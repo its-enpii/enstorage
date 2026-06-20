@@ -72,38 +72,24 @@ class GoogleAccountController extends Controller
 
     /**
      * POST /google-accounts/oauth/exchange
-     * Mobile-only — dipakai oleh Flutter app setelah Google OAuth
-     * callback ke `enstorage://oauth-callback?code=&state=`. Tukar
-     * code dengan token dan simpan GoogleAccount baru milik user
-     * yang login (resolved dari state).
+     * Mobile-only — dipakai oleh Flutter app yang pakai Google Sign-In
+     * native SDK. Terima `server_auth_code` (dari
+     * `user.authorizationClient.authorizeServer(scopes)`), tukar
+     * dengan token via `redirect_uri=postmessage` magic value.
      */
     public function exchange(Request $request): JsonResponse
     {
         $data = $request->validate([
             'code' => ['required', 'string'],
-            'state' => ['required', 'string'],
         ]);
 
-        $context = $this->resolveOAuthContext($request, $data['state']);
-        if ($context['error']) {
-            return $this->fail($context['error'], $context['status']);
-        }
-
-        $user = $context['user'];
-
-        // Refuse non-mobile states — web flow must continue to use
-        // /connect/google/callback (handled by `callback()`).
-        if ($context['platform'] !== 'mobile') {
-            return $this->fail(__('State OAuth tidak untuk platform ini.'), 400);
+        $user = $request->user();
+        if (! $user) {
+            return $this->fail(__('Autentikasi diperlukan.'), 401);
         }
 
         try {
-            $token = $this->tokens->exchangeCode(
-                $data['code'],
-                $context['redirect_uri'],
-                $context['client_id'],
-                $context['client_secret'],
-            );
+            $token = $this->tokens->exchangeServerAuthCode($data['code']);
         } catch (\Throwable $e) {
             return $this->fail(__('OAuth gagal: ').$e->getMessage(), 422);
         }
@@ -151,7 +137,7 @@ class GoogleAccountController extends Controller
             ActivityLog::ACTION_GOOGLE_ACCOUNT_ADD,
             userId: $user->id,
             subject: $account,
-            metadata: ['email' => $email, 'platform' => 'mobile'],
+            metadata: ['email' => $email, 'platform' => 'google_sign_in'],
             request: $request,
         );
 

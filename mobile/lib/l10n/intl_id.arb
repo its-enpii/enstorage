@@ -252,7 +252,6 @@
   "googleAccountsLabelFailed": "Gagal memperbarui label",
   "googleAccountsDisconnected": "Akun berhasil dicabut",
   "googleAccountsDisconnectFailed": "Gagal mencabut akun",
-  "googleAccountsConnectFailed": "Gagal memulai OAuth",
   "googleAccountsLoadingQuota": "Quota belum disinkronkan",
   "googleAccountsExchangeSuccess": "Akun terhubung",
   "googleAccountsExchangeFailed": "Gagal menghubungkan akun",

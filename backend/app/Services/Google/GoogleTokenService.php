@@ -4,6 +4,7 @@ namespace App\Services\Google;
 
 use App\Models\GoogleAccount;
 use Google\Client as GoogleClient;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
@@ -12,12 +13,12 @@ class GoogleTokenService
     public function __construct(private readonly GoogleClientFactory $factory) {}
 
     /**
-     * Generate URL authorize untuk OAuth flow. State berisi signed user identity
+     * Generate URL authorize untuk OAuth flow (web). State berisi signed user identity
      * (di-encode oleh caller) untuk di-resolve di callback tanpa session.
      *
-     * @param  string|null  $redirectUri    Override redirect_uri (custom URL scheme).
-     * @param  string|null  $clientId       Override client_id (Android/iOS OAuth client).
-     * @param  string|null  $clientSecret   Override client_secret (biasanya null untuk Android).
+     * @param  string|null  $redirectUri    Override redirect_uri.
+     * @param  string|null  $clientId       Override client_id.
+     * @param  string|null  $clientSecret   Override client_secret.
      */
     public function getAuthorizationUrl(
         ?string $state = null,
@@ -33,7 +34,7 @@ class GoogleTokenService
     }
 
     /**
-     * Tukar authorization code dengan access+refresh token.
+     * Tukar authorization code dengan access+refresh token (web flow).
      *
      * @param  string|null  $redirectUri   Harus match dengan yang dipakai saat authorize.
      * @param  string|null  $clientId      Harus match dengan yang dipakai saat authorize.
@@ -65,6 +66,81 @@ class GoogleTokenService
             'expires_in' => (int) ($token['expires_in'] ?? 0),
             'email' => $email,
         ];
+    }
+
+    /**
+     * Tukar server auth code (dari Google Sign-In native SDK di mobile)
+     * dengan access+refresh token. Pakai magic redirect_uri='postmessage'
+     * sesuai dokumentasi Google untuk mobile+server flow.
+     *
+     * Backend pakai Web client credentials (yang punya client_secret).
+     *
+     * @return array{access_token: string, refresh_token: ?string, expires_in: int, email: ?string}
+     */
+    public function exchangeServerAuthCode(string $serverAuthCode): array
+    {
+        $response = Http::asForm()->post('https://oauth2.googleapis.com/token', [
+            'code' => $serverAuthCode,
+            'client_id' => (string) config('services.google.client_id'),
+            'client_secret' => (string) config('services.google.client_secret'),
+            'redirect_uri' => 'postmessage',
+            'grant_type' => 'authorization_code',
+        ]);
+
+        if (! $response->successful()) {
+            throw new RuntimeException(
+                'Gagal menukar server auth code: HTTP '.$response->status().' — '.$response->body()
+            );
+        }
+
+        $data = $response->json();
+
+        if (! is_array($data)) {
+            throw new RuntimeException('Gagal menukar server auth code: response bukan JSON valid.');
+        }
+
+        if (isset($data['error'])) {
+            throw new RuntimeException(
+                'Gagal menukar server auth code: '.($data['error_description'] ?? $data['error'])
+            );
+        }
+
+        if (empty($data['access_token'])) {
+            throw new RuntimeException('Gagal menukar server auth code: access_token kosong.');
+        }
+
+        $email = $this->fetchEmailFromToken((string) $data['access_token']);
+
+        return [
+            'access_token' => (string) $data['access_token'],
+            'refresh_token' => isset($data['refresh_token']) ? (string) $data['refresh_token'] : null,
+            'expires_in' => (int) ($data['expires_in'] ?? 0),
+            'email' => $email,
+        ];
+    }
+
+    /**
+     * Ambil email user Google dari access token. Pakai UserInfo endpoint
+     * Google (https://www.googleapis.com/oauth2/v2/userinfo).
+     */
+    public function fetchEmailFromToken(string $accessToken): ?string
+    {
+        try {
+            $response = Http::withToken($accessToken)
+                ->get('https://www.googleapis.com/oauth2/v2/userinfo');
+            if (! $response->successful()) {
+                Log::warning('Google userinfo fetch failed', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                return null;
+            }
+            $data = $response->json();
+            return $data['email'] ?? null;
+        } catch (\Throwable $e) {
+            Log::warning('Gagal mengambil email user Google', ['error' => $e->getMessage()]);
+            return null;
+        }
     }
 
     /**

@@ -39,40 +39,18 @@ class GoogleAccountsRepository {
     return GoogleAccount.fromJson(inner);
   }
 
-  /// `GET /google-accounts/oauth/redirect`. Returns the Google OAuth
-  /// authorization URL the user must open in a browser. Backend
-  /// encodes user identity + platform into a signed `state` so the
-  /// callback (web) or exchange endpoint (mobile) can resolve which
-  /// user to attach the account to and which redirect_uri to use
-  /// when swapping the auth code.
-  ///
-  /// Pass `platform: 'mobile'` to switch the redirect_uri to the
-  /// custom URL scheme registered in Info.plist / AndroidManifest.
-  Future<String> getOAuthRedirectUrl({String platform = 'web'}) async {
-    final res = await _api.dio.get<Map<String, dynamic>>(
-      '/google-accounts/oauth/redirect',
-      queryParameters: {'platform': platform},
-    );
-    final inner = (res.data?['data'] as Map<String, dynamic>?) ?? const {};
-    final url = inner['authorization_url'] as String?;
-    if (url == null || url.isEmpty) {
-      throw StateError('authorization_url missing in response');
-    }
-    return url;
-  }
-
-  /// `POST /google-accounts/oauth/exchange`. Mobile-only — called
-  /// after the app intercepts the `enstorage://oauth-callback?code=
-  /// &state=` deep link. Backend uses the signed `state` to identify
-  /// the user and exchange the code with the mobile redirect_uri,
-  /// then returns the new GoogleAccount resource.
-  Future<GoogleAccount> exchangeOAuthCode({
+  /// `POST /google-accounts/oauth/exchange`. Mobile-only — kirim
+  /// `server_auth_code` (dari `google_sign_in` native SDK via
+  /// `user.authorizationClient.authorizeServer(scopes)`). Backend
+  /// menukar code dengan token menggunakan magic
+  /// `redirect_uri=postmessage` (cocok untuk server-side exchange
+  /// dari native SDK), lalu return `GoogleAccount` baru.
+  Future<GoogleAccount> exchangeServerAuthCode({
     required String code,
-    required String state,
   }) async {
     final res = await _api.dio.post<Map<String, dynamic>>(
       '/google-accounts/oauth/exchange',
-      data: {'code': code, 'state': state},
+      data: {'code': code},
     );
     final inner = (res.data?['data'] as Map<String, dynamic>?) ?? const {};
     return GoogleAccount.fromJson(inner);

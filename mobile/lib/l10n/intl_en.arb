@@ -262,7 +262,6 @@
   "googleAccountsLabelFailed": "Update failed",
   "googleAccountsDisconnected": "Account disconnected",
   "googleAccountsDisconnectFailed": "Disconnect failed",
-  "googleAccountsConnectFailed": "Failed to start OAuth",
   "googleAccountsLoadingQuota": "Quota not synced yet",
   "googleAccountsExchangeSuccess": "Account connected",
   "googleAccountsExchangeFailed": "Failed to connect account",

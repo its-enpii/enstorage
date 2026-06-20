@@ -1,9 +1,6 @@
-import 'dart:async';
-
-import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../data/models/google_account.dart';
 import '../../data/repositories/google_accounts_repository.dart';
@@ -16,12 +13,24 @@ import '../../theme/typography.dart';
 import '../../widgets/etheric_card.dart';
 import '../../widgets/etheric_fab.dart';
 
+/// Web OAuth client ID — dipakai sebagai `serverClientId` untuk Google
+/// Sign-In native SDK. Backend pakai `client_secret` milik client ini
+/// untuk menukar `server_auth_code` jadi token.
+const String _kWebClientId =
+    '821312365202-gkdfheld9sa8btmgjorpa26e3pn57lvo.apps.googleusercontent.com';
+
+/// Scopes yang diminta saat user hubungkan akun. `drive.file` kasih
+/// akses baca/tulis ke file yang app buat di Drive (cukup untuk vault).
+const List<String> _kScopes = <String>[
+  'https://www.googleapis.com/auth/drive.file',
+];
+
 /// Connected Google accounts. Three responsibilities:
 ///
 /// 1. Show the list of accounts (with quota per row).
-/// 2. Connect a new account via OAuth — `url_launcher` opens the
-///    in-app browser (Chrome Custom Tab / SFSafariViewController),
-///    and `app_links` intercepts the deep-link callback.
+/// 2. Connect a new account via `google_sign_in` native SDK —
+///    Google account picker muncul inline (bukan browser), lalu
+///    `serverAuthCode` dikirim ke backend untuk ditukar jadi token.
 /// 3. Per-account actions via bottom sheet: Sync Quota, Edit Label,
 ///    Disconnect.
 class GoogleAccountsScreen extends ConsumerStatefulWidget {
@@ -33,59 +42,59 @@ class GoogleAccountsScreen extends ConsumerStatefulWidget {
 }
 
 class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
-  final AppLinks _appLinks = AppLinks();
-  StreamSubscription<Uri>? _linkSub;
-
   @override
   void initState() {
     super.initState();
-    // `uriLinkStream` delivers the initial link (cold start) AND all
-    // subsequent links (warm/hot), so a single subscription is enough.
-    _linkSub = _appLinks.uriLinkStream.listen(_onAppLink);
+    _initGoogleSignIn();
   }
 
-  @override
-  void dispose() {
-    _linkSub?.cancel();
-    super.dispose();
-  }
-
-  void _onAppLink(Uri uri) {
-    if (uri.scheme != 'enstorage' || uri.host != 'oauth-callback') return;
-    final code = uri.queryParameters['code'];
-    final state = uri.queryParameters['state'];
-    final error = uri.queryParameters['error'];
-    if (error != null) {
-      // User cancelled at the Google consent screen, or some other
-      // authorization error came back. Show a friendly snackbar and
-      // skip the exchange call.
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10nError())),
+  Future<void> _initGoogleSignIn() async {
+    try {
+      await GoogleSignIn.instance.initialize(
+        serverClientId: _kWebClientId,
       );
-      return;
+    } catch (_) {
+      // Initialization failure (mis. emulator tanpa Google Play
+      // Services) — handled lazily on first `_onConnect()` call.
     }
-    if (code == null || state == null) return;
-    _onOAuthCallback(code, state);
   }
 
-  /// Tiny indirection so the cancelled-by-user path doesn't have to
-  /// look up `AppLocalizations` itself.
-  String l10nError() {
-    final l10n = AppLocalizations.of(context);
-    return l10n?.googleAccountsExchangeDenied ?? 'Authorization cancelled';
-  }
-
-  Future<void> _onOAuthCallback(String code, String state) async {
+  Future<void> _onConnect() async {
     final l10n = AppLocalizations.of(context)!;
     final repo = ref.read(googleAccountsRepositoryProvider);
     final messenger = ScaffoldMessenger.of(context);
+
     try {
-      await repo.exchangeOAuthCode(code: code, state: state);
+      // 1. Native Google account picker + sign-in.
+      final account = await GoogleSignIn.instance.authenticate();
+
+      // 2. Request server-side auth code with Drive scope. This
+      //    returns a one-time code yang backend tukar jadi token.
+      final serverAuth =
+          await account.authorizationClient.authorizeServer(_kScopes);
+      final code = serverAuth?.serverAuthCode;
+      if (code == null) {
+        if (!mounted) return;
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.googleAccountsExchangeFailed)),
+        );
+        return;
+      }
+
+      // 3. Exchange with backend.
+      await repo.exchangeServerAuthCode(code: code);
       ref.invalidate(googleAccountsProvider);
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(content: Text(l10n.googleAccountsExchangeSuccess)),
+      );
+    } on GoogleSignInException catch (e) {
+      // User cancelled at the picker, atau Play Services unavailable.
+      // Silent untuk cancellation — explicit error untuk yang lain.
+      if (e.code == GoogleSignInExceptionCode.canceled) return;
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.googleAccountsExchangeFailed)),
       );
     } catch (_) {
       if (!mounted) return;
@@ -93,33 +102,6 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
         SnackBar(content: Text(l10n.googleAccountsExchangeFailed)),
       );
     }
-  }
-
-  Future<void> _onConnect() async {
-    final l10n = AppLocalizations.of(context)!;
-    final repo = ref.read(googleAccountsRepositoryProvider);
-
-    // 1. Fetch the OAuth URL (with mobile redirect_uri).
-    String url;
-    try {
-      url = await repo.getOAuthRedirectUrl(platform: 'mobile');
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.googleAccountsConnectFailed)),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-
-    // 2. Open in Chrome Custom Tab / SFSafariViewController. The
-    //    OS will switch back to our app once Google redirects to
-    //    `enstorage://oauth-callback`, where `app_links` picks up
-    //    the URI and `_onAppLink` runs.
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
   }
 
   Future<void> _onSync(GoogleAccount account) async {
