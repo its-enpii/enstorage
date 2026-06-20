@@ -1,0 +1,330 @@
+{
+  "@@locale": "id",
+
+  "appName": "EnStorage",
+
+  "commonCancel": "Batal",
+  "commonConfirm": "Konfirmasi",
+  "commonOk": "OK",
+  "commonDelete": "Hapus",
+  "commonSave": "Simpan",
+  "commonLoading": "Memuat…",
+  "commonLoadingLabel": "Memuat",
+  "commonInfo": "Info",
+  "commonError": "Terjadi kesalahan.",
+  "commonInput": "Input",
+  "commonMuatLagi": "Muat lagi",
+  "commonMemuatLagi": "Memuat…",
+  "commonHide": "Sembunyikan",
+  "commonReveal": "Tampilkan",
+
+  "navHome": "Beranda",
+  "navFiles": "File",
+  "navSettings": "Pengaturan",
+  "navStarred": "Favorit",
+  "navFolders": "Folder",
+  "navProfile": "Profil",
+  "navLogout": "Keluar",
+
+  "authLoginTitle": "Masuk ke EnStorage",
+  "authLoginSubtitle": "Akses vault pribadi Anda.",
+  "authLoginEmail": "Email",
+  "authLoginPassword": "Password",
+  "authLoginSubmit": "Masuk",
+  "authLoginSubmitting": "Memproses…",
+  "authLoginFailed": "Login gagal.",
+  "authLoginNoAccount": "Belum punya akun?",
+  "authLoginRegisterLink": "Daftar",
+
+  "authRegisterTitle": "Daftar EnStorage",
+  "authRegisterSubtitle": "Buat akun baru untuk mulai menyimpan file.",
+  "authRegisterName": "Nama",
+  "authRegisterEmail": "Email",
+  "authRegisterPassword": "Password (min. 8)",
+  "authRegisterConfirmPassword": "Konfirmasi",
+  "authRegisterSubmit": "Daftar",
+  "authRegisterSubmitting": "Memproses…",
+  "authRegisterFailed": "Registrasi gagal.",
+  "authRegisterPasswordMismatch": "Password dan konfirmasi tidak sama.",
+  "authRegisterHasAccount": "Sudah punya akun?",
+  "authRegisterLoginLink": "Masuk",
+
+  "authGreeting": "Halo, {name}",
+  "@authGreeting": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "authSessionFailed": "Gagal memuat sesi",
+  "authSessionFailedDesc": "Tidak bisa menghubungi server untuk memverifikasi login Anda. Token login Anda masih tersimpan.",
+  "authRetry": "Coba lagi",
+  "authReLogin": "Login ulang",
+
+  "searchPlaceholder": "Cari file, folder...",
+  "searchNoResults": "Tidak ada hasil",
+  "searchNoResultsDesc": "Coba kata kunci lain untuk \"{query}\".",
+  "@searchNoResultsDesc": {
+    "placeholders": {
+      "query": { "type": "String" }
+    }
+  },
+  "searchTypeToSearch": "Ketik untuk mencari file atau folder.",
+
+  "filesTitle": "Dokumen",
+  "filesRootTitle": "File Manager",
+  "filesEmpty": "Belum ada file",
+  "filesEmptyDesc": "Tap tombol emas untuk upload file pertama Anda.",
+  "filesFolderCount": "{count, plural, =0{Kosong} =1{1 item} other{{count} items}}",
+  "@filesFolderCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "filesLoadingLabel": "Memuat file",
+
+  "filesActionsStar": "Star",
+  "filesActionsUnstar": "Hapus Star",
+  "filesActionsPreview": "Preview",
+  "filesActionsRename": "Rename",
+  "filesActionsDownload": "Download",
+  "filesActionsShare": "Share Link",
+  "filesSharePreparing": "Menyiapkan file untuk dibagikan…",
+  "filesShareFailed": "Gagal membagikan file.",
+  "filesActionsCopy": "Copy File",
+  "filesActionsDelete": "Hapus",
+  "filesActionsMenu": "Menu",
+  "filesActionsMove": "Pindah",
+  "filesActionsSelectAll": "Pilih Semua",
+  "filesConfirmDeleteTitle": "Hapus File",
+  "filesConfirmDeleteBody": "Yakin ingin menghapus file ini?",
+  "filesConfirmDeleteConfirm": "Hapus",
+  "filesCopiedSuccess": "Tersalin ke clipboard",
+  "filesCopyFailed": "Gagal menyalin file",
+  "filesDownloadStarted": "Download dimulai",
+  "filesDownloadFailed": "Gagal mendownload file",
+  "filesStarredSuccess": "Ditambahkan ke bintang",
+  "filesUnstarredSuccess": "Dihapus dari bintang",
+  "filesRenameTitle": "Rename File",
+  "filesRenameSave": "Simpan",
+  "filesRenameFailed": "Gagal rename file",
+  "filesDeleteFailed": "Gagal menghapus file",
+  "filesStarFailed": "Gagal mengubah status bintang",
+  "filesMoveTitle": "Pindahkan File",
+
+  "starredTitle": " Berbintang",
+  "starredEmpty": "Belum ada file berbintang",
+  "starredEmptyDesc": "Bintangi file atau folder untuk akses cepat di sini.",
+  "starredStatusDone": "Siap",
+  "starredStatusFailed": "Gagal",
+  "starredStatusUploading": "Mengupload",
+  "starredStatusPending": "Menunggu",
+
+  "shareTitle": "Bagikan File",
+  "shareDescEnabled": "Siapa saja dengan link ini dapat melihat file.",
+  "shareDescDisabled": "Buat link publik untuk membagikan file ini.",
+  "shareCreateLink": "Buat Link",
+  "shareCopyLink": "Salin Link",
+  "shareCopied": "Tersalin!",
+  "shareCopy": "Salin",
+  "shareDisable": "Matikan Link",
+
+  "filesConfirmDeleteTitle": "Hapus File?",
+  "filesConfirmDeleteBody": "File akan dihapus dari Google Drive dan record lokal.",
+  "filesConfirmDeleteConfirm": "Hapus",
+  "filesConfirmBulkDeleteTitle": "Hapus {count} File?",
+  "@filesConfirmBulkDeleteTitle": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "filesConfirmBulkDeleteBody": "Hapus {count} file dari Google Drive dan database?",
+  "@filesConfirmBulkDeleteBody": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "filesConfirmBulkDeleteConfirm": "Hapus Semua",
+
+  "filesSelected": "{count} dipilih",
+  "@filesSelected": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "filesSelectMode": "Select Mode",
+
+  "filesRenameTitle": "Rename File",
+  "filesRenameDesc": "Masukkan nama baru.",
+  "filesRenameSuccess": "File berhasil direname.",
+  "filesRenameFailed": "Gagal rename.",
+
+  "filesStarSuccess": "Star berhasil diupdate.",
+  "filesStarFailed": "Gagal update star.",
+  "filesDeleteFailed": "Gagal menghapus.",
+  "filesDownloadFailed": "Gagal download.",
+  "filesCopySuccess": "File tersalin ke clipboard.",
+  "filesCopyFailed": "Gagal copy file.",
+
+  "fabCreate": "BUAT",
+
+  "fabSheetTitle": "Buat Baru",
+  "fabNewFolder": "Folder Baru",
+  "fabNewFolderDesc": "Masukkan nama folder.",
+  "fabNewFolderPlaceholder": "Nama folder",
+  "fabUploadFile": "Upload File",
+  "fabUploadFolder": "Upload Folder",
+  "fabScanDocument": "Kamera",
+  "fabCamera": "Kamera (Foto atau Video)",
+  "cameraModeTitle": "Pilih Mode Kamera",
+  "cameraModePhoto": "Ambil Foto",
+  "cameraModeVideo": "Rekam Video",
+  "fabCancel": "Batal",
+  "fabCreateFolder": "Buat",
+  "fabCreating": "Membuat…",
+
+  "viewerClose": "Tutup",
+  "viewerLoading": "Memuat…",
+  "viewerFailed": "Gagal memuat file.",
+  "viewerMenuDelete": "Hapus",
+  "viewerMenuRename": "Rename",
+  "viewerMenuDownload": "Download",
+  "viewerMenuCopy": "Salin Link",
+  "viewerMenuShare": "Bagikan",
+
+  "homeWelcome": "Selamat datang kembali",
+  "homeStorageTitle": "Storage",
+  "homeStorageUsed": "{used} dari {total}",
+  "@homeStorageUsed": {
+    "placeholders": {
+      "used": { "type": "String" },
+      "total": { "type": "String" }
+    }
+  },
+  "homeStorageFree": "{free} tersisa",
+  "@homeStorageFree": {
+    "placeholders": {
+      "free": { "type": "String" }
+    }
+  },
+  "homeAccountsConnected": "{count} akun Google terhubung",
+  "@homeAccountsConnected": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "homeNoAccounts": "Belum ada akun terhubung",
+  "homeQuickActions": "Aksi Cepat",
+  "homeActionUpload": "Upload",
+  "homeActionFolder": "Folder Baru",
+  "homeActionStarred": "Favorit",
+  "homeActionCamera": "Kamera",
+  "homeRecentFiles": "File Terbaru",
+  "homeNoRecent": "Belum ada file terbaru",
+  "homeSeeAll": "Lihat semua",
+  "homeManageAccounts": "Kelola",
+
+  "settingsAccount": "Profil",
+  "settingsGoogleAccounts": "Akun Google",
+  "settingsApiKeys": "API Keys",
+  "googleAccountsTitle": "Akun Google Terhubung",
+  "googleAccountsEmpty": "Belum ada akun Google terhubung",
+  "googleAccountsEmptyDesc": "Hubungkan akun Google untuk mulai menyimpan file.",
+  "googleAccountsConnect": "Hubungkan Akun",
+  "googleAccountsSync": "Sinkronkan Quota",
+  "googleAccountsEditLabel": "Edit Label",
+  "googleAccountsDisconnect": "Putuskan",
+  "googleAccountsDisconnectTitle": "Putuskan Akun?",
+  "googleAccountsDisconnectBody": "File yang sudah diupload tetap tersimpan, tapi akun ini tidak bisa diakses lagi.",
+  "googleAccountsDisconnectConfirm": "Putuskan",
+  "googleAccountsEditLabelTitle": "Edit Label",
+  "googleAccountsEditLabelDesc": "Label untuk membedakan akun Google-mu.",
+  "googleAccountsEditLabelSave": "Simpan",
+  "googleAccountsConnectDialogTitle": "Hubungkan Akun Google",
+  "googleAccountsConnectDialogDesc": "Kami akan membuka browser untuk otorisasi. Setelah selesai, kembali ke aplikasi dan akun akan muncul otomatis.",
+  "googleAccountsConnectOpenBrowser": "Buka di Browser",
+  "googleAccountsConnectCopyUrl": "Salin URL",
+  "googleAccountsConnectUrlCopied": "URL tersalin",
+  "googleAccountsConnectWaiting": "Menunggu otorisasi di browser…",
+  "googleAccountsSyncStarted": "Sinkronisasi quota…",
+  "googleAccountsSyncSuccess": "Quota berhasil disinkronkan",
+  "googleAccountsSyncFailed": "Gagal sinkronisasi quota",
+  "googleAccountsLabelUpdated": "Label diperbarui",
+  "googleAccountsLabelFailed": "Gagal memperbarui label",
+  "googleAccountsDisconnected": "Akun berhasil dicabut",
+  "googleAccountsDisconnectFailed": "Gagal mencabut akun",
+  "googleAccountsConnectFailed": "Gagal memulai OAuth",
+  "googleAccountsLoadingQuota": "Quota belum disinkronkan",
+  "googleAccountsExchangeSuccess": "Akun terhubung",
+  "googleAccountsExchangeFailed": "Gagal menghubungkan akun",
+  "googleAccountsExchangeDenied": "Otorisasi dibatalkan",
+  "settingsAccountName": "Nama",
+  "settingsAccountEmail": "Email",
+  "settingsAccountRole": "Role",
+  "settingsAccountMember": "Terdaftar sejak",
+  "settingsAccountOwner": "Owner",
+  "settingsAccountMemberRole": "Member",
+  "settingsNotifications": "Notifikasi",
+  "settingsNotifUploadDesc": "Notifikasi saat file berhasil diupload.",
+  "settingsNotifQuotaDesc": "Peringatan saat storage > 90%.",
+  "settingsNotifSecurity": "Peringatan keamanan",
+  "settingsNotifSecurityDesc": "Login dari perangkat baru, API key baru, dll.",
+  "settingsDangerZone": "Zona Berbahaya",
+  "settingsDeleteAccount": "Hapus akun",
+  "settingsDeleteAccountDesc": "Hapus akun Anda secara permanen. Tidak dapat dibatalkan.",
+  "settingsComingSoon": "Segera hadir",
+
+  "uploadProgress": "{filename} • {progress}%",
+  "@uploadProgress": {
+    "placeholders": {
+      "filename": { "type": "String" },
+      "progress": { "type": "int" }
+    }
+  },
+  "uploadCancel": "Batalkan upload",
+
+  "settingsTitle": "Pengaturan",
+  "settingsAppearance": "Tampilan & Bahasa",
+  "settingsTheme": "Tema",
+  "settingsThemeDark": "Gelap",
+  "settingsThemeLight": "Terang",
+  "settingsThemeSystem": "Sistem",
+  "settingsLanguage": "Bahasa",
+  "settingsLanguageIndonesian": "Bahasa Indonesia",
+  "settingsLanguageEnglish": "English",
+  "settingsNotifications": "Notifikasi",
+  "settingsNotifUpload": "Upload selesai",
+  "settingsNotifUploadDesc": "Notifikasi saat file berhasil diupload.",
+  "settingsNotifQuota": "Quota hampir penuh",
+  "settingsNotifQuotaDesc": "Peringatan saat storage > 90%.",
+
+  "sortLabel": "Urutkan",
+  "filterLabel": "Filter",
+  "sortSheetTitle": "Urutkan",
+  "sortByName": "Nama",
+  "sortByCreatedAt": "Tanggal dibuat",
+  "sortByUploadedAt": "Tanggal upload",
+  "sortBySize": "Ukuran",
+  "filterSheetTitle": "Filter",
+  "filterStarredOnly": "Hanya Berbintang",
+  "filterTypeLabel": "Tipe",
+  "filterTypeImage": "Gambar",
+  "filterTypeVideo": "Video",
+  "filterTypeAudio": "Audio",
+  "filterTypePdf": "PDF",
+  "filterTypeDoc": "Dokumen",
+  "filterStatusLabel": "Status",
+  "filterStatusAll": "Semua",
+  "filterStatusDone": "Selesai",
+  "filterStatusUploading": "Mengupload",
+  "filterStatusPending": "Menunggu",
+  "filterStatusFailed": "Gagal",
+  "filterShowLabel": "Tampilkan",
+  "filterShowAll": "Semua",
+  "filterShowFolders": "Folder",
+  "filterShowFiles": "File",
+  "filterReset": "Reset",
+  "filterApply": "Terapkan",
+  "filesTabsAll": "Semua",
+  "filesTabsFolders": "Folder",
+  "filesTabsFiles": "File"
+}

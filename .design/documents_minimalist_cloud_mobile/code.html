@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CloudVault - My Files</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&amp;family=Inter:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .inner-glow {
+            box-shadow: inset 0px 1px 1px rgba(255, 255, 255, 0.05);
+        }
+        body {
+            background-color: #0F1117;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .ios-blur {
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#3e414c",
+                        "surface-container-high": "#282a30",
+                        "surface-variant": "#33343b",
+                        "inverse-surface": "#e2e2eb",
+                        "surface-tint": "#c6c0ff",
+                        "on-tertiary-container": "#abadba",
+                        "on-background": "#e2e2eb",
+                        "on-surface": "#e2e2eb",
+                        "surface-container": "#1e1f26",
+                        "secondary": "#f6be3d",
+                        "primary-container": "#3d348b",
+                        "on-secondary-container": "#3e2b00",
+                        "error": "#ffb4ab",
+                        "secondary-container": "#c08e00",
+                        "background": "#111319",
+                        "outline-variant": "#474551",
+                        "surface-container-lowest": "#0c0e14",
+                        "on-primary-fixed-variant": "#433a91",
+                        "on-error": "#690005",
+                        "inverse-on-surface": "#2e3037",
+                        "surface-dim": "#111319",
+                        "secondary-fixed-dim": "#f6be3d",
+                        "surface-bright": "#373940",
+                        "secondary-fixed": "#ffdea2",
+                        "outline": "#928f9d",
+                        "on-primary": "#2c2179",
+                        "primary-fixed-dim": "#c6c0ff",
+                        "on-tertiary-fixed-variant": "#444652",
+                        "on-tertiary": "#2d303b",
+                        "tertiary-fixed-dim": "#c4c6d3",
+                        "on-secondary": "#402d00",
+                        "inverse-primary": "#5b53aa",
+                        "on-secondary-fixed": "#261900",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed-variant": "#5c4200",
+                        "on-primary-container": "#aba3ff",
+                        "tertiary": "#c4c6d3",
+                        "error-container": "#93000a",
+                        "on-surface-variant": "#c8c4d3",
+                        "primary": "#c6c0ff",
+                        "primary-fixed": "#e4dfff",
+                        "surface-container-highest": "#33343b",
+                        "surface": "#111319",
+                        "surface-container-low": "#191b22",
+                        "on-primary-fixed": "#150066",
+                        "tertiary-fixed": "#e0e2f0",
+                        "on-tertiary-fixed": "#181b25"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "inner-padding": "32px",
+                        "sidebar-width": "72px",
+                        "section-margin": "64px",
+                        "container-padding": "40px",
+                        "card-gap": "24px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Inter"],
+                        "headline-lg-mobile": ["DM Sans"],
+                        "body-md": ["Inter"],
+                        "headline-lg": ["DM Sans"],
+                        "metadata": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "display-xl": ["DM Sans"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "headline-lg-mobile": ["24px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                        "body-md": ["15px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "metadata": ["13px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                        "label-sm": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "display-xl": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="text-on-background min-h-screen pb-32">
+<!-- Top App Bar (Shared Component) -->
+<header class="w-full top-0 sticky bg-background z-40">
+<div class="flex items-center justify-between px-5 py-4 w-full">
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile text-primary tracking-tight">Documents</h1>
+<div class="flex items-center gap-4">
+<button class="transition-opacity duration-200 hover:opacity-80">
+<span class="material-symbols-outlined text-primary text-[28px]" data-icon="search">search</span>
+</button>
+<div class="w-10 h-10 rounded-full bg-surface-container overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="A professional high-resolution studio portrait of a tech professional for a user avatar. The individual is shown from the chest up against a neutral, dark slate gray background. Soft cinematic lighting highlights their features, creating a sophisticated and trustworthy appearance. The overall aesthetic is premium, clean, and minimalist, fitting for a high-end digital vault application." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD1wCPUjxAIgNJYw2BisOG3H0hOOL3DY77tGeHg7wwG4MebTN4087k_uccvNoLPn49lzv5F4tTeZCIdNzVXNk69muO-Jgn08QGIO50k0cr11iLvRJcwn5DZPL9OIUTDqMeVq7ECxXclf15IHxREsaVxVmU2xSspEs8aiZ8mSCxVT2rqCnFA-D_yxgHpD3F5ygRWhbUKjHNmi-FdmM9SpDnLNUjkB2I0tvRfmW7b3mqgWb4uZq3mlIT8jTuoih-8RLvOrq4wFL0P6ABB"/>
+</div>
+</div>
+</div>
+</header>
+<main class="px-5 space-y-6 max-w-md mx-auto">
+<!-- Search Bar -->
+<div class="relative group">
+<div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-outline" data-icon="search">search</span>
+</div>
+<input class="w-full bg-[#1A1D27] text-on-surface py-4 pl-12 pr-4 rounded-full border-none focus:ring-2 focus:ring-primary-container transition-all placeholder:text-outline font-body-md text-body-md" placeholder="Search files, folders..." type="text"/>
+</div>
+<!-- Controls -->
+<div class="flex gap-3">
+<button class="flex-1 flex items-center justify-center gap-2 py-3 bg-[#1A1D27] rounded-full inner-glow text-on-surface hover:scale-[1.02] active:scale-95 transition-transform duration-200">
+<span class="material-symbols-outlined text-primary" data-icon="sort">sort</span>
+<span class="font-label-sm text-label-sm">Sort</span>
+</button>
+<button class="flex-1 flex items-center justify-center gap-2 py-3 bg-[#1A1D27] rounded-full inner-glow text-on-surface hover:scale-[1.02] active:scale-95 transition-transform duration-200">
+<span class="material-symbols-outlined text-primary" data-icon="filter_list">filter_list</span>
+<span class="font-label-sm text-label-sm">Filter</span>
+</button>
+</div>
+<!-- File Grid -->
+<div class="grid grid-cols-2 gap-4">
+<!-- Folder: Work -->
+<div class="bg-[#1A1D27] p-5 rounded-2xl inner-glow flex flex-col gap-4 hover:scale-[1.02] transition-transform duration-300 shadow-[0px_20px_40px_rgba(0,0,0,0.2)]">
+<div class="w-12 h-12 bg-primary-container/20 rounded-xl flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-[32px]" data-icon="folder" style="font-variation-settings: 'FILL' 1;">folder</span>
+</div>
+<div>
+<h3 class="font-body-md text-body-md text-on-surface font-semibold truncate">Work</h3>
+<p class="font-metadata text-metadata text-on-surface-variant">24 items</p>
+</div>
+</div>
+<!-- Folder: Personal -->
+<div class="bg-[#1A1D27] p-5 rounded-2xl inner-glow flex flex-col gap-4 hover:scale-[1.02] transition-transform duration-300 shadow-[0px_20px_40px_rgba(0,0,0,0.2)]">
+<div class="w-12 h-12 bg-secondary-container/20 rounded-xl flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary text-[32px]" data-icon="folder" style="font-variation-settings: 'FILL' 1;">folder</span>
+</div>
+<div>
+<h3 class="font-body-md text-body-md text-on-surface font-semibold truncate">Personal</h3>
+<p class="font-metadata text-metadata text-on-surface-variant">12 items</p>
+</div>
+</div>
+<!-- File: Presentation.pdf -->
+<div class="bg-[#1A1D27] p-5 rounded-2xl inner-glow flex flex-col gap-4 hover:scale-[1.02] transition-transform duration-300 shadow-[0px_20px_40px_rgba(0,0,0,0.2)]">
+<div class="w-full h-24 bg-surface-container rounded-lg overflow-hidden relative">
+<div class="absolute inset-0 flex items-center justify-center opacity-20">
+<span class="material-symbols-outlined text-[48px]" data-icon="picture_as_pdf">picture_as_pdf</span>
+</div>
+<img class="w-full h-full object-cover" data-alt="A clean, minimalist thumbnail preview of a professional slide presentation. The slide features abstract geometric shapes in shades of deep navy and electric purple. Thin white lines crisscross the composition, suggesting data flow and connectivity. The lighting is crisp and modern, reflecting a high-end corporate digital aesthetic with a focus on precision and professional utility." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDOMLW1CmbSfzYsKa4CxqJKsEfKm4IDlm_GysAakLKSXnv28XcEZAk7p7A3Vn7FtpwVq4RznAKoJJhc0M_KxSko_GjKnc0_CDnbiPSwF_W_D_XyHhOIuDaeb1fZBGaovb4Xj3VPzJVIByIIe2stBmLsSvqxBRKS_4pEujGKIatURfmO7jU7OuFPmSBdiJlXzoS1qd2JurNsIePeZ0EiqWvjn5RCZKLyWDBX9sP883I0-WF383orTO4OuTCdLl3BhjD1GthoymTsfieJ"/>
+</div>
+<div>
+<h3 class="font-body-md text-body-md text-on-surface font-semibold truncate">Presentation.pdf</h3>
+<p class="font-metadata text-metadata text-on-surface-variant">4.2 MB</p>
+</div>
+</div>
+<!-- File: Q3_Report.docx -->
+<div class="bg-[#1A1D27] p-5 rounded-2xl inner-glow flex flex-col gap-4 hover:scale-[1.02] transition-transform duration-300 shadow-[0px_20px_40px_rgba(0,0,0,0.2)]">
+<div class="w-full h-24 bg-surface-container rounded-lg overflow-hidden relative">
+<div class="absolute inset-0 flex items-center justify-center opacity-20">
+<span class="material-symbols-outlined text-[48px]" data-icon="description">description</span>
+</div>
+<img class="w-full h-full object-cover" data-alt="A macro-view of a document preview showing blurred lines of text and a professional header logo. The overall color scheme uses cool grays and muted blues. The style is reminiscent of a high-end document management system interface, emphasizing clarity, security, and meticulous organization. The atmosphere is quiet, focused, and professional, bathed in soft studio light." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDmOwjL_bwEovv1wPF-XGp5RtV0-oJxqeLaJ7AObnlWODavc3xapY37FegfTciJhgKTZvSv2ZbyChFbVUQOajyiK1cnkQIRx65hCzd-dW92ZojudpGCwfvRc3HR7S-NScWoi-WMELNS43FlLSF7z2OwQpdQ4ruJ0TR9nObGOdUMeq2zscnc_6zCzG6HDjH0JaxRYr3Qi_C8oSvWmf0w7PU7-PR4YK_zEh0xNXTpG-gWDZWViEQN5-hN3oeMARdx4l9THQfGyB8OmgcY"/>
+</div>
+<div>
+<h3 class="font-body-md text-body-md text-on-surface font-semibold truncate">Q3_Report.docx</h3>
+<p class="font-metadata text-metadata text-on-surface-variant">1.8 MB</p>
+</div>
+</div>
+</div>
+</main>
+<!-- FAB -->
+<button class="fixed bottom-24 right-6 bg-[#E6AF2E] text-[#261900] px-6 py-4 rounded-full flex items-center gap-2 shadow-[0px_10px_30px_rgba(230,175,46,0.3)] hover:scale-105 active:scale-95 transition-transform duration-200 z-50">
+<span class="material-symbols-outlined font-bold" data-icon="add">add</span>
+<span class="font-label-sm text-label-sm font-bold">CREATE</span>
+</button>
+<!-- Bottom Navigation (Shared Component) -->
+<nav class="fixed bottom-0 w-full z-50 pointer-events-none">
+<div class="flex justify-around items-center px-6 py-4 max-w-md mx-auto mb-8 rounded-full bg-surface-container/80 backdrop-blur-xl shadow-[0px_20px_40px_rgba(0,0,0,0.4)] pointer-events-auto">
+<!-- Home -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-3 transition-transform duration-200 hover:scale-105 active:scale-95" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-sm text-label-sm mt-1">Home</span>
+</a>
+<!-- My Files (Active) -->
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full p-3 transition-transform duration-200 hover:scale-105 active:scale-95" href="#">
+<span class="material-symbols-outlined" data-icon="folder_open" style="font-variation-settings: 'FILL' 1;">folder_open</span>
+</a>
+<!-- Settings -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-3 transition-transform duration-200 hover:scale-105 active:scale-95" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-label-sm text-label-sm mt-1">Settings</span>
+</a>
+</div>
+</nav>
+<script>
+        // Micro-interaction for cards
+        document.querySelectorAll('.rounded-2xl').forEach(card => {
+            card.addEventListener('mousedown', () => {
+                card.style.transform = 'scale(0.98)';
+            });
+            card.addEventListener('mouseup', () => {
+                card.style.transform = 'scale(1.02)';
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = 'scale(1)';
+            });
+        });
+
+        // Floating behavior for FAB on scroll
+        let lastScroll = 0;
+        const fab = document.querySelector('.fixed.bottom-24');
+        window.addEventListener('scroll', () => {
+            const currentScroll = window.pageYOffset;
+            if (currentScroll > lastScroll && currentScroll > 100) {
+                fab.style.transform = 'translateY(20px) scale(0.9)';
+                fab.style.opacity = '0.7';
+            } else {
+                fab.style.transform = 'translateY(0) scale(1)';
+                fab.style.opacity = '1';
+            }
+            lastScroll = currentScroll;
+        });
+    </script>
+</body></html>

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CloudVault - Multi-Select Mode</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#3e414c",
+                        "surface-container-high": "#282a30",
+                        "surface-variant": "#33343b",
+                        "inverse-surface": "#e2e2eb",
+                        "surface-tint": "#c6c0ff",
+                        "on-tertiary-container": "#abadba",
+                        "on-background": "#e2e2eb",
+                        "on-surface": "#e2e2eb",
+                        "surface-container": "#1e1f26",
+                        "secondary": "#f6be3d",
+                        "primary-container": "#3d348b",
+                        "on-secondary-container": "#3e2b00",
+                        "error": "#ffb4ab",
+                        "secondary-container": "#c08e00",
+                        "background": "#111319",
+                        "outline-variant": "#474551",
+                        "surface-container-lowest": "#0c0e14",
+                        "on-primary-fixed-variant": "#433a91",
+                        "on-error": "#690005",
+                        "inverse-on-surface": "#2e3037",
+                        "surface-dim": "#111319",
+                        "secondary-fixed-dim": "#f6be3d",
+                        "surface-bright": "#373940",
+                        "secondary-fixed": "#ffdea2",
+                        "outline": "#928f9d",
+                        "on-primary": "#2c2179",
+                        "primary-fixed-dim": "#c6c0ff",
+                        "on-tertiary-fixed-variant": "#444652",
+                        "on-tertiary": "#2d303b",
+                        "tertiary-fixed-dim": "#c4c6d3",
+                        "on-secondary": "#402d00",
+                        "inverse-primary": "#5b53aa",
+                        "on-secondary-fixed": "#261900",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed-variant": "#5c4200",
+                        "on-primary-container": "#aba3ff",
+                        "tertiary": "#c4c6d3",
+                        "error-container": "#93000a",
+                        "on-surface-variant": "#c8c4d3",
+                        "primary": "#c6c0ff",
+                        "primary-fixed": "#e4dfff",
+                        "surface-container-highest": "#33343b",
+                        "surface": "#111319",
+                        "surface-container-low": "#191b22",
+                        "on-primary-fixed": "#150066",
+                        "tertiary-fixed": "#e0e2f0",
+                        "on-tertiary-fixed": "#181b25"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "inner-padding": "32px",
+                        "sidebar-width": "72px",
+                        "section-margin": "64px",
+                        "container-padding": "40px",
+                        "card-gap": "24px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Inter"],
+                        "headline-lg-mobile": ["DM Sans"],
+                        "body-md": ["Inter"],
+                        "headline-lg": ["DM Sans"],
+                        "metadata": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "display-xl": ["DM Sans"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "headline-lg-mobile": ["24px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                        "body-md": ["15px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "metadata": ["13px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                        "label-sm": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "display-xl": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-toolbar {
+            background: rgba(26, 29, 39, 0.8);
+            backdrop-filter: blur(20px);
+        }
+        .inner-glow {
+            box-shadow: inset 0px 1px 1px rgba(255, 255, 255, 0.05);
+        }
+        body {
+            background-color: #111319;
+            color: #e2e2eb;
+            overflow-x: hidden;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body-md text-body-md min-h-screen flex flex-col">
+<!-- Top Selection Bar (Replaces TopAppBar in Multi-Select Mode) -->
+<header class="w-full top-0 sticky z-50 bg-background flex items-center justify-between px-6 py-4 transition-opacity duration-200">
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-surface-variant rounded-full transition-colors">
+<span class="material-symbols-outlined text-primary">close</span>
+</button>
+<span class="font-headline-lg-mobile text-headline-lg-mobile text-primary">1 selected</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 hover:bg-surface-variant rounded-full transition-colors" title="Download">
+<span class="material-symbols-outlined text-on-surface-variant">download</span>
+</button>
+<button class="p-2 hover:bg-surface-variant rounded-full transition-colors" title="Move">
+<span class="material-symbols-outlined text-on-surface-variant">drive_file_move</span>
+</button>
+<button class="p-2 hover:bg-surface-variant rounded-full transition-colors" title="Rename">
+<span class="material-symbols-outlined text-on-surface-variant">edit</span>
+</button>
+<button class="p-2 hover:bg-surface-variant rounded-full transition-colors" title="Delete">
+<span class="material-symbols-outlined text-error">delete</span>
+</button>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 px-6 pt-4 pb-40">
+<!-- Section Header -->
+<div class="flex items-center justify-between mb-8">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile">Files</h2>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest">Recent Updates</span>
+</div>
+<!-- Bento Grid / Asymmetric Layout -->
+<div class="grid grid-cols-2 gap-card-gap">
+<!-- Selected File Card: Presentation.pdf -->
+<div class="relative col-span-2 bg-[#1A1D27] p-inner-padding rounded-[16px] inner-glow shadow-[0px_20px_40px_rgba(0,0,0,0.4)] scale-[1.02] transition-transform">
+<div class="absolute top-4 right-4 w-8 h-8 bg-[#E6AF2E] rounded-full flex items-center justify-center shadow-lg">
+<span class="material-symbols-outlined text-on-secondary-container text-[20px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="flex flex-col gap-4">
+<div class="w-12 h-12 rounded-xl bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-[28px]">picture_as_pdf</span>
+</div>
+<div>
+<h3 class="font-body-lg text-body-lg text-on-surface">Presentation.pdf</h3>
+<p class="font-metadata text-metadata text-on-surface-variant">24.5 MB • Modified 2h ago</p>
+</div>
+</div>
+</div>
+<!-- Card: Images Folder -->
+<div class="bg-[#1A1D27] p-inner-padding rounded-[16px] inner-glow flex flex-col gap-4">
+<div class="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-tertiary text-[28px]">folder</span>
+</div>
+<div>
+<h3 class="font-body-md text-body-md text-on-surface">Assets</h3>
+<p class="font-metadata text-metadata text-on-surface-variant">128 items</p>
+</div>
+</div>
+<!-- Card: Spreadsheet -->
+<div class="bg-[#1A1D27] p-inner-padding rounded-[16px] inner-glow flex flex-col gap-4">
+<div class="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary text-[28px]">table_chart</span>
+</div>
+<div>
+<h3 class="font-body-md text-body-md text-on-surface">Budget.xlsx</h3>
+<p class="font-metadata text-metadata text-on-surface-variant">1.2 MB</p>
+</div>
+</div>
+<!-- Large Featured Card -->
+<div class="col-span-2 h-48 rounded-[24px] overflow-hidden relative group">
+<div class="absolute inset-0 bg-gradient-to-t from-background to-transparent z-10 opacity-60"></div>
+<div class="absolute inset-0 z-0 bg-cover bg-center" data-alt="A moody, high-end 3D render of abstract glass shards and metallic textures floating in a deep navy void. Luminous purple and gold light streaks cut through the darkness, creating a sense of professional security and premium cloud storage. The atmosphere is sleek, minimalist, and technologically advanced." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDOw8e7VsdtwzAAcHvhOZ3w6I-VCZAU_AS-1jndvNsolJnmgCaOUE_mWWV0r8X1F0ckGzZxvhM_ZXPFK6er2GbNqKnrCDFKT3AWN3Yf2Mld030N9jkDzSEdUu9v3eRye5h_2edUYy2g3Ej6ZIVNMJTNr_XJmohtRnnLqq1eEoskduBl8FjupI3n_OxYutvesa2DMRoOJtzi93KJ2Mnx1K__dkphWjXxoJbVQU9KAXV-OUstjNYXWYxVzHrn9GkrgWT7vXM4sdwuBLp4')"></div>
+<div class="absolute bottom-6 left-6 z-20">
+<span class="bg-primary-container/80 backdrop-blur-md px-3 py-1 rounded-full font-label-sm text-label-sm text-primary mb-2 inline-block">FAVORITE</span>
+<h3 class="font-headline-lg-mobile text-headline-lg-mobile text-white">Q3 Roadmap.mp4</h3>
+</div>
+</div>
+</div>
+</main>
+<!-- Progress Toast -->
+<div class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] w-max max-w-[90vw]">
+<div class="glass-toolbar rounded-full py-3 px-5 flex items-center gap-4 shadow-[0px_20px_40px_rgba(0,0,0,0.6)] border border-white/5">
+<div class="relative w-6 h-6">
+<svg class="w-full h-full -rotate-90">
+<circle class="text-surface-variant" cx="12" cy="12" fill="transparent" r="10" stroke="currentColor" stroke-width="2"></circle>
+<circle class="text-primary" cx="12" cy="12" fill="transparent" r="10" stroke="currentColor" stroke-dasharray="62.8" stroke-dashoffset="15.7" stroke-width="2"></circle>
+</svg>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-body-md text-body-md text-on-surface truncate max-w-[150px]">Project_Brief.pdf</span>
+<span class="font-label-sm text-label-sm text-primary">75%</span>
+</div>
+<button class="material-symbols-outlined text-[18px] text-on-surface-variant hover:text-white transition-colors">close</button>
+</div>
+</div>
+<!-- Bottom Navigation Shell -->
+<nav class="fixed bottom-0 w-full z-50">
+<div class="flex justify-around items-center px-6 py-4 max-w-md mx-auto mb-8 rounded-full bg-surface-container/80 backdrop-blur-xl shadow-[0px_20px_40px_rgba(0,0,0,0.4)]">
+<!-- Home -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-3 hover:scale-105 transition-transform duration-200" href="#">
+<span class="material-symbols-outlined">home</span>
+</a>
+<!-- Files (Active) -->
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full p-3 scale-100 active:scale-95 transition-transform duration-200" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">folder_open</span>
+</a>
+<!-- Settings -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-3 hover:scale-105 transition-transform duration-200" href="#">
+<span class="material-symbols-outlined">settings</span>
+</a>
+</div>
+</nav>
+<script>
+        // Simple micro-interaction for cards
+        document.querySelectorAll('.inner-glow').forEach(card => {
+            card.addEventListener('mousedown', () => {
+                card.style.transform = 'scale(0.98)';
+            });
+            card.addEventListener('mouseup', () => {
+                card.style.transform = card.classList.contains('scale-[1.02]') ? 'scale(1.02)' : 'scale(1)';
+            });
+        });
+    </script>
+</body></html>

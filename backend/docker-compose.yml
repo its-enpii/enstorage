@@ -1,0 +1,120 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: enstorage-app
+    container_name: enstorage-app
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+      - app-storage:/var/www/html/storage
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: enstorage
+      DB_USERNAME: enstorage
+      DB_PASSWORD: ${DB_PASSWORD:-enstorage}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      APP_ENV: local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - enstorage-net
+    restart: unless-stopped
+
+  web:
+    image: nginx:1.27-alpine
+    container_name: enstorage-web
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+    networks:
+      - enstorage-net
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    image: enstorage-worker
+    container_name: enstorage-worker
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+      - app-storage:/var/www/html/storage
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: enstorage
+      DB_USERNAME: enstorage
+      DB_PASSWORD: ${DB_PASSWORD:-enstorage}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+    depends_on:
+      app:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - enstorage-net
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: enstorage-postgres
+    environment:
+      POSTGRES_DB: enstorage
+      POSTGRES_USER: enstorage
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-enstorage}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U enstorage -d enstorage"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - enstorage-net
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: enstorage-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - enstorage-net
+    restart: unless-stopped
+
+volumes:
+  app-storage:
+  postgres-data:
+  redis-data:
+
+networks:
+  enstorage-net:
+    driver: bridge
