@@ -51,7 +51,13 @@ dependencies:
   collection: ^1.18.0
   share_plus: ^10.1.2
   url_launcher: ^6.3.0
-  google_sign_in: ^7.2.0
+
+  # Google Sign-In. Pinned to v6.x because v7's native Android SDK
+  # uses Android Credential Manager (HiddenActivity), which renders
+  # a stuck/non-interactive picker on Infinix / Transsion devices
+  # running GMS 26.x. v6 uses an intent-based WebView flow that
+  # works on these devices.
+  google_sign_in: ^6.2.0
 
 dev_dependencies:
   flutter_test:

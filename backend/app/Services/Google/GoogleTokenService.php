@@ -79,11 +79,27 @@ class GoogleTokenService
      */
     public function exchangeServerAuthCode(string $serverAuthCode): array
     {
+        // `server_auth_code` di-issue oleh native Android SDK
+        // (`google_sign_in` v6) dengan `redirect_uri` tertentu yang
+        // di-embed di code. Backend tukar di
+        // https://oauth2.googleapis.com/token — kalau `redirect_uri`
+        // dikirim dan tidak match byte-for-byte dengan issuance, Google
+        // return `invalid_grant` (bukan `redirect_uri_mismatch`).
+        //
+        // Untuk Android-installed flow, solusi yang direkomendasikan:
+        // **omit `redirect_uri` dari request**. Google token endpoint
+        // akan match implicit dengan redirect_uri yang dipakai saat
+        // issuance.
+        //
+        // Sumber: research dari Google OAuth docs + RFC 6749 + Flutter
+        // package GitHub issues (2024-2026).
+        $clientId = (string) config('services.google.client_id_mobile');
+        $clientSecret = (string) config('services.google.client_secret_mobile');
+
         $response = Http::asForm()->post('https://oauth2.googleapis.com/token', [
             'code' => $serverAuthCode,
-            'client_id' => (string) config('services.google.client_id'),
-            'client_secret' => (string) config('services.google.client_secret'),
-            'redirect_uri' => 'postmessage',
+            'client_id' => $clientId,
+            'client_secret' => $clientSecret,
             'grant_type' => 'authorization_code',
         ]);
 
@@ -158,6 +174,8 @@ class GoogleTokenService
                 Log::warning('Google token refresh failed', [
                     'account_id' => $account->id,
                     'error' => $newToken['error'],
+                    'has_refresh_token' => ! empty($account->refresh_token),
+                    'client_id_used' => $client->getClientId(),
                 ]);
                 throw new RuntimeException('Gagal me-refresh token Google: '.($newToken['error_description'] ?? $newToken['error']));
             }

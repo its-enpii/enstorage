@@ -91,6 +91,12 @@ class GoogleAccountController extends Controller
         try {
             $token = $this->tokens->exchangeServerAuthCode($data['code']);
         } catch (\Throwable $e) {
+            // Log full error so we can debug without going through the
+            // Flutter client. Production keeps the generic
+            // client-facing message; this only adds server-side log.
+            \Illuminate\Support\Facades\Log::error('GoogleAccountController::exchange failed', [
+                'exception' => $e->getMessage(),
+            ]);
             return $this->fail(__('OAuth gagal: ').$e->getMessage(), 422);
         }
 
@@ -129,9 +135,26 @@ class GoogleAccountController extends Controller
             );
         }
 
-        // Buat folder root di GDrive + auto-sync quota
-        try { $this->quota->ensureRootFolder($account); $account->refresh(); } catch (\Throwable $e) {}
-        try { $this->quota->getQuota($account, forceRefresh: true); $account->refresh(); } catch (\Throwable $e) {}
+        // Buat folder root di GDrive + auto-sync quota. Log error
+        // kalau gagal supaya bisa debug (sebelumnya silent swallow).
+        try {
+            $this->quota->ensureRootFolder($account);
+            $account->refresh();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('ensureRootFolder failed after connect', [
+                'account_id' => $account->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+        try {
+            $this->quota->getQuota($account, forceRefresh: true);
+            $account->refresh();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('getQuota failed after connect', [
+                'account_id' => $account->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         app(\App\Services\ActivityLogService::class)->log(
             ActivityLog::ACTION_GOOGLE_ACCOUNT_ADD,
@@ -247,6 +270,142 @@ class GoogleAccountController extends Controller
         }
 
         return $this->created(new GoogleAccountResource($account), __('Akun Google berhasil terhubung.'));
+    }
+
+    /**
+     * POST /api/v1/google-accounts/oauth/callback
+     * Mobile WebView flow — app's in-app WebView intercepts the
+     * `enstorage://oauth-callback?code=...&state=...` redirect from
+     * Google, extracts code+state, and POSTs them here for the backend
+     * to complete the token exchange and persist the GoogleAccount row.
+     *
+     * This reuses the same logic as the browser `callback()` but is
+     * a separate JSON-returning route because the API group requires
+     * Sanctum Bearer auth and the web group uses session cookies.
+     */
+    public function mobileCallback(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'code' => ['required', 'string'],
+            'state' => ['required', 'string'],
+        ]);
+
+        $context = $this->resolveOAuthContext($request, $data['state']);
+        if ($context['error']) {
+            return $this->fail($context['error'], $context['status']);
+        }
+
+        $user = $context['user'];
+        $redirectUri = $context['redirect_uri'];
+
+        try {
+            $token = $this->tokens->exchangeCode($data['code'], $redirectUri);
+        } catch (Throwable $e) {
+            return $this->fail(__('OAuth gagal: ').$e->getMessage(), 422);
+        }
+
+        if (! $token['email']) {
+            return $this->fail(__('Tidak dapat mengambil email dari akun Google.'), 422);
+        }
+
+        $email = $token['email'];
+
+        $exists = GoogleAccount::where('user_id', $user->id)->where('email', $email)->exists();
+        if ($exists) {
+            return $this->fail(__('Akun Google ini sudah terhubung.'), 409);
+        }
+
+        try {
+            $account = DB::transaction(function () use ($user, $email, $token) {
+                return GoogleAccount::create([
+                    'user_id' => $user->id,
+                    'label' => $email,
+                    'email' => $email,
+                    'access_token' => $token['access_token'],
+                    'refresh_token' => $token['refresh_token'] ?? '',
+                    'token_expires_at' => now()->addSeconds($token['expires_in']),
+                    'is_active' => true,
+                ]);
+            });
+        } catch (Throwable $e) {
+            return $this->fail(__('Gagal menyimpan akun: ').$e->getMessage(), 500);
+        }
+
+        try {
+            $this->quota->ensureRootFolder($account);
+            $this->quota->getQuota($account, forceRefresh: true);
+        } catch (Throwable $e) {
+            // Tidak fatal — user bisa sync quota nanti
+        }
+
+        app(\App\Services\ActivityLogService::class)->log(
+            ActivityLog::ACTION_GOOGLE_ACCOUNT_ADD,
+            userId: $user->id,
+            subject: $account,
+            metadata: ['email' => $email, 'platform' => $context['platform']],
+            request: $request,
+        );
+
+        return $this->created(
+            new GoogleAccountResource($account),
+            __('Akun Google berhasil terhubung.'),
+        );
+    }
+
+    /**
+     * GET /api/v1/google-accounts/oauth/callback-web
+     *
+     * Bridge endpoint for the in-app WebView OAuth flow. Google's
+     * `redirect_uri` must be a valid HTTPS public domain (per Google's
+     * OAuth client policy — custom URI schemes like `enstorage://`
+     * are not accepted). This endpoint serves as that valid HTTPS
+     * destination: when Google redirects here after the user consents,
+     * we extract `code` + `state` from the query string and return a
+     * tiny HTML page that JavaScript-redirects to `enstorage://oauth-callback?code=...&state=...`.
+     *
+     * The app's in-app WebView has a NavigationDelegate that
+     * intercepts that `enstorage://` URL and POSTs the code+state to
+     * `mobileCallback()` to complete the flow.
+     *
+     * Note: This endpoint intentionally does NOT touch the database or
+     * call `exchangeCode()` — that only happens after the app's
+     * WebView has confirmed it received the code, so we don't burn
+     * authorization codes for users who never finish the WebView flow.
+     */
+    public function callbackWeb(Request $request): \Illuminate\Http\Response
+    {
+        $code = $request->query('code');
+        $state = $request->query('state');
+        $error = $request->query('error');
+
+        // Build the enstorage:// redirect target. Use rawurlencode so
+        // special chars in code/state survive the trip.
+        $params = [];
+        if ($error) {
+            $params['error'] = $error;
+        } elseif ($code && $state) {
+            $params['code'] = $code;
+            $params['state'] = $state;
+        }
+        $query = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+        $target = 'enstorage://oauth-callback'.($query ? '?'.$query : '');
+
+        $html = <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>EnStorage OAuth</title>
+<meta http-equiv="refresh" content="0;url={$target}">
+<script>window.location.replace("{$target}");</script>
+</head>
+<body>
+<p>Mengembalikan ke aplikasi&hellip;</p>
+</body>
+</html>
+HTML;
+
+        return response($html, 200, ['Content-Type' => 'text/html; charset=utf-8']);
     }
 
     /**

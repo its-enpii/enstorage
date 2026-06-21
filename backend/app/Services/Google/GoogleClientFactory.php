@@ -36,10 +36,23 @@ class GoogleClientFactory
 
     /**
      * Bangun Google Client yang sudah diautentikasi atas nama akun Google tertentu.
+     *
+     * Pakai `GOOGLE_CLIENT_ID_MOBILE` + `GOOGLE_CLIENT_SECRET_MOBILE`
+     * (= Web OAuth client di project `enstorage-6f754`) sebagai
+     * `client_id` / `client_secret` di Google Client. Ini penting:
+     * `access_token` / `refresh_token` yang disimpan di
+     * `GoogleAccount` adalah hasil tukar `server_auth_code` dari
+     * native mobile SDK dengan OAuth client itu — jadi client_id di
+     * Google Client harus match, kalau tidak Drive API call akan
+     * ditolak Google ("invalid_token" / "Token used in the wrong
+     * context").
      */
     public function makeFor(\App\Models\GoogleAccount $account): GoogleClient
     {
-        $client = $this->make();
+        $client = $this->make(
+            overrideClientId: (string) config('services.google.client_id_mobile'),
+            overrideClientSecret: (string) config('services.google.client_secret_mobile'),
+        );
         $client->setAccessToken([
             'access_token' => $account->access_token,
             'refresh_token' => $account->refresh_token,

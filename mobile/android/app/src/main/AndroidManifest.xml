@@ -36,6 +36,17 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- OAuth callback deep link for in-app WebView flow.
+                 Google's redirect_uri is enstorage://oauth-callback?code=...
+                 The WebView's navigationDelegate intercepts this URL before
+                 Android tries to dispatch it, but this filter is the OS-level
+                 safety net for external triggers (e.g. OAuth link from email). -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="enstorage" android:host="oauth-callback"/>
+            </intent-filter>
         </activity>
         <meta-data
             android:name="flutterEmbedding"

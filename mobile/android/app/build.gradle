@@ -2,6 +2,12 @@ plugins {
     id "com.android.application"
     id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
+    // Reads `google-services.json` at sync time and exposes its OAuth
+    // client (notably `client_type: 3` web entry) to
+    // `google_sign_in_android` 7.x as the `serverClientId`. Required
+    // for the v7 native SDK on Android — without it the SDK throws
+    // "serverClientId must be provided on Android".
+    id "com.google.gms.google-services"
 }
 
 def localProperties = new Properties()

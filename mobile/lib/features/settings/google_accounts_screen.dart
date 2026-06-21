@@ -1,6 +1,11 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:dio/dio.dart';
 
 import '../../data/models/google_account.dart';
 import '../../data/repositories/google_accounts_repository.dart';
@@ -13,26 +18,44 @@ import '../../theme/typography.dart';
 import '../../widgets/etheric_card.dart';
 import '../../widgets/etheric_fab.dart';
 
-/// Web OAuth client ID — dipakai sebagai `serverClientId` untuk Google
-/// Sign-In native SDK. Backend pakai `client_secret` milik client ini
-/// untuk menukar `server_auth_code` jadi token.
-const String _kWebClientId =
-    '821312365202-gkdfheld9sa8btmgjorpa26e3pn57lvo.apps.googleusercontent.com';
-
-/// Scopes yang diminta saat user hubungkan akun. `drive.file` kasih
-/// akses baca/tulis ke file yang app buat di Drive (cukup untuk vault).
+/// Scopes that EnStorage requests when connecting a Google account.
+/// `drive.file` gives read/write access to files the app creates in
+/// Drive — sufficient for the vault use case without claiming the
+/// full Drive scope.
 const List<String> _kScopes = <String>[
   'https://www.googleapis.com/auth/drive.file',
 ];
 
-/// Connected Google accounts. Three responsibilities:
+/// Web OAuth client ID used as `serverClientId` for the
+/// `GoogleSignIn` constructor (v6.x).
 ///
-/// 1. Show the list of accounts (with quota per row).
-/// 2. Connect a new account via `google_sign_in` native SDK —
-///    Google account picker muncul inline (bukan browser), lalu
-///    `serverAuthCode` dikirim ke backend untuk ditukar jadi token.
-/// 3. Per-account actions via bottom sheet: Sync Quota, Edit Label,
-///    Disconnect.
+/// On Android, this is the **Web** OAuth client (type 3) registered
+/// in GCP. The native SDK returns `server_auth_code` which the
+/// backend exchanges with the **same** Web client's `client_id` +
+/// `client_secret` + `redirect_uri=postmessage`. Both must be the
+/// same OAuth client in the same GCP project.
+///
+/// GCP project `enstorage-6f754`:
+///   - Web OAuth client (type 3) = `REDACTED_CLIENT_ID`
+///     - Used here as `serverClientId`
+///     - Used by backend (`GOOGLE_CLIENT_ID_MOBILE`) as `client_id`
+///       when exchanging `server_auth_code`
+///     - Has `client_secret` `REDACTED_CLIENT_SECRET`
+const String _kWebClientId =
+    'REDACTED_CLIENT_ID';
+
+/// Connected Google accounts. Responsibilities:
+///
+/// 1. Show the list of connected accounts (with quota per row).
+/// 2. Connect a new account via `google_sign_in` native SDK +
+///    `google-services.json`.
+/// 3. Per-account actions: sync quota, edit label, disconnect.
+///
+/// Uses `google_sign_in` v6.x — the v7 SDK on Android uses Android
+/// Credential Manager (HiddenActivity), which renders a stuck /
+/// non-interactive picker on Infinix / Transsion devices running
+/// GMS 26.x. v6 uses an intent-based WebView flow that works on
+/// these devices.
 class GoogleAccountsScreen extends ConsumerStatefulWidget {
   const GoogleAccountsScreen({super.key});
 
@@ -42,66 +65,169 @@ class GoogleAccountsScreen extends ConsumerStatefulWidget {
 }
 
 class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
-  @override
-  void initState() {
-    super.initState();
-    _initGoogleSignIn();
-  }
+  bool _connecting = false;
 
-  Future<void> _initGoogleSignIn() async {
-    try {
-      await GoogleSignIn.instance.initialize(
-        serverClientId: _kWebClientId,
-      );
-    } catch (_) {
-      // Initialization failure (mis. emulator tanpa Google Play
-      // Services) — handled lazily on first `_onConnect()` call.
-    }
+  /// v6.x API: `GoogleSignIn` is a regular constructor (not a
+  /// `.instance` singleton). `serverClientId` is a constructor arg.
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: _kScopes,
+    serverClientId: _kWebClientId,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final accounts = ref.watch(googleAccountsProvider);
+
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.googleAccountsTitle)),
+      body: SafeArea(
+        top: false,
+        child: RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(googleAccountsProvider);
+            await ref.read(googleAccountsProvider.future);
+          },
+          child: accounts.when(
+            loading: () => const _LoadingState(),
+            error: (e, _) => _ErrorState(
+              message: l10n.commonError,
+              onRetry: () => ref.invalidate(googleAccountsProvider),
+            ),
+            data: (list) {
+              if (list.isEmpty) {
+                return _EmptyState(l10n: l10n);
+              }
+              return ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.containerPadding,
+                  12,
+                  AppSpacing.containerPadding,
+                  120,
+                ),
+                itemCount: list.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (ctx, i) {
+                  final acc = list[i];
+                  return _GoogleAccountCard(
+                    account: acc,
+                    onTap: () => _showActionSheet(acc),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ),
+      floatingActionButton: _connecting
+          ? const _ConnectingFab()
+          : EthericFab(onTap: _onConnect),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
   }
 
   Future<void> _onConnect() async {
+    if (_connecting) return;
+    setState(() => _connecting = true);
+
     final l10n = AppLocalizations.of(context)!;
     final repo = ref.read(googleAccountsRepositoryProvider);
     final messenger = ScaffoldMessenger.of(context);
 
     try {
-      // 1. Native Google account picker + sign-in.
-      final account = await GoogleSignIn.instance.authenticate();
+      // v6 sign-in: triggers the OS account picker (intent-based on
+      // Android) and returns a `GoogleSignInAccount` on success.
+      // `null` = user dismissed.
+      final GoogleSignInAccount? account = await _googleSignIn.signIn();
+      if (account == null) {
+        debugPrint('[google_accounts] signIn returned null (user cancelled)');
+        return;
+      }
+      debugPrint(
+        '[google_accounts] account: id=${account.id} '
+        'email=${account.email} displayName=${account.displayName}',
+      );
 
-      // 2. Request server-side auth code with Drive scope. This
-      //    returns a one-time code yang backend tukar jadi token.
-      final serverAuth =
-          await account.authorizationClient.authorizeServer(_kScopes);
-      final code = serverAuth?.serverAuthCode;
-      if (code == null) {
-        if (!mounted) return;
-        messenger.showSnackBar(
-          SnackBar(content: Text(l10n.googleAccountsExchangeFailed)),
+      // v6.x exposes `serverAuthCode` on `GoogleSignInAccount`. The
+      // code is only populated when `serverClientId` is set on the
+      // `GoogleSignIn` instance and the user has completed the
+      // consent screen.
+      final String? code = account.serverAuthCode;
+      if (code == null || code.isEmpty) {
+        await _showError(
+          'serverAuthCode null/kosong setelah authentication. '
+          'Pastikan serverClientId valid dan cocok dengan client '
+          'yang punya client_secret.',
         );
         return;
       }
 
-      // 3. Exchange with backend.
       await repo.exchangeServerAuthCode(code: code);
+      // Sign out from the native session so the OS doesn't keep a
+      // cached "last signed-in" account — the source of truth is our
+      // backend's `google_accounts` table.
+      unawaited(_googleSignIn.signOut());
+
       ref.invalidate(googleAccountsProvider);
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(content: Text(l10n.googleAccountsExchangeSuccess)),
       );
-    } on GoogleSignInException catch (e) {
-      // User cancelled at the picker, atau Play Services unavailable.
-      // Silent untuk cancellation — explicit error untuk yang lain.
-      if (e.code == GoogleSignInExceptionCode.canceled) return;
+    } on PlatformException catch (e) {
+      // v6.x surfaces cancellations and configuration errors as
+      // PlatformException. `code` is one of:
+      //   'sign_in_canceled'        — user dismissed the picker
+      //   'network_error'           — no connectivity
+      //   'sign_in_failed'          — generic failure
+      //   'sign_in_required'        — no active session
+      debugPrint(
+        '[google_accounts] PlatformException: code=${e.code} '
+        'message=${e.message} details=${e.details}',
+      );
+      if (e.code == 'sign_in_canceled') return;
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text(l10n.googleAccountsExchangeFailed)),
+        SnackBar(
+          content: Text(
+            'Sign-in gagal (${e.code}): ${e.message ?? '(no message)'}',
+          ),
+          duration: const Duration(seconds: 6),
+        ),
       );
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[google_accounts] UNEXPECTED: $e\n$st');
+      // Surface backend error body (422 from exchange) so we can see
+      // the exact OAuth error message without going through laravel.log.
+      if (e is DioException && e.response != null) {
+        debugPrint(
+          '[google_accounts] backend response '
+          'status=${e.response?.statusCode} '
+          'body=${e.response?.data}',
+        );
+      }
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text(l10n.googleAccountsExchangeFailed)),
+        SnackBar(
+          content: Text('Unexpected error: $e'),
+          duration: const Duration(seconds: 6),
+        ),
       );
+    } finally {
+      if (mounted) setState(() => _connecting = false);
     }
+  }
+
+  Future<void> _showError(String msg) async {
+    debugPrint('[google_accounts] $msg');
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(l10n.googleAccountsExchangeFailed),
+        duration: const Duration(seconds: 6),
+      ),
+    );
   }
 
   Future<void> _onSync(GoogleAccount account) async {
@@ -238,55 +364,33 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
       },
     );
   }
+}
+
+// ─── Connecting FAB (spinner) ───────────────────────────────────────────
+
+class _ConnectingFab extends StatelessWidget {
+  const _ConnectingFab();
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final accounts = ref.watch(googleAccountsProvider);
-
-    return Scaffold(
-      appBar: AppBar(title: Text(l10n.googleAccountsTitle)),
-      body: SafeArea(
-        top: false,
-        child: RefreshIndicator(
-          onRefresh: () async {
-            ref.invalidate(googleAccountsProvider);
-            await ref.read(googleAccountsProvider.future);
-          },
-          child: accounts.when(
-            loading: () => const _LoadingState(),
-            error: (e, _) => _ErrorState(
-              message: l10n.commonError,
-              onRetry: () => ref.invalidate(googleAccountsProvider),
-            ),
-            data: (list) {
-              if (list.isEmpty) {
-                return _EmptyState(l10n: l10n);
-              }
-              return ListView.separated(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.containerPadding,
-                  12,
-                  AppSpacing.containerPadding,
-                  120,
-                ),
-                itemCount: list.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (ctx, i) {
-                  final acc = list[i];
-                  return _GoogleAccountCard(
-                    account: acc,
-                    onTap: () => _showActionSheet(acc),
-                  );
-                },
-              );
-            },
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: const BoxDecoration(
+        color: AppColors.secondary,
+        shape: BoxShape.circle,
+        boxShadow: AppShadows.fabGold,
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
           ),
         ),
       ),
-      floatingActionButton: EthericFab(onTap: _onConnect),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }
@@ -312,8 +416,6 @@ class _GoogleAccountCard extends StatelessWidget {
     final used = q.used;
     final pct = total > 0 ? (used / total).clamp(0.0, 1.0) : 0.0;
     final showQuota = total > 0;
-    // Backend seeds `label` with the email on connect, so hide the
-    // duplicate label row when it still equals the email.
     final showLabel = account.label.isNotEmpty && account.label != account.email;
 
     return Material(

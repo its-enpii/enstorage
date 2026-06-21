@@ -31,6 +31,14 @@ Route::get('docs/openapi.yaml', [DocsController::class, 'spec']);
 // Public share link (tanpa auth)
 Route::get('s/{token}', [FileController::class, 'viewByToken']);
 
+// Google OAuth bridge — public, no auth. Google's redirect_uri MUST
+// be a valid HTTPS public domain (custom URI schemes are rejected
+// by Google for both Web and Android OAuth client types). This
+// endpoint serves as that HTTPS destination, then returns HTML that
+// JS-redirects to enstorage://oauth-callback?code=...&state=... for
+// the mobile app's in-app WebView to intercept.
+Route::get('google-accounts/oauth/callback-web', [GoogleAccountController::class, 'callbackWeb']);
+
 // Protected
 Route::middleware('auth.apikey')->group(function () {
     Route::post('auth/logout', [AuthController::class, 'logout']);
@@ -61,6 +69,9 @@ Route::middleware('auth.apikey')->group(function () {
         // agar tidak konflik dengan format Sanctum-protected API.
         // Mobile flow: app intercept custom URL scheme callback dan POST ke sini.
         Route::post('oauth/exchange', [GoogleAccountController::class, 'exchange']);
+        // Mobile WebView flow: WebView intercepts enstorage://oauth-callback
+        // navigation, extracts code+state, POSTs here for backend to exchange.
+        Route::post('oauth/callback', [GoogleAccountController::class, 'mobileCallback']);
         Route::get('/', [GoogleAccountController::class, 'index']);
         Route::get('{id}', [GoogleAccountController::class, 'show']);
         Route::patch('{id}', [GoogleAccountController::class, 'update']);
