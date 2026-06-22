@@ -38,14 +38,15 @@ const List<String> _kScopes = <String>[
 /// `client_secret` + `redirect_uri=postmessage`. Both must be the
 /// same OAuth client in the same GCP project.
 ///
-/// GCP project `enstorage-6f754`:
-///   - Web OAuth client (type 3) = `REDACTED_CLIENT_ID`
-///     - Used here as `serverClientId`
-///     - Used by backend (`GOOGLE_CLIENT_ID_MOBILE`) as `client_id`
-///       when exchanging `server_auth_code`
-///     - Has `client_secret` `REDACTED_CLIENT_SECRET`
-const String _kWebClientId =
-    'REDACTED_CLIENT_ID';
+/// The OAuth `client_secret` is a server-side credential and must
+/// NEVER live in this app. It belongs on the backend that performs
+/// the code-for-token exchange.
+///
+/// Injected at build time via:
+///   ./scripts/run_dev.sh
+/// which reads `GOOGLE_CLIENT_ID` from `.env.local` and passes it as
+/// `--dart-define`. In CI, pass it via the same flag.
+const String _kWebClientId = String.fromEnvironment('GOOGLE_CLIENT_ID');
 
 /// Connected Google accounts. Responsibilities:
 ///

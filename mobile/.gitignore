@@ -32,3 +32,10 @@ ios/Runner.xcworkspace/xcuserdata/
 
 # Generated
 lib/l10n/gen/
+
+# Local secrets — copy .env.example to .env.local and fill in.
+# Never commit any *.env.local or generic .env files.
+.env
+.env.local
+.env.*.local
+*.local
