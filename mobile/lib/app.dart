@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'l10n/gen/app_localizations.dart';
 import 'router/router.dart';
+import 'services/notification_service.dart';
 import 'state/auth_state.dart';
 import 'state/locale_state.dart';
+import 'state/theme_state.dart';
 import 'theme/theme.dart';
 
 class EnStorageApp extends ConsumerStatefulWidget {
@@ -40,11 +42,15 @@ class _EnStorageAppState extends ConsumerState<EnStorageApp> {
 
     final router = ref.watch(routerConfigProvider);
     final locale = ref.watch(localeControllerProvider);
+    final themeMode = ref.watch(themeModeControllerProvider);
     return MaterialApp.router(
       title: 'EnStorage',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.build(),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: themeMode,
       routerConfig: router,
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       locale: locale,
       supportedLocales: supportedLocales,
       localizationsDelegates: const [

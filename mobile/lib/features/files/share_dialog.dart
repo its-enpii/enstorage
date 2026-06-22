@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/file_item.dart';
 import '../../data/repositories/files_repository.dart';
 import '../../l10n/gen/app_localizations.dart';
-import '../../theme/colors.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -75,9 +74,10 @@ class _ShareDialogState extends ConsumerState<ShareDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
     final hasShare = _shareToken != null;
     return Dialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: scheme.surfaceContainer,
       shape: RoundedRectangleBorder(borderRadius: AppRadii.cardBorder),
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.innerPadding),
@@ -89,7 +89,7 @@ class _ShareDialogState extends ConsumerState<ShareDialog> {
               children: [
                 Icon(
                   hasShare ? Icons.link : Icons.link_off,
-                  color: hasShare ? AppColors.primary : AppColors.onSurfaceVariant,
+                  color: hasShare ? scheme.primary : scheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -104,7 +104,7 @@ class _ShareDialogState extends ConsumerState<ShareDialog> {
             Text(
               hasShare ? l10n.shareDescEnabled : l10n.shareDescDisabled,
               style: AppTypography.bodyMd.copyWith(
-                color: AppColors.onSurfaceVariant,
+                color: scheme.onSurfaceVariant,
               ),
             ),
             if (hasShare) ...[
@@ -112,7 +112,7 @@ class _ShareDialogState extends ConsumerState<ShareDialog> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceHigh,
+                  color: scheme.surfaceContainerHigh,
                   borderRadius: AppRadii.controlBorder,
                 ),
                 child: Row(
@@ -124,14 +124,14 @@ class _ShareDialogState extends ConsumerState<ShareDialog> {
                         overflow: TextOverflow.ellipsis,
                         style: AppTypography.bodySm.copyWith(
                           fontFamily: 'monospace',
-                          color: AppColors.onSurface,
+                          color: scheme.onSurface,
                         ),
                       ),
                     ),
                     IconButton(
                       icon: Icon(
                         _copied ? Icons.check : Icons.content_copy,
-                        color: AppColors.primary,
+                        color: scheme.primary,
                         size: 20,
                       ),
                       onPressed: _copy,

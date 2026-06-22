@@ -4,8 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../data/repositories/files_repository.dart';
 import '../../l10n/gen/app_localizations.dart';
-import '../../state/upload_state.dart';
-import '../../theme/colors.dart';
+import '../../services/notification_service.dart';
 import '../../theme/radii.dart';
 import '../../widgets/list_menu_sheet.dart';
 import '../../widgets/nav_aware_sheet.dart';
@@ -29,15 +28,15 @@ Future<CameraMode?> showCameraModeSheet(BuildContext context) {
           children: [
             ListMenuTile(
               icon: Icons.photo_camera_outlined,
-              iconFg: AppColors.onSurface,
-              iconBg: AppColors.surfaceHigh,
+              iconFg: Theme.of(ctx).colorScheme.onSurface,
+              iconBg: Theme.of(ctx).colorScheme.surfaceContainerHigh,
               label: l10n.cameraModePhoto,
               onTap: () => Navigator.of(ctx).pop(CameraMode.photo),
             ),
             ListMenuTile(
               icon: Icons.videocam_outlined,
-              iconFg: AppColors.onSurface,
-              iconBg: AppColors.surfaceHigh,
+              iconFg: Theme.of(ctx).colorScheme.onSurface,
+              iconBg: Theme.of(ctx).colorScheme.surfaceContainerHigh,
               label: l10n.cameraModeVideo,
               onTap: () => Navigator.of(ctx).pop(CameraMode.video),
             ),
@@ -69,17 +68,22 @@ Future<void> runCameraCapture(BuildContext context, {String? folderId}) async {
 
   final container = ProviderScope.containerOf(context, listen: false);
   final repo = container.read(filesRepositoryProvider);
-  final ctrl = container.read(uploadControllerProvider.notifier);
-  final id = ctrl.start(shot.name);
+  final filename = shot.name;
+  showUploadProgress(filename: filename, progress: 0);
   try {
     await repo.uploadFile(
       path: shot.path,
-      filename: shot.name,
+      filename: filename,
       folderId: folderId,
-      onProgress: (s, t) => ctrl.update(id, sent: s, total: t),
+      onProgress: (s, t) {
+        final pct = t == 0 ? 0 : ((s / t) * 100).round();
+        showUploadProgress(filename: filename, progress: pct);
+      },
     );
-    ctrl.complete(id);
-  } catch (_) {
-    ctrl.fail(id);
+    // HTTP done — fase 2 (backend → GDrive). Notif jadi indeterminate.
+    showUploadProgress(filename: filename, progress: 0, indeterminate: true);
+    // Tunggu FCM upload.complete dari backend.
+  } catch (e) {
+    finishUpload(filename: filename, success: false, body: e.toString());
   }
 }

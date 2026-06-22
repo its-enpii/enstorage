@@ -10,13 +10,16 @@ import 'package:dio/dio.dart';
 import '../../data/models/google_account.dart';
 import '../../data/repositories/google_accounts_repository.dart';
 import '../../l10n/gen/app_localizations.dart';
-import '../../theme/colors.dart';
+import '../../state/storage_state.dart';
 import '../../theme/radii.dart';
 import '../../theme/shadows.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/etheric_card.dart';
 import '../../widgets/etheric_fab.dart';
+import '../../widgets/app_snackbar.dart';
+import '../../widgets/list_menu_sheet.dart';
+import '../../widgets/nav_aware_sheet.dart';
 
 /// Scopes that EnStorage requests when connecting a Google account.
 /// `drive.file` gives read/write access to files the app creates in
@@ -83,47 +86,54 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
       appBar: AppBar(title: Text(l10n.googleAccountsTitle)),
       body: SafeArea(
         top: false,
-        child: RefreshIndicator(
-          onRefresh: () async {
-            ref.invalidate(googleAccountsProvider);
-            await ref.read(googleAccountsProvider.future);
-          },
-          child: accounts.when(
-            loading: () => const _LoadingState(),
-            error: (e, _) => _ErrorState(
-              message: l10n.commonError,
-              onRetry: () => ref.invalidate(googleAccountsProvider),
-            ),
-            data: (list) {
-              if (list.isEmpty) {
-                return _EmptyState(l10n: l10n);
-              }
-              return ListView.separated(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.containerPadding,
-                  12,
-                  AppSpacing.containerPadding,
-                  120,
+        child: Stack(
+          children: [
+            RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(googleAccountsProvider);
+                await ref.read(googleAccountsProvider.future);
+              },
+              child: accounts.when(
+                loading: () => const _LoadingState(),
+                error: (e, _) => _ErrorState(
+                  message: l10n.commonError,
+                  onRetry: () => ref.invalidate(googleAccountsProvider),
                 ),
-                itemCount: list.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (ctx, i) {
-                  final acc = list[i];
-                  return _GoogleAccountCard(
-                    account: acc,
-                    onTap: () => _showActionSheet(acc),
+                data: (list) {
+                  if (list.isEmpty) {
+                    return _EmptyState(l10n: l10n);
+                  }
+                  return ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.containerPadding,
+                      12,
+                      AppSpacing.containerPadding,
+                      120,
+                    ),
+                    itemCount: list.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (ctx, i) {
+                      final acc = list[i];
+                      return _GoogleAccountCard(
+                        account: acc,
+                        onTap: () => _showActionSheet(acc),
+                      );
+                    },
                   );
                 },
-              );
-            },
-          ),
+              ),
+            ),
+            Positioned(
+              right: AppSpacing.fabHorizontal,
+              bottom: AppSpacing.fabBottom,
+              child: _connecting
+                  ? const _ConnectingFab()
+                  : EthericFab(onTap: _onConnect),
+            ),
+          ],
         ),
       ),
-      floatingActionButton: _connecting
-          ? const _ConnectingFab()
-          : EthericFab(onTap: _onConnect),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -133,7 +143,6 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
 
     final l10n = AppLocalizations.of(context)!;
     final repo = ref.read(googleAccountsRepositoryProvider);
-    final messenger = ScaffoldMessenger.of(context);
 
     try {
       // v6 sign-in: triggers the OS account picker (intent-based on
@@ -170,10 +179,12 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
       unawaited(_googleSignIn.signOut());
 
       ref.invalidate(googleAccountsProvider);
+      // Refresh the homepage storage summary so the user sees the
+      // newly-connected account's quota right after returning to home.
+      ref.invalidate(storageSummaryProvider);
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.googleAccountsExchangeSuccess)),
-      );
+      showAppSnackBar(context, l10n.googleAccountsExchangeSuccess,
+          variant: AppSnackBarVariant.success);
     } on PlatformException catch (e) {
       // v6.x surfaces cancellations and configuration errors as
       // PlatformException. `code` is one of:
@@ -187,13 +198,11 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
       );
       if (e.code == 'sign_in_canceled') return;
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            'Sign-in gagal (${e.code}): ${e.message ?? '(no message)'}',
-          ),
-          duration: const Duration(seconds: 6),
-        ),
+      showAppSnackBar(
+        context,
+        'Sign-in gagal (${e.code}): ${e.message ?? '(no message)'}',
+        variant: AppSnackBarVariant.error,
+        duration: const Duration(seconds: 6),
       );
     } catch (e, st) {
       debugPrint('[google_accounts] UNEXPECTED: $e\n$st');
@@ -207,11 +216,11 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
         );
       }
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Unexpected error: $e'),
-          duration: const Duration(seconds: 6),
-        ),
+      showAppSnackBar(
+        context,
+        'Unexpected error: $e',
+        variant: AppSnackBarVariant.error,
+        duration: const Duration(seconds: 6),
       );
     } finally {
       if (mounted) setState(() => _connecting = false);
@@ -222,30 +231,28 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
     debugPrint('[google_accounts] $msg');
     if (!mounted) return;
     final l10n = AppLocalizations.of(context)!;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(l10n.googleAccountsExchangeFailed),
-        duration: const Duration(seconds: 6),
-      ),
+    showAppSnackBar(
+      context,
+      l10n.googleAccountsExchangeFailed,
+      variant: AppSnackBarVariant.error,
+      duration: const Duration(seconds: 6),
     );
   }
 
   Future<void> _onSync(GoogleAccount account) async {
     final l10n = AppLocalizations.of(context)!;
-    final messenger = ScaffoldMessenger.of(context);
     final repo = ref.read(googleAccountsRepositoryProvider);
     try {
       await repo.syncQuota(account.id);
       ref.invalidate(googleAccountsProvider);
+      ref.invalidate(storageSummaryProvider);
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.googleAccountsSyncSuccess)),
-      );
+      showAppSnackBar(context, l10n.googleAccountsSyncSuccess,
+          variant: AppSnackBarVariant.success);
     } catch (_) {
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.googleAccountsSyncFailed)),
-      );
+      showAppSnackBar(context, l10n.googleAccountsSyncFailed,
+          variant: AppSnackBarVariant.error);
     }
   }
 
@@ -259,19 +266,16 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
       return;
     }
     final repo = ref.read(googleAccountsRepositoryProvider);
-    final messenger = ScaffoldMessenger.of(context);
     try {
       await repo.updateLabel(account.id, newLabel);
       ref.invalidate(googleAccountsProvider);
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.googleAccountsLabelUpdated)),
-      );
+      showAppSnackBar(context, l10n.googleAccountsLabelUpdated,
+          variant: AppSnackBarVariant.success);
     } catch (_) {
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.googleAccountsLabelFailed)),
-      );
+      showAppSnackBar(context, l10n.googleAccountsLabelFailed,
+          variant: AppSnackBarVariant.error);
     }
   }
 
@@ -280,7 +284,7 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainer,
         title: Text(l10n.googleAccountsDisconnectTitle),
         content: Text(l10n.googleAccountsDisconnectBody),
         actions: [
@@ -289,7 +293,8 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
             child: Text(l10n.commonCancel),
           ),
           TextButton(
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(ctx).colorScheme.error),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: Text(l10n.googleAccountsDisconnectConfirm),
           ),
@@ -299,60 +304,59 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
     if (confirmed != true) return;
 
     final repo = ref.read(googleAccountsRepositoryProvider);
-    final messenger = ScaffoldMessenger.of(context);
     try {
       await repo.disconnect(account.id);
       ref.invalidate(googleAccountsProvider);
+      ref.invalidate(storageSummaryProvider);
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.googleAccountsDisconnected)),
-      );
+      showAppSnackBar(context, l10n.googleAccountsDisconnected,
+          variant: AppSnackBarVariant.success);
     } catch (_) {
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.googleAccountsDisconnectFailed)),
-      );
+      showAppSnackBar(context, l10n.googleAccountsDisconnectFailed,
+          variant: AppSnackBarVariant.error);
     }
   }
 
   void _showActionSheet(GoogleAccount account) {
     final l10n = AppLocalizations.of(context)!;
-    showModalBottomSheet<Widget>(
+    showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: AppRadii.topSheetBorder),
+      isScrollControlled: true,
+      useRootNavigator: true,
       builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+        final scheme = Theme.of(ctx).colorScheme;
+        return NavAwareSheet(
+          child: ListMenuSheet(
+            title: account.email,
             children: [
-              ListTile(
-                leading: const Icon(Icons.sync),
-                title: Text(l10n.googleAccountsSync),
+              ListMenuTile(
+                icon: Icons.sync,
+                iconFg: scheme.primary,
+                iconBg: scheme.primary.withValues(alpha: 0.10),
+                label: l10n.googleAccountsSync,
                 onTap: () {
                   Navigator.of(ctx).pop();
                   _onSync(account);
                 },
               ),
-              ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: Text(l10n.googleAccountsEditLabel),
+              ListMenuTile(
+                icon: Icons.edit_outlined,
+                iconFg: scheme.secondary,
+                iconBg: scheme.secondary.withValues(alpha: 0.10),
+                label: l10n.googleAccountsEditLabel,
                 onTap: () {
                   Navigator.of(ctx).pop();
                   _onEditLabel(account);
                 },
               ),
-              ListTile(
-                leading: const Icon(
-                  Icons.link_off,
-                  color: AppColors.error,
-                ),
-                title: Text(
-                  l10n.googleAccountsDisconnect,
-                  style: const TextStyle(color: AppColors.error),
-                ),
+              ListMenuTile(
+                icon: Icons.link_off,
+                iconFg: scheme.error,
+                iconBg: scheme.error.withValues(alpha: 0.10),
+                label: l10n.googleAccountsDisconnect,
                 onTap: () {
                   Navigator.of(ctx).pop();
                   _onDisconnect(account);
@@ -373,11 +377,12 @@ class _ConnectingFab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       width: 56,
       height: 56,
-      decoration: const BoxDecoration(
-        color: AppColors.secondary,
+      decoration: BoxDecoration(
+        color: scheme.secondary,
         shape: BoxShape.circle,
         boxShadow: AppShadows.fabGold,
       ),
@@ -411,6 +416,7 @@ class _GoogleAccountCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
     final q = account.quota;
     final total = q.total;
     final used = q.used;
@@ -419,7 +425,7 @@ class _GoogleAccountCard extends StatelessWidget {
     final showLabel = account.label.isNotEmpty && account.label != account.email;
 
     return Material(
-      color: AppColors.surface,
+      color: scheme.surfaceContainer,
       borderRadius: AppRadii.cardBorder,
       child: InkWell(
         borderRadius: AppRadii.cardBorder,
@@ -428,7 +434,7 @@ class _GoogleAccountCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: AppRadii.cardBorder,
-            boxShadow: AppShadows.innerGlow,
+            boxShadow: AppShadows.innerGlow(Theme.of(context).brightness),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -437,14 +443,14 @@ class _GoogleAccountCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.primaryContainer,
+                  color: scheme.primaryContainer,
                   borderRadius: BorderRadius.circular(22),
                 ),
                 child: Center(
                   child: Text(
                     _initial,
                     style: AppTypography.headlineLgMobile.copyWith(
-                      color: AppColors.onPrimaryContainer,
+                      color: scheme.onPrimaryContainer,
                       fontSize: 20,
                     ),
                   ),
@@ -460,7 +466,7 @@ class _GoogleAccountCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.bodyMd.copyWith(
-                        color: AppColors.onSurface,
+                        color: scheme.onSurface,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -471,7 +477,7 @@ class _GoogleAccountCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AppTypography.bodySm.copyWith(
-                          color: AppColors.onSurfaceVariant,
+                          color: scheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -482,9 +488,9 @@ class _GoogleAccountCard extends StatelessWidget {
                         child: LinearProgressIndicator(
                           value: pct,
                           minHeight: 6,
-                          backgroundColor: AppColors.surfaceHigh,
+                          backgroundColor: scheme.surfaceContainerHigh,
                           valueColor: AlwaysStoppedAnimation(
-                            pct > 0.9 ? AppColors.error : AppColors.secondary,
+                            pct > 0.9 ? scheme.error : scheme.secondary,
                           ),
                         ),
                       ),
@@ -492,23 +498,23 @@ class _GoogleAccountCard extends StatelessWidget {
                       Text(
                         '${_humanSize(used)} / ${_humanSize(total)}',
                         style: AppTypography.metadata.copyWith(
-                          color: AppColors.onSurfaceVariant,
+                          color: scheme.onSurfaceVariant,
                         ),
                       ),
                     ] else
                       Text(
                         l10n.googleAccountsLoadingQuota,
                         style: AppTypography.metadata.copyWith(
-                          color: AppColors.onSurfaceVariant,
+                          color: scheme.onSurfaceVariant,
                         ),
                       ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(
+              Icon(
                 Icons.more_vert,
-                color: AppColors.onSurfaceVariant,
+                color: scheme.onSurfaceVariant,
               ),
             ],
           ),
@@ -550,7 +556,7 @@ class _ErrorState extends StatelessWidget {
           child: Text(
             message,
             style: AppTypography.bodyMd.copyWith(
-              color: AppColors.onSurfaceVariant,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ),
@@ -569,6 +575,7 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.containerPadding),
@@ -579,10 +586,10 @@ class _EmptyState extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
+              Icon(
                 Icons.account_circle_outlined,
                 size: 48,
-                color: AppColors.primary,
+                color: scheme.primary,
               ),
               const SizedBox(height: 16),
               Text(
@@ -593,7 +600,7 @@ class _EmptyState extends StatelessWidget {
               Text(
                 l10n.googleAccountsEmptyDesc,
                 style: AppTypography.bodyMd.copyWith(
-                  color: AppColors.onSurfaceVariant,
+                  color: scheme.onSurfaceVariant,
                 ),
               ),
             ],
@@ -627,8 +634,9 @@ class _EditLabelDialogState extends State<_EditLabelDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: scheme.surfaceContainer,
       title: Text(l10n.googleAccountsEditLabelTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -637,7 +645,7 @@ class _EditLabelDialogState extends State<_EditLabelDialog> {
           Text(
             l10n.googleAccountsEditLabelDesc,
             style: AppTypography.bodySm.copyWith(
-              color: AppColors.onSurfaceVariant,
+              color: scheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 12),

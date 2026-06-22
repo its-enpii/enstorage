@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'colors.dart';
-
 /// Typography tokens.
 /// Headings: DM Sans (geometric, confident).
 /// Body / label / metadata: Inter (legible).
@@ -92,8 +90,10 @@ class AppTypography {
     height: 1.4,
   );
 
-  /// Build the TextTheme used by ThemeData.
-  static TextTheme buildTextTheme(Color onSurface) {
+  /// Build the TextTheme used by ThemeData. Both [onSurface] and
+  /// [onSurfaceVariant] must be supplied by the caller so the theme
+  /// works in both brightness modes.
+  static TextTheme buildTextTheme(Color onSurface, Color onSurfaceVariant) {
     return TextTheme(
       displayLarge: displayXl.copyWith(color: onSurface),
       displayMedium: headlineLg.copyWith(color: onSurface),
@@ -105,10 +105,10 @@ class AppTypography {
       titleMedium: bodyMd.copyWith(color: onSurface, fontWeight: FontWeight.w600),
       bodyLarge: bodyLg.copyWith(color: onSurface),
       bodyMedium: bodyMd.copyWith(color: onSurface),
-      bodySmall: metadata.copyWith(color: AppColors.onSurfaceVariant),
+      bodySmall: metadata.copyWith(color: onSurfaceVariant),
       labelLarge: labelSm.copyWith(color: onSurface),
       labelMedium: labelSm.copyWith(color: onSurface),
-      labelSmall: labelSm.copyWith(color: AppColors.onSurfaceVariant),
+      labelSmall: labelSm.copyWith(color: onSurfaceVariant),
     );
   }
 }

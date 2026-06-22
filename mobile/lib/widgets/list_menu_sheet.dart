@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme/colors.dart';
 import '../theme/radii.dart';
 import '../theme/typography.dart';
 
@@ -43,6 +42,7 @@ class ListMenuSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -53,7 +53,7 @@ class ListMenuSheet extends StatelessWidget {
               height: 4,
               margin: const EdgeInsets.only(top: 12),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.20),
+                color: scheme.onSurface.withValues(alpha: 0.20),
                 borderRadius: AppRadii.pillBorder,
               ),
             ),
@@ -115,6 +115,7 @@ class ListMenuTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasBadge = iconBg != null;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return Material(
       color: Colors.transparent,
       borderRadius: AppRadii.controlBorder,
@@ -143,7 +144,7 @@ class ListMenuTile extends StatelessWidget {
                 child: Text(
                   label,
                   style: AppTypography.bodyLg.copyWith(
-                    color: AppColors.onSurface,
+                    color: onSurface,
                     fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                   ),
                 ),

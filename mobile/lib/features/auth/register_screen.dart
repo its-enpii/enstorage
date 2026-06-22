@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../l10n/gen/app_localizations.dart';
 import '../../state/auth_state.dart';
-import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/etheric_button.dart';
@@ -47,6 +46,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final auth = ref.watch(authControllerProvider);
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(),
       body: SafeArea(
@@ -64,7 +64,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 Text(
                   l10n.authRegisterSubtitle,
                   style: AppTypography.bodyMd.copyWith(
-                    color: AppColors.onSurfaceVariant,
+                    color: scheme.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -107,7 +107,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   const SizedBox(height: 16),
                   Text(
                     auth.error!,
-                    style: AppTypography.bodyMd.copyWith(color: AppColors.error),
+                    style: AppTypography.bodyMd.copyWith(color: scheme.error),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -125,7 +125,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     Text(
                       l10n.authRegisterHasAccount,
                       style: AppTypography.bodyMd.copyWith(
-                        color: AppColors.onSurfaceVariant,
+                        color: scheme.onSurfaceVariant,
                       ),
                     ),
                     TextButton(

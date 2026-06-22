@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:photo_view/photo_view.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
@@ -16,9 +17,10 @@ import '../../data/models/file_item.dart';
 import '../../data/repositories/files_repository.dart';
 import '../../data/storage/token_storage.dart';
 import '../../l10n/gen/app_localizations.dart';
-import '../../theme/colors.dart';
+import '../../state/refresh_signal_state.dart';
 import '../../theme/typography.dart';
 import '../../widgets/etheric_button.dart';
+import '../../widgets/app_snackbar.dart';
 import '../files/share_dialog.dart';
 import '../files/rename_dialog.dart';
 
@@ -28,10 +30,12 @@ class FileViewerScreen extends ConsumerStatefulWidget {
     required this.fileId,
     required this.filename,
     required this.mime,
+    this.folderId,
   });
   final String fileId;
   final String filename;
   final String mime;
+  final String? folderId;
 
   @override
   ConsumerState<FileViewerScreen> createState() => _FileViewerScreenState();
@@ -116,17 +120,20 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
-        iconTheme: const IconThemeData(color: AppColors.onSurface),
+        // Viewer always renders against a black media surface — keep
+        // the chrome dark regardless of theme.
+        backgroundColor: const Color(0xFF111319),
+        iconTheme: IconThemeData(color: scheme.onSurface),
         title: Text(
           widget.filename,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: AppTypography.bodyMd.copyWith(
-            color: AppColors.onSurface,
+            color: scheme.onSurface,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -165,12 +172,13 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
   void _showMenu(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
         final l10n = AppLocalizations.of(ctx)!;
+        final scheme = Theme.of(ctx).colorScheme;
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -208,10 +216,10 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete_outline, color: AppColors.error),
+                leading: Icon(Icons.delete_outline, color: scheme.error),
                 title: Text(
                   l10n.viewerMenuDelete,
-                  style: const TextStyle(color: AppColors.error),
+                  style: TextStyle(color: scheme.error),
                 ),
                 onTap: () {
                   Navigator.of(ctx).pop();
@@ -240,16 +248,14 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
       if (res.statusCode == 200) {
         await OpenFilex.open(file.path);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.filesDownloadStarted)),
-          );
+          showAppSnackBar(context, l10n.filesDownloadStarted,
+              variant: AppSnackBarVariant.info);
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.filesDownloadFailed)),
-        );
+        showAppSnackBar(context, l10n.filesDownloadFailed,
+            variant: AppSnackBarVariant.error);
       }
     }
   }
@@ -261,22 +267,23 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
     );
     if (newName == null || newName.isEmpty || newName == widget.filename) return;
     try {
-      await ref
+      final updated = await ref
           .read(filesRepositoryProvider)
           .renameFile(widget.fileId, newName);
+      // Update list di belakang (no API call).
+      notifyReplaceFile(widget.folderId, updated);
       if (mounted) {
         // Replace current screen with updated name in title.
         context.pushReplacement(
           '/viewer/${widget.fileId}',
-          extra: {'filename': newName, 'mime': widget.mime},
+          extra: {'filename': newName, 'mime': widget.mime, 'folderId': widget.folderId},
         );
       }
     } catch (e) {
       if (!mounted) return;
       final l10n = AppLocalizations.of(context)!;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.filesRenameFailed)),
-      );
+      showAppSnackBar(context, l10n.filesRenameFailed,
+          variant: AppSnackBarVariant.error);
     }
   }
 
@@ -289,15 +296,13 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
         filename: widget.filename,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.filesCopySuccess)),
-        );
+        showAppSnackBar(context, l10n.filesCopySuccess,
+            variant: AppSnackBarVariant.success);
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.filesCopyFailed)),
-        );
+        showAppSnackBar(context, l10n.filesCopyFailed,
+            variant: AppSnackBarVariant.error);
       }
     }
   }
@@ -321,23 +326,20 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
       }
       if (url == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.filesCopyFailed)),
-          );
+          showAppSnackBar(context, l10n.filesCopyFailed,
+              variant: AppSnackBarVariant.error);
         }
         return;
       }
       await Clipboard.setData(ClipboardData(text: url));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.shareCopied)),
-        );
+        showAppSnackBar(context, l10n.shareCopied,
+            variant: AppSnackBarVariant.success);
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.filesCopyFailed)),
-        );
+        showAppSnackBar(context, l10n.filesCopyFailed,
+            variant: AppSnackBarVariant.error);
       }
     }
   }
@@ -347,7 +349,7 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainer,
         title: Text(l10n.filesConfirmDeleteTitle),
         content: Text(l10n.filesConfirmDeleteBody),
         actions: [
@@ -357,7 +359,8 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(ctx).colorScheme.error),
             child: Text(l10n.filesConfirmDeleteConfirm),
           ),
         ],
@@ -366,12 +369,13 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
     if (confirmed != true) return;
     try {
       await ref.read(filesRepositoryProvider).deleteFile(widget.fileId);
+      // Update list di belakang — file hilang instan tanpa refresh.
+      notifyRemoveFile(widget.folderId, widget.fileId);
       if (mounted) context.pop();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.filesDeleteFailed)),
-      );
+      showAppSnackBar(context, l10n.filesDeleteFailed,
+          variant: AppSnackBarVariant.error);
     }
   }
 }
@@ -386,9 +390,15 @@ class _ImageViewer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final token = ref.watch(tokenStorageProvider).readTokenSync();
+    final url = repo.downloadUrl(fileId, token: token, inline: true);
+    // Cache by fileId rather than the raw URL so a refreshed bearer
+    // token doesn't create a duplicate cache entry for the same image.
+    // Authorization header still rides on every fetch so the backend
+    // can reject if the token has rotated.
     return PhotoView(
-      imageProvider: NetworkImage(
-        repo.downloadUrl(fileId, token: token, inline: true),
+      imageProvider: CachedNetworkImageProvider(
+        url,
+        cacheKey: 'viewer-img-$fileId',
         headers: token != null ? {'Authorization': 'Bearer $token'} : null,
       ),
       backgroundDecoration: const BoxDecoration(color: Colors.black),
@@ -469,6 +479,7 @@ class _AudioViewerState extends ConsumerState<_AudioViewer> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -478,12 +489,12 @@ class _AudioViewerState extends ConsumerState<_AudioViewer> {
             Container(
               width: 120,
               height: 120,
-              decoration: const BoxDecoration(
-                color: AppColors.primaryContainer,
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.music_note,
-                  size: 64, color: AppColors.onPrimaryContainer),
+              child: Icon(Icons.music_note,
+                  size: 64, color: scheme.onPrimaryContainer),
             ),
             const SizedBox(height: 24),
             Text(
@@ -549,15 +560,16 @@ class _TextViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
-      color: AppColors.background,
+      color: scheme.surface,
       padding: const EdgeInsets.all(16),
       child: SingleChildScrollView(
         child: SelectableText(
           content,
           style: AppTypography.bodySm.copyWith(
             fontFamily: 'monospace',
-            color: AppColors.onSurface,
+            color: scheme.onSurface,
           ),
         ),
       ),
@@ -579,13 +591,14 @@ class _OtherViewer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.description, size: 64, color: AppColors.onSurfaceVariant),
+            Icon(Icons.description, size: 64, color: scheme.onSurfaceVariant),
             const SizedBox(height: 16),
             Text(filename, style: AppTypography.bodyLg),
             const SizedBox(height: 8),

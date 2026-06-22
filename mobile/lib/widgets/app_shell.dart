@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../l10n/gen/app_localizations.dart';
-import '../theme/colors.dart';
 import '../theme/radii.dart';
 import '../theme/spacing.dart';
 import 'glass_pill.dart';
@@ -149,6 +148,7 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -170,8 +170,8 @@ class _NavItem extends StatelessWidget {
                   child: Container(
                     width: AppShell._circleSize,
                     height: AppShell._circleSize,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primaryContainer,
+                    decoration: BoxDecoration(
+                      color: scheme.primaryContainer,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -187,8 +187,8 @@ class _NavItem extends StatelessWidget {
               child: Icon(
                 icon,
                 color: active
-                    ? AppColors.onPrimaryContainer
-                    : AppColors.onSurfaceVariant,
+                    ? scheme.onPrimaryContainer
+                    : scheme.onSurfaceVariant,
                 size: AppShell._iconSize,
               ),
             ),
@@ -213,8 +213,8 @@ class _NavItem extends StatelessWidget {
                         label,
                         maxLines: 1,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: AppColors.onSurfaceVariant,
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant,
                           fontSize: AppShell._labelSize,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.2,

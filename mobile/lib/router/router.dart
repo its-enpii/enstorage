@@ -1,11 +1,12 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/login_screen.dart';
-import '../features/auth/register_screen.dart';
+import '../features/auth/terms_of_service_screen.dart';
+
 import '../features/files/files_screen.dart';
 import '../features/home/home_screen.dart';
+import '../features/settings/change_password_screen.dart';
 import '../features/settings/google_accounts_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/starred/starred_screen.dart';
@@ -25,11 +26,14 @@ GoRouter buildHomeRouter() {
       GoRoute(
         path: '/viewer/:fileId',
         builder: (ctx, st) {
-          final extra = (st.extra as Map<String, String>?) ?? const {};
+          // `folderId` may be null (root-level files), so the value
+          // type is nullable. The keys we read are still Strings.
+          final extra = (st.extra as Map<String, String?>?) ?? const {};
           return FileViewerScreen(
             fileId: st.pathParameters['fileId']!,
             filename: extra['filename'] ?? 'File',
             mime: extra['mime'] ?? 'application/octet-stream',
+            folderId: extra['folderId'],
           );
         },
       ),
@@ -72,6 +76,10 @@ GoRouter buildHomeRouter() {
                 builder: (ctx, st) => const SettingsScreen(),
                 routes: [
                   GoRoute(
+                    path: 'change-password',
+                    builder: (ctx, st) => const ChangePasswordScreen(),
+                  ),
+                  GoRoute(
                     path: 'google-accounts',
                     builder: (ctx, st) => const GoogleAccountsScreen(),
                   ),
@@ -89,7 +97,7 @@ GoRouter buildHomeRouter() {
   );
 }
 
-/// Build the unauthenticated router — just /login and /register.
+/// Build the unauthenticated router — just /login (Google Sign-In).
 /// No redirect logic. The router is swapped to [buildHomeRouter] on
 /// successful login.
 GoRouter buildAuthRouter() {
@@ -101,8 +109,8 @@ GoRouter buildAuthRouter() {
         builder: (ctx, st) => const LoginScreen(),
       ),
       GoRoute(
-        path: '/register',
-        builder: (ctx, st) => const RegisterScreen(),
+        path: '/terms',
+        builder: (ctx, st) => const TermsOfServiceScreen(),
       ),
     ],
   );

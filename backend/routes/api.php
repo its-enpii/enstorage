@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Api\FileUploadController;
 use App\Http\Controllers\Api\FolderController;
 use App\Http\Controllers\Api\GoogleAccountController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\RecentController;
 use App\Http\Controllers\Api\StorageController;
 use App\Http\Controllers\Api\WebhookController;
@@ -22,6 +23,9 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('auth')->middleware('throttle:auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
+    Route::post('google', [AuthController::class, 'googleAuth']);
+    Route::get('google/redirect', [AuthController::class, 'googleRedirect']);
+    Route::get('google/callback', [AuthController::class, 'googleCallback']);
 });
 
 // API docs (public, no auth)
@@ -46,6 +50,12 @@ Route::middleware('auth.apikey')->group(function () {
     Route::patch('auth/me', [AuthController::class, 'updateMe']);
     Route::post('auth/change-password', [AuthController::class, 'changePassword']);
     Route::patch('auth/locale', [AuthController::class, 'updateLocale']);
+
+    // Notifications
+    Route::post('notifications/token', [NotificationController::class, 'registerToken']);
+    Route::delete('notifications/token', [NotificationController::class, 'removeToken']);
+    Route::get('notifications/settings', [NotificationController::class, 'getSettings']);
+    Route::patch('notifications/settings', [NotificationController::class, 'updateSettings']);
 
     // API Keys (CRUD — Sanctum only, no API key allowed)
     Route::middleware('auth.sanctum.only')->prefix('api-keys')->group(function () {

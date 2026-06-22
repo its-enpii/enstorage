@@ -125,21 +125,24 @@ class GoogleTokenService
             throw new RuntimeException('Gagal menukar server auth code: access_token kosong.');
         }
 
-        $email = $this->fetchEmailFromToken((string) $data['access_token']);
+        $userInfo = $this->fetchUserInfo((string) $data['access_token']);
 
         return [
             'access_token' => (string) $data['access_token'],
             'refresh_token' => isset($data['refresh_token']) ? (string) $data['refresh_token'] : null,
             'expires_in' => (int) ($data['expires_in'] ?? 0),
-            'email' => $email,
+            'email' => $userInfo['email'] ?? null,
+            'name' => $userInfo['name'] ?? null,
         ];
     }
 
     /**
-     * Ambil email user Google dari access token. Pakai UserInfo endpoint
+     * Ambil info user Google dari access token. Pakai UserInfo endpoint
      * Google (https://www.googleapis.com/oauth2/v2/userinfo).
+     *
+     * @return array{email: ?string, name: ?string}
      */
-    public function fetchEmailFromToken(string $accessToken): ?string
+    public function fetchUserInfo(string $accessToken): array
     {
         try {
             $response = Http::withToken($accessToken)
@@ -149,14 +152,25 @@ class GoogleTokenService
                     'status' => $response->status(),
                     'body' => $response->body(),
                 ]);
-                return null;
+                return ['email' => null, 'name' => null];
             }
             $data = $response->json();
-            return $data['email'] ?? null;
+            return [
+                'email' => $data['email'] ?? null,
+                'name' => $data['name'] ?? null,
+            ];
         } catch (\Throwable $e) {
-            Log::warning('Gagal mengambil email user Google', ['error' => $e->getMessage()]);
-            return null;
+            Log::warning('Gagal mengambil info user Google', ['error' => $e->getMessage()]);
+            return ['email' => null, 'name' => null];
         }
+    }
+
+    /**
+     * Backward-compatible wrapper — returns only the email.
+     */
+    public function fetchEmailFromToken(string $accessToken): ?string
+    {
+        return $this->fetchUserInfo($accessToken)['email'];
     }
 
     /**

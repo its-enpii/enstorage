@@ -36,6 +36,20 @@
   "authLoginNoAccount": "Belum punya akun?",
   "authLoginRegisterLink": "Daftar",
 
+  "authGoogleSignIn": "Masuk dengan Google",
+  "authGoogleSubtitle": "Gunakan akun Google untuk mengakses vault Anda.",
+  "authGoogleFailed": "Login Google gagal.",
+
+  "termsTitle": "Syarat dan Ketentuan",
+  "termsAgreePrefix": "Dengan masuk, Anda menyetujui ",
+  "termsLink": "Syarat dan Ketentuan",
+  "termsLastUpdated": "Terakhir diperbarui: {date}",
+  "@termsLastUpdated": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+
   "authRegisterTitle": "Daftar EnStorage",
   "authRegisterSubtitle": "Buat akun baru untuk mulai menyimpan file.",
   "authRegisterName": "Nama",
@@ -69,6 +83,7 @@
     }
   },
   "searchTypeToSearch": "Ketik untuk mencari file atau folder.",
+  "searchClear": "Hapus pencarian",
 
   "filesTitle": "Dokumen",
   "filesRootTitle": "File Manager",
@@ -272,6 +287,21 @@
   "settingsDeleteAccountDesc": "Hapus akun Anda secara permanen. Tidak dapat dibatalkan.",
   "settingsComingSoon": "Segera hadir",
 
+  "settingsEditNameTitle": "Sunting Nama",
+  "settingsEditNameSave": "Simpan",
+  "settingsEditNameSuccess": "Nama diperbarui.",
+  "settingsAccountSection": "Akun",
+  "settingsChangePassword": "Ubah Kata Sandi",
+  "settingsChangePasswordSubtitle": "Pilih kata sandi kuat yang tidak dipakai di tempat lain.",
+  "settingsChangePasswordCurrent": "Kata sandi saat ini",
+  "settingsChangePasswordNew": "Kata sandi baru",
+  "settingsChangePasswordConfirm": "Konfirmasi kata sandi baru",
+  "settingsChangePasswordMismatch": "Kata sandi baru dan konfirmasi tidak sama.",
+  "settingsChangePasswordTooShort": "Kata sandi baru minimal 8 karakter.",
+  "settingsChangePasswordWrongCurrent": "Kata sandi saat ini salah.",
+  "settingsChangePasswordSuccess": "Kata sandi diperbarui.",
+  "settingsChangePasswordFailed": "Gagal mengubah kata sandi.",
+
   "uploadProgress": "{filename} • {progress}%",
   "@uploadProgress": {
     "placeholders": {
@@ -325,5 +355,9 @@
   "filterApply": "Terapkan",
   "filesTabsAll": "Semua",
   "filesTabsFolders": "Folder",
-  "filesTabsFiles": "File"
+  "filesTabsFiles": "File",
+
+  "logoutConfirmTitle": "Keluar?",
+  "logoutConfirmBody": "Anda perlu masuk lagi untuk mengakses file.",
+  "logoutConfirmAction": "Keluar"
 }

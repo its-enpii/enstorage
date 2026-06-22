@@ -6,10 +6,9 @@ import '../../data/models/file_item.dart';
 import '../../data/models/folder.dart';
 import '../../data/repositories/files_repository.dart';
 import '../../l10n/gen/app_localizations.dart';
-import '../../theme/colors.dart';
-import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../theme/radii.dart';
 import '../files/widgets/file_card.dart';
 import '../files/widgets/folder_card.dart';
 
@@ -44,11 +43,12 @@ class _StarredScreenState extends ConsumerState<StarredScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
         title: Row(
           children: [
-            const Icon(Icons.star_rounded, color: AppColors.secondary, size: 22),
+            Icon(Icons.star_rounded, color: scheme.secondary, size: 22),
             const SizedBox(width: 8),
             Text(l10n.starredTitle),
           ],
@@ -85,7 +85,7 @@ class _StarredScreenState extends ConsumerState<StarredScreen> {
                   if (f.uploadStatus == UploadStatus.done) {
                     context.push(
                       '/viewer/${f.id}',
-                      extra: {'filename': f.name, 'mime': f.mimeType},
+                      extra: {'filename': f.name, 'mime': f.mimeType, 'folderId': f.folderId},
                     );
                   }
                 },
@@ -148,6 +148,7 @@ class _Empty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -158,11 +159,11 @@ class _Empty extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: AppColors.surfaceHigh,
+                color: scheme.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Icon(Icons.star_border_rounded,
-                  size: 36, color: AppColors.onSurfaceVariant),
+              child: Icon(Icons.star_border_rounded,
+                  size: 36, color: scheme.onSurfaceVariant),
             ),
             const SizedBox(height: 20),
             Text(l10n.starredEmpty, style: AppTypography.bodyLg),
@@ -171,7 +172,7 @@ class _Empty extends StatelessWidget {
               l10n.starredEmptyDesc,
               textAlign: TextAlign.center,
               style: AppTypography.bodyMd.copyWith(
-                color: AppColors.onSurfaceVariant,
+                color: scheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -187,13 +188,14 @@ class _Error extends StatelessWidget {
   final VoidCallback onRetry;
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+            Icon(Icons.error_outline, size: 48, color: scheme.error),
             const SizedBox(height: 12),
             Text(message, textAlign: TextAlign.center, style: AppTypography.bodyMd),
             const SizedBox(height: 12),

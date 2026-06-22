@@ -7,6 +7,8 @@ use App\Models\File as FileModel;
 use App\Services\ActivityLogService;
 use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\QuotaManager;
+use App\Services\NotificationService;
+use App\Services\ThumbnailGenerator;
 use App\Services\WebhookService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -30,6 +32,8 @@ class UploadFileJob implements ShouldQueue
         GoogleDriveUploader $uploader,
         ActivityLogService $log,
         WebhookService $webhooks,
+        NotificationService $notifications,
+        ThumbnailGenerator $thumbnails,
     ): void {
         $file = FileModel::find($this->fileId);
         if (! $file) {
@@ -43,7 +47,7 @@ class UploadFileJob implements ShouldQueue
 
         $localPath = storage_path('app/temp/'.$file->id);
         if (! file_exists($localPath)) {
-            $this->markFailed($file, $log, $webhooks, 'File temp tidak ditemukan (kemungkinan dihapus atau gagal di awal).');
+            $this->markFailed($file, $log, $webhooks, $notifications, 'File temp tidak ditemukan (kemungkinan dihapus atau gagal di awal).');
             return;
         }
 
@@ -62,16 +66,23 @@ class UploadFileJob implements ShouldQueue
             $file->uploaded_at = now();
             $file->save();
 
-            // Hapus file temp
+            // Generate thumbnail INLINE untuk image (skip round-trip kedua ke GDrive).
+            // Pakai local file yang baru di-upload. Fallback ke background job kalau gagal.
+            if (str_starts_with($file->mime_type, 'image/')) {
+                $ok = $thumbnails->tryGenerate($file, $localPath);
+                if (! $ok) {
+                    GenerateThumbnailJob::dispatch($file->id);
+                }
+            } elseif (str_starts_with($file->mime_type, 'video/')) {
+                // Video butuh ffmpeg — out of scope Fase 3, generate via background job.
+                GenerateThumbnailJob::dispatch($file->id);
+            }
+
+            // Hapus file temp setelah thumbnail selesai di-generate.
             @unlink($localPath);
 
             // Invalidate cache quota
             $quota->invalidate($account);
-
-            // Dispatch thumbnail untuk image/video
-            if (str_starts_with($file->mime_type, 'image/') || str_starts_with($file->mime_type, 'video/')) {
-                GenerateThumbnailJob::dispatch($file->id);
-            }
 
             $log->log(
                 ActivityLog::ACTION_FILE_UPLOAD,
@@ -92,14 +103,38 @@ class UploadFileJob implements ShouldQueue
                 'gdrive_file_id' => $file->gdrive_file_id,
                 'uploaded_at' => $file->uploaded_at?->toIso8601String(),
             ]);
+
+            // Push notification — upload complete. data.type = 'upload.complete'
+            // agar mobile append file baru ke list (gak refresh seluruh halaman).
+            // Sertakan field minimal supaya FileItem.fromJson bisa instantiate.
+            $notifications->sendToUser(
+                $file->user,
+                __('Upload Selesai'),
+                __(':name berhasil diupload.', ['name' => $file->name]),
+                'upload',
+                [
+                    'type' => 'upload.complete',
+                    'file_id' => $file->id,
+                    'file_name' => $file->name,
+                    'folder_id' => $file->folder_id ?? '',
+                    'mime_type' => $file->mime_type,
+                    'size' => (string) $file->size,
+                    'has_thumbnail' => $file->thumbnail !== null ? 'true' : 'false',
+                ],
+            );
         } catch (\Throwable $e) {
-            $this->markFailed($file, $log, $webhooks, $e->getMessage());
+            $this->markFailed($file, $log, $webhooks, $notifications, $e->getMessage());
             throw $e; // biarkan queue retry sesuai tries
         }
     }
 
-    private function markFailed(FileModel $file, ActivityLogService $log, WebhookService $webhooks, string $reason): void
-    {
+    private function markFailed(
+        FileModel $file,
+        ActivityLogService $log,
+        WebhookService $webhooks,
+        NotificationService $notifications,
+        string $reason,
+    ): void {
         $file->upload_status = FileModel::STATUS_FAILED;
         $file->save();
 
@@ -120,5 +155,8 @@ class UploadFileJob implements ShouldQueue
             'name' => $file->name,
             'reason' => $reason,
         ]);
+
+        // Push notification — upload gagal. Mobile ganti ongoing progress jadi failed.
+        $notifications->sendUploadFailed($file, $reason);
     }
 }

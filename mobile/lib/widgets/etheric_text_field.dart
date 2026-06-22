@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../theme/colors.dart';
 import '../theme/radii.dart';
 import '../theme/typography.dart';
 
-/// "Punched-out" text field — bg = background color, primary focus ring.
+/// "Punched-out" text field — bg = surface color, primary focus ring.
 class EthericTextField extends StatelessWidget {
   const EthericTextField({
     super.key,
@@ -35,13 +34,14 @@ class EthericTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (label != null) ...[
           Text(
             label!,
-            style: AppTypography.labelSm.copyWith(color: AppColors.onSurfaceVariant),
+            style: AppTypography.labelSm.copyWith(color: scheme.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
         ],
@@ -52,33 +52,33 @@ class EthericTextField extends StatelessWidget {
           textInputAction: textInputAction,
           onSubmitted: onSubmitted,
           autofocus: autofocus,
-          style: AppTypography.bodyMd.copyWith(color: AppColors.onSurface),
-          cursorColor: AppColors.primary,
+          style: AppTypography.bodyMd.copyWith(color: scheme.onSurface),
+          cursorColor: scheme.primary,
           decoration: InputDecoration(
             hintText: hint,
             errorText: errorText,
             prefixIcon: prefixIcon == null
                 ? null
-                : Icon(prefixIcon, color: AppColors.onSurfaceVariant, size: 20),
+                : Icon(prefixIcon, color: scheme.onSurfaceVariant, size: 20),
             suffixIcon: suffix,
             filled: true,
-            fillColor: AppColors.surface,
+            fillColor: scheme.surfaceContainer,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 16,
             ),
-            hintStyle: AppTypography.bodyMd.copyWith(color: AppColors.outline),
-            border: const OutlineInputBorder(
+            hintStyle: AppTypography.bodyMd.copyWith(color: scheme.outline),
+            border: OutlineInputBorder(
               borderRadius: AppRadii.controlBorder,
-              borderSide: BorderSide(color: AppColors.outlineVariant, width: 1),
+              borderSide: BorderSide(color: scheme.outlineVariant, width: 1),
             ),
-            enabledBorder: const OutlineInputBorder(
+            enabledBorder: OutlineInputBorder(
               borderRadius: AppRadii.controlBorder,
-              borderSide: BorderSide(color: AppColors.outlineVariant, width: 1),
+              borderSide: BorderSide(color: scheme.outlineVariant, width: 1),
             ),
-            focusedBorder: const OutlineInputBorder(
+            focusedBorder: OutlineInputBorder(
               borderRadius: AppRadii.controlBorder,
-              borderSide: BorderSide(color: AppColors.primaryContainer, width: 2),
+              borderSide: BorderSide(color: scheme.primaryContainer, width: 2),
             ),
           ),
         ),

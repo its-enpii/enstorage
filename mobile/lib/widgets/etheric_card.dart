@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme/colors.dart';
 import '../theme/radii.dart';
 import '../theme/shadows.dart';
 
@@ -17,6 +16,8 @@ class EthericCard extends StatefulWidget {
     this.badge,
     this.radius = AppRadii.card,
     this.height,
+    this.color,
+    this.borderColor,
   });
 
   final Widget child;
@@ -26,6 +27,12 @@ class EthericCard extends StatefulWidget {
   final bool selected;
   final Widget? badge;
   final double radius;
+
+  /// Override warna background card (default = surfaceContainer).
+  final Color? color;
+
+  /// Border accent (mis. untuk highlight starred files).
+  final Color? borderColor;
 
   /// Optional fixed card height. When set, the card is exactly this
   /// tall regardless of its content height — useful for matching
@@ -43,6 +50,9 @@ class _EthericCardState extends State<EthericCard> {
   Widget build(BuildContext context) {
     final scale = _pressed ? 0.98 : 1.0;
     final borderRadius = BorderRadius.circular(widget.radius);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final primary = scheme.primary;
     Widget card = AnimatedScale(
       scale: scale,
       duration: const Duration(milliseconds: 150),
@@ -50,18 +60,21 @@ class _EthericCardState extends State<EthericCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: widget.color ?? scheme.surfaceContainer,
           borderRadius: borderRadius,
+          border: widget.borderColor != null
+              ? Border.all(color: widget.borderColor!, width: 1.5)
+              : null,
           boxShadow: [
-            ...AppShadows.innerGlow,
-            ...AppShadows.xl,
-            if (widget.selected) ...AppShadows.primaryGlow,
+            ...AppShadows.innerGlow(theme.brightness),
+            ...AppShadows.ambient(theme.brightness),
+            if (widget.selected) ...AppShadows.primaryGlow(theme.brightness),
             // Outset ring drawn as a shadow so it doesn't claim any of
             // the card's interior width — content keeps the same size
             // whether the card is selected or not.
             if (widget.selected)
-              const BoxShadow(
-                color: AppColors.primary,
+              BoxShadow(
+                color: primary,
                 blurRadius: 0,
                 spreadRadius: 2,
               ),
@@ -75,8 +88,8 @@ class _EthericCardState extends State<EthericCard> {
             onTap: widget.onTap,
             onLongPress: widget.onLongPress,
             borderRadius: borderRadius,
-            splashColor: AppColors.primary.withValues(alpha: 0.08),
-            highlightColor: AppColors.primary.withValues(alpha: 0.04),
+            splashColor: primary.withValues(alpha: 0.08),
+            highlightColor: primary.withValues(alpha: 0.04),
             onTapDown: widget.onTap != null
                 ? (_) => setState(() => _pressed = true)
                 : null,

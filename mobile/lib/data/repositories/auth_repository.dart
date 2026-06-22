@@ -18,11 +18,11 @@ class AuthRepository {
   final ApiClient _api;
   final TokenStorage _tokens;
 
-  Future<User> login({required String email, required String password}) async {
+  Future<User> googleAuth({required String code}) async {
     try {
       final res = await _api.dio.post<Map<String, dynamic>>(
-        '/auth/login',
-        data: {'email': email, 'password': password},
+        '/auth/google',
+        data: {'code': code},
       );
       return _persist(res.data!);
     } on DioException catch (e) {
@@ -30,15 +30,13 @@ class AuthRepository {
     }
   }
 
-  Future<User> register({
-    required String name,
-    required String email,
-    required String password,
-  }) async {
+  /// Kept for backward compatibility (existing users who registered
+  /// with email/password).
+  Future<User> login({required String email, required String password}) async {
     try {
       final res = await _api.dio.post<Map<String, dynamic>>(
-        '/auth/register',
-        data: {'name': name, 'email': email, 'password': password},
+        '/auth/login',
+        data: {'email': email, 'password': password},
       );
       return _persist(res.data!);
     } on DioException catch (e) {
@@ -60,6 +58,49 @@ class AuthRepository {
 
   Future<void> logout() async {
     await _tokens.clear();
+  }
+
+  /// Update the current user's name + email. Backend returns the full
+  /// updated user payload inside `data.user`; we parse and return it so
+  /// the caller can refresh cached state.
+  Future<User> updateMe({required String name, required String email}) async {
+    try {
+      final res = await _api.dio.patch<Map<String, dynamic>>(
+        '/auth/me',
+        data: {'name': name, 'email': email},
+      );
+      final body = res.data!;
+      final data = (body['data'] as Map<String, dynamic>?) ?? body;
+      final userJson = (data['user'] ?? data) as Map<String, dynamic>;
+      final user = User.fromJson(userJson);
+      // Persist so a cold start reads the new values straight from
+      // secure storage without waiting on /me.
+      await _tokens.writeUser(user);
+      return user;
+    } on DioException catch (e) {
+      throw AuthException(_extractMessage(e));
+    }
+  }
+
+  /// Rotate the current user's password. The backend's `confirmed`
+  /// rule requires the new password to be passed alongside
+  /// `new_password_confirmation` (any value matching `new_password`).
+  Future<void> changePassword({
+    required String current,
+    required String next,
+  }) async {
+    try {
+      await _api.dio.post<Map<String, dynamic>>(
+        '/auth/change-password',
+        data: {
+          'current_password': current,
+          'new_password': next,
+          'new_password_confirmation': next,
+        },
+      );
+    } on DioException catch (e) {
+      throw AuthException(_extractMessage(e));
+    }
   }
 
   User _persist(Map<String, dynamic> body) {

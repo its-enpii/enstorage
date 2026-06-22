@@ -4,17 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../data/api_client.dart';
 import '../../data/models/recent_entry.dart';
-import '../../data/models/storage_summary.dart';
 import '../../data/repositories/files_repository.dart';
 import '../../data/repositories/recent_repository.dart';
 import '../../data/storage/token_storage.dart';
 import '../../l10n/gen/app_localizations.dart';
+import '../../services/notification_service.dart';
 import '../../state/auth_state.dart';
 import '../../state/files_state.dart';
-import '../../state/upload_state.dart';
-import '../../theme/colors.dart';
+import '../../state/storage_state.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -55,17 +53,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final picked = file.files.first;
     if (picked.path == null) return;
     final repo = ref.read(filesRepositoryProvider);
-    final ctrl = ref.read(uploadControllerProvider.notifier);
-    final id = ctrl.start(picked.name);
+    final filename = picked.name;
+    showUploadProgress(filename: filename, progress: 0);
     try {
       await repo.uploadFile(
         path: picked.path!,
-        filename: picked.name,
-        onProgress: (s, t) => ctrl.update(id, sent: s, total: t),
+        filename: filename,
+        onProgress: (s, t) {
+          final pct = t == 0 ? 0 : ((s / t) * 100).round();
+          showUploadProgress(filename: filename, progress: pct);
+        },
       );
-      ctrl.complete(id);
-    } catch (_) {
-      ctrl.fail(id);
+      showUploadProgress(filename: filename, progress: 0, indeterminate: true);
+      // Tunggu FCM upload.complete dari backend.
+    } catch (e) {
+      finishUpload(filename: filename, success: false, body: e.toString());
     }
   }
 
@@ -135,6 +137,7 @@ class _Greeting extends StatelessWidget {
   final AppLocalizations l10n;
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -142,14 +145,14 @@ class _Greeting extends StatelessWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: AppColors.primaryContainer,
+            color: scheme.primaryContainer,
             borderRadius: BorderRadius.circular(22),
           ),
           child: Center(
             child: Text(
               name.isEmpty ? '?' : name[0].toUpperCase(),
               style: AppTypography.headlineLgMobile.copyWith(
-                color: AppColors.onPrimaryContainer,
+                color: scheme.onPrimaryContainer,
                 fontSize: 20,
               ),
             ),
@@ -163,7 +166,7 @@ class _Greeting extends StatelessWidget {
               Text(
                 l10n.homeWelcome,
                 style: AppTypography.metadata.copyWith(
-                  color: AppColors.onSurfaceVariant,
+                  color: scheme.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 2),
@@ -181,53 +184,38 @@ class _Greeting extends StatelessWidget {
   }
 }
 
-class _StorageCard extends ConsumerStatefulWidget {
+class _StorageCard extends ConsumerWidget {
   const _StorageCard();
-  @override
-  ConsumerState<_StorageCard> createState() => _StorageCardState();
-}
-
-class _StorageCardState extends ConsumerState<_StorageCard> {
-  Future<StorageSummary?>? _future;
 
   @override
-  void initState() {
-    super.initState();
-    _future = _load();
-  }
-
-  Future<StorageSummary?> _load() async {
-    try {
-      final api = ref.read(apiClientProvider);
-      final res = await api.dio.get<Map<String, dynamic>>('/storage/summary');
-      final inner = (res.data?['data'] as Map<String, dynamic>?) ?? const {};
-      return StorageSummary.fromJson(inner);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
+    final summary = ref.watch(storageSummaryProvider);
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.containerPadding),
-      child: FutureBuilder<StorageSummary?>(
-        future: _future,
-        builder: (ctx, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return const _SkeletonBox(height: 120);
-          }
-          final s = snap.data;
-          if (s == null || s.total == 0) {
+      child: summary.when(
+        loading: () => const _SkeletonBox(height: 120),
+        error: (_, __) => _EmptyStorage(l10n: l10n),
+        data: (s) {
+          // Empty state = user has zero connected accounts, not
+          // "total quota is 0". A user with one active account whose
+          // Drive API hasn't returned quota yet will have
+          // `accountsCount > 0` but `total == 0`; show the skeleton
+          // briefly via pull-to-refresh, but don't claim
+          // "Belum ada akun terhubung" (which is misleading).
+          if (s == null || s.accountsCount == 0) {
             return _EmptyStorage(l10n: l10n);
           }
-          final pct = (s.used / s.total).clamp(0.0, 1.0);
+          final pct = s.total > 0
+              ? (s.used / s.total).clamp(0.0, 1.0)
+              : 0.0;
           final usedStr = _humanSize(s.used);
           final totalStr = _humanSize(s.total);
           final freeStr = _humanSize(s.free);
           return EthericCard(
             padding: const EdgeInsets.all(AppSpacing.innerPadding),
+            onTap: () => context.push('/settings/google-accounts'),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -236,7 +224,7 @@ class _StorageCardState extends ConsumerState<_StorageCard> {
                     Text(
                       l10n.homeStorageTitle,
                       style: AppTypography.labelSm.copyWith(
-                        color: AppColors.onSurfaceVariant,
+                        color: scheme.onSurfaceVariant,
                         letterSpacing: 0.05 * 12,
                       ),
                     ),
@@ -244,7 +232,7 @@ class _StorageCardState extends ConsumerState<_StorageCard> {
                     Text(
                       l10n.homeAccountsConnected(s.accountsCount),
                       style: AppTypography.metadata.copyWith(
-                        color: AppColors.onSurfaceVariant,
+                        color: scheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -253,7 +241,7 @@ class _StorageCardState extends ConsumerState<_StorageCard> {
                 Text(
                   l10n.homeStorageUsed(usedStr, totalStr),
                   style: AppTypography.bodyLg.copyWith(
-                    color: AppColors.onSurface,
+                    color: scheme.onSurface,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -263,9 +251,9 @@ class _StorageCardState extends ConsumerState<_StorageCard> {
                   child: LinearProgressIndicator(
                     value: pct,
                     minHeight: 6,
-                    backgroundColor: AppColors.surfaceHigh,
+                    backgroundColor: scheme.surfaceContainerHigh,
                     valueColor: AlwaysStoppedAnimation(
-                      pct > 0.9 ? AppColors.error : AppColors.secondary,
+                      pct > 0.9 ? scheme.error : scheme.secondary,
                     ),
                   ),
                 ),
@@ -273,7 +261,7 @@ class _StorageCardState extends ConsumerState<_StorageCard> {
                 Text(
                   l10n.homeStorageFree(freeStr),
                   style: AppTypography.metadata.copyWith(
-                    color: AppColors.onSurfaceVariant,
+                    color: scheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -292,12 +280,13 @@ class _EmptyStorage extends StatelessWidget {
   Widget build(BuildContext context) {
     return EthericCard(
       padding: const EdgeInsets.all(AppSpacing.innerPadding),
+      onTap: () => context.push('/settings/google-accounts'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             l10n.homeStorageTitle,
-            style: AppTypography.labelSm.copyWith(color: AppColors.onSurfaceVariant),
+            style: AppTypography.labelSm.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
           Text(
@@ -320,17 +309,21 @@ class _QuickActions extends ConsumerWidget {
     if (picked.path == null) return;
     final container = ProviderScope.containerOf(context, listen: false);
     final repo = container.read(filesRepositoryProvider);
-    final ctrl = container.read(uploadControllerProvider.notifier);
-    final id = ctrl.start(picked.name);
+    final filename = picked.name;
+    showUploadProgress(filename: filename, progress: 0);
     try {
       await repo.uploadFile(
         path: picked.path!,
-        filename: picked.name,
-        onProgress: (s, t) => ctrl.update(id, sent: s, total: t),
+        filename: filename,
+        onProgress: (s, t) {
+          final pct = t == 0 ? 0 : ((s / t) * 100).round();
+          showUploadProgress(filename: filename, progress: pct);
+        },
       );
-      ctrl.complete(id);
-    } catch (_) {
-      ctrl.fail(id);
+      showUploadProgress(filename: filename, progress: 0, indeterminate: true);
+      // Tunggu FCM upload.complete dari backend.
+    } catch (e) {
+      finishUpload(filename: filename, success: false, body: e.toString());
     }
   }
 
@@ -351,6 +344,7 @@ class _QuickActions extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.containerPadding),
       child: Column(
@@ -359,7 +353,7 @@ class _QuickActions extends ConsumerWidget {
           Text(
             l10n.homeQuickActions,
             style: AppTypography.labelSm.copyWith(
-              color: AppColors.onSurfaceVariant,
+              color: scheme.onSurfaceVariant,
               letterSpacing: 0.05 * 12,
             ),
           ),
@@ -408,8 +402,9 @@ class _ActionTile extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: AppColors.surface,
+      color: scheme.surfaceContainer,
       borderRadius: AppRadii.cardBorder,
       child: InkWell(
         borderRadius: AppRadii.cardBorder,
@@ -418,17 +413,17 @@ class _ActionTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
             borderRadius: AppRadii.cardBorder,
-            boxShadow: const [
+            boxShadow: [
               BoxShadow(
-                color: Color(0x0DFFFFFF),
-                offset: Offset(0, 1),
+                color: scheme.onSurface.withValues(alpha: 0.05),
+                offset: const Offset(0, 1),
                 blurRadius: 0,
               ),
             ],
           ),
           child: Column(
             children: [
-              Icon(icon, color: AppColors.primary, size: 24),
+              Icon(icon, color: scheme.primary, size: 24),
               const SizedBox(height: 8),
               Text(
                 label,
@@ -448,6 +443,7 @@ class _RecentHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.containerPadding),
       child: Row(
@@ -455,7 +451,7 @@ class _RecentHeader extends StatelessWidget {
           Text(
             l10n.homeRecentFiles,
             style: AppTypography.labelSm.copyWith(
-              color: AppColors.onSurfaceVariant,
+              color: scheme.onSurfaceVariant,
               letterSpacing: 0.05 * 12,
             ),
           ),
@@ -537,7 +533,7 @@ class _RecentListState extends ConsumerState<_RecentList> {
           child: Text(
             _error != null ? l10n.commonError : l10n.homeNoRecent,
             style: AppTypography.bodyMd.copyWith(
-              color: AppColors.onSurfaceVariant,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ),
@@ -595,14 +591,15 @@ class _FileRow extends ConsumerWidget {
     final isImage = mime.startsWith('image/');
     final showThumb = isImage && (entry.hasThumbnail ?? false);
     final token = ref.watch(tokenStorageProvider).readTokenSync();
+    final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: AppColors.surface,
+      color: scheme.surfaceContainer,
       borderRadius: AppRadii.cardBorder,
       child: InkWell(
         borderRadius: AppRadii.cardBorder,
         onTap: () => context.push(
           '/viewer/${entry.id}',
-          extra: {'filename': entry.name, 'mime': mime},
+          extra: {'filename': entry.name, 'mime': mime, 'folderId': entry.folderId},
         ),
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -630,22 +627,22 @@ class _FileRow extends ConsumerWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.bodyMd.copyWith(
-                        color: AppColors.onSurface,
+                        color: scheme.onSurface,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
                       _humanSize(entry.size ?? 0),
                       style: AppTypography.metadata.copyWith(
-                        color: AppColors.onSurfaceVariant,
+                        color: scheme.onSurfaceVariant,
                       ),
                     ),
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right,
-                color: AppColors.onSurfaceVariant,
+                color: scheme.onSurfaceVariant,
               ),
             ],
           ),
@@ -662,8 +659,9 @@ class _FolderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final countLabel = _folderSubtitle(entry);
+    final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: AppColors.surface,
+      color: scheme.surfaceContainer,
       borderRadius: AppRadii.cardBorder,
       child: InkWell(
         borderRadius: AppRadii.cardBorder,
@@ -675,9 +673,9 @@ class _FolderRow extends StatelessWidget {
               _ThumbBox(
                 size: 40,
                 borderRadius: 10,
-                child: const Icon(
+                child: Icon(
                   Icons.folder_outlined,
-                  color: AppColors.primary,
+                  color: scheme.primary,
                   size: 20,
                 ),
               ),
@@ -691,22 +689,22 @@ class _FolderRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.bodyMd.copyWith(
-                        color: AppColors.onSurface,
+                        color: scheme.onSurface,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
                       countLabel,
                       style: AppTypography.metadata.copyWith(
-                        color: AppColors.onSurfaceVariant,
+                        color: scheme.onSurfaceVariant,
                       ),
                     ),
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right,
-                color: AppColors.onSurfaceVariant,
+                color: scheme.onSurfaceVariant,
               ),
             ],
           ),
@@ -732,7 +730,7 @@ class _ThumbBox extends StatelessWidget {
       height: size,
       clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
-        color: AppColors.surfaceHigh,
+        color: Theme.of(context).colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(borderRadius),
       ),
       child: child,
@@ -749,7 +747,7 @@ class _FileIcon extends StatelessWidget {
         ? Icons.image_outlined
         : Icons.description_outlined;
     return Center(
-      child: Icon(icon, color: AppColors.primary, size: 20),
+      child: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 20),
     );
   }
 }
@@ -772,7 +770,7 @@ class _SkeletonBox extends StatelessWidget {
     return Container(
       height: height,
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surfaceContainer,
         borderRadius: AppRadii.cardBorder,
       ),
       child: const Center(

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/gen/app_localizations.dart';
-import '../../theme/colors.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -33,7 +32,7 @@ class _RenameDialogState extends State<RenameDialog> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Dialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
       shape: RoundedRectangleBorder(borderRadius: AppRadii.cardBorder),
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.innerPadding),

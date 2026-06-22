@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/gen/app_localizations.dart';
 import '../../state/files_state.dart';
-import '../../theme/colors.dart';
 import '../../theme/radii.dart';
 import '../../theme/typography.dart';
 import '../../widgets/list_menu_sheet.dart';
@@ -50,6 +49,7 @@ Future<FilterResult?> showFilterSheet(
     useRootNavigator: true,
     builder: (ctx) {
       final l10n = AppLocalizations.of(ctx)!;
+      final scheme = Theme.of(ctx).colorScheme;
       return NavAwareSheet(
         child: StatefulBuilder(
           builder: (ctx, setState) {
@@ -62,8 +62,8 @@ Future<FilterResult?> showFilterSheet(
                 // onTap, to avoid double-toggling via event propagation.
                 ListMenuTile(
                   icon: Icons.star_rounded,
-                  iconFg: AppColors.secondary,
-                  iconBg: AppColors.secondary.withValues(alpha: 0.10),
+                  iconFg: scheme.secondary,
+                  iconBg: scheme.secondary.withValues(alpha: 0.10),
                   label: l10n.filterStarredOnly,
                   selected: starredOnly,
                   trailing: Switch.adaptive(
@@ -78,7 +78,7 @@ Future<FilterResult?> showFilterSheet(
                   child: Text(
                     l10n.filterShowLabel,
                     style: AppTypography.labelSm.copyWith(
-                      color: AppColors.onSurfaceVariant,
+                      color: scheme.onSurfaceVariant,
                     ),
                   ),
                 ),
@@ -116,7 +116,7 @@ Future<FilterResult?> showFilterSheet(
                   child: Text(
                     l10n.filterTypeLabel,
                     style: AppTypography.labelSm.copyWith(
-                      color: AppColors.onSurfaceVariant,
+                      color: scheme.onSurfaceVariant,
                     ),
                   ),
                 ),
@@ -208,10 +208,11 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Material(
       color: selected
-          ? AppColors.primaryContainer
-          : AppColors.surfaceHigh,
+          ? scheme.primaryContainer
+          : scheme.surfaceContainerHigh,
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
@@ -222,8 +223,8 @@ class _Chip extends StatelessWidget {
             label,
             style: AppTypography.bodySm.copyWith(
               color: selected
-                  ? AppColors.onPrimaryContainer
-                  : AppColors.onSurface,
+                  ? scheme.onPrimaryContainer
+                  : scheme.onSurface,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
           ),

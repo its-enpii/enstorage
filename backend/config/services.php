@@ -56,4 +56,9 @@ return [
         ],
     ],
 
+    'firebase' => [
+        'project_id' => env('FIREBASE_PROJECT_ID', 'enstorage-6f754'),
+        'credentials_path' => env('FIREBASE_CREDENTIALS_PATH', storage_path('app/firebase-service-account.json')),
+    ],
+
 ];

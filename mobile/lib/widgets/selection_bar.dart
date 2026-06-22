@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme/colors.dart';
 import '../theme/radii.dart';
 import '../theme/typography.dart';
 
@@ -22,14 +21,15 @@ class SelectionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
-      color: AppColors.background,
+      color: scheme.surface,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
           IconButton(
             onPressed: onClose,
-            icon: const Icon(Icons.close, color: AppColors.primary),
+            icon: Icon(Icons.close, color: scheme.primary),
             tooltip: title,
           ),
           const SizedBox(width: 4),
@@ -38,7 +38,7 @@ class SelectionBar extends StatelessWidget {
               '$count $title',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: AppTypography.headlineLgMobile.copyWith(color: AppColors.primary),
+              style: AppTypography.headlineLgMobile.copyWith(color: scheme.primary),
             ),
           ),
           const SizedBox(width: 8),
@@ -65,12 +65,13 @@ class SelectionAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return IconButton(
       onPressed: onTap,
       tooltip: tooltip,
       icon: Icon(
         icon,
-        color: danger ? AppColors.error : AppColors.onSurfaceVariant,
+        color: danger ? scheme.error : scheme.onSurfaceVariant,
       ),
       style: IconButton.styleFrom(
         backgroundColor: Colors.transparent,

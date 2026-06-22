@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/gen/app_localizations.dart';
 import '../../state/files_state.dart';
-import '../../theme/colors.dart';
 import '../../theme/radii.dart';
 import '../../widgets/list_menu_sheet.dart';
 import '../../widgets/nav_aware_sheet.dart';
@@ -25,128 +24,57 @@ Future<SortResult?> showSortSheet(BuildContext context, FilesFilter current) {
     useRootNavigator: true,
     builder: (ctx) {
       final l10n = AppLocalizations.of(ctx)!;
+      final scheme = Theme.of(ctx).colorScheme;
       return NavAwareSheet(
         child: StatefulBuilder(
           builder: (ctx, setState) {
+            Widget sortTile(
+              IconData icon,
+              String label,
+              FileSort value,
+            ) {
+              final selected = sort == value;
+              return ListMenuTile(
+                icon: icon,
+                iconFg: scheme.onSurface,
+                iconBg: selected
+                    ? scheme.primary.withValues(alpha: 0.10)
+                    : scheme.surfaceContainerHigh,
+                label: label,
+                selected: selected,
+                onTap: () => setState(() {
+                  if (sort == value) {
+                    ascending = !ascending;
+                  } else {
+                    sort = value;
+                    ascending = true;
+                  }
+                }),
+                trailing: selected
+                    ? AnimatedRotation(
+                        turns: ascending ? 0 : 0.5,
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeInOut,
+                        child: Icon(
+                          Icons.arrow_upward,
+                          color: scheme.primary,
+                          size: 20,
+                        ),
+                      )
+                    : null,
+              );
+            }
+
             return ListMenuSheet(
               title: l10n.sortSheetTitle,
               children: [
-                ListMenuTile(
-                  icon: Icons.sort_by_alpha,
-                  iconFg: AppColors.onSurface,
-                  iconBg: sort == FileSort.name
-                      ? AppColors.primary.withValues(alpha: 0.10)
-                      : AppColors.surfaceHigh,
-                  label: l10n.sortByName,
-                  selected: sort == FileSort.name,
-                  onTap: () => setState(() {
-                    if (sort == FileSort.name) {
-                      ascending = !ascending;
-                    } else {
-                      sort = FileSort.name;
-                      ascending = true;
-                    }
-                  }),
-                  trailing: sort == FileSort.name
-                      ? AnimatedRotation(
-                          turns: ascending ? 0 : 0.5,
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeInOut,
-                          child: const Icon(
-                            Icons.arrow_upward,
-                            color: AppColors.primary,
-                            size: 20,
-                          ),
-                        )
-                      : null,
-                ),
-                ListMenuTile(
-                  icon: Icons.calendar_today_outlined,
-                  iconFg: AppColors.onSurface,
-                  iconBg: sort == FileSort.createdAt
-                      ? AppColors.primary.withValues(alpha: 0.10)
-                      : AppColors.surfaceHigh,
-                  label: l10n.sortByCreatedAt,
-                  selected: sort == FileSort.createdAt,
-                  onTap: () => setState(() {
-                    if (sort == FileSort.createdAt) {
-                      ascending = !ascending;
-                    } else {
-                      sort = FileSort.createdAt;
-                      ascending = true;
-                    }
-                  }),
-                  trailing: sort == FileSort.createdAt
-                      ? AnimatedRotation(
-                          turns: ascending ? 0 : 0.5,
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeInOut,
-                          child: const Icon(
-                            Icons.arrow_upward,
-                            color: AppColors.primary,
-                            size: 20,
-                          ),
-                        )
-                      : null,
-                ),
-                ListMenuTile(
-                  icon: Icons.cloud_upload_outlined,
-                  iconFg: AppColors.onSurface,
-                  iconBg: sort == FileSort.uploadedAt
-                      ? AppColors.primary.withValues(alpha: 0.10)
-                      : AppColors.surfaceHigh,
-                  label: l10n.sortByUploadedAt,
-                  selected: sort == FileSort.uploadedAt,
-                  onTap: () => setState(() {
-                    if (sort == FileSort.uploadedAt) {
-                      ascending = !ascending;
-                    } else {
-                      sort = FileSort.uploadedAt;
-                      ascending = true;
-                    }
-                  }),
-                  trailing: sort == FileSort.uploadedAt
-                      ? AnimatedRotation(
-                          turns: ascending ? 0 : 0.5,
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeInOut,
-                          child: const Icon(
-                            Icons.arrow_upward,
-                            color: AppColors.primary,
-                            size: 20,
-                          ),
-                        )
-                      : null,
-                ),
-                ListMenuTile(
-                  icon: Icons.straighten_outlined,
-                  iconFg: AppColors.onSurface,
-                  iconBg: sort == FileSort.size
-                      ? AppColors.primary.withValues(alpha: 0.10)
-                      : AppColors.surfaceHigh,
-                  label: l10n.sortBySize,
-                  selected: sort == FileSort.size,
-                  onTap: () => setState(() {
-                    if (sort == FileSort.size) {
-                      ascending = !ascending;
-                    } else {
-                      sort = FileSort.size;
-                      ascending = true;
-                    }
-                  }),
-                  trailing: sort == FileSort.size
-                      ? AnimatedRotation(
-                          turns: ascending ? 0 : 0.5,
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeInOut,
-                          child: const Icon(
-                            Icons.arrow_upward,
-                            color: AppColors.primary,
-                            size: 20,
-                          ),
-                        )
-                      : null,
-                ),
+                sortTile(Icons.sort_by_alpha, l10n.sortByName, FileSort.name),
+                sortTile(Icons.calendar_today_outlined, l10n.sortByCreatedAt,
+                    FileSort.createdAt),
+                sortTile(Icons.cloud_upload_outlined, l10n.sortByUploadedAt,
+                    FileSort.uploadedAt),
+                sortTile(Icons.straighten_outlined, l10n.sortBySize,
+                    FileSort.size),
                 const SizedBox(height: 16),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),

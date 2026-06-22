@@ -108,7 +108,7 @@ class FilesRepository {
       if (folderId != null) 'folder_id': folderId,
     });
     final res = await _api.dio.post<Map<String, dynamic>>(
-      '/files',
+      '/files/upload',
       data: form,
       onSendProgress: onProgress,
     );

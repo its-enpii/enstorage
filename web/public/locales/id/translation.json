@@ -380,7 +380,14 @@
       "submitting": "Memproses…",
       "failed": "Login gagal.",
       "noAccount": "Belum punya akun?",
-      "registerLink": "Daftar"
+      "registerLink": "Daftar",
+      "googleButton": "Masuk dengan Google",
+      "googleLoading": "Mengarahkan ke Google…",
+      "orDivider": "atau",
+      "tagline": "Cloud vault pribadi yang terhubung dengan Google Drive Anda.",
+      "feature1": "Terenkripsi & aman",
+      "feature2": "Multi-akun Google Drive",
+      "feature3": "Akses dari mana saja"
     },
     "register": {
       "title": "Daftar EnStorage",
@@ -394,7 +401,14 @@
       "failed": "Registrasi gagal.",
       "passwordMismatch": "Password dan konfirmasi tidak sama.",
       "hasAccount": "Sudah punya akun?",
-      "loginLink": "Masuk"
+      "loginLink": "Masuk",
+      "googleButton": "Daftar dengan Google",
+      "googleLoading": "Mengarahkan ke Google…"
+    },
+    "callback": {
+      "processing": "Memproses login…",
+      "failed": "Login gagal.",
+      "redirecting": "Mengalihkan…"
     },
     "greeting": "Halo, {{name}}",
     "sessionFailed": "Gagal memuat sesi",

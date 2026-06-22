@@ -1,6 +1,7 @@
 *.log
 .DS_Store
 .env
+firebase-service-account.json
 .env.backup
 .env.production
 .phpactor.json

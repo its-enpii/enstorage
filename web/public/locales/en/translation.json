@@ -380,7 +380,14 @@
       "submitting": "Processing…",
       "failed": "Login failed.",
       "noAccount": "Don't have an account?",
-      "registerLink": "Sign Up"
+      "registerLink": "Sign Up",
+      "googleButton": "Sign in with Google",
+      "googleLoading": "Redirecting to Google…",
+      "orDivider": "or",
+      "tagline": "Your personal cloud vault connected to Google Drive.",
+      "feature1": "Encrypted & secure",
+      "feature2": "Multi-account Google Drive",
+      "feature3": "Access from anywhere"
     },
     "register": {
       "title": "Sign Up for EnStorage",
@@ -394,7 +401,14 @@
       "failed": "Registration failed.",
       "passwordMismatch": "Password and confirmation do not match.",
       "hasAccount": "Already have an account?",
-      "loginLink": "Sign In"
+      "loginLink": "Sign In",
+      "googleButton": "Sign up with Google",
+      "googleLoading": "Redirecting to Google…"
+    },
+    "callback": {
+      "processing": "Processing login…",
+      "failed": "Login failed.",
+      "redirecting": "Redirecting…"
     },
     "greeting": "Hello, {{name}}",
     "sessionFailed": "Failed to load session",

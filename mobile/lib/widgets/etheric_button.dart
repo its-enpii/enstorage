@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme/colors.dart';
 import '../theme/radii.dart';
 import '../theme/typography.dart';
 
@@ -27,7 +26,7 @@ class EthericButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = _palette();
+    final palette = _palette(context);
     final child = loading
         ? SizedBox(
             width: 18,
@@ -75,23 +74,24 @@ class EthericButton extends StatelessWidget {
     );
   }
 
-  _ButtonPalette _palette() {
+  _ButtonPalette _palette(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     switch (variant) {
       case EthericButtonVariant.primary:
-        return const _ButtonPalette(
-          bg: AppColors.primaryContainer,
-          fg: AppColors.onPrimaryContainer,
+        return _ButtonPalette(
+          bg: scheme.primaryContainer,
+          fg: scheme.onPrimaryContainer,
         );
       case EthericButtonVariant.secondary:
         return _ButtonPalette(
           bg: Colors.transparent,
-          fg: AppColors.onSurface,
-          border: Colors.white.withValues(alpha: 0.10),
+          fg: scheme.onSurface,
+          border: scheme.onSurface.withValues(alpha: 0.10),
         );
       case EthericButtonVariant.danger:
-        return const _ButtonPalette(
-          bg: AppColors.errorContainer,
-          fg: AppColors.onErrorContainer,
+        return _ButtonPalette(
+          bg: scheme.errorContainer,
+          fg: scheme.onErrorContainer,
         );
     }
   }

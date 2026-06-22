@@ -19,6 +19,8 @@ type AuthContextValue = {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, passwordConfirmation: string) => Promise<void>;
+  googleLogin: () => Promise<void>;
+  handleGoogleCallback: (token: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -123,6 +125,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const googleLogin = useCallback(async () => {
+    const res = await apiRequest<{ authorization_url: string }>('/auth/google/redirect', {
+      auth: false,
+    });
+    window.location.href = res.authorization_url;
+  }, []);
+
+  const handleGoogleCallback = useCallback(async (token: string) => {
+    setToken(token);
+    // Fetch user profile with the new token
+    const u = await fetchMe();
+    if (!u) throw new Error('Failed to fetch user after Google login');
+    setUser(u);
+  }, [fetchMe]);
+
   const logout = useCallback(async () => {
     try {
       await apiRequest<null>('/auth/logout', { method: 'POST' });
@@ -141,7 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchMe]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refresh }}>
+    <AuthContext.Provider value={{ user, loading, login, register, googleLogin, handleGoogleCallback, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );

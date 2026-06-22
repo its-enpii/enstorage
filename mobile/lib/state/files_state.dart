@@ -7,6 +7,7 @@ import '../data/models/file_item.dart';
 import '../data/models/folder.dart';
 import '../data/paged_result.dart';
 import '../data/repositories/files_repository.dart';
+import 'refresh_signal_state.dart';
 
 enum FileSort { name, size, createdAt, uploadedAt }
 
@@ -153,6 +154,7 @@ class FilesController
   int _folderLastPage = 1;
   int _fileLastPage = 1;
   bool _loadingMore = false;
+  bool _isRefreshing = false;
 
   /// Debounce timer for filter-driven refetches (search input).
   Timer? _debounce;
@@ -160,12 +162,25 @@ class FilesController
   FilesFilter get filter => _filter;
   bool get loadingMore => _loadingMore;
 
+  /// True when a refetch is in-flight but the previous data is still
+  /// being shown (so the UI can show a subtle progress bar instead
+  /// of blanking the list).
+  bool get isRefreshing => _isRefreshing;
+
   /// Reload from page 1, replacing current results. Call after a
   /// filter or sort change.
   Future<void> refresh() async {
     _folderPage = 1;
     _filePage = 1;
-    await _load();
+    await _runRefresh(isInitialLoad: state.valueOrNull == null);
+  }
+
+  /// Reset the search query and refetch. Used by the "Clear search"
+  /// CTA in the empty state so the user can recover without restarting.
+  void clearSearch() {
+    if (_filter.search.isEmpty) return;
+    _filter = _filter.copyWith(search: '');
+    refresh();
   }
 
   /// Debounced variant of [refresh] — cancels any pending refetch and
@@ -250,8 +265,20 @@ class FilesController
     }
   }
 
-  Future<void> _load() async {
-    state = const AsyncValue.loading();
+  Future<void> _load() => _runRefresh(isInitialLoad: true);
+
+  /// Internal refetch path. On the very first load there's no prior
+  /// data to show, so we still flip [AsyncValue] to loading and the
+  /// UI renders a full-page spinner. On any subsequent refetch (search,
+  /// sort, filter) we keep the previous [FilesData] in place and just
+  /// toggle [isRefreshing] so the UI can show a subtle indicator — no
+  /// blank flash.
+  Future<void> _runRefresh({required bool isInitialLoad}) async {
+    if (isInitialLoad) {
+      state = const AsyncValue.loading();
+    } else {
+      _isRefreshing = true;
+    }
     try {
       final foldersRes = await _fetchFoldersPage(1);
       final filesRes = await _fetchFilesPage(1);
@@ -268,7 +295,18 @@ class FilesController
         fileTotal: filesRes.total,
       ));
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      // On a non-initial failure keep the prior data visible and just
+      // expose the error via a separate signal — caller decides how
+      // to surface it (snackbar). For initial load, fall back to the
+      // error state so the error widget can take over.
+      if (isInitialLoad) {
+        state = AsyncValue.error(e, st);
+      } else {
+        // Preserve last good data; UI continues to render it.
+        debugPrint('refresh failed: $e\n$st');
+      }
+    } finally {
+      _isRefreshing = false;
     }
   }
 
@@ -332,6 +370,51 @@ class FilesController
     ));
   }
 
+  /// Bulk-remove files (untuk delete multi). Update list lokal, no API call.
+  void removeFiles(Iterable<String> ids) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    final idSet = ids.toSet();
+    final removed = current.files.where((f) => idSet.contains(f.id)).length;
+    if (removed == 0) return;
+    state = AsyncValue.data(current.copyWith(
+      files: current.files.where((f) => !idSet.contains(f.id)).toList(),
+      fileTotal: (current.fileTotal - removed).clamp(0, 1 << 30),
+    ));
+  }
+
+  /// Prepend a freshly-uploaded file to the list (used by FCM
+  /// upload.complete handler — no API call, no full refresh).
+  /// Idempotent: kalau file dengan id yg sama udah ada, gak duplikat.
+  void prependFile(FileItem file) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    // Cek folder cocok: kalau controller di-scope ke folder tertentu,
+    // cuma append kalau file.folderId match. Untuk root (parentId == null),
+    // cuma append kalau file.folderId juga null.
+    final myFolder = _parentId;
+    if (myFolder != (file.folderId ?? '')) return;
+    // Skip kalau udah ada
+    if (current.files.any((f) => f.id == file.id)) return;
+    state = AsyncValue.data(current.copyWith(
+      files: [file, ...current.files],
+      fileTotal: current.fileTotal + 1,
+    ));
+  }
+
+  /// Replace file dengan id yg sama di list (untuk update setelah toggle star,
+  /// rename, dll). Listeners di scope yang sama akan rebuild otomatis.
+  /// Gak throw kalau gak ketemu — biar UI gak crash kalau file di folder lain.
+  void replaceFile(FileItem file) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    final idx = current.files.indexWhere((f) => f.id == file.id);
+    if (idx < 0) return;
+    final updated = [...current.files];
+    updated[idx] = file;
+    state = AsyncValue.data(current.copyWith(files: updated));
+  }
+
   void removeFolder(String id) {
     final current = state.valueOrNull;
     if (current == null) return;
@@ -351,5 +434,30 @@ class FilesController
 /// AutoDispose family keyed by parentId.
 final filesControllerProvider = StateNotifierProvider.autoDispose
     .family<FilesController, AsyncValue<FilesData>, String?>((ref, parentId) {
-  return FilesController(ref.watch(filesRepositoryProvider), parentId: parentId);
+  final controller = FilesController(
+    ref.watch(filesRepositoryProvider),
+    parentId: parentId,
+  );
+  // Listen ke FCM upload.complete: append file baru ke list (no API call).
+  ref.listen<FileItem?>(appendFileProvider(parentId), (prev, next) {
+    if (next == null) return;
+    controller.prependFile(next);
+    // ignore: unused_result
+    ref.read(appendFileProvider(parentId).notifier).state = null;
+  });
+  // Listen ke mutation dari viewer / FCM (rename, share, star update).
+  ref.listen<FileItem?>(replaceFileProvider(parentId), (prev, next) {
+    if (next == null) return;
+    controller.replaceFile(next);
+    // ignore: unused_result
+    ref.read(replaceFileProvider(parentId).notifier).state = null;
+  });
+  // Listen ke delete events.
+  ref.listen<String?>(removeFileProvider(parentId), (prev, next) {
+    if (next == null) return;
+    controller.removeFile(next);
+    // ignore: unused_result
+    ref.read(removeFileProvider(parentId).notifier).state = null;
+  });
+  return controller;
 });

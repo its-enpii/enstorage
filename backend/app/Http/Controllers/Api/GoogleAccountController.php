@@ -106,8 +106,8 @@ class GoogleAccountController extends Controller
 
         $email = $token['email'];
 
-        // Cegah duplikat (satu email per user)
-        $exists = GoogleAccount::where('user_id', $user->id)->where('email', $email)->exists();
+        // Cegah duplikat (satu email Google hanya boleh terhubung ke satu user)
+        $exists = GoogleAccount::where('email', $email)->exists();
         if ($exists) {
             return $this->fail(__('Akun Google ini sudah terhubung.'), 409);
         }
@@ -207,8 +207,8 @@ class GoogleAccountController extends Controller
 
         $email = $token['email'];
 
-        // Cegah duplikat (satu email per user)
-        $exists = GoogleAccount::where('user_id', $user->id)->where('email', $email)->exists();
+        // Cegah duplikat (satu email Google hanya boleh terhubung ke satu user)
+        $exists = GoogleAccount::where('email', $email)->exists();
         if ($exists) {
             return $isBrowser
                 ? $this->redirectToFrontend(error: __('Akun Google ini sudah terhubung.'))
@@ -310,7 +310,7 @@ class GoogleAccountController extends Controller
 
         $email = $token['email'];
 
-        $exists = GoogleAccount::where('user_id', $user->id)->where('email', $email)->exists();
+        $exists = GoogleAccount::where('email', $email)->exists();
         if ($exists) {
             return $this->fail(__('Akun Google ini sudah terhubung.'), 409);
         }

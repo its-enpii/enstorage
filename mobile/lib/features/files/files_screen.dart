@@ -13,16 +13,16 @@ import '../../data/models/file_item.dart';
 import '../../data/models/folder.dart';
 import '../../data/repositories/files_repository.dart';
 import '../../data/storage/token_storage.dart';
+import '../../services/notification_service.dart';
 import '../../l10n/gen/app_localizations.dart';
 import '../../state/files_state.dart';
 import '../../state/folder_state.dart';
 import '../../state/selection_state.dart';
-import '../../state/upload_state.dart';
-import '../../theme/colors.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/etheric_fab.dart';
+import '../../widgets/app_snackbar.dart';
 import 'create_action_sheet.dart';
 import 'create_folder_dialog.dart';
 import 'camera_capture.dart';
@@ -30,7 +30,6 @@ import 'sort_sheet.dart';
 import 'filter_sheet.dart';
 import 'widgets/file_card.dart';
 import 'widgets/folder_card.dart';
-import 'widgets/upload_progress_toast.dart';
 
 class FilesScreen extends ConsumerStatefulWidget {
   const FilesScreen({super.key, this.folderId});
@@ -92,23 +91,24 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     if (path == null) return;
 
     final repo = ref.read(filesRepositoryProvider);
-    final uploadCtrl = ref.read(uploadControllerProvider.notifier);
-    final id = uploadCtrl.start(picked.name);
+    final filename = picked.name;
+    // Bikin notif progress lokal (kayak Chrome download).
+    showUploadProgress(filename: filename, progress: 0);
     try {
       await repo.uploadFile(
         path: path,
-        filename: picked.name,
+        filename: filename,
         folderId: widget.folderId,
-        onProgress: (sent, total) => uploadCtrl.update(id, sent: sent, total: total),
+        onProgress: (sent, total) {
+          final pct = total == 0 ? 0 : ((sent / total) * 100).round();
+          showUploadProgress(filename: filename, progress: pct);
+        },
       );
-      uploadCtrl.complete(id);
-      if (mounted) {
-        await ref
-            .read(filesControllerProvider(widget.folderId).notifier)
-            .refresh();
-      }
+      // HTTP done — masuk fase 2 (backend upload ke GDrive). Notif jadi indeterminate.
+      showUploadProgress(filename: filename, progress: 0, indeterminate: true);
+      // FCM upload.complete nanti append file baru ke list (no refresh).
     } catch (e) {
-      uploadCtrl.fail(id);
+      finishUpload(filename: filename, success: false, body: e.toString());
     }
   }
 
@@ -143,8 +143,10 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       }
     }
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${l10n.filesDownloadStarted} ($success/${selection.ids.length})')),
+      showAppSnackBar(
+        context,
+        '${l10n.filesDownloadStarted} ($success/${selection.ids.length})',
+        variant: AppSnackBarVariant.info,
       );
     }
     _exitSelectMode();
@@ -166,14 +168,14 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     final repo = ref.read(filesRepositoryProvider);
     final token = await ref.read(tokenStorageProvider).readToken();
     final api = ref.read(apiClientProvider);
+    if (!mounted) return;
 
     // Show a progress snackbar while we pull the bytes.
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(l10n.filesSharePreparing),
-        duration: const Duration(seconds: 2),
-      ),
+    showAppSnackBar(
+      context,
+      l10n.filesSharePreparing,
+      variant: AppSnackBarVariant.info,
+      duration: const Duration(seconds: 2),
     );
 
     final dir = await getTemporaryDirectory();
@@ -192,7 +194,8 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
 
     if (!mounted) return;
     if (downloaded.isEmpty) {
-      messenger.showSnackBar(SnackBar(content: Text(l10n.filesShareFailed)));
+      showAppSnackBar(context, l10n.filesShareFailed,
+          variant: AppSnackBarVariant.error);
       return;
     }
     try {
@@ -201,7 +204,9 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
         subject: l10n.appName,
       );
     } catch (_) {
-      messenger.showSnackBar(SnackBar(content: Text(l10n.filesShareFailed)));
+      if (!mounted) return;
+      showAppSnackBar(context, l10n.filesShareFailed,
+          variant: AppSnackBarVariant.error);
     }
   }
 
@@ -212,7 +217,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainer,
         title: Text(l10n.filesConfirmBulkDeleteTitle(count)),
         content: Text(l10n.filesConfirmBulkDeleteBody(count)),
         actions: [
@@ -222,27 +227,29 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(ctx).colorScheme.error),
             child: Text(l10n.filesConfirmDeleteConfirm),
           ),
         ],
       ),
     );
     if (confirmed != true) return;
+    final idsToDelete = selection.ids.toList();
     try {
       await ref
           .read(filesRepositoryProvider)
-          .bulkDeleteFiles(selection.ids.toList());
+          .bulkDeleteFiles(idsToDelete);
       if (mounted) {
-        await ref
+        // Update state lokal — list langsung berkurang, no refresh.
+        ref
             .read(filesControllerProvider(widget.folderId).notifier)
-            .refresh();
+            .removeFiles(idsToDelete);
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.filesDeleteFailed)),
-        );
+        showAppSnackBar(context, l10n.filesDeleteFailed,
+            variant: AppSnackBarVariant.error);
       }
     }
     _exitSelectMode();
@@ -256,6 +263,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
         ref.read(filesControllerProvider(widget.folderId).notifier);
     final selection = ref.watch(selectionControllerProvider);
     final inSelection = selection.isNotEmpty;
+    final scheme = Theme.of(context).colorScheme;
 
     final title = _buildAppBarTitle(context, l10n);
 
@@ -269,36 +277,36 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppTypography.headlineLgMobile.copyWith(
-                  color: AppColors.onSurface,
+                  color: scheme.onSurface,
                 ),
               ),
               actions: [
                 IconButton(
                   onPressed: _exitSelectMode,
-                  icon: const Icon(Icons.close, color: AppColors.onSurface),
+                  icon: Icon(Icons.close, color: scheme.onSurface),
                   tooltip: l10n.filesSelectMode,
                 ),
                 IconButton(
                   onPressed: _bulkShare,
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.share_outlined,
-                    color: AppColors.onSurface,
+                    color: scheme.onSurface,
                   ),
                   tooltip: l10n.filesActionsShare,
                 ),
                 IconButton(
                   onPressed: _bulkDownload,
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.download_outlined,
-                    color: AppColors.onSurface,
+                    color: scheme.onSurface,
                   ),
                   tooltip: l10n.filesActionsDownload,
                 ),
                 IconButton(
                   onPressed: _bulkDelete,
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.delete_outline,
-                    color: AppColors.error,
+                    color: scheme.error,
                   ),
                   tooltip: l10n.filesActionsDelete,
                 ),
@@ -311,29 +319,36 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                   padding: const EdgeInsets.only(right: 12),
                   child: CircleAvatar(
                     radius: 18,
-                    backgroundColor: AppColors.surfaceHigh,
-                    child: const Icon(Icons.person_outline,
-                        size: 20, color: AppColors.onSurface),
+                    backgroundColor: scheme.surfaceContainerHigh,
+                    child: Icon(Icons.person_outline,
+                        size: 20, color: scheme.onSurface),
                   ),
                 ),
               ],
             ),
       body: Stack(
         children: [
-          if (state.isLoading)
+          // Full-page spinner only on the very first load, when there's
+          // no prior data to keep visible. Subsequent refreshes (search
+          // keystrokes, sort, filter) let _Body stay mounted and just
+          // show a thin top progress bar via `isRefreshing`.
+          if (state.isLoading && state.valueOrNull == null)
             const Center(child: CircularProgressIndicator())
-          else if (state.hasError)
+          else if (state.hasError && state.valueOrNull == null)
             _Error(
               message: state.error.toString(),
               onRetry: () => controller.refresh(),
             )
           else
             _Body(
-              data: state.value!,
+              data: state.valueOrNull ?? const FilesData(),
+              folderId: widget.folderId,
               scrollController: _scroll,
               scope: _scope,
               onScopeChanged: (s) => setState(() => _scope = s),
               inSelection: inSelection,
+              isRefreshing: controller.isRefreshing,
+              onClearSearch: controller.clearSearch,
               onFolderTap: (f) {
                 if (inSelection) {
                   _toggleSelect(f.id);
@@ -350,6 +365,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                     extra: {
                       'filename': f.name,
                       'mime': f.mimeType,
+                      'folderId': widget.folderId,
                     },
                   );
                 }
@@ -366,7 +382,6 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
               bottom: AppSpacing.fabBottom,
               child: EthericFab(onTap: _onFab),
             ),
-          const UploadProgressToast(),
         ],
       ),
     );
@@ -423,10 +438,13 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
 class _Body extends StatefulWidget {
   const _Body({
     required this.data,
+    required this.folderId,
     required this.scrollController,
     required this.scope,
     required this.onScopeChanged,
     required this.inSelection,
+    required this.isRefreshing,
+    required this.onClearSearch,
     required this.onFolderTap,
     required this.onFileTap,
     required this.onLongPress,
@@ -437,10 +455,13 @@ class _Body extends StatefulWidget {
   });
 
   final FilesData data;
+  final String? folderId;
   final ScrollController scrollController;
   final FileListScope scope;
   final ValueChanged<FileListScope> onScopeChanged;
   final bool inSelection;
+  final bool isRefreshing;
+  final VoidCallback onClearSearch;
   final void Function(Folder) onFolderTap;
   final void Function(FileItem) onFileTap;
   final void Function(String id) onLongPress;
@@ -489,13 +510,25 @@ class _BodyState extends State<_Body> {
         ? const <FileItem>[]
         : data.files;
 
+    final searchQuery = widget.activeFilter.search.trim();
     if (data.isEmpty) {
-      return _Empty(l10n: l10n);
+      return _Empty(
+        l10n: l10n,
+        searchQuery: searchQuery.isEmpty ? null : searchQuery,
+        onClearSearch: widget.onClearSearch,
+      );
     }
 
     return CustomScrollView(
       controller: widget.scrollController,
       slivers: [
+        // Thin progress bar — only while a refetch is in flight, so
+        // the list below stays visible. The bar sits above the search
+        // field and animates out when the refetch completes.
+        if (widget.isRefreshing)
+          const SliverToBoxAdapter(
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
         // Full-width search input.
         SliverToBoxAdapter(
           child: Padding(
@@ -571,6 +604,7 @@ class _BodyState extends State<_Body> {
                 final f = visibleFiles[i - visibleFolders.length];
                 return FileCard(
                   file: f,
+                  parentFolderId: widget.folderId,
                   onTap: () => widget.onFileTap(f),
                   onLongPress: () => widget.onLongPress(f.id),
                 );
@@ -592,6 +626,7 @@ class _SearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
     return TextField(
       controller: controller,
       textInputAction: TextInputAction.search,
@@ -613,7 +648,7 @@ class _SearchField extends StatelessWidget {
           },
         ),
         filled: true,
-        fillColor: AppColors.surface,
+        fillColor: scheme.surfaceContainer,
         contentPadding: const EdgeInsets.symmetric(vertical: 0),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(999),
@@ -625,7 +660,7 @@ class _SearchField extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(999),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          borderSide: BorderSide(color: scheme.primary, width: 1.5),
         ),
       ),
     );
@@ -646,8 +681,9 @@ class _PillButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: AppColors.surface,
+      color: scheme.surfaceContainer,
       borderRadius: AppRadii.pillBorder,
       child: InkWell(
         borderRadius: AppRadii.pillBorder,
@@ -657,12 +693,12 @@ class _PillButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: AppRadii.pillBorder,
             border: active
-                ? Border.all(color: AppColors.secondary, width: 1.5)
+                ? Border.all(color: scheme.secondary, width: 1.5)
                 : null,
-            boxShadow: const [
+            boxShadow: [
               BoxShadow(
-                color: Color(0x0DFFFFFF),
-                offset: Offset(0, 1),
+                color: scheme.onSurface.withValues(alpha: 0.05),
+                offset: const Offset(0, 1),
                 blurRadius: 0,
               ),
             ],
@@ -672,7 +708,7 @@ class _PillButton extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon,
-                  color: active ? AppColors.secondary : AppColors.onSurfaceVariant,
+                  color: active ? scheme.secondary : scheme.onSurfaceVariant,
                   size: 18),
               const SizedBox(width: 6),
               Flexible(
@@ -681,7 +717,7 @@ class _PillButton extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.bodySm.copyWith(
-                    color: active ? AppColors.secondary : AppColors.onSurface,
+                    color: active ? scheme.secondary : scheme.onSurface,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -695,10 +731,18 @@ class _PillButton extends StatelessWidget {
 }
 
 class _Empty extends StatelessWidget {
-  const _Empty({required this.l10n});
+  const _Empty({
+    required this.l10n,
+    this.searchQuery,
+    this.onClearSearch,
+  });
   final AppLocalizations l10n;
+  final String? searchQuery;
+  final VoidCallback? onClearSearch;
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isSearch = searchQuery != null && searchQuery!.isNotEmpty;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -709,22 +753,38 @@ class _Empty extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: AppColors.surfaceHigh,
+                color: scheme.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Icon(Icons.folder_open,
-                  size: 36, color: AppColors.onSurfaceVariant),
-            ),
-            const SizedBox(height: 20),
-            Text(l10n.filesEmpty, style: AppTypography.bodyLg),
-            const SizedBox(height: 6),
-            Text(
-              l10n.filesEmptyDesc,
-              textAlign: TextAlign.center,
-              style: AppTypography.bodyMd.copyWith(
-                color: AppColors.onSurfaceVariant,
+              child: Icon(
+                isSearch ? Icons.search_off : Icons.folder_open,
+                size: 36,
+                color: scheme.onSurfaceVariant,
               ),
             ),
+            const SizedBox(height: 20),
+            Text(
+              isSearch ? l10n.searchNoResults : l10n.filesEmpty,
+              style: AppTypography.bodyLg,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              isSearch
+                  ? l10n.searchNoResultsDesc(searchQuery!)
+                  : l10n.filesEmptyDesc,
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyMd.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            if (isSearch) ...[
+              const SizedBox(height: 16),
+              FilledButton.tonalIcon(
+                onPressed: onClearSearch,
+                icon: const Icon(Icons.close, size: 18),
+                label: Text(l10n.searchClear),
+              ),
+            ],
           ],
         ),
       ),
@@ -738,18 +798,18 @@ class _Error extends StatelessWidget {
   final VoidCallback onRetry;
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline,
-                size: 48, color: AppColors.error),
+            Icon(Icons.error_outline, size: 48, color: scheme.error),
             const SizedBox(height: 12),
             Text(message,
                 textAlign: TextAlign.center,
-                style: AppTypography.bodyMd.copyWith(color: AppColors.error)),
+                style: AppTypography.bodyMd.copyWith(color: scheme.error)),
             const SizedBox(height: 12),
             TextButton.icon(
               onPressed: onRetry,

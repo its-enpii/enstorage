@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/models/file_item.dart';
 import '../../../data/repositories/files_repository.dart';
 import '../../../data/storage/token_storage.dart';
+import '../../../state/files_state.dart';
 import '../../../state/selection_state.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/typography.dart';
@@ -17,17 +18,20 @@ class FileCard extends ConsumerWidget {
     required this.onTap,
     required this.onLongPress,
     this.onOverflowTap,
+    this.parentFolderId,
   });
 
   final FileItem file;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback? onOverflowTap;
+  final String? parentFolderId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(selectionControllerProvider).contains(file.id);
     final repo = ref.watch(filesRepositoryProvider);
+    final scheme = Theme.of(context).colorScheme;
 
     final token = ref.watch(tokenStorageProvider).readTokenSync();
     final hasThumb = file.hasThumbnail && file.uploadStatus == UploadStatus.done;
@@ -39,22 +43,27 @@ class FileCard extends ConsumerWidget {
             width: 56,
             height: 56,
             fit: BoxFit.cover,
-            placeholder: (_, __) => _iconFallback(file.mimeType),
-            errorWidget: (_, __, ___) => _iconFallback(file.mimeType),
+            placeholder: (_, __) => _iconFallback(file.mimeType, scheme),
+            errorWidget: (_, __, ___) => _iconFallback(file.mimeType, scheme),
           )
-        : _iconFallback(file.mimeType);
+        : _iconFallback(file.mimeType, scheme);
+
+    // Indikator visual: cukup icon star filled vs outline, tanpa border/tint
+    // di kartu. Selected state (sudah ada di EthericCard) handle highlight
+    // via outset ring primary glow.
+    final isStarred = file.isStarred;
 
     return EthericCard(
       selected: selected,
       onTap: onTap,
       onLongPress: onLongPress,
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          Stack(
-            clipBehavior: Clip.none,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(14),
@@ -64,36 +73,41 @@ class FileCard extends ConsumerWidget {
                   child: iconContent,
                 ),
               ),
-              Positioned(
-                top: -4,
-                right: -4,
-                child: _StarButton(file: file),
+              const SizedBox(height: 12),
+              const Spacer(),
+              Text(
+                file.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: scheme.onSurface,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  height: 1.3,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _humanSize(file.size),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: scheme.onSurfaceVariant,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  height: 1.3,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          const Spacer(),
-          Text(
-            file.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.onSurface,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _humanSize(file.size),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.onSurfaceVariant,
-              fontSize: 13,
-              fontWeight: FontWeight.w400,
-              height: 1.3,
+          // Star button di pojok kanan-atas card.
+          Positioned(
+            top: -4,
+            right: -4,
+            child: _StarButton(
+              file: file,
+              isStarred: isStarred,
+              parentFolderId: parentFolderId,
             ),
           ),
         ],
@@ -101,7 +115,7 @@ class FileCard extends ConsumerWidget {
     );
   }
 
-  Widget _iconFallback(String mime) {
+  Widget _iconFallback(String mime, ColorScheme scheme) {
     final isImage = mime.startsWith('image/');
     final isVideo = mime.startsWith('video/');
     final isPdf = mime == 'application/pdf';
@@ -119,10 +133,10 @@ class FileCard extends ConsumerWidget {
       width: 56,
       height: 56,
       decoration: BoxDecoration(
-        color: AppColors.primaryContainer,
+        color: scheme.primaryContainer,
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Icon(icon, color: AppColors.onPrimaryContainer, size: 32),
+      child: Icon(icon, color: scheme.onPrimaryContainer, size: 32),
     );
   }
 
@@ -140,31 +154,45 @@ class FileCard extends ConsumerWidget {
 }
 
 class _StarButton extends ConsumerWidget {
-  const _StarButton({required this.file});
+  const _StarButton({
+    required this.file,
+    required this.isStarred,
+    required this.parentFolderId,
+  });
   final FileItem file;
+  final bool isStarred;
+  final String? parentFolderId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: Colors.black.withValues(alpha: 0.4),
+      color: isStarred
+          ? scheme.primary
+          : Colors.black.withValues(alpha: 0.5),
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: () async {
           try {
-            await ref
+            final updated = await ref
                 .read(filesRepositoryProvider)
                 .toggleStarFile(file.id, !file.isStarred);
+            // Update state lokal — UI langsung berubah tanpa nunggu reload.
+            // ignore: discarded_futures
+            ref
+                .read(filesControllerProvider(parentFolderId).notifier)
+                .replaceFile(updated);
           } catch (_) {
             // ignore — surface error in a follow-up
           }
         },
-        child: const Padding(
-          padding: EdgeInsets.all(4),
+        child: Padding(
+          padding: const EdgeInsets.all(6),
           child: Icon(
-            Icons.star_border_rounded,
+            isStarred ? Icons.star_rounded : Icons.star_border_rounded,
             color: Colors.white,
-            size: 14,
+            size: 18,
           ),
         ),
       ),

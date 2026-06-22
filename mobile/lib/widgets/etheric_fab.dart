@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme/colors.dart';
-import '../theme/radii.dart';
 import '../theme/shadows.dart';
 
 /// Gold circular FAB — plus icon only.
@@ -17,6 +15,7 @@ class EthericFab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -25,14 +24,14 @@ class EthericFab extends StatelessWidget {
         child: Container(
           width: 56,
           height: 56,
-          decoration: const BoxDecoration(
-            color: AppColors.secondary,
+          decoration: BoxDecoration(
+            color: scheme.secondary,
             shape: BoxShape.circle,
             boxShadow: AppShadows.fabGold,
           ),
-          child: const Icon(
+          child: Icon(
             Icons.add,
-            color: AppColors.onSecondary,
+            color: scheme.onSecondary,
             size: 28,
           ),
         ),

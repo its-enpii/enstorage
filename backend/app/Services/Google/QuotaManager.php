@@ -59,6 +59,20 @@ class QuotaManager
 
         Cache::put($cacheKey, $data, self::CACHE_TTL_SECONDS);
 
+        // Push notification when storage > 90%.
+        if ($total > 0 && ($used / $total) > 0.9) {
+            $notifications = app(\App\Services\NotificationService::class);
+            $notifications->sendToUser(
+                $account->user,
+                __('Storage Hampir Penuh'),
+                __('Penggunaan storage telah mencapai :pct%.', [
+                    'pct' => (int) (($used / $total) * 100),
+                ]),
+                'quota',
+                ['type' => 'quota_warning', 'pct' => (string) (int) (($used / $total) * 100)],
+            );
+        }
+
         return $data;
     }
 

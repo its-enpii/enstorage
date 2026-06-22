@@ -44,6 +44,20 @@
   "authLoginNoAccount": "Don't have an account?",
   "authLoginRegisterLink": "Sign Up",
 
+  "authGoogleSignIn": "Sign in with Google",
+  "authGoogleSubtitle": "Use your Google account to access your vault.",
+  "authGoogleFailed": "Google sign-in failed.",
+
+  "termsTitle": "Terms of Service",
+  "termsAgreePrefix": "By signing in, you agree to our ",
+  "termsLink": "Terms of Service",
+  "termsLastUpdated": "Last updated: {date}",
+  "@termsLastUpdated": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+
   "authRegisterTitle": "Sign Up for EnStorage",
   "authRegisterSubtitle": "Create a new account to start storing files.",
   "authRegisterName": "Name",
@@ -77,6 +91,7 @@
     }
   },
   "searchTypeToSearch": "Type to search files or folders.",
+  "searchClear": "Clear search",
 
   "filesTitle": "Documents",
   "filesRootTitle": "File Manager",
@@ -282,6 +297,21 @@
   "settingsDeleteAccountDesc": "Permanently delete your account. This cannot be undone.",
   "settingsComingSoon": "Coming soon",
 
+  "settingsEditNameTitle": "Edit Name",
+  "settingsEditNameSave": "Save",
+  "settingsEditNameSuccess": "Name updated.",
+  "settingsAccountSection": "Account",
+  "settingsChangePassword": "Change Password",
+  "settingsChangePasswordSubtitle": "Pick a strong password you don't use elsewhere.",
+  "settingsChangePasswordCurrent": "Current password",
+  "settingsChangePasswordNew": "New password",
+  "settingsChangePasswordConfirm": "Confirm new password",
+  "settingsChangePasswordMismatch": "New password and confirmation do not match.",
+  "settingsChangePasswordTooShort": "New password must be at least 8 characters.",
+  "settingsChangePasswordWrongCurrent": "Current password is incorrect.",
+  "settingsChangePasswordSuccess": "Password updated.",
+  "settingsChangePasswordFailed": "Failed to change password.",
+
   "uploadProgress": "{filename} • {progress}%",
   "@uploadProgress": {
     "placeholders": {
@@ -335,5 +365,9 @@
   "filterStatusFailed": "Failed",
   "filesTabsAll": "All",
   "filesTabsFolders": "Folders",
-  "filesTabsFiles": "Files"
+  "filesTabsFiles": "Files",
+
+  "logoutConfirmTitle": "Sign Out?",
+  "logoutConfirmBody": "You will need to sign in again to access your files.",
+  "logoutConfirmAction": "Sign Out"
 }

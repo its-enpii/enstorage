@@ -32,6 +32,7 @@ dependencies:
   # UI
   google_fonts: ^6.2.1
   cached_network_image: ^3.4.1
+  flutter_cache_manager: ^3.4.1
 
   # Pickers / camera
   file_picker: ^8.1.2
@@ -58,6 +59,10 @@ dependencies:
   # running GMS 26.x. v6 uses an intent-based WebView flow that
   # works on these devices.
   google_sign_in: ^6.2.0
+  flutter_svg: ^2.3.0
+  firebase_core: ^4.11.0
+  firebase_messaging: ^16.4.0
+  flutter_local_notifications: ^22.0.1
 
 dev_dependencies:
   flutter_test:
@@ -69,3 +74,4 @@ flutter:
   generate: true
   assets:
     - assets/
+    - assets/icon/
