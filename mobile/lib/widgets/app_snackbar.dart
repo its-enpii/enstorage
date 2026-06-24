@@ -23,6 +23,8 @@ void showAppSnackBar(
   String message, {
   AppSnackBarVariant variant = AppSnackBarVariant.info,
   Duration? duration,
+  String? actionLabel,
+  VoidCallback? onAction,
 }) {
   final scheme = Theme.of(context).colorScheme;
   final (Color bg, Color fg, IconData icon) = switch (variant) {
@@ -43,16 +45,24 @@ void showAppSnackBar(
       ),
   };
 
+  // Default duration lebih panjang kalau ada action — supaya user
+  // punya waktu tap. Material spec: SnackBar dengan action minimal
+  // 4 detik.
+  final effectiveDuration = duration ??
+      (variant == AppSnackBarVariant.error
+          ? const Duration(seconds: 4)
+          : const Duration(milliseconds: 2500));
+  final durationWithAction = onAction != null && duration == null
+      ? const Duration(seconds: 6)
+      : effectiveDuration;
+
   final messenger = ScaffoldMessenger.of(context);
   messenger
     ..clearSnackBars()
     ..showSnackBar(
       SnackBar(
         backgroundColor: bg,
-        duration: duration ??
-            (variant == AppSnackBarVariant.error
-                ? const Duration(seconds: 4)
-                : const Duration(milliseconds: 2500)),
+        duration: durationWithAction,
         content: Row(
           children: [
             Icon(icon, color: fg, size: 20),
@@ -65,6 +75,16 @@ void showAppSnackBar(
             ),
           ],
         ),
+        // SnackBarAction WARNA-nya independent dari foregroundColor
+        // SnackBar — pakai colorScheme inverse biar kontras dengan
+        // errorContainer background.
+        action: (actionLabel != null && onAction != null)
+            ? SnackBarAction(
+                label: actionLabel,
+                textColor: scheme.onInverseSurface,
+                onPressed: onAction,
+              )
+            : null,
       ),
     );
 }

@@ -50,7 +50,18 @@ return [
         'redirect_uri_mobile' => env('GOOGLE_REDIRECT_URI_MOBILE', 'enstorage://oauth-callback'),
 
         'scopes' => [
-            'https://www.googleapis.com/auth/drive.file',
+            // `drive` (full) — bukan `drive.file` — karena:
+            // 1. `QuotaManager::getQuota()` panggil `about.get` untuk baca
+            //    `storageQuota` global akun. Scope `drive.file` cuma cover
+            //    file yang dibuat app ini, tidak termasuk `about` endpoint,
+            //    sehingga Google return 403 `insufficient authentication scopes`.
+            // 2. App butuh manage folder root `EnStorage` di root Drive +
+            //    read/write file di dalamnya — semua covered by `drive`.
+            // Trade-off: consent screen lebih "berat" (full Drive access),
+            // tapi tanpa scope ini quota sync & beberapa Drive fitur lain
+            // tidak akan jalan. Akun existing harus Cabut & Hubungkan ulang
+            // agar Google re-issue token dengan scope baru.
+            'https://www.googleapis.com/auth/drive',
             'https://www.googleapis.com/auth/userinfo.email',
             'https://www.googleapis.com/auth/userinfo.profile',
         ],

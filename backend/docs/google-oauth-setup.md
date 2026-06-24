@@ -2,7 +2,8 @@
 
 ## Prerequisites
 
-- Google Cloud Console project dengan **OAuth consent screen** sudah configured (External user type, scopes: `drive.file`, `userinfo.email`, `userinfo.profile`)
+- Google Cloud Console project dengan **OAuth consent screen** sudah configured (External user type, scopes: `https://www.googleapis.com/auth/drive`, `userinfo.email`, `userinfo.profile`)
+- **Catatan scope**: backend pakai `drive` (full) bukan `drive.file` karena `QuotaManager` perlu panggil `about.get` untuk baca `storageQuota` global akun. Scope `drive.file` terlalu sempit — Google return 403 untuk endpoint `about`. Akun existing harus Cabut & Hubungkan ulang agar token baru punya scope `drive`.
 - Minimal 1 OAuth client sudah dibuat
 
 ---

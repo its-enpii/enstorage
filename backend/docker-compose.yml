@@ -1,3 +1,5 @@
+name: "enstorage"
+
 services:
   app:
     build:
@@ -120,3 +122,4 @@ volumes:
 networks:
   enstorage-net:
     driver: bridge
+      

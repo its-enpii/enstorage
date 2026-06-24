@@ -20,8 +20,18 @@ Thumbs.db
 # Android
 android/.gradle/
 android/local.properties
-android/app/google-services.json
+# google-services.json is INTENTIONALLY tracked — it's a public Firebase
+# config that gets bundled into the APK. Anyone can extract it from the
+# binary, so excluding it from git gains no security. Keeping it tracked
+# lets `git clone && flutter run` work out of the box.
+# (Rotate via Firebase Console: Project Settings -> Your apps -> Android app)
 android/key.properties
+# Android signing key + keystore — NEVER commit. Use a password manager
+# and pass via env vars (e.g. KEYSTORE_PASSWORD) in CI.
+android/app/*.jks
+android/app/*.keystore
+android/key.properties
+android/app/google-services.json
 
 # iOS
 ios/Pods/
@@ -39,3 +49,11 @@ lib/l10n/gen/
 .env.local
 .env.*.local
 *.local
+
+# Firebase Admin SDK service account keys (private_key material).
+# These are SERVER-SIDE only and must never be checked in, even by
+# accident — the private key can sign tokens as your Firebase project.
+# Mobile app uses google-services.json (public); backend uses these.
+**/service-account.json
+**/firebase-adminsdk-*.json
+**/*-firebase-adminsdk.json

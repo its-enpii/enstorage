@@ -30,14 +30,30 @@ else
   echo "[run_dev] Copy .env.example to .env.local to set defaults." >&2
 fi
 
-# Build --dart-define flags from any GOOGLE_* env vars present.
+# Build --dart-define flags from any recognised env vars present.
+# Order matters: the matching `case` decides which keys get forwarded.
+# GOOGLE_CLIENT_ID is safe to embed in the APK (it's a public OAuth
+# client ID). API_BASE is also safe — it's just a URL.
 DART_DEFINES=()
-for key in GOOGLE_CLIENT_ID; do
+for key in GOOGLE_CLIENT_ID API_BASE; do
   val="${!key:-}"
   if [ -n "${val}" ]; then
     DART_DEFINES+=("--dart-define=${key}=${val}")
   fi
 done
+
+# Fail fast if API_BASE is missing — the app will assert at startup
+# and we want the dev to see the error HERE (build time) instead of
+# inside a running emulator where the stack trace is less obvious.
+if [ -z "${API_BASE:-}" ]; then
+  echo "[run_dev] API_BASE is not set in .env.local." >&2
+  echo "[run_dev] Add a line like:  API_BASE=http://10.0.2.2:8080/api/v1" >&2
+  echo "[run_dev]   - Android emulator → host PC : http://10.0.2.2:8080/api/v1" >&2
+  echo "[run_dev]   - iOS simulator                : http://localhost:8080/api/v1" >&2
+  echo "[run_dev]   - Physical device on LAN       : http://<your-LAN-IP>:8080/api/v1" >&2
+  echo "[run_dev]   - Production                   : https://api.example.com/api/v1" >&2
+  exit 1
+fi
 
 cd "${PROJECT_ROOT}"
 exec flutter "${DART_DEFINES[@]}" "$@"

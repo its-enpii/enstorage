@@ -73,9 +73,12 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
 
   /// v6.x API: `GoogleSignIn` is a regular constructor (not a
   /// `.instance` singleton). `serverClientId` is a constructor arg.
+  // Lihat komentar di login_screen.dart — `forceCodeForRefreshToken`
+  // wajib agar serverAuthCode bisa ditukar backend menjadi refresh_token.
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: _kScopes,
     serverClientId: _kWebClientId,
+    forceCodeForRefreshToken: true,
   );
 
   @override
@@ -250,10 +253,57 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
       if (!mounted) return;
       showAppSnackBar(context, l10n.googleAccountsSyncSuccess,
           variant: AppSnackBarVariant.success);
-    } catch (_) {
+    } on DioException catch (e, st) {
+      debugPrint(
+        '[google_accounts] syncQuota failed: '
+        'status=${e.response?.statusCode} '
+        'body=${e.response?.data}\n$st',
+      );
       if (!mounted) return;
-      showAppSnackBar(context, l10n.googleAccountsSyncFailed,
-          variant: AppSnackBarVariant.error);
+      // Backend balikin 502 dengan `{ success:false, message:"Sinkronisasi
+      // quota gagal: <reason>" }` — ekstrak reason-nya agar user bisa
+      // diagnosis. Deteksi Drive API permission error (403 / "insufficient
+      // authentication scopes") — terjadi bila akun di-connect dengan
+      // scope `drive.file` lama, dan user perlu Cabut & Hubungkan ulang
+      // agar Google re-issue token dengan scope `drive` (full).
+      final raw = e.response?.data;
+      String reason = e.message ?? 'unknown error';
+      if (raw is Map && raw['message'] is String) {
+        reason = (raw['message'] as String)
+            .replaceFirst('Sinkronisasi quota gagal: ', '')
+            .replaceFirst('Sinkronisasi quota gagal:', '')
+            .trim();
+      }
+      final lower = reason.toLowerCase();
+      final isPermissionError = e.response?.statusCode == 403 ||
+          lower.contains('insufficient') ||
+          lower.contains('permission') ||
+          lower.contains('scope');
+
+      final message = l10n.googleAccountsSyncFailedReason(reason);
+      if (isPermissionError) {
+        showAppSnackBar(
+          context,
+          message,
+          variant: AppSnackBarVariant.error,
+          actionLabel: l10n.googleAccountsSyncReconnectAction,
+          onAction: () => _onDisconnect(account),
+        );
+      } else {
+        showAppSnackBar(
+          context,
+          message,
+          variant: AppSnackBarVariant.error,
+        );
+      }
+    } catch (e, st) {
+      debugPrint('[google_accounts] syncQuota unexpected: $e\n$st');
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        l10n.googleAccountsSyncFailedReason(e.toString()),
+        variant: AppSnackBarVariant.error,
+      );
     }
   }
 

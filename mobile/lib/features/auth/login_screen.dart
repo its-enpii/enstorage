@@ -22,8 +22,10 @@ const List<String> _kScopes = <String>[
 ];
 
 /// Web OAuth client ID — same as in google_accounts_screen.dart.
-const String _kWebClientId =
-    'REDACTED_CLIENT_ID';
+/// Sourced from --dart-define=GOOGLE_CLIENT_ID=... (see scripts/run_dev.sh,
+/// which loads .env.local). Must match a Web application client (type 3)
+/// in the GCP project for `serverAuthCode` to be returned.
+const String _kWebClientId = String.fromEnvironment('GOOGLE_CLIENT_ID');
 
 /// Single auth screen — Google Sign-In only.
 ///
@@ -41,9 +43,16 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _signingIn = false;
 
+  // `forceCodeForRefreshToken: true` memaksa native Android SDK
+  // meminta `access_type=offline` + `prompt=consent` ke Google, sehingga
+  // `serverAuthCode` yang dikembalikan bisa ditukar backend menjadi
+  // `refresh_token`. Tanpa ini, Google hanya kirim `access_token` (online)
+  // dan `sync-quota` akan gagal dengan "missing required parameter:
+  // refresh_token". iOS mengabaikan flag ini.
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: _kScopes,
     serverClientId: _kWebClientId,
+    forceCodeForRefreshToken: true,
   );
 
   Future<void> _onGoogleSignIn() async {
