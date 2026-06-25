@@ -91,8 +91,22 @@ jobs:
               exit 1
             fi
 
-            echo ">>> docker compose build (pull base images + cache layers)"
-            docker compose build --pull
+            echo ">>> remove stale images (force fresh build)"
+            # `--pull` alone won't invalidate cached stages when the
+            # Dockerfile hasn't changed, but a stale `enstorage-app`
+            # image from an earlier deploy (with a different docker-
+            # compose.yml mount layout) can leave the container in a
+            # broken state. Drop and rebuild from scratch.
+            docker image rm -f enstorage-app enstorage-worker 2>/dev/null || true
+
+            echo ">>> docker compose build (no-cache, pull base images)"
+            docker compose build --no-cache --pull
+
+            echo ">>> verify vendor/autoload.php baked into image"
+            docker run --rm enstorage-app:latest \
+              test -f /var/www/html/vendor/autoload.php \
+              && echo "OK: autoload.php present" \
+              || { echo "FATAL: vendor/autoload.php missing from image"; exit 1; }
 
             echo ">>> recreate changed containers"
             # `up -d` only recreates services whose image or config changed.
@@ -176,17 +190,26 @@ jobs:
           if-no-files-found: error
 
       - name: Ship image tarball to VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
-          # SCP a single file (appleboy/scp-action supports both files
-          # and directories). The VPS-side `Ship image + restart` step
-          # expects it at /tmp/enstorage-web.tar.
-          source: "enstorage-web.tar"
-          target: "/tmp/enstorage-web.tar"
+        # `appleboy/scp-action@v0.1.7` only reliably transfers folders;
+        # pointing it at a single file makes the target a directory.
+        # Upload via a raw `scp -P` invocation instead, which handles
+        # single-file transfers fine. The runner writes the SSH key
+        # to a temp file (chmod 600) and uses StrictHostKeyChecking=no.
+        run: |
+          set -euo pipefail
+          KEY_FILE="$(mktemp)"
+          printf '%s' "${{ secrets.VPS_SSH_KEY }}" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+
+          echo ">>> scp enstorage-web.tar to VPS"
+          scp -P "${{ secrets.VPS_PORT || 22 }}" \
+              -o StrictHostKeyChecking=accept-new \
+              -i "$KEY_FILE" \
+              enstorage-web.tar \
+              "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/enstorage-web.tar"
+
+          rm -f "$KEY_FILE"
+          echo ">>> tarball uploaded"
 
       - name: Sync source to VPS (debug + emergency fallback)
         uses: appleboy/scp-action@v0.1.7
