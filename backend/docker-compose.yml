@@ -9,9 +9,15 @@ services:
     container_name: enstorage-app
     working_dir: /var/www/html
     volumes:
-      - ./:/var/www/html
-      - app-storage:/var/www/html/storage
+      # Bind-mount individual subpaths, NOT the whole project. A
+      # blanket `./:/var/www/html` mount would shadow the `vendor/`
+      # directory that the image bakes in, so `php artisan` would
+      # fail with "Failed opening required .../vendor/autoload.php"
+      # on every restart.
       - ./storage/app/firebase-service-account.json:/var/www/html/storage/app/firebase-service-account.json:ro
+      # Persist generated files across container recreations.
+      - app-storage:/var/www/html/storage
+      - app-bootstrap-cache:/var/www/html/bootstrap/cache
     environment:
       DB_CONNECTION: pgsql
       DB_HOST: postgres
@@ -123,6 +129,7 @@ services:
 
 volumes:
   app-storage:
+  app-bootstrap-cache:
   postgres-data:
   redis-data:
 

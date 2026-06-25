@@ -158,7 +158,13 @@ jobs:
         run: |
           # Single-host deploy — no registry. Save + scp + load.
           # `docker save` → ~150 MB for the standalone Next.js image.
+          #
+          # `docker save` runs against the daemon (root), so the
+          # resulting file is owned by root. The next step runs as
+          # the default Actions user and cannot read it. Make it
+          # world-readable before SCP.
           docker save enstorage-web:latest -o enstorage-web.tar
+          chmod 644 enstorage-web.tar
           ls -lh enstorage-web.tar
 
       - name: Upload image artifact
