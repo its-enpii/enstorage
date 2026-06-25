@@ -35,11 +35,15 @@ services:
       - web-network
     restart: unless-stopped
 
-  web:
+  nginx:
     image: nginx:1.27-alpine
-    container_name: enstorage-web
+    container_name: enstorage-nginx
     ports:
-      - "8080:80"
+      # Host port 8080 was taken on the VPS by another container, so
+      # this maps 8081 → container 80 for debug access from the host.
+      # Production traffic flows through NPM via web-network on
+      # container port 80 (no host port needed).
+      - "8081:80"
     volumes:
       - ./:/var/www/html:ro
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro

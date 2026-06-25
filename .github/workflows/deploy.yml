@@ -169,6 +169,19 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+      - name: Ship image tarball to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          # SCP a single file (appleboy/scp-action supports both files
+          # and directories). The VPS-side `Ship image + restart` step
+          # expects it at /tmp/enstorage-web.tar.
+          source: "enstorage-web.tar"
+          target: "/tmp/enstorage-web.tar"
+
       - name: Sync source to VPS (debug + emergency fallback)
         uses: appleboy/scp-action@v0.1.7
         with:
