@@ -80,6 +80,17 @@ jobs:
             set -euo pipefail
             cd "${{ secrets.BACKEND_PATH }}"
 
+            # Fail-fast if Firebase service account is missing on the
+            # host — docker-compose mounts it read-only into the
+            # container, and NotificationService will silently no-op
+            # without it. This catches the "I forgot to scp it" case
+            # before we waste 20 minutes rebuilding.
+            if [ ! -f storage/app/firebase-service-account.json ]; then
+              echo "ERROR: storage/app/firebase-service-account.json not found on VPS."
+              echo "       Copy it from Firebase Console and rerun the workflow."
+              exit 1
+            fi
+
             echo ">>> docker compose build (pull base images + cache layers)"
             docker compose build --pull
 
