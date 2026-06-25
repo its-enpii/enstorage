@@ -193,13 +193,28 @@ jobs:
         # `appleboy/scp-action@v0.1.7` only reliably transfers folders;
         # pointing it at a single file makes the target a directory.
         # Upload via a raw `scp -P` invocation instead, which handles
-        # single-file transfers fine. The runner writes the SSH key
-        # to a temp file (chmod 600) and uses StrictHostKeyChecking=no.
+        # single-file transfers fine.
+        #
+        # Writing the PEM to a temp file via `printf '%s'` corrupts
+        # keys with trailing newlines and triggers "error in libcrypto"
+        # in OpenSSH. Use `base64 -d` so the secret stays single-line
+        # and the byte content is exact.
+        env:
+          VPS_SSH_KEY_B64: ${{ secrets.VPS_SSH_KEY }}
         run: |
           set -euo pipefail
           KEY_FILE="$(mktemp)"
-          printf '%s' "${{ secrets.VPS_SSH_KEY }}" > "$KEY_FILE"
+          # Some users paste keys with literal \n escapes inside the
+          # GitHub UI; normalise them to real newlines first.
+          echo "$VPS_SSH_KEY_B64" | base64 -d > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
+
+          # Sanity-check: the file must start with the PEM header.
+          head -1 "$KEY_FILE" | grep -q "-----BEGIN" || {
+            echo "FATAL: key file does not look like a PEM private key"
+            head -3 "$KEY_FILE" >&2
+            exit 1
+          }
 
           echo ">>> scp enstorage-web.tar to VPS"
           scp -P "${{ secrets.VPS_PORT || 22 }}" \
