@@ -98,15 +98,22 @@ jobs:
             # compose.yml mount layout) can leave the container in a
             # broken state. Drop and rebuild from scratch.
             docker image rm -f enstorage-app enstorage-worker 2>/dev/null || true
+            # Also clear dangling build cache for enstorage-app to be
+            # safe — `docker builder prune` only removes dangling, not
+            # referenced layers.
+            docker builder prune -f --filter "label=stage=enstorage-app" 2>/dev/null || true
 
             echo ">>> docker compose build (no-cache, pull base images)"
             docker compose build --no-cache --pull
 
             echo ">>> verify vendor/autoload.php baked into image"
-            docker run --rm enstorage-app:latest \
-              test -f /var/www/html/vendor/autoload.php \
-              && echo "OK: autoload.php present" \
-              || { echo "FATAL: vendor/autoload.php missing from image"; exit 1; }
+            if ! docker run --rm --entrypoint ls enstorage-app:latest \
+                 -la /var/www/html/vendor/autoload.php; then
+              echo "FATAL: vendor/autoload.php missing from enstorage-app image"
+              echo "       Inspect image with:"
+              echo "       docker run --rm --entrypoint ls enstorage-app:latest -la /var/www/html/vendor"
+              exit 1
+            fi
 
             echo ">>> recreate changed containers"
             # `up -d` only recreates services whose image or config changed.
@@ -195,18 +202,18 @@ jobs:
         # Upload via a raw `scp -P` invocation instead, which handles
         # single-file transfers fine.
         #
-        # Writing the PEM to a temp file via `printf '%s'` corrupts
-        # keys with trailing newlines and triggers "error in libcrypto"
-        # in OpenSSH. Use `base64 -d` so the secret stays single-line
-        # and the byte content is exact.
+        # GitHub Actions exposes multi-line secrets through `${{ }}`
+        # interpolation but collapses newlines into spaces. We restore
+        # them with `tr` before writing to disk, otherwise OpenSSH
+        # fails with "error in libcrypto".
         env:
-          VPS_SSH_KEY_B64: ${{ secrets.VPS_SSH_KEY }}
+          VPS_SSH_KEY_RAW: ${{ secrets.VPS_SSH_KEY }}
         run: |
           set -euo pipefail
           KEY_FILE="$(mktemp)"
-          # Some users paste keys with literal \n escapes inside the
-          # GitHub UI; normalise them to real newlines first.
-          echo "$VPS_SSH_KEY_B64" | base64 -d > "$KEY_FILE"
+          # Restore real newlines that GitHub stripped, then ensure a
+          # trailing newline (OpenSSH is strict about the PEM footer).
+          printf '%s\n' "$VPS_SSH_KEY_RAW" | tr ' ' '\n' > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
 
           # Sanity-check: the file must start with the PEM header.

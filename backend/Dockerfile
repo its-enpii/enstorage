@@ -33,16 +33,32 @@ COPY --from=composer:2.8 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Install composer deps first (cache layer)
+# ── Step 1: install vendor from composer.lock only (cache-friendly).
+# We DO use `--no-scripts` here (skips post-install scripts that may
+# need a writable filesystem), but we explicitly generate the
+# autoloader at the end so `vendor/autoload.php` exists for `artisan`.
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-interaction \
-    || composer install --no-scripts --no-autoloader --prefer-dist --no-interaction
+RUN composer install \
+        --no-dev \
+        --no-scripts \
+        --prefer-dist \
+        --no-interaction \
+        --optimize-autoloader \
+    && ls -la vendor/autoload.php
 
-# Copy rest of app
+# ── Step 2: copy the rest of the application source.
 COPY . .
 
-RUN composer dump-autoload --optimize --no-dev \
-    && mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views storage/app/public bootstrap/cache \
+# ── Step 3: refresh the autoloader against the actual source tree.
+# `composer dump-autoload` is idempotent — it just regenerates the
+# autoload files from `composer.json`'s `autoload` map. Required because
+# Laravel registers new classes at runtime via service providers and
+# the optimized classmap from step 1 may be stale.
+RUN composer dump-autoload --optimize --no-dev --classmap-authoritative \
+    && ls -la vendor/autoload.php
+
+# Writable dirs for Laravel runtime
+RUN mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views storage/app/public bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache
 
