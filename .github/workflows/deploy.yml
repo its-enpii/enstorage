@@ -45,7 +45,9 @@ jobs:
   deploy-backend:
     name: Deploy backend (Docker)
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || hashFiles('backend/composer.json') != ''
+    # No `if:` needed — the `on.push.paths` filter at the top of the
+    # file already restricts push triggers to backend/web/workflow
+    # changes. workflow_dispatch runs both jobs unconditionally.
     defaults:
       run:
         shell: bash
@@ -116,7 +118,6 @@ jobs:
   deploy-web:
     name: Deploy web (Docker)
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || hashFiles('web/package.json') != ''
     defaults:
       run:
         shell: bash
