@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FileResource;
+use App\Http\Resources\FolderResource;
 use App\Models\ActivityLog;
 use App\Models\File as FileModel;
 use App\Models\Folder;
@@ -366,12 +367,32 @@ class FileController extends Controller
     }
 
     /**
-     * GET /s/{token} — public: stream file inline (tanpa auth).
+     * GET /s/{token} — public (no auth).
+     * Dispatches by token: file → stream inline; folder → JSON listing.
      */
     public function viewByToken(Request $request, string $token): StreamedResponse|JsonResponse
     {
+        // 1) Try file token first (most common).
         $file = FileModel::where('share_token', $token)->first();
-        if (! $file || ! $file->isDone()) {
+        if ($file) {
+            return $this->streamSharedFile($request, $file);
+        }
+
+        // 2) Fallback: folder token → JSON read-only listing.
+        $folder = Folder::where('share_token', $token)->first();
+        if ($folder) {
+            return $this->respondSharedFolder($folder);
+        }
+
+        return $this->fail(__('Link share tidak ditemukan atau tidak valid.'), 404);
+    }
+
+    /**
+     * Stream a file (called when /s/{token} matched a File row).
+     */
+    private function streamSharedFile(Request $request, FileModel $file): StreamedResponse|JsonResponse
+    {
+        if (! $file->isDone()) {
             return $this->fail(__('File tidak ditemukan atau belum siap.'), 404);
         }
 
@@ -404,6 +425,35 @@ class FileController extends Controller
         } catch (Throwable $e) {
             return $this->fail(__('Gagal memuat file: ').$e->getMessage(), 502);
         }
+    }
+
+    /**
+     * Return a read-only JSON listing of a shared folder.
+     */
+    private function respondSharedFolder(Folder $folder): JsonResponse
+    {
+        $subfolders = Folder::where('parent_id', $folder->id)
+            ->orderBy('name')
+            ->get();
+
+        $files = FileModel::where('folder_id', $folder->id)
+            ->where('upload_status', 'done')
+            ->with('thumbnail:id,file_id')
+            ->orderByDesc('created_at')
+            ->get(['id', 'name', 'original_name', 'mime_type', 'size']);
+
+        return $this->ok([
+            'kind' => 'folder',
+            'folder' => (new FolderResource($folder))->resolve(),
+            'subfolders' => FolderResource::collection($subfolders)->resolve(),
+            'files' => $files->map(fn ($f) => [
+                'id' => $f->id,
+                'name' => $f->original_name,
+                'mime_type' => $f->mime_type,
+                'size' => (int) $f->size,
+                'has_thumbnail' => $f->thumbnail !== null,
+            ])->all(),
+        ], __('Folder share listing.'));
     }
 
     private function deleteOne(FileModel $file, string $userId): void

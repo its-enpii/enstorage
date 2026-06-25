@@ -11,6 +11,7 @@ import { Chip } from '@/components/Chip';
 import { usePrompt } from '@/components/usePrompt';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter } from 'next/navigation';
+import { usePageTitle } from '@/lib/usePageTitle';
 
 export default function ProfilePage() {
   return (
@@ -25,6 +26,7 @@ function ProfileContent() {
   const { user, logout, refresh } = useAuth();
   const router = useRouter();
   const { alert, confirm } = usePrompt();
+  usePageTitle(t('profile.title'));
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(user?.name ?? '');

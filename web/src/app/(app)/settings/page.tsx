@@ -13,6 +13,7 @@ import { useTheme } from '@/components/ThemeProvider';
 import { WebhooksSection } from '@/components/WebhooksSection';
 import { setLocale } from '@/lib/i18n';
 import { createViewStore } from '@/lib/viewStore';
+import { usePageTitle } from '@/lib/usePageTitle';
 
 const summaryStore = createViewStore<StorageSummary>(async () => {
   return apiRequest<StorageSummary>('/storage/summary');
@@ -42,6 +43,7 @@ export default function SettingsPage() {
 
 function SettingsContent() {
   const { t, i18n } = useTranslation();
+  usePageTitle(t('settings.title'));
   const { data: summary, loading, error, revalidate } = summaryStore.useStore();
   const [notif, setNotif] = useState({ upload: true, quota: true, security: true });
   const { theme, setTheme } = useTheme();

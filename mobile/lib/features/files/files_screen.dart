@@ -28,6 +28,7 @@ import 'create_folder_dialog.dart';
 import 'camera_capture.dart';
 import 'sort_sheet.dart';
 import 'filter_sheet.dart';
+import 'share_dialog.dart';
 import 'widgets/file_card.dart';
 import 'widgets/folder_card.dart';
 
@@ -356,6 +357,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                   context.go('/files/${f.id}');
                 }
               },
+              onFolderShare: _shareFolder,
               onFileTap: (f) {
                 if (inSelection) {
                   _toggleSelect(f.id);
@@ -412,6 +414,24 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     }
   }
 
+  Future<void> _shareFolder(Folder folder) async {
+    final selection = ref.read(selectionControllerProvider);
+    if (selection.isNotEmpty) return;
+    final repo = ref.read(filesRepositoryProvider);
+    final fresh = await repo.getFolder(folder.id);
+    if (!mounted) return;
+    final updated = await showDialog<Folder>(
+      context: context,
+      builder: (ctx) => ShareDialog(target: ShareFolderTarget(fresh)),
+    );
+    if (updated != null) {
+      // Sync the new share_token back into the list state.
+      ref
+          .read(filesControllerProvider(widget.folderId).notifier)
+          .replaceFolder(updated);
+    }
+  }
+
   /// AppBar title:
   /// - root: localized "File Manager"
   /// - inside a folder: the folder's name (fetched via [folderProvider]),
@@ -448,6 +468,7 @@ class _Body extends StatefulWidget {
     required this.onFolderTap,
     required this.onFileTap,
     required this.onLongPress,
+    this.onFolderShare,
     required this.onSortTap,
     required this.onFilterTap,
     required this.onSearchChange,
@@ -465,6 +486,7 @@ class _Body extends StatefulWidget {
   final void Function(Folder) onFolderTap;
   final void Function(FileItem) onFileTap;
   final void Function(String id) onLongPress;
+  final void Function(Folder)? onFolderShare;
   final VoidCallback onSortTap;
   final VoidCallback onFilterTap;
   final ValueChanged<String> onSearchChange;
@@ -599,6 +621,9 @@ class _BodyState extends State<_Body> {
                     folder: f,
                     onTap: () => widget.onFolderTap(f),
                     onLongPress: () => widget.onLongPress(f.id),
+                    onShare: widget.onFolderShare == null
+                        ? null
+                        : () => widget.onFolderShare!(f),
                   );
                 }
                 final f = visibleFiles[i - visibleFolders.length];

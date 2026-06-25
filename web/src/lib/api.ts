@@ -54,6 +54,7 @@ export type Folder = {
   files_count?: number;
   folders_count?: number;
   total_size?: number;
+  share_token?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -170,6 +171,21 @@ export class ApiError extends Error {
 
 const TOKEN_KEY = 'enstorage_token';
 
+/**
+ * Dispatched on `window` whenever an authenticated API call returns 401.
+ * AuthProvider listens for this to clear user state and trigger redirect.
+ * Dispatched AFTER `setToken(null)` so the AppShell redirect condition
+ * (`!localStorage.getItem('enstorage_token')`) is already satisfied.
+ */
+export const AUTH_INVALID_EVENT = 'enstorage:auth-invalid';
+
+function handleAuthInvalid() {
+  setToken(null);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(AUTH_INVALID_EVENT));
+  }
+}
+
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem(TOKEN_KEY);
@@ -234,6 +250,9 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
   }
 
   if (!res.ok) {
+    if (res.status === 401 && opts.auth !== false) {
+      handleAuthInvalid();
+    }
     throw new ApiError(
       json?.message ?? `HTTP ${res.status}`,
       res.status,
@@ -297,6 +316,9 @@ export async function apiRequestEnvelope<T>(
   }
 
   if (!res.ok) {
+    if (res.status === 401 && opts.auth !== false) {
+      handleAuthInvalid();
+    }
     throw new ApiError(
       json?.message ?? `HTTP ${res.status}`,
       res.status,

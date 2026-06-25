@@ -10,6 +10,7 @@ import { Button, IconButton } from '@/components/Button';
 import { Loading } from '@/components/Loading';
 import { usePrompt } from '@/components/usePrompt';
 import { createViewStore } from '@/lib/viewStore';
+import { usePageTitle } from '@/lib/usePageTitle';
 import {
   AddIcon,
   CloudIcon,
@@ -47,6 +48,7 @@ export default function GoogleAccountsPage() {
 function AccountsContent() {
   const { t, i18n } = useTranslation();
   const { alert, confirm } = usePrompt();
+  usePageTitle(t('accounts.title'));
   const router = useRouter();
   const params = useSearchParams();
   const handled = useRef(false);

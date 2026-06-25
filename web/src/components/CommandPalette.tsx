@@ -287,13 +287,15 @@ export function CommandPalette({ open, onClose }: Props) {
         />
         {shareFile && (
           <ShareDialog
-            file={shareFile}
+            target={{ kind: 'file', item: shareFile }}
             onClose={() => setShareFile(null)}
             onUpdate={(updated) => {
-              setShareFile(updated);
-              setPreviewFile((p) => (p && p.id === updated.id ? updated : p));
-              setAllFiles((arr) => arr.map((f) => (f.id === updated.id ? updated : f)));
-              setFiles((arr) => arr.map((f) => (f.id === updated.id ? updated : f)));
+              if (updated.kind !== 'file') return;
+              const f = updated.item;
+              setShareFile(f);
+              setPreviewFile((p) => (p && p.id === f.id ? f : p));
+              setAllFiles((arr) => arr.map((x) => (x.id === f.id ? f : x)));
+              setFiles((arr) => arr.map((x) => (x.id === f.id ? f : x)));
             }}
           />
         )}

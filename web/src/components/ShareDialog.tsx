@@ -5,32 +5,52 @@ import { useTranslation } from 'react-i18next';
 import { ContentCopy, Check, LinkOff, Link } from '@mui/icons-material';
 import { Dialog } from '@/components/Dialog';
 import { Button } from '@/components/Button';
-import { apiRequest, type FileItem } from '@/lib/api';
+import { apiRequest, type FileItem, type Folder } from '@/lib/api';
+
+export type ShareTarget =
+  | { kind: 'file'; item: FileItem }
+  | { kind: 'folder'; item: Folder };
 
 type Props = {
-  file: FileItem;
+  target: ShareTarget;
   onClose: () => void;
-  onUpdate: (file: FileItem) => void;
+  /** Update the target with the latest share_token after a mutation. */
+  onUpdate: (target: ShareTarget) => void;
 };
 
-export function ShareDialog({ file, onClose, onUpdate }: Props) {
+export function ShareDialog({ target, onClose, onUpdate }: Props) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
-  const hasShare = !!file.share_token;
 
-  const shareUrl = hasShare
-    ? `${window.location.origin}/s/${file.share_token}`
-    : '';
+  const token = target.item.share_token;
+  const hasShare = !!token;
+  const shareUrl = hasShare ? `${window.location.origin}/s/${token}` : '';
+
+  const isFolder = target.kind === 'folder';
+  const titleKey = isFolder ? 'share.folderTitle' : 'share.title';
+  const descKey = hasShare
+    ? isFolder
+      ? 'share.folderDescEnabled'
+      : 'share.descEnabled'
+    : isFolder
+      ? 'share.folderDescDisabled'
+      : 'share.descDisabled';
 
   async function enableShare() {
     setLoading(true);
     try {
+      const path = isFolder
+        ? `/folders/${target.item.id}/share`
+        : `/files/${target.item.id}/share`;
       const res = await apiRequest<{ share_token: string; share_url: string }>(
-        `/files/${file.id}/share`,
+        path,
         { method: 'POST' },
       );
-      onUpdate({ ...file, share_token: res.share_token });
+      onUpdate({
+        ...target,
+        item: { ...target.item, share_token: res.share_token } as FileItem & Folder,
+      });
     } catch {
       // ignore
     }
@@ -40,8 +60,14 @@ export function ShareDialog({ file, onClose, onUpdate }: Props) {
   async function disableShare() {
     setLoading(true);
     try {
-      await apiRequest<null>(`/files/${file.id}/share`, { method: 'DELETE' });
-      onUpdate({ ...file, share_token: null });
+      const path = isFolder
+        ? `/folders/${target.item.id}/share`
+        : `/files/${target.item.id}/share`;
+      await apiRequest<null>(path, { method: 'DELETE' });
+      onUpdate({
+        ...target,
+        item: { ...target.item, share_token: null } as FileItem & Folder,
+      });
     } catch {
       // ignore
     }
@@ -62,8 +88,8 @@ export function ShareDialog({ file, onClose, onUpdate }: Props) {
     <Dialog
       open
       onClose={onClose}
-      title={t('share.title')}
-      description={hasShare ? t('share.descEnabled') : t('share.descDisabled')}
+      title={t(titleKey)}
+      description={t(descKey)}
       icon={hasShare ? <Link /> : <LinkOff />}
       actions={
         hasShare ? (

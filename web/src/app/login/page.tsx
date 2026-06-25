@@ -5,12 +5,14 @@ import { Cloud } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/components/AuthProvider';
 import { Button } from '@/components/Button';
+import { usePageTitle } from '@/lib/usePageTitle';
 
 export default function LoginPage() {
   const { t } = useTranslation();
   const { googleLogin } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  usePageTitle(t('auth.login.title'));
 
   async function handleGoogle() {
     setError(null);

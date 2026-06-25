@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
-import { Tune } from '@mui/icons-material';
-import { apiRequest, ApiError, getToken, type FileItem, type Folder as FolderType } from '@/lib/api';
+import { Tune, Link as LinkIcon } from '@mui/icons-material';
+import { apiRequest, ApiError, getToken, type FileItem, type Folder, type Folder as FolderType } from '@/lib/api';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { getLocalUserId } from '@/lib/filesStore';
 import {
@@ -32,7 +32,9 @@ import { UploadProgress, type UploadJob } from '@/components/UploadProgress';
 import { EmptyDropZone } from '@/components/EmptyDropZone';
 import { Loading } from '@/components/Loading';
 import { usePrompt } from '@/components/usePrompt';
+import { useInfiniteScroll } from '@/lib/useInfiniteScroll';
 import { bytes } from '@/lib/format';
+import { usePageTitle } from '@/lib/usePageTitle';
 
 type Tab = 'all' | 'folders' | 'files';
 
@@ -131,9 +133,19 @@ function FilesContent() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [viewerFile, setViewerFile] = useState<FileItem | null>(null);
   const [shareFile, setShareFile] = useState<FileItem | null>(null);
+  const [shareFolder, setShareFolder] = useState<Folder | null>(null);
   const [folderCrumbs, setFolderCrumbs] = useState<{ id: string; name: string }[]>([]);
   const pollRefs = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
   const dragCounter = useRef(0);
+
+  // Dynamic title: deepest folder name · "My Files" · EnStorage. Falls back to
+  // plain "My Files" when at the root or crumbs haven't loaded yet.
+  const deepestFolder = folderCrumbs.length > 0 ? folderCrumbs[folderCrumbs.length - 1] : null;
+  usePageTitle(
+    deepestFolder
+      ? `${deepestFolder.name} · ${t('files.title')}`
+      : t('files.title'),
+  );
 
   const selectMode = selected.size > 0;
 
@@ -572,6 +584,14 @@ function FilesContent() {
   const hasMore = tab === 'files' ? hasMoreFiles : hasMoreFolders;
   const loadMore = tab === 'files' ? loadMoreFiles : loadMoreFolders;
 
+  // Auto-load next page when the sentinel scrolls into view. Manual "Load
+  // more" button stays as a fallback if IntersectionObserver misfires.
+  const stableLoadMore = useCallback(() => {
+    if (loadingMore) return;
+    void loadMore();
+  }, [loadMore, loadingMore]);
+  const loadMoreSentinel = useInfiniteScroll(stableLoadMore, { enabled: hasMore });
+
   function buildFileMenuItems(f: FileItem, opts: { includePreview?: boolean } = {}): MenuItem[] {
     const items: MenuItem[] = [
       {
@@ -775,6 +795,19 @@ function FilesContent() {
                     <IconButton
                       onClick={(e) => {
                         e.stopPropagation();
+                        setShareFolder(f);
+                      }}
+                      title={t('files.actions.share')}
+                    >
+                      {f.share_token ? (
+                        <LinkIcon className="!text-base text-primary" />
+                      ) : (
+                        <LinkIcon className="!text-base" />
+                      )}
+                    </IconButton>
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
                         toggleStarFolder(f.id, f.is_starred);
                       }}
                       title={f.is_starred ? t('files.actions.unstarred') : t('files.actions.starred')}
@@ -843,9 +876,13 @@ function FilesContent() {
         </div>
       )}
 
-      {/* Load more button — manual trigger, no auto scroll. */}
+      {/* Infinite-scroll sentinel + manual "Load more" fallback.
+          The sentinel auto-fires loadMore when it scrolls into view (200px
+          before the bottom). The button stays as a fallback for cases where
+          IntersectionObserver misfires or scroll hangs. */}
       {!loading && hasMore && (visibleFolders.length > 0 || visibleFiles.length > 0) && (
-        <div className="flex items-center justify-center pt-10 pb-4">
+        <div className="flex flex-col items-center pt-10 pb-4 gap-3">
+          <div ref={loadMoreSentinel} aria-hidden className="h-1 w-full" />
           <Button
             variant="secondary"
             size="md"
@@ -916,11 +953,25 @@ function FilesContent() {
       )}
       {shareFile && (
         <ShareDialog
-          file={shareFile}
+          target={{ kind: 'file', item: shareFile }}
           onClose={() => setShareFile(null)}
           onUpdate={(updated) => {
-            upsertFile(updated);
-            setShareFile(updated);
+            if (updated.kind === 'file') {
+              upsertFile(updated.item);
+              setShareFile(updated.item);
+            }
+          }}
+        />
+      )}
+      {shareFolder && (
+        <ShareDialog
+          target={{ kind: 'folder', item: shareFolder }}
+          onClose={() => setShareFolder(null)}
+          onUpdate={(updated) => {
+            if (updated.kind === 'folder') {
+              upsertFolder(updated.item);
+              setShareFolder(updated.item);
+            }
           }}
         />
       )}

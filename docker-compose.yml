@@ -1,0 +1,52 @@
+# Root-level production stack. Composes backend services (Laravel +
+# Postgres + Redis + Nginx + worker) with the Next.js web container.
+#
+# Usage on the VPS:
+#   docker compose -f docker-compose.yml up -d
+#
+# Notes:
+#   * Backend lives in backend/docker-compose.yml and is `include`d here
+#     so the two stacks share networks (web-network) and can talk to
+#     each other by container name (`app`, `web`).
+#   * web container publishes 3001:3000 (host:3001 → container:3000) to
+#     avoid clashing with anything else holding host port 3000.
+#   * Both stacks attach to the external `web-network` so Nginx Proxy
+#     Manager (running on the host) can resolve `web` and `app` by name.
+#   * Internal service-to-service traffic (app ↔ postgres, app ↔ redis)
+#     stays on `enstorage-net` which is NOT attached to web-network.
+#
+# Required external resources on the host (one-time setup):
+#   docker network create web-network
+
+name: enstorage-prod
+
+include:
+  - path: ./backend/docker-compose.yml
+
+services:
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    image: enstorage-web:latest
+    container_name: enstorage-web
+    environment:
+      NODE_ENV: production
+      # Browser-facing values — baked in at build time on the runner
+      # and forwarded to the runtime container unchanged.
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://enpii.studio/api/v1}
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
+    depends_on:
+      - app   # just so web waits; it actually talks to `app` via NPM, not directly
+    networks:
+      - web-network
+    # host:3001 because host:3000 is taken by another container on the
+    # VPS. NPM forwards `enpii.studio` → `web:3000` over web-network
+    # (NOT through the host port — the port mapping is only a fallback).
+    ports:
+      - "3001:3000"
+    restart: unless-stopped
+
+networks:
+  web-network:
+    external: true

@@ -415,6 +415,18 @@ class FilesController
     state = AsyncValue.data(current.copyWith(files: updated));
   }
 
+  /// Replace folder dengan id yg sama di list (untuk update setelah
+  /// toggle star, share, dll). Gak throw kalau gak ketemu.
+  void replaceFolder(Folder folder) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    final idx = current.folders.indexWhere((f) => f.id == folder.id);
+    if (idx < 0) return;
+    final updated = [...current.folders];
+    updated[idx] = folder;
+    state = AsyncValue.data(current.copyWith(folders: updated));
+  }
+
   void removeFolder(String id) {
     final current = state.valueOrNull;
     if (current == null) return;

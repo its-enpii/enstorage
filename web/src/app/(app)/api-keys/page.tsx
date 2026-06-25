@@ -19,6 +19,7 @@ import { Loading } from '@/components/Loading';
 import { usePrompt } from '@/components/usePrompt';
 import { Field, Input } from '@/components/Input';
 import { createViewStore } from '@/lib/viewStore';
+import { usePageTitle } from '@/lib/usePageTitle';
 
 const keysStore = createViewStore<ApiKey[]>(async () => {
   return apiRequest<ApiKey[]>('/api-keys');
@@ -45,6 +46,7 @@ export default function ApiKeysPage() {
 function ApiKeysContent() {
   const { t, i18n } = useTranslation();
   const { alert, confirm } = usePrompt();
+  usePageTitle(t('apikeys.title'));
   const { data, loading, setData, revalidate } = keysStore.useStore();
   const keys = data ?? [];
   const [creating, setCreating] = useState(false);

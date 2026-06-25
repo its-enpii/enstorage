@@ -26,6 +26,7 @@ import {
 } from '@/lib/icons';
 import { bytes } from '@/lib/format';
 import { cacheGet, cacheSet } from '@/lib/cache';
+import { usePageTitle } from '@/lib/usePageTitle';
 
 type FoldersView = { current: FolderWithChildren | null; list: FolderType[] };
 type FilesViewShape = { folders: FolderType[]; files: unknown[]; breadcrumb: { id: string; name: string }[] };
@@ -72,6 +73,7 @@ export default function FoldersPage() {
 
 function FoldersContent() {
   const { t } = useTranslation();
+  usePageTitle(t('folders.title'));
   const { user } = useAuth();
   const router = useRouter();
   // Resolve userId synchronously from localStorage. We use this instead of

@@ -13,11 +13,13 @@ class FolderCard extends ConsumerWidget {
     required this.folder,
     required this.onTap,
     required this.onLongPress,
+    this.onShare,
   });
 
   final Folder folder;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  final VoidCallback? onShare;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -34,18 +36,38 @@ class FolderCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: scheme.primaryContainer,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(
-              Icons.folder_rounded,
-              color: scheme.onPrimaryContainer,
-              size: 32,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  Icons.folder_rounded,
+                  color: scheme.onPrimaryContainer,
+                  size: 32,
+                ),
+              ),
+              const Spacer(),
+              if (onShare != null)
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: l10n.filesActionsShare,
+                  icon: Icon(
+                    folder.shareToken != null
+                        ? Icons.link
+                        : Icons.share_outlined,
+                    color: folder.shareToken != null
+                        ? scheme.primary
+                        : scheme.onSurfaceVariant,
+                    size: 20,
+                  ),
+                  onPressed: onShare,
+                ),
+            ],
           ),
           const SizedBox(height: 12),
           const Spacer(),

@@ -177,6 +177,17 @@ class FilesRepository {
     await _api.dio.delete<void>('/files/$fileId/share');
   }
 
+  Future<Map<String, dynamic>> createFolderShareLink(String folderId) async {
+    final res = await _api.dio.post<Map<String, dynamic>>(
+      '/folders/$folderId/share',
+    );
+    return _unwrap(res.data!);
+  }
+
+  Future<void> deleteFolderShareLink(String folderId) async {
+    await _api.dio.delete<void>('/folders/$folderId/share');
+  }
+
   // ─── Folders ─────────────────────────────────────────────────────
 
   Future<Folder> getFolder(String id) async {

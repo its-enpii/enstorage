@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { apiRequest, ApiError, getToken, setToken, type User } from '@/lib/api';
+import { apiRequest, ApiError, getToken, setToken, AUTH_INVALID_EVENT, type User } from '@/lib/api';
 import { setLocale } from '@/lib/i18n';
 
 const USER_CACHE_KEY = 'enstorage_user';
@@ -96,6 +96,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     })();
   }, [fetchMe]);
+
+  // Listen for 401s from any API call (not just /auth/me). api.ts dispatches
+  // this event after clearing the token; we mirror that in React state so
+  // AppShell's `!user && !token` redirect kicks in.
+  useEffect(() => {
+    function onAuthInvalid() {
+      setUser(null);
+      writeCachedUser(null);
+    }
+    window.addEventListener(AUTH_INVALID_EVENT, onAuthInvalid);
+    return () => window.removeEventListener(AUTH_INVALID_EVENT, onAuthInvalid);
+  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await apiRequest<{ user: User; token: string }>('/auth/login', {

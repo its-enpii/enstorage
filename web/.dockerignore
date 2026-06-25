@@ -1,0 +1,29 @@
+# Exclude everything not needed at runtime. Standalone output is
+# self-contained, but `pnpm install` still pulls dev deps for the build.
+node_modules
+.next
+.next/*
+out
+build
+dist
+
+# Local env / IDE / VCS — never bake into image.
+.env
+.env.local
+.env.*.local
+.git
+.gitignore
+.DS_Store
+.vscode
+.idea
+
+# Logs, tests, docs.
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+coverage
+.vercel
+.next-env.d.ts
+tsconfig.tsbuildinfo

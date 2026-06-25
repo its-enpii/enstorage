@@ -15,6 +15,7 @@ class FolderResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'is_starred' => (bool) $this->is_starred,
+            'share_token' => $this->share_token,
             'path' => $this->path,
             'parent_id' => $this->parent_id,
             'user_id' => $this->user_id,

@@ -1,0 +1,214 @@
+name: Deploy
+
+# Self-hosted deploy to a single VPS via SSH + Docker.
+#
+# Strategy:
+#   - Backend: rsync source → docker compose build (cached layers) →
+#     docker compose up -d → run artisan migrate/optimize.
+#   - Web: docker build on the runner → save image to .tar → scp to VPS
+#     → docker load. No registry needed for a single-host setup.
+#     The image stays under ~150 MB thanks to `output: 'standalone'`.
+#
+# Triggered on push to main that touches backend/ or web/.
+#
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+#   VPS_HOST              - hostname / IP of the VPS
+#   VPS_USER              - SSH user (e.g. "deploy")
+#   VPS_SSH_KEY           - private SSH key (full PEM)
+#   VPS_PORT              - SSH port (default 22)
+#   BACKEND_PATH          - absolute path on VPS, e.g. /opt/enstorage/backend
+#   WEB_PATH              - absolute path on VPS, e.g. /opt/enstorage/web
+#                            (only used to keep the rsync'd source in sync
+#                             for local debugging — runtime uses the image)
+#   NEXT_PUBLIC_API_BASE_URL      - browser-visible API base URL (incl. /api/v1)
+#   NEXT_PUBLIC_GOOGLE_CLIENT_ID  - OAuth client id exposed to browser
+#
+# One-time on the VPS:
+#   docker network create web-network
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'web/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ─── Backend (Laravel + Docker Compose) ───────────────────────────────
+  deploy-backend:
+    name: Deploy backend (Docker)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || hashFiles('backend/composer.json') != ''
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync source to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          source: "backend/"
+          target: "${{ secrets.BACKEND_PATH }}"
+          # No --delete: keep .env, storage/, and any host-generated secrets.
+          rm: false
+
+      - name: Build & restart on VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 20m
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.BACKEND_PATH }}"
+
+            echo ">>> docker compose build (pull base images + cache layers)"
+            docker compose build --pull
+
+            echo ">>> recreate changed containers"
+            # `up -d` only recreates services whose image or config changed.
+            # DB & redis stay up — volumes are preserved by default.
+            docker compose up -d --remove-orphans
+
+            echo ">>> waiting for app to be healthy"
+            for i in $(seq 1 30); do
+              if docker compose exec -T app php -r 'exit(0);' >/dev/null 2>&1; then
+                echo "app container ready"
+                break
+              fi
+              echo "waiting... ($i)"
+              sleep 2
+            done
+
+            echo ">>> artisan optimize (inside app container)"
+            docker compose exec -T app php artisan config:clear
+            docker compose exec -T app php artisan route:clear
+            docker compose exec -T app php artisan view:clear
+            docker compose exec -T app php artisan cache:clear || true
+
+            docker compose exec -T app php artisan migrate --force --no-interaction
+
+            docker compose exec -T app php artisan config:cache
+            docker compose exec -T app php artisan route:cache
+            docker compose exec -T app php artisan view:cache
+
+            docker compose exec -T app php artisan storage:link || true
+
+            echo ">>> backend deploy OK"
+
+  # ─── Web (Next.js Docker image) ───────────────────────────────────────
+  deploy-web:
+    name: Deploy web (Docker)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || hashFiles('web/package.json') != ''
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU & Buildx
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (runner)
+        working-directory: web
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
+        run: |
+          docker build \
+            --tag enstorage-web:latest \
+            --label "org.opencontainers.image.revision=${{ github.sha }}" \
+            --load \
+            .
+
+      - name: Save image to tarball
+        run: |
+          # Single-host deploy — no registry. Save + scp + load.
+          # `docker save` → ~150 MB for the standalone Next.js image.
+          docker save enstorage-web:latest -o enstorage-web.tar
+          ls -lh enstorage-web.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: enstorage-web-image
+          path: enstorage-web.tar
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Sync source to VPS (debug + emergency fallback)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          source: "web/"
+          target: "${{ secrets.WEB_PATH }}"
+          rm: false
+
+      - name: Ship image + restart on VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+
+            # cd into the repo root so `docker compose` finds the root
+            # stack file. BACKEND_PATH/.. = /opt/enstorage.
+            ROOT_DIR="$(dirname "${{ secrets.BACKEND_PATH }}")"
+            cd "$ROOT_DIR"
+
+            echo ">>> load image"
+            docker load -i /tmp/enstorage-web.tar
+            rm -f /tmp/enstorage-web.tar
+
+            echo ">>> write .env for compose"
+            cat > .env <<EOF
+            NEXT_PUBLIC_API_BASE_URL=${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+            NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
+            EOF
+
+            echo ">>> recreate web container"
+            # Pull base layer for backend rebuilds (no-op for web).
+            docker compose build web
+
+            # `up -d --no-deps` so we don't try to restart DB/redis/web
+            # for an unrelated web change.
+            docker compose up -d --no-deps web
+
+            echo ">>> healthcheck"
+            sleep 3
+            if curl -fsS http://localhost:3001/ >/dev/null; then
+              echo "web responding on host:3001"
+            else
+              echo "WARN: web not responding yet (cold start or build error)"
+              docker compose logs --tail=50 web
+            fi
+
+            echo ">>> web deploy OK"

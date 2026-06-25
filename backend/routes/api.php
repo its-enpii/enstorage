@@ -113,6 +113,8 @@ Route::middleware('auth.apikey')->group(function () {
     Route::patch('folders/{id}', [FolderController::class, 'update']);
     Route::put('folders/{id}/move', [FolderController::class, 'move']);
     Route::delete('folders/{id}', [FolderController::class, 'destroy']);
+    Route::post('folders/{id}/share', [FolderController::class, 'share']);
+    Route::delete('folders/{id}/share', [FolderController::class, 'unshare']);
 
     // Recent (root-level folders + files, mixed, cursor-paginated)
     Route::get('recent', [RecentController::class, 'index']);

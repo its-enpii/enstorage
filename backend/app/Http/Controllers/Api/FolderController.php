@@ -306,6 +306,43 @@ class FolderController extends Controller
         return $this->ok(null, __('Folder berhasil dihapus.'));
     }
 
+    /**
+     * POST /folders/{id}/share — generate share token.
+     */
+    public function share(Request $request, string $id): JsonResponse
+    {
+        $folder = $this->findOwned($request, $id);
+        if (! $folder) {
+            return $this->fail(__('Folder tidak ditemukan.'), 404);
+        }
+
+        if (! $folder->share_token) {
+            $folder->share_token = bin2hex(random_bytes(16));
+            $folder->save();
+        }
+
+        return $this->ok([
+            'share_token' => $folder->share_token,
+            'share_url' => rtrim(config('app.frontend_url', config('app.url')), '/').'/s/'.$folder->share_token,
+        ], __('Folder share berhasil dibuat.'));
+    }
+
+    /**
+     * DELETE /folders/{id}/share — hapus share token.
+     */
+    public function unshare(Request $request, string $id): JsonResponse
+    {
+        $folder = $this->findOwned($request, $id);
+        if (! $folder) {
+            return $this->fail(__('Folder tidak ditemukan.'), 404);
+        }
+
+        $folder->share_token = null;
+        $folder->save();
+
+        return $this->ok(null, __('Link share dihapus.'));
+    }
+
     private function findOwned(Request $request, string $id): ?Folder
     {
         return Folder::where('id', $id)

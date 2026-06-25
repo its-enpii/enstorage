@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/components/AuthProvider';
+import { usePageTitle } from '@/lib/usePageTitle';
 
 function CallbackContent() {
   const { t } = useTranslation();
@@ -11,6 +12,7 @@ function CallbackContent() {
   const searchParams = useSearchParams();
   const { handleGoogleCallback } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  usePageTitle(t('auth.callback.title'));
 
   useEffect(() => {
     const token = searchParams.get('token');

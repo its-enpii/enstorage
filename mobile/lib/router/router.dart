@@ -2,10 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/login_screen.dart';
-import '../features/auth/terms_of_service_screen.dart';
+import '../features/legal/terms_of_service_screen.dart' show TermsOfServiceScreen;
 
 import '../features/files/files_screen.dart';
 import '../features/home/home_screen.dart';
+import '../features/legal/privacy_policy_screen.dart';
 import '../features/settings/change_password_screen.dart';
 import '../features/settings/google_accounts_screen.dart';
 import '../features/settings/settings_screen.dart';
@@ -82,6 +83,14 @@ GoRouter buildHomeRouter() {
                   GoRoute(
                     path: 'google-accounts',
                     builder: (ctx, st) => const GoogleAccountsScreen(),
+                  ),
+                  GoRoute(
+                    path: 'legal/privacy',
+                    builder: (ctx, st) => const PrivacyPolicyScreen(),
+                  ),
+                  GoRoute(
+                    path: 'legal/terms',
+                    builder: (ctx, st) => const TermsOfServiceScreen(),
                   ),
                 ],
               ),

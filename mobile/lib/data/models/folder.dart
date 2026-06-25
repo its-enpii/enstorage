@@ -8,6 +8,7 @@ class Folder {
     this.filesCount = 0,
     this.foldersCount = 0,
     this.totalSize = 0,
+    this.shareToken,
   });
 
   final String id;
@@ -17,6 +18,7 @@ class Folder {
   final int filesCount;
   final int foldersCount;
   final int totalSize;
+  final String? shareToken;
 
   factory Folder.fromJson(Map<String, dynamic> json) => Folder(
         id: (json['id'] ?? '').toString(),
@@ -26,9 +28,19 @@ class Folder {
         filesCount: (json['files_count'] ?? 0) as int,
         foldersCount: (json['folders_count'] ?? 0) as int,
         totalSize: (json['total_size'] ?? 0) as int,
+        shareToken: json['share_token'] as String?,
       );
 
-  Folder copyWith({String? name, bool? isStarred, String? parentId, int? filesCount, int? foldersCount, int? totalSize}) {
+  Folder copyWith({
+    String? name,
+    bool? isStarred,
+    String? parentId,
+    int? filesCount,
+    int? foldersCount,
+    int? totalSize,
+    String? shareToken,
+    bool clearShareToken = false,
+  }) {
     return Folder(
       id: id,
       name: name ?? this.name,
@@ -37,6 +49,7 @@ class Folder {
       filesCount: filesCount ?? this.filesCount,
       foldersCount: foldersCount ?? this.foldersCount,
       totalSize: totalSize ?? this.totalSize,
+      shareToken: clearShareToken ? null : (shareToken ?? this.shareToken),
     );
   }
 }

@@ -227,6 +227,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             const SizedBox(height: 24),
 
+            // Legal (Privacy Policy + Terms of Service)
+            _SectionLabel(l10n.settingsLegalSection),
+            const SizedBox(height: 12),
+            _SettingGroup(
+              children: [
+                _SettingRow(
+                  icon: Icons.privacy_tip_outlined,
+                  label: l10n.settingsLegalPrivacy,
+                  trailing: Icon(
+                    Icons.chevron_right,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  onTap: () => context.push('/settings/legal/privacy'),
+                ),
+                _Divider(),
+                _SettingRow(
+                  icon: Icons.description_outlined,
+                  label: l10n.settingsLegalTerms,
+                  trailing: Icon(
+                    Icons.chevron_right,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  onTap: () => context.push('/settings/legal/terms'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
             // Sign out
             _SettingGroup(
               children: [

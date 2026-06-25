@@ -15,6 +15,7 @@ import { Tabs } from '@/components/Tabs';
 import { usePrompt } from '@/components/usePrompt';
 import { bytes } from '@/lib/format';
 import { createViewStore } from '@/lib/viewStore';
+import { usePageTitle } from '@/lib/usePageTitle';
 import {
   CloudDoneIcon,
   FileIcon,
@@ -75,6 +76,7 @@ function StarredContent() {
   const [tab, setTab] = useState<Tab>('all');
   const [viewerFile, setViewerFile] = useState<FileItem | null>(null);
   const [shareFile, setShareFile] = useState<FileItem | null>(null);
+  usePageTitle(t('starred.title'));
   const { data, loading, error, setData, revalidate } = starredStore.useStore();
   const folders = data?.folders ?? [];
   const files = data?.files ?? [];
@@ -319,11 +321,13 @@ function StarredContent() {
       )}
       {shareFile && (
         <ShareDialog
-          file={shareFile}
+          target={{ kind: 'file', item: shareFile }}
           onClose={() => setShareFile(null)}
           onUpdate={(updated) => {
-            setData((prev) => prev ? { ...prev, files: prev.files.map((f) => f.id === updated.id ? updated : f) } : prev);
-            setShareFile(updated);
+            if (updated.kind !== 'file') return;
+            const f = updated.item;
+            setData((prev) => prev ? { ...prev, files: prev.files.map((x) => x.id === f.id ? f : x) } : prev);
+            setShareFile(f);
           }}
         />
       )}

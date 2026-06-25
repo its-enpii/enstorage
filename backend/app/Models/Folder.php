@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['user_id', 'parent_id', 'name', 'path', 'is_starred'])]
+#[Fillable(['user_id', 'parent_id', 'name', 'path', 'is_starred', 'share_token'])]
 class Folder extends Model
 {
     use HasUuids;

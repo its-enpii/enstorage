@@ -32,6 +32,7 @@ services:
         condition: service_healthy
     networks:
       - enstorage-net
+      - web-network
     restart: unless-stopped
 
   web:
@@ -46,6 +47,7 @@ services:
       - app
     networks:
       - enstorage-net
+      - web-network
     restart: unless-stopped
 
   worker:
@@ -79,6 +81,7 @@ services:
         condition: service_healthy
     networks:
       - enstorage-net
+      - web-network
     restart: unless-stopped
 
   postgres:
@@ -122,4 +125,12 @@ volumes:
 networks:
   enstorage-net:
     driver: bridge
+  # External network shared with the host's reverse proxy (Nginx Proxy
+  # Manager, Traefik, etc.). Create it on the host BEFORE first
+  # `docker compose up`:
+  #   docker network create web-network
+  # The host proxy then resolves container hostnames like `web` or `app`
+  # via this network.
+  web-network:
+    external: true
       

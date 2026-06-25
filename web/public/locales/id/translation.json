@@ -364,7 +364,17 @@
     "sharedFile": "Shared File",
     "sharedDesc": "Klik tombol di bawah untuk mengunduh file.",
     "sharedVia": "Shared via EnStorage",
-    "copy": "Salin"
+    "copy": "Salin",
+    "folderTitle": "Bagikan Folder",
+    "folderDescEnabled": "Siapa saja dengan link ini dapat melihat folder ini dan isinya.",
+    "folderDescDisabled": "Buat link publik untuk membagikan folder ini.",
+    "sharedFolderDesc": "Folder ini berisi item-item berikut.",
+    "sharedFolders": "Folder",
+    "sharedFiles": "File",
+    "sharedEmpty": "Folder ini kosong.",
+    "sharedLoading": "Memuat…",
+    "sharedNotFound": "Link tidak ditemukan",
+    "sharedError": "Link share ini tidak valid atau sudah dicabut."
   },
   "preview": {
     "close": "Tutup preview",
@@ -406,6 +416,7 @@
       "googleLoading": "Mengarahkan ke Google…"
     },
     "callback": {
+      "title": "Menghubungkan",
       "processing": "Memproses login…",
       "failed": "Login gagal.",
       "redirecting": "Mengalihkan…"
@@ -421,5 +432,55 @@
     "uploadFile": "Upload File",
     "uploadFolder": "Upload Folder",
     "selectMode": "Select Mode"
+  },
+  "legal": {
+    "pageTitle": "Legal",
+    "lastUpdated": "Terakhir diperbarui",
+    "privacy": {
+      "title": "Kebijakan Privasi",
+      "intro": "Kebijakan Privasi ini menjelaskan bagaimana enpii studio ('kami') mengumpulkan, menggunakan, dan melindungi informasi saat Anda menggunakan EnStorage ('Layanan'). Dengan menggunakan Layanan, Anda menyetujui praktik yang dijelaskan di bawah ini.",
+      "dataWeCollect": "1. Informasi yang Kami Kumpulkan",
+      "dataWeCollectBody": "Informasi akun: Saat Anda masuk dengan Google, kami menerima nama, alamat email, dan foto profil Anda dari Google. Data ini digunakan untuk mengidentifikasi akun Anda dan mempersonalisasi antarmuka.\n\nBerkas dan metadata: Kami menyimpan berkas yang Anda unggah beserta metadata yang diperlukan untuk mengelolanya (nama folder, tanda favorit, pengaturan berbagi). Isi berkas disimpan persis seperti yang diunggah.\n\nData penggunaan: Kami mencatat metadata permintaan dasar (timestamp, endpoint, status code) untuk keamanan dan pencegahan penyalahgunaan. Kami tidak menggunakan analitik pihak ketiga atau piksel pelacakan.\n\nAPI key: Saat Anda membuat token akses pribadi, hanya hash dengan salt yang disimpan. Token plaintext ditampilkan sekali dan tidak dapat dilihat kembali.\n\nTautan akun Google: Jika Anda menghubungkan akun Google untuk fitur lintas-cloud, kami menyimpan refresh token terenkripsi. Kami tidak pernah melihat kata sandi Google Anda.",
+      "howWeUse": "2. Cara Kami Menggunakan Informasi",
+      "howWeUseBody": "Kami menggunakan informasi yang dikumpulkan semata-mata untuk mengoperasikan Layanan: mengautentikasi Anda, menyimpan dan mengambil berkas Anda, mengirimkan berkas yang Anda bagikan melalui tautan, dan memberitahu Anda tentang aktivitas di akun Anda. Kami tidak menjual, menyewakan, atau memperdagangkan informasi pribadi Anda kepada pihak ketiga untuk keperluan pemasaran.",
+      "sharing": "3. Pembagian Berkas",
+      "sharingBody": "Folder yang Anda pilih untuk dibagikan dapat diakses oleh siapa pun yang memiliki tautan bagikan. Tautan bagikan berisi token acak dan dapat dicabut kapan saja dari halaman Folder. Anda bertanggung jawab atas konten yang Anda bagikan melalui tautan tersebut.",
+      "thirdParty": "4. Layanan Pihak Ketiga",
+      "thirdPartyBody": "Kami mengandalkan pihak ketiga berikut untuk mengoperasikan Layanan:\n\nGoogle (OAuth & integrasi Google Drive): tunduk pada Kebijakan Privasi Google. Kami hanya meminta scope yang diperlukan untuk memproses login Anda dan, jika relevan, untuk mengakses berkas yang Anda pilih untuk diimpor.\n\nPenyedia hosting dan storage: data dapat melewati atau disimpan pada infrastruktur yang kami gunakan untuk menjalankan Layanan.\n\nPenyedia email: jika kami mengirim email transaksional (misalnya reset kata sandi), email dirutekan melalui penyedia SMTP standar.",
+      "security": "5. Keamanan",
+      "securityBody": "Kami menggunakan langkah-langkah standar industri untuk melindungi data Anda, termasuk HTTPS untuk seluruh transport, hash untuk kata sandi, dan hash untuk API key. Tidak ada sistem yang sepenuhnya aman; jika Anda menemukan kerentanan, hubungi kami di alamat di bawah.",
+      "retention": "6. Retensi dan Penghapusan Data",
+      "retentionBody": "Berkas Anda tetap berada di akun hingga Anda menghapusnya. Menghapus berkas atau folder memindahkannya ke status soft-delete dan akan dihapus permanen setelah 30 hari, kecuali Anda memulihkannya. Jika Anda menghapus akun, semua data terkait akan dihapus permanen dalam 30 hari.",
+      "yourRights": "7. Hak Anda",
+      "yourRightsBody": "Anda dapat mengakses, memperbaiki, atau menghapus informasi pribadi Anda kapan saja melalui halaman Profil, atau dengan menghubungi kami. Jika Anda berada di Wilayah Ekonomi Eropa, Inggris, atau California, Anda memiliki hak tambahan berdasarkan hukum yang berlaku (GDPR / CCPA), termasuk hak atas portabilitas data dan hak untuk mengajukan keluhan ke otoritas pengawas.",
+      "changes": "8. Perubahan pada Kebijakan Ini",
+      "changesBody": "Kami dapat memperbarui Kebijakan Privasi ini dari waktu ke waktu. Perubahan material akan diumumkan melalui Layanan. Penggunaan Layanan yang berkelanjutan setelah perubahan menunjukkan penerimaan terhadap kebijakan yang diperbarui.",
+      "contact": "9. Kontak",
+      "contactBody": "Untuk pertanyaan terkait privasi atau untuk menggunakan hak Anda, hubungi kami di enpiiofficial@gmail.com."
+    },
+    "terms": {
+      "title": "Ketentuan Layanan",
+      "intro": "Ketentuan Layanan ('Ketentuan') ini mengatur penggunaan Anda terhadap EnStorage yang dioperasikan oleh enpii studio ('kami'). Dengan membuat akun atau menggunakan Layanan, Anda menyetujui Ketentuan ini.",
+      "eligibility": "1. Kelayakan",
+      "eligibilityBody": "Anda harus berusia minimal 13 tahun (atau usia minimum consent digital di yurisdiksi Anda) untuk menggunakan Layanan. Dengan menggunakan Layanan, Anda menyatakan bahwa Anda memenuhi persyaratan ini.",
+      "account": "2. Akun Anda",
+      "accountBody": "Anda bertanggung jawab atas aktivitas di akun Anda dan menjaga keamanan kredensial Anda. Anda setuju untuk memberikan informasi yang akurat dan segera memberi tahu kami jika ada penggunaan yang tidak sah. Kami dapat menangguhkan atau menghentikan akun yang melanggar Ketentuan ini.",
+      "acceptableUse": "3. Penggunaan yang Dapat Diterima",
+      "acceptableUseBody": "Anda setuju untuk tidak menggunakan Layanan untuk:\n\n- Menyimpan atau mendistribusikan konten yang ilegal di yurisdiksi Anda, melanggar hak kekayaan intelektual, atau dimaksudkan untuk merugikan orang lain.\n- Mengunggah malware, ransomware, atau kode berbahaya lainnya.\n- Mencoba mendapatkan akses tidak sah ke akun lain, Layanan, atau infrastrukturnya.\n- Menggunakan Layanan dengan cara yang membebani secara tidak proporsional atau mengganggu pengguna lain.\n- Menjual ulang atau mensublisensikan akses ke Layanan tanpa izin tertulis dari kami.",
+      "yourContent": "4. Konten Anda",
+      "yourContentBody": "Anda mempertahankan semua hak atas berkas yang Anda unggah. Anda memberi kami lisensi terbatas untuk meng-host, menyimpan, mengirimkan, dan memproses konten Anda semata-mata untuk mengoperasikan Layanan bagi Anda. Lisensi ini berakhir saat Anda menghapus konten, kecuali jika retensi diwajibkan oleh hukum.",
+      "service": "5. Layanan",
+      "serviceBody": "Kami dapat mengubah, menangguhkan, atau menghentikan fitur Layanan kapan saja, dengan pemberitahuan yang wajar untuk perubahan material. Kami menyediakan Layanan 'sebagaimana adanya' dan tidak menjamin bahwa Layanan akan selalu tersedia atau bebas dari kesalahan.",
+      "termination": "6. Penghentian",
+      "terminationBody": "Anda dapat berhenti menggunakan Layanan kapan saja dan menghapus akun Anda dari halaman Profil. Kami dapat menangguhkan atau menghentikan akses Anda jika Anda melanggar Ketentuan ini, dengan atau tanpa pemberitahuan terlebih dahulu. Setelah penghentian, hak Anda untuk menggunakan Layanan berakhir, tetapi bagian dari Ketentuan ini yang secara sifatnya harus tetap berlaku akan tetap berlaku.",
+      "liability": "7. Batasan Tanggung Jawab",
+      "liabilityBody": "Sebatas yang diizinkan oleh hukum, tanggung jawab agregat kami untuk klaim apa pun yang timbul dari atau terkait dengan Layanan terbatas pada jumlah yang Anda bayarkan kepada kami (jika ada) dalam 12 bulan sebelum klaim, atau USD 10, mana yang lebih besar. Kami tidak bertanggung jawab atas kerusakan tidak langsung, insidental, khusus, konsekuensial, atau hukuman.",
+      "changes": "8. Perubahan pada Ketentuan Ini",
+      "changesBody": "Kami dapat memperbarui Ketentuan ini dari waktu ke waktu. Perubahan material akan diumumkan melalui Layanan. Penggunaan yang berkelanjutan setelah perubahan menunjukkan penerimaan terhadap Ketentuan yang diperbarui.",
+      "governingLaw": "9. Hukum yang Berlaku",
+      "governingLawBody": "Ketentuan ini diatur oleh hukum Republik Indonesia. Setiap sengketa yang timbul dari atau terkait dengan Layanan akan diselesaikan di pengadilan Indonesia, kecuali undang-undang perlindungan konsumen wajib di yurisdiksi Anda memberi Anda hak untuk mengajukan perkara secara lokal.",
+      "contact": "10. Kontak",
+      "contactBody": "Pertanyaan tentang Ketentuan ini? Hubungi kami di enpiiofficial@gmail.com."
+    }
   }
 }
