@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/gen/app_localizations.dart';
-import '../../theme/radii.dart';
+import '../../widgets/app_dialog.dart';
 import '../../widgets/list_menu_sheet.dart';
 import '../../widgets/nav_aware_sheet.dart';
 
@@ -11,12 +11,9 @@ enum CreateAction { newFolder, uploadFile, scanDocument }
 /// Bottom sheet that matches `.design/new_action_bottom_sheet` — handle bar,
 /// scrim, action rows. Returns null on dismiss.
 Future<CreateAction?> showCreateActionSheet(BuildContext context) {
-  return showModalBottomSheet<CreateAction>(
+  return showAppBottomSheet<CreateAction>(
     context: context,
     backgroundColor: Theme.of(context).colorScheme.surface,
-    shape: const RoundedRectangleBorder(borderRadius: AppRadii.topSheetBorder),
-    isScrollControlled: true,
-    useRootNavigator: true,
     builder: (ctx) {
       final l10n = AppLocalizations.of(ctx)!;
       final scheme = Theme.of(ctx).colorScheme;

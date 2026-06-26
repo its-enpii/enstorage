@@ -382,7 +382,7 @@
   },
   "auth": {
     "login": {
-      "title": "Sign In to EnStorage",
+      "title": "Sign In",
       "subtitle": "Access your private vault.",
       "email": "Email",
       "password": "Password",
@@ -394,7 +394,7 @@
       "googleButton": "Sign in with Google",
       "googleLoading": "Redirecting to Google…",
       "orDivider": "or",
-      "tagline": "Your personal cloud vault connected to Google Drive.",
+      "tagline": "Never Leaves Your Drive.",
       "feature1": "Encrypted & secure",
       "feature2": "Multi-account Google Drive",
       "feature3": "Access from anywhere"

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../l10n/gen/app_localizations.dart';
 import '../../theme/radii.dart';
 import '../../theme/typography.dart';
+import '../../widgets/app_dialog.dart';
 import '../../widgets/etheric_button.dart';
 import '../../widgets/etheric_text_field.dart';
 import '../../widgets/nav_aware_sheet.dart';
@@ -10,12 +11,9 @@ import '../../widgets/nav_aware_sheet.dart';
 /// Returns the entered name, or null if cancelled.
 Future<String?> showCreateFolderDialog(BuildContext context) {
   final controller = TextEditingController();
-  return showModalBottomSheet<String>(
+  return showAppBottomSheet<String>(
     context: context,
-    isScrollControlled: true,
-    useRootNavigator: true,
     backgroundColor: Theme.of(context).colorScheme.surface,
-    shape: const RoundedRectangleBorder(borderRadius: AppRadii.topSheetBorder),
     builder: (ctx) {
       final l10n = AppLocalizations.of(ctx)!;
       return NavAwareSheet(

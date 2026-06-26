@@ -18,6 +18,7 @@ import '../../theme/typography.dart';
 import '../../widgets/etheric_card.dart';
 import '../../widgets/etheric_fab.dart';
 import '../../widgets/app_snackbar.dart';
+import '../../widgets/app_dialog.dart';
 import '../../widgets/list_menu_sheet.dart';
 import '../../widgets/nav_aware_sheet.dart';
 
@@ -309,7 +310,7 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
 
   Future<void> _onEditLabel(GoogleAccount account) async {
     final l10n = AppLocalizations.of(context)!;
-    final newLabel = await showDialog<String>(
+    final newLabel = await showAppDialog<String>(
       context: context,
       builder: (_) => _EditLabelDialog(initial: account.label),
     );
@@ -332,10 +333,9 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
 
   Future<void> _onDisconnect(GoogleAccount account) async {
     final l10n = AppLocalizations.of(context)!;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainer,
         title: Text(l10n.googleAccountsDisconnectTitle),
         content: Text(l10n.googleAccountsDisconnectBody),
         actions: [

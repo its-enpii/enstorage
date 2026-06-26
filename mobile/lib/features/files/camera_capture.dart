@@ -6,6 +6,7 @@ import '../../data/repositories/files_repository.dart';
 import '../../l10n/gen/app_localizations.dart';
 import '../../services/notification_service.dart';
 import '../../theme/radii.dart';
+import '../../widgets/app_dialog.dart';
 import '../../widgets/list_menu_sheet.dart';
 import '../../widgets/nav_aware_sheet.dart';
 
@@ -15,12 +16,9 @@ enum CameraMode { photo, video }
 /// Returns the chosen [CameraMode], or null if dismissed.
 Future<CameraMode?> showCameraModeSheet(BuildContext context) {
   final l10n = AppLocalizations.of(context)!;
-  return showModalBottomSheet<CameraMode>(
+  return showAppBottomSheet<CameraMode>(
     context: context,
     backgroundColor: Theme.of(context).colorScheme.surface,
-    shape: const RoundedRectangleBorder(borderRadius: AppRadii.topSheetBorder),
-    isScrollControlled: true,
-    useRootNavigator: true,
     builder: (ctx) {
       return NavAwareSheet(
         child: ListMenuSheet(

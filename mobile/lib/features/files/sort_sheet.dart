@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/gen/app_localizations.dart';
 import '../../state/files_state.dart';
-import '../../theme/radii.dart';
+import '../../widgets/app_dialog.dart';
 import '../../widgets/list_menu_sheet.dart';
 import '../../widgets/nav_aware_sheet.dart';
 
@@ -16,12 +16,9 @@ class SortResult {
 Future<SortResult?> showSortSheet(BuildContext context, FilesFilter current) {
   FileSort sort = current.sort;
   bool ascending = current.ascending;
-  return showModalBottomSheet<SortResult>(
+  return showAppBottomSheet<SortResult>(
     context: context,
     backgroundColor: Theme.of(context).colorScheme.surface,
-    shape: const RoundedRectangleBorder(borderRadius: AppRadii.topSheetBorder),
-    isScrollControlled: true,
-    useRootNavigator: true,
     builder: (ctx) {
       final l10n = AppLocalizations.of(ctx)!;
       final scheme = Theme.of(ctx).colorScheme;

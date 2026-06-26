@@ -10,6 +10,7 @@ import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/app_snackbar.dart';
+import '../../widgets/app_dialog.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -264,10 +265,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   label: l10n.navLogout,
                   labelColor: scheme.error,
                   onTap: () async {
-                    final confirmed = await showDialog<bool>(
+                    final confirmed = await showAppDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainer,
                         title: Text(l10n.logoutConfirmTitle),
                         content: Text(l10n.logoutConfirmBody),
                         actions: [

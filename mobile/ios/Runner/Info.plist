@@ -50,19 +50,19 @@
 		</dict>
 		<!-- Permissions used by file_picker, image_picker, etc. -->
 		<key>NSCameraUsageDescription</key>
-		<string>EnStorage uses the camera to scan documents and capture photos for upload.</string>
+		<string>EnStorage — Never Leaves Your Drive. Uses the camera to scan documents and capture photos for upload.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>EnStorage needs access to your photos to upload them to your vault.</string>
+		<string>EnStorage — Never Leaves Your Drive. Needs access to your photos to upload them to your vault.</string>
 		<key>NSPhotoLibraryAddUsageDescription</key>
-		<string>EnStorage saves photos you scan back to your photo library.</string>
+		<string>EnStorage — Never Leaves Your Drive. Saves photos you scan back to your photo library.</string>
 		<key>NSMicrophoneUsageDescription</key>
-		<string>EnStorage may record audio for video file uploads.</string>
+		<string>EnStorage — Never Leaves Your Drive. May record audio for video file uploads.</string>
 		<key>NSDocumentsFolderUsageDescription</key>
-		<string>EnStorage needs access to your documents to upload files.</string>
+		<string>EnStorage — Never Leaves Your Drive. Needs access to your documents to upload files.</string>
 		<key>NSDesktopFolderUsageDescription</key>
-		<string>EnStorage needs access to your Desktop to upload files.</string>
+		<string>EnStorage — Never Leaves Your Drive. Needs access to your Desktop to upload files.</string>
 		<key>NSDownloadsFolderUsageDescription</key>
-		<string>EnStorage needs access to your Downloads folder to upload files.</string>
+		<string>EnStorage — Never Leaves Your Drive. Needs access to your Downloads folder to upload files.</string>
 		<!-- Custom URL scheme untuk OAuth callback dari Google.
 	     Backend GOOGLE_REDIRECT_URI_MOBILE harus match persis. -->
 		<key>CFBundleURLTypes</key>

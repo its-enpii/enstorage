@@ -9,6 +9,8 @@ import '../../l10n/gen/app_localizations.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../theme/radii.dart';
+import '../../theme/breakpoints.dart';
+import '../../state/files_pane_selection_state.dart';
 import '../files/widgets/file_card.dart';
 import '../files/widgets/folder_card.dart';
 
@@ -80,12 +82,31 @@ class _StarredScreenState extends ConsumerState<StarredScreen> {
               child: _Body(
                 folders: data.folders,
                 files: data.files,
-                onFolderTap: (f) => context.go('/files/${f.id}'),
+                onFolderTap: (f) {
+                  if (Breakpoints.isExpanded(context)) {
+                    // Switch to Files tab and select the folder there
+                    // so the two-pane viewer can show its content.
+                    context.go('/files/${f.id}');
+                  } else {
+                    context.go('/files/${f.id}');
+                  }
+                },
                 onFileTap: (f) {
-                  if (f.uploadStatus == UploadStatus.done) {
+                  if (f.uploadStatus != UploadStatus.done) return;
+                  if (Breakpoints.isExpanded(context)) {
+                    ref.read(filesPaneSelectionProvider.notifier).state =
+                        FilesPaneSelection.file(
+                      f.id,
+                      folderId: f.folderId,
+                    );
+                  } else {
                     context.push(
                       '/viewer/${f.id}',
-                      extra: {'filename': f.name, 'mime': f.mimeType, 'folderId': f.folderId},
+                      extra: {
+                        'filename': f.name,
+                        'mime': f.mimeType,
+                        'folderId': f.folderId,
+                      },
                     );
                   }
                 },
@@ -125,8 +146,8 @@ class _Body extends StatelessWidget {
         AppSpacing.containerPadding,
         140,
       ),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: Breakpoints.gridCount(context),
         mainAxisSpacing: AppSpacing.cardGap,
         crossAxisSpacing: AppSpacing.cardGap,
         childAspectRatio: 1.1,

@@ -187,6 +187,12 @@ class AppTheme {
         showDragHandle: false,
         dragHandleColor: onSurfaceVariant,
       ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: const RoundedRectangleBorder(borderRadius: AppRadii.cardBorder),
+      ),
       iconTheme: IconThemeData(color: onSurface, size: 24),
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: primary,

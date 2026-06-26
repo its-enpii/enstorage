@@ -382,7 +382,7 @@
   },
   "auth": {
     "login": {
-      "title": "Masuk ke EnStorage",
+      "title": "Masuk",
       "subtitle": "Akses vault pribadi Anda.",
       "email": "Email",
       "password": "Password",
@@ -394,7 +394,7 @@
       "googleButton": "Masuk dengan Google",
       "googleLoading": "Mengarahkan ke Google…",
       "orDivider": "atau",
-      "tagline": "Cloud vault pribadi yang terhubung dengan Google Drive Anda.",
+      "tagline": "Tidak Pernah Meninggalkan Drive Anda.",
       "feature1": "Terenkripsi & aman",
       "feature2": "Multi-akun Google Drive",
       "feature3": "Akses dari mana saja"

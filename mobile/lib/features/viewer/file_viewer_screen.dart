@@ -21,6 +21,7 @@ import '../../state/refresh_signal_state.dart';
 import '../../theme/typography.dart';
 import '../../widgets/etheric_button.dart';
 import '../../widgets/app_snackbar.dart';
+import '../../widgets/app_dialog.dart';
 import '../files/share_dialog.dart';
 import '../files/rename_dialog.dart';
 
@@ -170,12 +171,9 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
   }
 
   void _showMenu(BuildContext context) {
-    showModalBottomSheet(
+    showAppBottomSheet<void>(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (ctx) {
         final l10n = AppLocalizations.of(ctx)!;
         final scheme = Theme.of(ctx).colorScheme;
@@ -261,7 +259,7 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
   }
 
   Future<void> _rename() async {
-    final newName = await showDialog<String>(
+    final newName = await showAppDialog<String>(
       context: context,
       builder: (_) => RenameDialog(currentName: widget.filename),
     );
@@ -346,10 +344,9 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
 
   Future<void> _delete() async {
     final l10n = AppLocalizations.of(context)!;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainer,
         title: Text(l10n.filesConfirmDeleteTitle),
         content: Text(l10n.filesConfirmDeleteBody),
         actions: [

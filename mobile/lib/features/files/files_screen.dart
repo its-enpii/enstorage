@@ -15,14 +15,17 @@ import '../../data/repositories/files_repository.dart';
 import '../../data/storage/token_storage.dart';
 import '../../services/notification_service.dart';
 import '../../l10n/gen/app_localizations.dart';
+import '../../theme/breakpoints.dart';
 import '../../state/files_state.dart';
 import '../../state/folder_state.dart';
 import '../../state/selection_state.dart';
+import '../../state/files_pane_selection_state.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/etheric_fab.dart';
 import '../../widgets/app_snackbar.dart';
+import '../../widgets/app_dialog.dart';
 import 'create_action_sheet.dart';
 import 'create_folder_dialog.dart';
 import 'camera_capture.dart';
@@ -64,6 +67,36 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       ..removeListener(_maybeLoadMore)
       ..dispose();
     super.dispose();
+  }
+
+  void _openFolder(Folder f) {
+    if (Breakpoints.isExpanded(context)) {
+      // Two-pane mode: render this folder in the right pane.
+      ref.read(filesPaneSelectionProvider.notifier).state =
+          FilesPaneSelection.folder(f.id);
+    } else {
+      context.go('/files/${f.id}');
+    }
+  }
+
+  void _openFile(FileItem f) {
+    if (Breakpoints.isExpanded(context)) {
+      // Two-pane mode: render the file viewer in the right pane.
+      ref.read(filesPaneSelectionProvider.notifier).state =
+          FilesPaneSelection.file(
+        f.id,
+        folderId: widget.folderId ?? f.folderId,
+      );
+    } else {
+      context.push(
+        '/viewer/${f.id}',
+        extra: {
+          'filename': f.name,
+          'mime': f.mimeType,
+          'folderId': widget.folderId ?? f.folderId,
+        },
+      );
+    }
   }
 
   Future<void> _onFab() async {
@@ -215,10 +248,9 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     final l10n = AppLocalizations.of(context)!;
     final selection = ref.read(selectionControllerProvider);
     final count = selection.count;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(ctx).colorScheme.surfaceContainer,
         title: Text(l10n.filesConfirmBulkDeleteTitle(count)),
         content: Text(l10n.filesConfirmBulkDeleteBody(count)),
         actions: [
@@ -354,7 +386,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                 if (inSelection) {
                   _toggleSelect(f.id);
                 } else {
-                  context.go('/files/${f.id}');
+                  _openFolder(f);
                 }
               },
               onFolderShare: _shareFolder,
@@ -362,14 +394,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                 if (inSelection) {
                   _toggleSelect(f.id);
                 } else {
-                  context.push(
-                    '/viewer/${f.id}',
-                    extra: {
-                      'filename': f.name,
-                      'mime': f.mimeType,
-                      'folderId': widget.folderId,
-                    },
-                  );
+                  _openFile(f);
                 }
               },
               onLongPress: _enterSelectMode,
@@ -420,7 +445,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     final repo = ref.read(filesRepositoryProvider);
     final fresh = await repo.getFolder(folder.id);
     if (!mounted) return;
-    final updated = await showDialog<Folder>(
+    final updated = await showAppDialog<Folder>(
       context: context,
       builder: (ctx) => ShareDialog(target: ShareFolderTarget(fresh)),
     );
@@ -607,8 +632,8 @@ class _BodyState extends State<_Body> {
             140,
           ),
           sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: Breakpoints.gridCount(context),
               mainAxisSpacing: AppSpacing.cardGap,
               crossAxisSpacing: AppSpacing.cardGap,
               childAspectRatio: 1.1,

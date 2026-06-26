@@ -21,7 +21,7 @@ const dmSans = DM_Sans({
 
 export const metadata: Metadata = {
   title: 'EnStorage',
-  description: 'Self-hosted centralized file storage',
+  description: 'Never Leaves Your Drive.',
   icons: {
     icon: [
       { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },

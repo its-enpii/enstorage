@@ -18,8 +18,14 @@ import 'state/theme_state.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Allow all orientations so the app can take advantage of larger
+  // screens (tablet / foldable) in landscape as well as portrait.
+  // Pages themselves adapt via Breakpoints / ResponsiveContainer.
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
   ]);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
