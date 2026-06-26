@@ -17,8 +17,10 @@ services:
       - ./storage/app/firebase-service-account.json:/var/www/html/storage/app/firebase-service-account.json:ro
       # Laravel runtime config — must live at /var/www/html/.env
       # inside the container. The .env file is gitignored; create it
-      # from .env.example on the host before first deploy.
-      - ./.env:/var/www/html/.env
+      # from .env.example on the host before first deploy. Read-only
+      # to avoid permission issues if the host file is owned by a
+      # different UID than the in-container `www-data` user.
+      - ./.env:/var/www/html/.env:ro
       # Persist generated files across container recreations.
       - app-storage:/var/www/html/storage
       - app-bootstrap-cache:/var/www/html/bootstrap/cache
