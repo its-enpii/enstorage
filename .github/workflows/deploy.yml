@@ -35,7 +35,13 @@ jobs:
             git pull origin main
 
             docker network inspect web-network >/dev/null 2>&1 || docker network create web-network
-            docker compose up -d --build
+            # --force-recreate: drop existing containers first so we
+            # don't hit "container name already in use" on restarts
+            # where the container was stopped manually or the daemon
+            # still has the old entry. Named volumes (postgres-data,
+            # redis-data, app-storage) are preserved — only containers
+            # are replaced.
+            docker compose up -d --build --force-recreate --remove-orphans
 
             # Stale bootstrap/cache from dev providers (e.g.
             # Laravel\Pail) can survive bind-mounts. Wipe and let
