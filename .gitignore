@@ -1,0 +1,7 @@
+# Local env file written by the deploy workflow at runtime. Holds
+# GitHub Secrets injected via docker-compose. Never commit.
+.env
+
+# OS
+.DS_Store
+Thumbs.db
