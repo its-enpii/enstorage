@@ -50,6 +50,12 @@ lib/l10n/gen/
 .env.*.local
 *.local
 
+# Build-time dart-define configs. Track the .example files (template
+# only), but never the filled-in prod.json — it carries the public
+# Google OAuth client id baked into the APK.
+lib/config/*.json
+!lib/config/*.example.json
+
 # Firebase Admin SDK service account keys (private_key material).
 # These are SERVER-SIDE only and must never be checked in, even by
 # accident — the private key can sign tokens as your Firebase project.

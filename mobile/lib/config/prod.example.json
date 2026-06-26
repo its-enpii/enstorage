@@ -1,0 +1,4 @@
+{
+  "API_BASE": "https://your-production-domain.com/api/v1",
+  "GOOGLE_CLIENT_ID": "YOUR_PROD_CLIENT_ID.apps.googleusercontent.com"
+}

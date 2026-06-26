@@ -28,7 +28,7 @@ jobs:
             # so leaving them empty falls back to the in-compose
             # defaults — useful for first-time deploys.
             cat > .env <<EOF
-            NEXT_PUBLIC_API_BASE_URL=${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+            NEXT_PUBLIC_API_BASE=${{ secrets.NEXT_PUBLIC_API_BASE }}
             NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
             EOF
 

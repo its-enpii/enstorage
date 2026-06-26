@@ -34,7 +34,9 @@ services:
       NODE_ENV: production
       # Browser-facing values — baked in at build time on the runner
       # and forwarded to the runtime container unchanged.
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://enpii.studio/api/v1}
+      # NOTE: env var name is NEXT_PUBLIC_API_BASE (without _URL) to
+      # match `process.env.NEXT_PUBLIC_API_BASE` in web/src/lib/api.ts.
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-https://enpii.enpiistudio.com/api/v1}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
     depends_on:
       - app   # just so web waits; it actually talks to `app` via NPM, not directly
