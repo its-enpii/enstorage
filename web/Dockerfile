@@ -19,6 +19,15 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
+# NEXT_PUBLIC_* are baked into the JS bundle at build time. They must
+# be declared as ARGs and re-exported as ENVs in the builder stage,
+# otherwise `process.env.NEXT_PUBLIC_API_BASE` stays undefined in the
+# generated code and the client falls back to `localhost:8080`.
+ARG NEXT_PUBLIC_API_BASE
+ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
+ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID
+ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
