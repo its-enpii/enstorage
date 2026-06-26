@@ -21,7 +21,7 @@ jobs:
             # Assumes the SSH user is already in the repo directory
             # (e.g. `cd /opt/enstorage` in their shell rc, or run a
             # `cd /path/to/repo` here). Edit `cd` below if needed.
-            cd /opt/enstorage
+            cd //home/enpii/studio/enstorage
 
             # Inject runtime secrets into a local .env file. The repo's
             # docker-compose.yml references these via ${VAR:-default},
