@@ -15,6 +15,10 @@ services:
       # fail with "Failed opening required .../vendor/autoload.php"
       # on every restart.
       - ./storage/app/firebase-service-account.json:/var/www/html/storage/app/firebase-service-account.json:ro
+      # Laravel runtime config — must live at /var/www/html/.env
+      # inside the container. The .env file is gitignored; create it
+      # from .env.example on the host before first deploy.
+      - ./.env:/var/www/html/.env
       # Persist generated files across container recreations.
       - app-storage:/var/www/html/storage
       - app-bootstrap-cache:/var/www/html/bootstrap/cache
