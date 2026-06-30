@@ -3,6 +3,15 @@ name: Deploy
 on:
   push:
     branches: [main]
+    # Only deploy when shipped product code changes. Internal/dev folders
+    # (.design/, .guide/), docs/, mobile/ and other paths are ignored —
+    # they don't affect the running stack. The root docker-compose.yml
+    # is included so infra-only changes still trigger.
+    paths:
+      - 'backend/**'
+      - 'web/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 jobs:
