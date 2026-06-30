@@ -19,6 +19,7 @@ REST API endpoint reference untuk integrasi dengan EnStorage.
   - [Storage Summary](#storage-summary)
   - [API Keys](#api-keys)
   - [Recent](#recent)
+  - [Search](#search)
   - [Webhooks](#webhooks)
   - [Activity Logs](#activity-logs)
   - [Public share](#public-share)
@@ -1058,6 +1059,140 @@ List folder root + file root (mixed, cursor-paginated). Untuk homepage "Recent a
   "message": "Item terbaru."
 }
 ```
+
+---
+
+### Search
+
+Smart search file dengan fuzzy match, typo-tolerance, dan case-insensitive normalization. Pakai Postgres `pg_trgm` extension untuk `%` operator dan `similarity()` function.
+
+#### `GET /search/files` — Scope: `read`
+
+Cari file milik user berdasarkan nama. Case-insensitive, ignore spasi/tanda baca, typo-tolerant.
+
+**Query Parameters**
+
+| Param | Tipe | Wajib | Default | Keterangan |
+|-------|------|-------|---------|------------|
+| `q` | string (1–100 char) | ya | — | Kata kunci. Normalisasi: lowercase + hapus semua non-alphanumeric. |
+| `folder_id` | UUID | tidak | — | Filter ke satu folder. 404 jika folder tidak ditemukan atau bukan milik user. |
+| `folder_path` | string (max 500) | tidak | — | Path folder (mis. `/Laporan/2024`). Resolve via `folders.path`. 404 jika tidak ada. |
+| `recursive` | boolean | tidak | `false` | Jika `true`, scan seluruh subtree folder (folder_id/folder_path). Pakai Postgres recursive CTE. |
+| `type` | enum | tidak | — | `image` \| `pdf` \| `doc` \| `video` \| `audio`. Mapping ke `mime_type` prefix. |
+| `mime_type` | string | tidak | — | Prefix `mime_type` (mis. `image/`). |
+| `status` | enum | tidak | exclude `failed` | `pending` \| `uploading` \| `done` \| `failed`. |
+| `starred` | boolean | tidak | `false` | Hanya file yang di-star. |
+| `sort` | enum | tidak | `score` | `name` \| `size` \| `created_at` \| `uploaded_at` \| `score`. Default `score DESC` lalu `created_at DESC`. |
+| `dir` | enum | tidak | `desc` | `asc` \| `desc`. |
+| `per_page` | integer (1–100) | tidak | `25` | Halaman pagination. |
+
+**Response**
+
+- `data[]` — file cocok, tiap item berisi field `FileResource` PLUS:
+  - `highlight` (string) — `name` dengan bagian match dibungkus `**...**`. Mis. `**Lap**oran Q1.pdf`.
+  - `score` (float) — relevance 0–1 dari `similarity(lower(name), :q)`.
+- `meta`:
+  - `query` — raw input.
+  - `query_normalized` — setelah normalisasi.
+  - `folder_resolved` — `{id, name, path}` jika ada folder filter, `null` jika tidak.
+  - `pagination` — `{page, per_page, total, last_page}`.
+  - `did_you_mean` — array suggestion jika hasil kosong. Top 3 file dengan `similarity > 0.2`. Tiap item: `{name, score}`.
+
+**Error responses**
+
+| Status | Kondisi |
+|--------|---------|
+| `401` | Tidak ada token / API key. |
+| `403` | API key tanpa scope `read`. |
+| `404` | `folder_id` atau `folder_path` tidak ditemukan. |
+| `422` | `q` kosong atau setelah normalisasi jadi string kosong. |
+
+**Contoh — exact match dengan highlight:**
+
+```http
+GET /api/v1/search/files?q=Laporan
+Authorization: Bearer en_a1b2c3d4_e5f6g7h8...
+```
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid-1",
+      "name": "Laporan Q1.pdf",
+      "highlight": "**Laporan** Q1.pdf",
+      "score": 0.875,
+      "folder_id": "uuid-folder",
+      ...
+    }
+  ],
+  "meta": {
+    "query": "Laporan",
+    "query_normalized": "laporan",
+    "folder_resolved": null,
+    "pagination": { "page": 1, "per_page": 25, "total": 1, "last_page": 1 },
+    "did_you_mean": []
+  },
+  "message": "Hasil pencarian."
+}
+```
+
+**Contoh — fuzzy match dengan folder_path + recursive:**
+
+```http
+GET /api/v1/search/files?q=lapran&folder_path=/Laporan&recursive=1
+```
+
+```json
+{
+  "success": true,
+  "data": [
+    { "name": "Laporan Bulanan.pdf", "highlight": "**Lap**oran Bulanan.pdf", "score": 0.36, ... }
+  ],
+  "meta": {
+    "query": "lapran",
+    "query_normalized": "lapran",
+    "folder_resolved": { "id": "uuid-f", "name": "Laporan", "path": "/Laporan" },
+    "pagination": { "page": 1, "per_page": 25, "total": 1, "last_page": 1 },
+    "did_you_mean": []
+  },
+  "message": "Hasil pencarian."
+}
+```
+
+**Contoh — 0 hasil dengan did-you-mean:**
+
+```http
+GET /api/v1/search/files?q=zzzzzzz
+```
+
+```json
+{
+  "success": true,
+  "data": [],
+  "meta": {
+    "query": "zzzzzzz",
+    "query_normalized": "zzzzzzz",
+    "folder_resolved": null,
+    "pagination": { "page": 1, "per_page": 25, "total": 0, "last_page": 1 },
+    "did_you_mean": [
+      { "name": "laporan tahunan.pdf", "score": 0.31 },
+      { "name": "laporan bulanan.pdf", "score": 0.28 }
+    ]
+  },
+  "message": "Hasil pencarian."
+}
+```
+
+**Catatan teknis**
+
+- Dependency: `pg_trgm` extension harus terinstall di database. Extension ini sudah dibuat oleh migration `create_folders_table` dan dijamin ada di production via migration `2026_06_30_130000_create_pg_extensions`.
+- Index: `idx_files_name_trgm` (GIN trigram) di `files.name` — dibuat oleh migration `2026_06_30_120000_add_trgm_index_to_files`. Tanpa index, query `%` operator jadi sequential scan (lambat di tabel besar).
+- Algoritma: query dieksekusi sebagai `WHERE name % :q OR name ILIKE '%' || :normalized || '%'`. `OR` clause memberi recall untuk term pendek yang similarity-nya terlalu rendah; `%` untuk typo-tolerance.
+- `recursive=1` tanpa folder filter = scan global dengan `WITH RECURSIVE` CTE. Untuk dataset besar, disarankan tetap pakai `folder_id`/`folder_path` agar query tetap scoped.
+
+
 
 ---
 

@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\FolderController;
 use App\Http\Controllers\Api\GoogleAccountController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\RecentController;
+use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\StorageController;
 use App\Http\Controllers\Api\WebhookController;
 use Illuminate\Support\Facades\Route;
@@ -167,6 +168,7 @@ Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(funct
         Route::get('folders', [FolderController::class, 'index']);
         Route::get('folders/{id}', [FolderController::class, 'show']);
         Route::get('recent', [RecentController::class, 'index']);
+        Route::get('search/files', [SearchController::class, 'searchFiles']);
     });
 
     // Write scope
