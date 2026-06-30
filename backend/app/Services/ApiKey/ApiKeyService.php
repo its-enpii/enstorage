@@ -44,7 +44,7 @@ class ApiKeyService
     public function verify(string $plaintext): ?ApiKey
     {
         $parts = explode('_', $plaintext);
-        if (count($parts) !== 3 || $parts[0] !== 'enp') {
+        if (count($parts) !== 3 || $parts[0] !== 'en') {
             return null;
         }
         $prefix = Str::lower($parts[1]);
