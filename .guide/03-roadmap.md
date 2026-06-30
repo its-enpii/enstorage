@@ -163,7 +163,7 @@ Upload file via `curl` atau Postman berhasil. File muncul di folder Google Drive
   - `POST   /api/v1/api-keys` — generate API key baru (`label`, `scopes`, `expires_at` opsional)
   - `DELETE /api/v1/api-keys/{id}` — revoke API key
 - [ ] Implementasi autentikasi via API Key:
-  - Header: `Authorization: Bearer enst_xxxxxxxx...`
+  - Header: `Authorization: Bearer en_xxxxxxxx...`
   - Middleware `auth.apikey` — lookup `key_prefix`, bandingkan hash, cek scope
 - [ ] Middleware scope enforcement per endpoint (mis. upload butuh scope `write` atau `full`)
 - [ ] Insert log ke `api_key_logs` setiap request via API Key

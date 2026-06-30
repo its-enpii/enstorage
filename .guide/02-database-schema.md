@@ -175,7 +175,7 @@ CREATE TABLE api_keys (
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     label           VARCHAR(255) NOT NULL,          -- mis. "Flutter App", "n8n Integration"
     key_hash        VARCHAR(255) NOT NULL UNIQUE,   -- bcrypt hash dari API key
-    key_prefix      VARCHAR(10) NOT NULL,           -- 8 karakter pertama, untuk identifikasi (mis. "enst_a1b2")
+    key_prefix      VARCHAR(10) NOT NULL,           -- 8 karakter pertama, untuk identifikasi (mis. "en_a1b2")
     scopes          TEXT[] NOT NULL DEFAULT '{}',   -- ['read', 'write', 'delete'] atau ['full']
     last_used_at    TIMESTAMP WITH TIME ZONE,
     expires_at      TIMESTAMP WITH TIME ZONE,       -- NULL = tidak expired
@@ -189,7 +189,7 @@ CREATE INDEX idx_api_keys_key_prefix ON api_keys(key_prefix);
 ```
 
 **Catatan:**
-- API key yang digenerate hanya ditampilkan **sekali** saat pembuatan (format: `enst_<random 40 char>`).
+- API key yang digenerate hanya ditampilkan **sekali** saat pembuatan (format: `en_<random 40 char>`).
 - `key_hash` adalah bcrypt dari full API key — tidak bisa di-reverse.
 - `key_prefix` digunakan untuk lookup awal sebelum bcrypt compare (efisiensi query).
 - `scopes` menggunakan PostgreSQL array. Nilai valid: `read`, `write`, `delete`, `full`.
