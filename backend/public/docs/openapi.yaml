@@ -8,7 +8,7 @@ info:
     ## Authentication
     Dua mode:
     1. **Sanctum** (web/mobile user) — `Authorization: Bearer <token>`
-    2. **API Key** (machine-to-machine) — `X-API-Key: enp_<8>_<40>`
+    2. **API Key** (machine-to-machine) — `X-API-Key: en_<8>_<40>`
 
     Endpoint `/api-keys/*` HANYA bisa diakses via Sanctum.
 

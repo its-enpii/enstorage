@@ -11,7 +11,7 @@ class ApiKeyService
 {
     /**
      * Generate key baru.
-     * Format: `enp_<8 prefix>_<40 random>`. Prefix disimpan plain, hash bcrypt.
+     * Format: `en_<8 prefix>_<40 random>`. Prefix disimpan plain, hash bcrypt.
      * Return [model, plaintext] — plaintext hanya dikembalikan sekali.
      */
     public function create(
@@ -22,7 +22,7 @@ class ApiKeyService
     ): array {
         $prefix = Str::lower(Str::random(8));
         $secret = Str::random(40);
-        $plaintext = "enp_{$prefix}_{$secret}";
+        $plaintext = "en_{$prefix}_{$secret}";
 
         $apiKey = ApiKey::create([
             'user_id' => $userId,

@@ -111,8 +111,8 @@ function ApiKeysContent() {
     }
   }
 
-  function copy(plain: string) {
-    navigator.clipboard.writeText(plain).catch(() => {});
+  function copy(plain: string): Promise<void> {
+    return navigator.clipboard.writeText(plain).catch(() => undefined);
   }
 
   return (
@@ -181,7 +181,7 @@ function ApiKeysContent() {
                   {k.label}
                 </h3>
                 <p className="text-metadata text-outline font-mono mt-1">
-                  enp_{k.key_prefix}••••••••••••••••••••
+                  en_{k.key_prefix}••••••••••••••••••••
                 </p>
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -316,6 +316,18 @@ function PlaintextReveal({
 }) {
   const { t } = useTranslation();
   const [show, setShow] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await onCopy(data.plaintext);
+    } catch {
+      return;
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm px-4"
@@ -344,11 +356,15 @@ function PlaintextReveal({
             {show ? <VisibilityOff /> : <Visibility />}
           </button>
           <button
-            onClick={() => onCopy(data.plaintext)}
-            className="text-on-surface-variant hover:text-primary"
-            title={t('apikeys.copyKey')}
+            onClick={handleCopy}
+            className={clsx(
+              'transition',
+              copied ? 'text-primary' : 'text-on-surface-variant hover:text-primary',
+            )}
+            title={copied ? t('apikeys.copied') : t('apikeys.copyKey')}
+            aria-label={copied ? t('apikeys.copied') : t('apikeys.copyKey')}
           >
-            <ContentCopy />
+            {copied ? <Check /> : <ContentCopy />}
           </button>
         </div>
         <Button onClick={onClose} fullWidth size="lg">

@@ -13,8 +13,8 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * Resolve user dari salah satu:
  *  1. Sanctum Bearer token: `Authorization: Bearer <sanctum-token>`
- *  2. X-API-Key header: `X-API-Key: enp_xxxx_yyyy`
- *  3. Bearer API key: `Authorization: Bearer enp_xxxx_yyyy`
+ *  2. X-API-Key header: `X-API-Key: en_xxxx_yyyy`
+ *  3. Bearer API key: `Authorization: Bearer en_xxxx_yyyy`
  *
  * Set `_api_key` di request jika pakai API key (untuk CheckScope/Log/Throttle).
  */
@@ -40,8 +40,8 @@ class AuthApiKey
             return $next($request);
         }
 
-        // 2. API key via Bearer (enp_ prefix)
-        if ($bearer && str_starts_with($bearer, 'enp_')) {
+        // 2. API key via Bearer (en_ prefix)
+        if ($bearer && str_starts_with($bearer, 'en_')) {
             $apiKey = $this->service->verify($bearer);
             if (! $apiKey) {
                 return $this->unauthorized('API key tidak valid atau sudah dicabut.');
