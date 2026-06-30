@@ -185,7 +185,6 @@ enstorage/
 │       └── lib/
 ├── mobile/             # Flutter app
 │   └── lib/
-├── .guide/             # Catatan internal (overview, schema, roadmap)
 ├── docs/               # Dokumentasi publik (lihat struktur di bawah)
 └── docker-compose.yml  # Stack produksi (web + backend)
 ```
@@ -267,7 +266,7 @@ flutter build ios                     # iOS
 
 ## Roadmap
 
-Fase development (lihat `.guide/03-roadmap.md` untuk detail):
+Fase development:
 
 | Fase | Target |
 |------|--------|
@@ -295,4 +294,4 @@ MIT — lihat [LICENSE](LICENSE).
 
 ---
 
-[Catatan internal En-suite](.guide/) · [API documentation](docs/api.md) · [Berkontribusi](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
+[API documentation](docs/api.md) · [Berkontribusi](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
