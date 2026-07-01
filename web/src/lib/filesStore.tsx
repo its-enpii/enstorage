@@ -84,6 +84,15 @@ type Ctx = {
   renameFolder: (id: string, name: string) => void;
   renameFile: (id: string, name: string) => void;
   /**
+   * Optimistically adjust a folder's `files_count` and `total_size`.
+   * Pass positive values to add, negative to subtract. The destination
+   * folder doesn't need to live in the current view's `folders` list —
+   * if absent, the call is a no-op (server-side count wins on next
+   * fetch). Use after a move so the folder card's "X items" subtitle
+   * updates immediately, without waiting for a navigation round-trip.
+   */
+  updateFolderCounts: (id: string, deltaFiles: number, deltaSize: number) => void;
+  /**
    * Drop the cache entry for the current view. Use after destructive
    * mutations (move/delete) so navigating away and back doesn't show a
    * stale snapshot before the background refetch completes. Removes only
@@ -381,6 +390,23 @@ export function FilesStoreProvider({
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, name } : f)));
   }, []);
 
+  const updateFolderCounts = useCallback(
+    (id: string, deltaFiles: number, deltaSize: number) => {
+      setFolders((prev) => {
+        let mutated = false;
+        const next = prev.map((f) => {
+          if (f.id !== id) return f;
+          mutated = true;
+          const newCount = Math.max(0, (f.files_count ?? 0) + deltaFiles);
+          const newSize = Math.max(0, (f.total_size ?? 0) + deltaSize);
+          return { ...f, files_count: newCount, total_size: newSize };
+        });
+        return mutated ? next : prev;
+      });
+    },
+    [],
+  );
+
   /**
    * Eagerly drop the cache entry for the current view so a remount
    * (e.g. user navigates to folder then back) shows the post-mutation
@@ -417,6 +443,7 @@ export function FilesStoreProvider({
     upsertFile,
     renameFolder,
     renameFile,
+    updateFolderCounts,
     invalidateCurrentCache,
   };
 

@@ -120,6 +120,7 @@ function FilesContent() {
     upsertFolder,
     upsertFile,
     renameFolder,
+    updateFolderCounts,
     invalidateCurrentCache,
   } = store;
 
@@ -551,6 +552,20 @@ function FilesContent() {
     const prevSnapshot = targets.map((f) => ({ ...f }));
     // Optimistic: hapus dari view (file pindah ke folder lain jadi tidak ada di sini lagi).
     targets.forEach((f) => removeFile(f.id));
+    // Adjust folder counters on source + destination so the "X items"
+    // badge updates without waiting for a refresh round-trip. Subfolders
+    // are not affected by file-level moves (only files_count changes).
+    const sourceFolderId = folderId;
+    if (sourceFolderId) {
+      // Source = current folder. Subtract each moved file's count + size.
+      for (const f of targets) updateFolderCounts(sourceFolderId, -1, -(f.size ?? 0));
+    }
+    // Destination folder: bump counters too. Walid runs even when the
+    // destination is the root — the count update simply does nothing in
+    // that case since the root has no folder card.
+    if (targetFolderId && targetFolderId !== sourceFolderId) {
+      for (const f of targets) updateFolderCounts(targetFolderId, +1, +(f.size ?? 0));
+    }
     clearSelection();
     // Invalidate source + destination caches eagerly. Without this, a
     // remount (user navigates to the destination folder then back) could
@@ -596,15 +611,19 @@ function FilesContent() {
     const targetIds = new Set(results.map((r) => r.id));
     // Remove files dari view ini (mereka pindah keluar).
     results.forEach((r) => removeFile(r.id));
+    // Adjust folder counters — same as runDirectMove. Destination is
+    // not threaded through MoveDialog onMoved signature (results only
+    // carry file metadata), so for the dialog path we can't adjust the
+    // destination card without rewriting the contract. Source update is
+    // enough; destination counter will refresh on next visit.
+    const sourceFolderId = folderId;
+    if (sourceFolderId) {
+      for (const r of results) updateFolderCounts(sourceFolderId, -1, -(r.size ?? 0));
+    }
     clearSelection();
     // Eagerly invalidate cache for source + destination so a remount
     // doesn't restore the stale snapshot. See runDirectMove comment.
     invalidateCurrentCache();
-    // Pick destination from MoveDialog's last selection (folder picker
-    // closes on success so we read from moveFiles sibling dialog state).
-    // For bulk move we may not have an explicit single dest — invalidating
-    // the source is enough because the destination provider will refetch
-    // on mount with `mode: 'replace'`.
     const renamed = results.filter((r) => r.renamed);
     if (renamed.length > 0) {
       await alert(
