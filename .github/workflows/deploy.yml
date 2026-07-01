@@ -36,9 +36,19 @@ jobs:
             # docker-compose.yml references these via ${VAR:-default},
             # so leaving them empty falls back to the in-compose
             # defaults — useful for first-time deploys.
+            #
+            # Reverb vars are required for the web build to bake the
+            # WSS endpoint config into the JS bundle. If NEXT_PUBLIC_REVERB_APP_KEY
+            # is missing, Next.js emits `process.env.NEXT_PUBLIC_REVERB_APP_KEY`
+            # literally and the browser throws "process is not defined",
+            # killing the entire Echo WS connection.
             cat > .env <<EOF
             NEXT_PUBLIC_API_BASE=${{ secrets.NEXT_PUBLIC_API_BASE }}
             NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
+            NEXT_PUBLIC_REVERB_SCHEME=${{ secrets.NEXT_PUBLIC_REVERB_SCHEME }}
+            NEXT_PUBLIC_REVERB_HOST=${{ secrets.NEXT_PUBLIC_REVERB_HOST }}
+            NEXT_PUBLIC_REVERB_PORT=${{ secrets.NEXT_PUBLIC_REVERB_PORT }}
+            NEXT_PUBLIC_REVERB_APP_KEY=${{ secrets.NEXT_PUBLIC_REVERB_APP_KEY }}
             EOF
 
             git pull origin main
