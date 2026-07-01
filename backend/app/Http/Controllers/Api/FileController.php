@@ -9,14 +9,18 @@ use App\Models\ActivityLog;
 use App\Models\File as FileModel;
 use App\Models\Folder;
 use App\Services\ActivityLogService;
+use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveUploader;
+use App\Services\Google\GoogleTokenService;
 use App\Services\WebhookService;
+use Google\Service\Drive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
@@ -145,11 +149,11 @@ class FileController extends Controller
                 throw new \RuntimeException('Akun Google untuk file ini tidak ditemukan.');
             }
 
-            $client = app(\App\Services\Google\GoogleClientFactory::class)->makeFor($account);
-            app(\App\Services\Google\GoogleTokenService::class)->ensureFreshToken($account);
+            $client = app(GoogleClientFactory::class)->makeFor($account);
+            app(GoogleTokenService::class)->ensureFreshToken($account);
             $client->setAccessToken($account->access_token);
 
-            $drive = new \Google\Service\Drive($client);
+            $drive = new Drive($client);
             $response = $drive->files->get($file->gdrive_file_id, ['alt' => 'media']);
             $body = $response->getBody();
 
@@ -218,8 +222,12 @@ class FileController extends Controller
 
         $starChanged = array_key_exists('is_starred', $data) && (bool) $data['is_starred'] !== (bool) $file->is_starred;
 
-        if (array_key_exists('name', $data)) $file->name = $data['name'];
-        if (array_key_exists('is_starred', $data)) $file->is_starred = (bool) $data['is_starred'];
+        if (array_key_exists('name', $data)) {
+            $file->name = $data['name'];
+        }
+        if (array_key_exists('is_starred', $data)) {
+            $file->is_starred = (bool) $data['is_starred'];
+        }
         $file->save();
 
         if (array_key_exists('name', $data)) {
@@ -246,6 +254,16 @@ class FileController extends Controller
 
     /**
      * PUT /files/{id}/move — pindah ke folder lain (null = root).
+     *
+     * Aturan:
+     * - folder tujuan harus milik user yang sama (kalau diisi).
+     * - Jika di folder tujuan sudah ada file dengan nama yang sama dengan
+     *   file ini, auto-rename dengan suffix " (n)" sampai ketemu nama kosong,
+     *   konsisten dengan pola rename OS. Response tetap 200 dengan field
+     *   `renamed` = true dan `original_name` (nama sebelum rename) agar
+     *   client bisa kasih notif "dipindahkan sebagai <nama baru>".
+     * - Folder_id == folder saat ini → no-op (200, renamed=false).
+     * - Dispatch webhook `file.moved` ke semua subscriber user.
      */
     public function move(Request $request, string $id): JsonResponse
     {
@@ -268,18 +286,99 @@ class FileController extends Controller
             }
         }
 
-        $file->folder_id = $newFolderId;
-        $file->save();
+        $renamed = false;
+        $originalName = $file->name;
+
+        DB::transaction(function () use ($file, $newFolderId, &$renamed) {
+            $file->folder_id = $newFolderId;
+
+            // Auto-rename kalau di folder tujuan sudah ada file同名 (kecuali diri sendiri).
+            $collision = FileModel::where('user_id', $file->user_id)
+                ->where('folder_id', $newFolderId)
+                ->where('name', $file->name)
+                ->where('id', '!=', $file->id)
+                ->exists();
+            if ($collision) {
+                $file->name = $this->makeUniqueNameInFolder(
+                    userId: $file->user_id,
+                    folderId: $newFolderId,
+                    desiredName: $file->name,
+                    excludeId: $file->id,
+                );
+                $renamed = true;
+            }
+
+            $file->save();
+        });
 
         $this->activityLog->log(
             ActivityLog::ACTION_FILE_MOVE,
             userId: $request->user()->id,
             subject: $file,
-            metadata: ['new_folder_id' => $newFolderId],
+            metadata: [
+                'new_folder_id' => $newFolderId,
+                'renamed' => $renamed,
+                'original_name' => $originalName,
+                'final_name' => $file->name,
+            ],
             request: $request,
         );
 
-        return $this->ok(new FileResource($file), __('File berhasil dipindahkan.'));
+        // Broadcast event ke webhook subscriber.
+        // Payload berisi field minimal + nama sebelum/sesudah rename agar
+        // client bisa memutuskan apakah perlu sinkronisasi list.
+        $this->webhooks->dispatch($request->user()->id, 'file.moved', [
+            'file_id' => $file->id,
+            'name' => $file->name,
+            'original_name' => $renamed ? $originalName : null,
+            'mime_type' => $file->mime_type,
+            'size' => $file->size,
+            'folder_id' => $file->folder_id,
+            'previous_folder_id' => $renamed ? null : null, // tidak disimpan pre-state; biarkan null
+            'renamed' => $renamed,
+        ]);
+
+        return $this->ok(
+            array_merge(
+                (new FileResource($file))->resolve($request),
+                ['renamed' => $renamed, 'previous_name' => $renamed ? $originalName : null],
+            ),
+            $renamed
+                ? __('File berhasil dipindahkan dan di-rename menjadi ":name".', ['name' => $file->name])
+                : __('File berhasil dipindahkan.'),
+        );
+    }
+
+    /**
+     * Generate nama unik di dalam folder: "laporan.pdf" → "laporan (1).pdf"
+     * → "laporan (2).pdf", dst. Mirip OS behaviour.
+     */
+    private function makeUniqueNameInFolder(
+        string $userId,
+        ?string $folderId,
+        string $desiredName,
+        string $excludeId,
+    ): string {
+        $dotPos = strrpos($desiredName, '.');
+        $base = $dotPos === false ? $desiredName : substr($desiredName, 0, $dotPos);
+        $ext = $dotPos === false ? '' : substr($desiredName, $dotPos);
+
+        $taken = FileModel::where('user_id', $userId)
+            ->where('folder_id', $folderId)
+            ->where('id', '!=', $excludeId)
+            ->pluck('name')
+            ->all();
+        $takenSet = array_flip($taken);
+
+        for ($i = 1; $i < 10_000; $i++) {
+            $candidate = "{$base} ({$i}){$ext}";
+            if (! isset($takenSet[$candidate])) {
+                return $candidate;
+            }
+        }
+
+        // Fallback extremely unlikely: append ULID.
+        return $base.' ('.Str::ulid().')'.$ext;
     }
 
     /**
@@ -303,7 +402,7 @@ class FileController extends Controller
     public function bulkDestroy(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'ids'   => ['required', 'array', 'min:1', 'max:50'],
+            'ids' => ['required', 'array', 'min:1', 'max:50'],
             'ids.*' => ['required', 'string', 'uuid'],
         ]);
 
@@ -321,9 +420,9 @@ class FileController extends Controller
         }
 
         return $this->ok([
-            'deleted'  => $deleted,
+            'deleted' => $deleted,
             'not_found' => array_values($notFound),
-            'count'    => count($deleted),
+            'count' => count($deleted),
         ], count($deleted).__(' file berhasil dihapus.'));
     }
 
@@ -432,11 +531,11 @@ class FileController extends Controller
                 throw new \RuntimeException('Akun Google tidak ditemukan.');
             }
 
-            $client = app(\App\Services\Google\GoogleClientFactory::class)->makeFor($account);
-            app(\App\Services\Google\GoogleTokenService::class)->ensureFreshToken($account);
+            $client = app(GoogleClientFactory::class)->makeFor($account);
+            app(GoogleTokenService::class)->ensureFreshToken($account);
             $client->setAccessToken($account->access_token);
 
-            $drive = new \Google\Service\Drive($client);
+            $drive = new Drive($client);
             $response = $drive->files->get($file->gdrive_file_id, ['alt' => 'media']);
             $body = $response->getBody();
 

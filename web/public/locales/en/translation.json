@@ -78,6 +78,7 @@
       "starred": "Add to Starred",
       "preview": "Preview",
       "rename": "Rename",
+      "moveTo": "Move to…",
       "download": "Download",
       "share": "Share Link",
       "copy": "Copy File",
@@ -96,6 +97,7 @@
     },
     "selected": "{{count}} selected",
     "downloadAll": "Download",
+    "moveAll": "Move",
     "deleteAll": "Delete",
     "starSuccess": "Star updated.",
     "renameSuccess": "File renamed.",
@@ -119,6 +121,24 @@
       "oauthStartFailed": "Failed to start OAuth.",
       "syncFailed": "Sync failed.",
       "disconnectFailed": "Failed to disconnect."
+    },
+    "move": {
+      "titleSingle": "Move File",
+      "titleBulk": "Move {{count}} Files",
+      "root": "Root (My Files)",
+      "pickTarget": "Pick a destination folder.",
+      "toLabel": "Will be moved to: {{target}}",
+      "noFolders": "No other folders yet.",
+      "confirm": "Move ({{count}})",
+      "moving": "Moving…",
+      "dropToRoot": "Drop here to move to root",
+      "renamedTitle": "Some files were auto-renamed",
+      "renamedHint": "{{count}} file(s) were auto-renamed because the destination folder already has files with the same name.",
+      "errors": {
+        "allFailed": "Failed to move all files.",
+        "partial": "{{count}} file(s) failed to move.",
+        "sameFolder": "The file is already in this folder."
+      }
     }
   },
   "folders": {

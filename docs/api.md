@@ -953,13 +953,49 @@ Rename (kolom `name` saja, **tidak** rename di Google Drive) dan/atau set star.
 
 #### `PUT /files/{id}/move` — Scope: `write`
 
-Pindah folder.
+Pindah file ke folder lain (`null` = root). Folder tujuan harus milik user yang sama; kalau tidak → 404.
 
 **Body:**
 
 ```json
 { "folder_id": "uuid | null" }
 ```
+
+**Auto-rename:** jika di folder tujuan sudah ada file lain dengan nama yang sama, server rename menjadi `laporan (1).pdf`, `laporan (2).pdf`, dst. Response berisi `renamed: true` dan `previous_name` agar UI bisa tampilkan "dipindahkan sebagai `<nama baru>`".
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "name": "laporan (1).pdf",
+    "original_name": "laporan.pdf",
+    "folder_id": "uuid-tujuan",
+    "renamed": true,
+    "previous_name": "laporan.pdf",
+    "...": "..."
+  },
+  "message": "File berhasil dipindahkan dan di-rename menjadi \"laporan (1).pdf\"."
+}
+```
+
+**Webhook:** dispatch event `file.moved` ke subscriber.
+
+```json
+{
+  "file_id": "uuid",
+  "name": "laporan (1).pdf",
+  "original_name": "laporan.pdf",
+  "mime_type": "application/pdf",
+  "size": 1024,
+  "folder_id": "uuid-tujuan",
+  "renamed": true
+}
+```
+
+**Errors:** 404 (file/folder tidak ditemukan, atau folder bukan milik user).
 
 ---
 

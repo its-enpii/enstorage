@@ -78,6 +78,7 @@
       "starred": "Tambah ke Starred",
       "preview": "Preview",
       "rename": "Rename",
+      "moveTo": "Pindahkan",
       "download": "Download",
       "share": "Share Link",
       "copy": "Copy File",
@@ -96,6 +97,7 @@
     },
     "selected": "{{count}} dipilih",
     "downloadAll": "Download",
+    "moveAll": "Pindahkan",
     "deleteAll": "Hapus",
     "starSuccess": "Star berhasil diupdate.",
     "renameSuccess": "File berhasil direname.",
@@ -119,6 +121,24 @@
       "oauthStartFailed": "Gagal mulai OAuth.",
       "syncFailed": "Sync gagal.",
       "disconnectFailed": "Gagal menghapus."
+    },
+    "move": {
+      "titleSingle": "Pindahkan File",
+      "titleBulk": "Pindahkan {{count}} File",
+      "root": "Root (My Files)",
+      "pickTarget": "Pilih folder tujuan.",
+      "toLabel": "Dipindahkan ke: {{target}}",
+      "noFolders": "Belum ada folder lain.",
+      "confirm": "Pindahkan ({{count}})",
+      "moving": "Memindahkan…",
+      "dropToRoot": "Drop di sini untuk pindah ke root",
+      "renamedTitle": "Sebagian file di-rename otomatis",
+      "renamedHint": "{{count}} file di-rename otomatis karena sudah ada nama yang sama di folder tujuan.",
+      "errors": {
+        "allFailed": "Gagal memindahkan semua file.",
+        "partial": "{{count}} file gagal dipindahkan.",
+        "sameFolder": "File sudah berada di folder ini."
+      }
     }
   },
   "folders": {

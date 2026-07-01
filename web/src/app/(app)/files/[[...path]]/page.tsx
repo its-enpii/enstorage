@@ -10,6 +10,7 @@ import { getLocalUserId } from '@/lib/filesStore';
 import {
   CloudDoneIcon,
   CloudOffIcon,
+  DriveFileMoveIcon,
   EditIcon,
   ErrorOutlineIcon,
   FileIcon,
@@ -26,6 +27,7 @@ import { DropdownMenu, type MenuItem } from '@/components/DropdownMenu';
 import { FileViewer } from '@/components/FileViewer';
 import { ItemCard } from '@/components/ItemCard';
 import { ShareDialog } from '@/components/ShareDialog';
+import { MoveDialog, type MovedFileResult } from '@/components/MoveDialog';
 import { FilesStoreProvider, useFilesStore } from '@/lib/filesStore';;
 import { UploadToolbar } from '@/components/UploadToolbar';
 import { UploadProgress, type UploadJob } from '@/components/UploadProgress';
@@ -134,6 +136,8 @@ function FilesContent() {
   const [viewerFile, setViewerFile] = useState<FileItem | null>(null);
   const [shareFile, setShareFile] = useState<FileItem | null>(null);
   const [shareFolder, setShareFolder] = useState<Folder | null>(null);
+  const [moveFiles, setMoveFiles] = useState<FileItem[] | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [folderCrumbs, setFolderCrumbs] = useState<{ id: string; name: string }[]>([]);
   const pollRefs = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
   const dragCounter = useRef(0);
@@ -477,6 +481,128 @@ function FilesContent() {
     }
   }
 
+  async function openMoveDialog(filesToMove: FileItem[]) {
+    if (filesToMove.length === 0) return;
+    setMoveFiles(filesToMove);
+  }
+
+  /**
+   * Drag-and-drop file ke folder card.
+   * Pakai HTML5 drag-and-drop: file card set `text/x-file-ids` = JSON array
+   * of ids; folder card on dragover cek dataTransfer.types. onDrop lookup
+   * file objects dari state lalu buka MoveDialog (single-step confirmation).
+   */
+  function handleFileDragStart(e: React.DragEvent, file: FileItem) {
+    if (selectMode) {
+      // Bulk mode: serialize semua selected ids.
+      e.dataTransfer.setData('text/x-file-ids', JSON.stringify(Array.from(selected)));
+      e.dataTransfer.setData('text/x-bulk', '1');
+    } else {
+      e.dataTransfer.setData('text/x-file-ids', JSON.stringify([file.id]));
+    }
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function handleFolderDragOver(e: React.DragEvent, folderId: string) {
+    if (e.dataTransfer.types.includes('text/x-file-ids')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      setDragOverFolderId(folderId);
+    }
+  }
+
+  function handleFolderDragLeave() {
+    setDragOverFolderId(null);
+  }
+
+  function handleFolderDrop(e: React.DragEvent, targetFolderId: string | null) {
+    if (!e.dataTransfer.types.includes('text/x-file-ids')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverFolderId(null);
+    const idsJson = e.dataTransfer.getData('text/x-file-ids');
+    if (!idsJson) return;
+    let ids: string[];
+    try {
+      ids = JSON.parse(idsJson) as string[];
+    } catch {
+      return;
+    }
+    if (ids.length === 0) return;
+    const targets = files.filter((f) => ids.includes(f.id));
+    if (targets.length === 0) return;
+
+    // Cegah drop ke diri sendiri (kalau currentFolderId === target).
+    if (targetFolderId && targetFolderId === folderId) {
+      void alert(t('files.move.errors.sameFolder'), { title: t('common.error') });
+      return;
+    }
+
+    // Direct move (skip dialog) — fires optimistic update via onMoved handler.
+    void runDirectMove(targets, targetFolderId);
+  }
+
+  async function runDirectMove(targets: FileItem[], targetFolderId: string | null) {
+    const prevSnapshot = targets.map((f) => ({ ...f }));
+    // Optimistic: hapus dari view (file pindah ke folder lain jadi tidak ada di sini lagi).
+    targets.forEach((f) => removeFile(f.id));
+    clearSelection();
+    const results: MovedFileResult[] = [];
+    let failed = 0;
+    for (const f of targets) {
+      try {
+        const res = await apiRequest<MovedFileResult>(`/files/${f.id}/move`, {
+          method: 'PUT',
+          body: { folder_id: targetFolderId },
+        });
+        results.push(res);
+      } catch {
+        failed += 1;
+      }
+    }
+    if (failed > 0) {
+      // Rollback file yang gagal dipindah supaya UI konsisten lagi.
+      for (const snap of prevSnapshot.slice(0, failed)) {
+        upsertFile(snap);
+      }
+      void revalidate();
+      await alert(t('files.move.errors.partial', { count: failed }), {
+        title: t('common.error'),
+      });
+      return;
+    }
+    if (results.some((r) => r.renamed)) {
+      const renamedCount = results.filter((r) => r.renamed).length;
+      await alert(
+        t('files.move.renamedHint', { count: renamedCount }),
+        { title: t('files.move.renamedTitle') },
+      );
+    }
+  }
+
+  async function handleMoved(results: MovedFileResult[]) {
+    const targetIds = new Set(results.map((r) => r.id));
+    // Remove files dari view ini (mereka pindah keluar).
+    results.forEach((r) => removeFile(r.id));
+    clearSelection();
+    // Bulk endpoint tidak dipakai; loop sequential selesai di MoveDialog.
+    const renamed = results.filter((r) => r.renamed);
+    if (renamed.length > 0) {
+      await alert(
+        t('files.move.renamedHint', { count: renamed.length }),
+        { title: t('files.move.renamedTitle') },
+      );
+    }
+    // Tidak ada error → close dialog (MoveDialog sudah onClose).
+    if (moveFiles && moveFiles.length > 0) {
+      const movedIds = new Set(moveFiles.map((m) => m.id));
+      const unexpected = movedIds.size !== results.length || results.some((r) => !movedIds.has(r.id));
+      if (unexpected) void revalidate();
+    }
+    // Suppress unused warning.
+    void targetIds;
+  }
+
   async function renameFile(file: FileItem) {
     const name = await prompt(t('files.renameDesc'), { title: t('files.renameTitle'), defaultValue: file.name });
     if (!name?.trim() || name.trim() === file.name) return;
@@ -612,6 +738,11 @@ function FilesContent() {
         label: t('files.actions.rename'),
         icon: <span className="material-symbols-outlined !text-base">edit</span>,
         onClick: () => renameFile(f),
+      },
+      {
+        label: t('files.actions.moveTo'),
+        icon: <DriveFileMoveIcon />,
+        onClick: () => openMoveDialog([f]),
       },
       {
         label: t('files.actions.download'),
@@ -773,13 +904,53 @@ function FilesContent() {
       {loading ? (
         <Loading label={t('files.loadingLabel')} />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-card-gap">
+        <div className="space-y-3">
+          {/* Drop-to-root zone: visible whenever the view is inside a folder.
+              Drop a file/selected files here to move them to root (folder_id = null). */}
+          {folderId && (
+            <div
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes('text/x-file-ids')) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  setDragOverFolderId('__root__');
+                }
+              }}
+              onDragLeave={() => setDragOverFolderId((cur) => (cur === '__root__' ? null : cur))}
+              onDrop={(e) => handleFolderDrop(e, null)}
+              className={
+                'rounded-2xl border-2 border-dashed px-4 py-3 text-sm flex items-center gap-2 transition-colors ' +
+                (dragOverFolderId === '__root__'
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-outline-variant/40 text-outline hover:border-primary/50')
+              }
+              data-testid="drop-target-root"
+            >
+              <span className="material-symbols-outlined !text-base">home</span>
+              <span>{t('files.move.dropToRoot')}</span>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-card-gap">
           {visibleFolders.map((f) => {
             const items = (f.files_count ?? 0) + (f.folders_count ?? 0);
             const size = f.total_size ?? 0;
+            const isDropTarget = dragOverFolderId === f.id;
             return (
-              <ItemCard
+              <div
                 key={f.id}
+                draggable={false}
+                onDragOver={(e) => handleFolderDragOver(e, f.id)}
+                onDragLeave={handleFolderDragLeave}
+                onDrop={(e) => handleFolderDrop(e, f.id)}
+                className={
+                  'rounded-card transition-all ' +
+                  (isDropTarget
+                    ? 'ring-4 ring-primary bg-primary/5 scale-[1.02]'
+                    : '')
+                }
+                data-testid={`drop-target-folder-${f.id}`}
+              >
+              <ItemCard
                 icon={f.is_starred ? <FolderSpecialIcon /> : folderIcon()}
                 iconVariant={f.is_starred ? 'gold' : undefined}
                 title={
@@ -822,11 +993,18 @@ function FilesContent() {
                   </div>
                 }
               />
+              </div>
             );
           })}
           {visibleFiles.map((f) => (
-            <ItemCard
+            <div
               key={f.id}
+              draggable={!selectMode}
+              onDragStart={(e) => handleFileDragStart(e, f)}
+              className={selectMode ? '' : 'cursor-grab active:cursor-grabbing'}
+              data-testid={`draggable-file-${f.id}`}
+            >
+            <ItemCard
               icon={fileIcon(f)}
               selected={selected.has(f.id)}
               onClick={selectMode ? () => toggleSelect(f.id) : () => setViewerFile(f)}
@@ -867,12 +1045,14 @@ function FilesContent() {
                 )
               }
             />
+            </div>
           ))}
           {visibleFolders.length === 0 && visibleFiles.length === 0 && (
             <div className="col-span-full">
               <EmptyDropZone onDrop={uploadFiles} hint={t('files.empty')} />
             </div>
           )}
+          </div>
         </div>
       )}
 
@@ -906,6 +1086,15 @@ function FilesContent() {
           <div className="glass-toolbar rounded-full h-16 px-6 flex items-center gap-4 border border-outline-variant/30">
             <span className="text-sm text-on-surface font-medium">{t('files.selected', { count: selected.size })}</span>
             <div className="h-6 w-px bg-outline-variant/30" />
+            <Button
+              size="sm"
+              onClick={() =>
+                openMoveDialog(visibleFiles.filter((f) => selected.has(f.id)))
+              }
+              disabled={visibleFiles.filter((f) => selected.has(f.id)).length === 0}
+            >
+              <DriveFileMoveIcon /> {t('files.moveAll')}
+            </Button>
             <Button
               size="sm"
               onClick={() => downloadMultiple(Array.from(selected))}
@@ -973,6 +1162,17 @@ function FilesContent() {
               setShareFolder(updated.item);
             }
           }}
+        />
+      )}
+
+      {moveFiles && (
+        <MoveDialog
+          files={moveFiles}
+          folders={folders}
+          currentFolderId={folderId}
+          open={true}
+          onClose={() => setMoveFiles(null)}
+          onMoved={(results) => void handleMoved(results)}
         />
       )}
 

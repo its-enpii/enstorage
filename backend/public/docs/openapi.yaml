@@ -433,6 +433,11 @@ paths:
     put:
       tags: [Files]
       summary: Pindah file ke folder lain
+      description: |
+        Pindah file ke folder lain (null = root). Jika di folder tujuan sudah
+        ada file dengan nama yang sama, server auto-rename menjadi `<name> (n).<ext>`
+        dan response berisi `renamed: true` + `previous_name`. Dispatch webhook
+        `file.moved` ke subscriber.
       security: [{ sanctum: [] }, { apiKey: [] }]
       parameters: [ { $ref: '#/components/parameters/IdPath' } ]
       requestBody:
@@ -444,7 +449,23 @@ paths:
               properties:
                 folder_id: { type: string, format: uuid, nullable: true }
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/File'
+                      - type: object
+                        properties:
+                          renamed: { type: boolean, description: "true jika auto-rename dilakukan karena nama bentrok di folder tujuan." }
+                          previous_name: { type: string, nullable: true, description: "Nama file sebelum rename (hanya diisi kalau renamed=true)." }
+                  message: { type: string }
+        '404': { description: "File tidak ditemukan atau folder tujuan bukan milik user." }
   /search/files:
     get:
       tags: [Search]

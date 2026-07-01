@@ -32,6 +32,7 @@ import 'camera_capture.dart';
 import 'sort_sheet.dart';
 import 'filter_sheet.dart';
 import 'share_dialog.dart';
+import 'move_sheet.dart';
 import 'widgets/file_card.dart';
 import 'widgets/folder_card.dart';
 
@@ -244,6 +245,33 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     }
   }
 
+  /// Bulk move: ambil selection, resolve ke list FileItem, buka move sheet.
+  /// Selection mungkin berisi folder (skip) atau file dari scope lain —
+  /// sheet kita expect list of FileItem, jadi filter.
+  Future<void> _bulkMove() async {
+    final l10n = AppLocalizations.of(context)!;
+    final selection = ref.read(selectionControllerProvider);
+    if (selection.isEmpty) return;
+    final filesState = ref.read(filesControllerProvider(widget.folderId)).valueOrNull;
+    final selectedFiles = (filesState?.files ?? const <FileItem>[])
+        .where((f) => selection.contains(f.id))
+        .toList();
+    if (selectedFiles.isEmpty) {
+      showAppSnackBar(context, l10n.filesMoveNoSelection,
+          variant: AppSnackBarVariant.info);
+      _exitSelectMode();
+      return;
+    }
+    await showMoveSheet(context, ref,
+        files: selectedFiles, currentFolderId: widget.folderId);
+    _exitSelectMode();
+  }
+
+  /// Single-file move: dipanggil dari overflow menu pada FileCard.
+  Future<void> _moveSingle(FileItem f) async {
+    await showMoveSheet(context, ref, files: [f], currentFolderId: widget.folderId);
+  }
+
   Future<void> _bulkDelete() async {
     final l10n = AppLocalizations.of(context)!;
     final selection = ref.read(selectionControllerProvider);
@@ -328,6 +356,14 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                   tooltip: l10n.filesActionsShare,
                 ),
                 IconButton(
+                  onPressed: _bulkMove,
+                  icon: Icon(
+                    Icons.drive_file_move_outline,
+                    color: scheme.onSurface,
+                  ),
+                  tooltip: l10n.filesActionsMove,
+                ),
+                IconButton(
                   onPressed: _bulkDownload,
                   icon: Icon(
                     Icons.download_outlined,
@@ -397,6 +433,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                   _openFile(f);
                 }
               },
+              onFileOverflow: _moveSingle,
               onLongPress: _enterSelectMode,
               onSortTap: () => _openSortSheet(context, controller),
               onFilterTap: () => _openFilterSheet(context, controller),
@@ -494,6 +531,7 @@ class _Body extends StatefulWidget {
     required this.onFileTap,
     required this.onLongPress,
     this.onFolderShare,
+    required this.onFileOverflow,
     required this.onSortTap,
     required this.onFilterTap,
     required this.onSearchChange,
@@ -512,6 +550,7 @@ class _Body extends StatefulWidget {
   final void Function(FileItem) onFileTap;
   final void Function(String id) onLongPress;
   final void Function(Folder)? onFolderShare;
+  final void Function(FileItem) onFileOverflow;
   final VoidCallback onSortTap;
   final VoidCallback onFilterTap;
   final ValueChanged<String> onSearchChange;
@@ -657,6 +696,7 @@ class _BodyState extends State<_Body> {
                   parentFolderId: widget.folderId,
                   onTap: () => widget.onFileTap(f),
                   onLongPress: () => widget.onLongPress(f.id),
+                  onOverflowTap: widget.inSelection ? null : () => widget.onFileOverflow(f),
                 );
               },
               childCount: visibleFolders.length + visibleFiles.length,

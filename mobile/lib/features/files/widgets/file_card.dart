@@ -7,8 +7,6 @@ import '../../../data/repositories/files_repository.dart';
 import '../../../data/storage/token_storage.dart';
 import '../../../state/files_state.dart';
 import '../../../state/selection_state.dart';
-import '../../../theme/colors.dart';
-import '../../../theme/typography.dart';
 import '../../../widgets/etheric_card.dart';
 
 class FileCard extends ConsumerWidget {
@@ -110,6 +108,15 @@ class FileCard extends ConsumerWidget {
               parentFolderId: parentFolderId,
             ),
           ),
+          // Overflow button (3 dots) pojok kanan-bawah — trigger menu
+          // (move to…). Disembunyikan ketika card lagi dalam selection mode
+          // (parent udah pass onOverflowTap=null) supaya gak ganggu UX.
+          if (onOverflowTap != null)
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: _OverflowButton(onTap: onOverflowTap!),
+            ),
         ],
       ),
     );
@@ -192,6 +199,34 @@ class _StarButton extends ConsumerWidget {
           child: Icon(
             isStarred ? Icons.star_rounded : Icons.star_border_rounded,
             color: Colors.white,
+            size: 18,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Overflow "..." button — trigger menu action (saat ini: move to…).
+/// Tetap kelihatan subtle (low opacity) supaya gak ganggu visual card.
+class _OverflowButton extends StatelessWidget {
+  const _OverflowButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainerHigh.withValues(alpha: 0.85),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Icon(
+            Icons.more_vert,
+            color: scheme.onSurface,
             size: 18,
           ),
         ),
