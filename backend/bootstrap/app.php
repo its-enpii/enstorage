@@ -12,7 +12,14 @@ return Application::configure(basePath: dirname(__DIR__))
         apiPrefix: 'api/v1',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
-        channels: __DIR__.'/../routes/channels.php',
+        // Intentionally NOT passing `channels:` here. Laravel 11's
+        // default channel-registration wires /broadcasting/auth under
+        // the 'web' middleware group (session cookie + CSRF), which
+        // rejects the frontend's Bearer API key with 403. The
+        // channel-authorization closures are loaded manually from
+        // App\Providers\BroadcastServiceProvider::boot() instead,
+        // and the /broadcasting/auth route is registered there with
+        // the auth.apikey middleware stack.
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Token-based auth (Sanctum Bearer / API key) — tidak butuh session/CSRF.

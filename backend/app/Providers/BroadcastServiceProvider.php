@@ -2,69 +2,55 @@
 
 namespace App\Providers;
 
-use Illuminate\Routing\Route as RoutingRoute;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
 /**
- * Override the auto-registered /broadcasting/auth route so it uses
- * our API-key auth stack instead of the default `web` middleware
- * group (which expects a session cookie + CSRF token and rejects
- * Bearer API keys with 403).
+ * Wires up the Reverb channel auth stack.
  *
- * Laravel 11's withRouting(channels: ...) auto-mounts
- * `Illuminate\Broadcasting\BroadcastController@authenticate` at
- * POST /broadcasting/auth under the `web` middleware group. We find
- * that route in the live collection and:
- *   1. Reset its `middleware` array (Route::middleware() is append-only;
- *      we need to clear the inherited web group, not just append to it).
- *   2. Append auth.apikey + auth.sanctum.only:false.
+ * Replaces the auto-registration that Laravel 11's
+ * withRouting(channels: ...) does, which mounts
+ * /broadcasting/auth under the `web` middleware group. The frontend
+ * posts from a different origin with a Bearer API key (or
+ * X-API-Key header), and `web` expects a session cookie + CSRF —
+ * leading to 403 even when auth.apikey would accept the token.
  *
- * The Closure channels from routes/channels.php still resolve
- * normally because we only swap the wrapping middleware.
+ * Here we:
+ *   1. Load the channel closures from routes/channels.php manually
+ *      (the same `Broadcast::channel('...', fn)` API the framework
+ *      uses, but we control when it runs).
+ *   2. Register POST /broadcasting/auth with our token-based
+ *      middleware stack: auth.apikey + auth.sanctum.only:false.
+ *      The channel closures from routes/channels.php still gate
+ *      subscribe, so per-user/per-client_key ownership is preserved.
+ *
+ * To skip auto-registration we omit the `channels:` arg from
+ * withRouting() in bootstrap/app.php.
  */
 class BroadcastServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
-        foreach (Route::getRoutes() as $route) {
-            $action = $route->getAction();
-            $uses = is_string($action['uses'] ?? null) ? $action['uses'] : '';
-            if (! str_contains($uses, 'BroadcastController@authenticate')) {
-                continue;
-            }
-
-            // Reflection: clear inherited web-group middleware. The
-            // Route's `middleware` property holds the explicit list,
-            // but the web group's "SubstituteBindings + session + CSRF
-            // + cookie + ShareErrors" get merged in by Router at
-            // resolve time. To actually swap them out we need to set
-            // the resolved middleware list — which `gatherMiddleware`
-            // reads from. Clearing the protected `middleware` array
-            // stops the merge pipeline from inheriting anything from
-            // a parent group.
-            $reflection = new \ReflectionObject($route);
-            if ($reflection->hasProperty('middleware')) {
-                $prop = $reflection->getProperty('middleware');
-                $prop->setAccessible(true);
-                $prop->setValue($route, []);
-            }
-            if ($reflection->hasProperty('excludedMiddleware')) {
-                $prop = $reflection->getProperty('excludedMiddleware');
-                $prop->setAccessible(true);
-                $prop->setValue($route, []);
-            }
-            if ($reflection->hasProperty('computedMiddleware')) {
-                $prop = $reflection->getProperty('computedMiddleware');
-                $prop->setAccessible(true);
-                $prop->setValue($route, []);
-            }
-
-            // Now attach our token-based stack.
-            $route->middleware([
-                'auth.apikey',
-                'auth.sanctum.only:false',
-            ]);
+        // 1. Load channel closures. require_once is safe even if the
+        //    file is later touched; the Broadcast::channel() registry
+        //    is keyed by name so re-registration just no-ops.
+        $channelsFile = base_path('routes/channels.php');
+        if (file_exists($channelsFile)) {
+            require_once $channelsFile;
         }
+
+        // 2. Register /broadcasting/auth with our middleware stack.
+        //    Echo's pusher-js POSTs to this URL with the channel name
+        //    + socket_id; we forward to the framework's
+        //    BroadcastController@authenticate, which evaluates the
+        //    closure and returns the Pusher HMAC signature.
+        Route::post('/broadcasting/auth', [
+            \Illuminate\Broadcasting\BroadcastController::class,
+            'authenticate',
+        ])->middleware([
+            'auth.apikey',
+            'auth.sanctum.only:false',
+        ]);
     }
 }
