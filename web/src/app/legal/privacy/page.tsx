@@ -1,4 +1,7 @@
 import { LegalDocument } from '@/components/LegalDocument';
+import { pageTitle } from '@/lib/serverMetadata';
+
+export const metadata = pageTitle('legal.privacy.title');
 
 export default function PrivacyPage() {
   return (
