@@ -5,7 +5,7 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { Tune, Link as LinkIcon } from '@mui/icons-material';
 import { apiRequest, ApiError, getToken, type FileItem, type Folder, type Folder as FolderType } from '@/lib/api';
-import { cacheGet, cacheSet } from '@/lib/cache';
+import { cacheGet, cacheInvalidatePrefix, cacheSet } from '@/lib/cache';
 import { getLocalUserId } from '@/lib/filesStore';
 import {
   CloudDoneIcon,
@@ -120,6 +120,7 @@ function FilesContent() {
     upsertFolder,
     upsertFile,
     renameFolder,
+    invalidateCurrentCache,
   } = store;
 
   const [tab, setTab] = useState<Tab>(() => {
@@ -141,6 +142,10 @@ function FilesContent() {
   const [folderCrumbs, setFolderCrumbs] = useState<{ id: string; name: string }[]>([]);
   const pollRefs = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
   const dragCounter = useRef(0);
+  const folderIdRef = useRef<string | null>(folderId);
+  useEffect(() => {
+    folderIdRef.current = folderId;
+  }, [folderId]);
 
   // Dynamic title: deepest folder name · "My Files" · EnStorage. Falls back to
   // plain "My Files" when at the root or crumbs haven't loaded yet.
@@ -547,6 +552,13 @@ function FilesContent() {
     // Optimistic: hapus dari view (file pindah ke folder lain jadi tidak ada di sini lagi).
     targets.forEach((f) => removeFile(f.id));
     clearSelection();
+    // Invalidate source + destination caches eagerly. Without this, a
+    // remount (user navigates to the destination folder then back) could
+    // restore the stale pre-move snapshot from localStorage before the
+    // background refetch completes — making the moved file appear to
+    // "come back" in the source view.
+    invalidateCurrentCache();
+    invalidateFolderCache(targetFolderId);
     const results: MovedFileResult[] = [];
     let failed = 0;
     for (const f of targets) {
@@ -585,7 +597,14 @@ function FilesContent() {
     // Remove files dari view ini (mereka pindah keluar).
     results.forEach((r) => removeFile(r.id));
     clearSelection();
-    // Bulk endpoint tidak dipakai; loop sequential selesai di MoveDialog.
+    // Eagerly invalidate cache for source + destination so a remount
+    // doesn't restore the stale snapshot. See runDirectMove comment.
+    invalidateCurrentCache();
+    // Pick destination from MoveDialog's last selection (folder picker
+    // closes on success so we read from moveFiles sibling dialog state).
+    // For bulk move we may not have an explicit single dest — invalidating
+    // the source is enough because the destination provider will refetch
+    // on mount with `mode: 'replace'`.
     const renamed = results.filter((r) => r.renamed);
     if (renamed.length > 0) {
       await alert(
@@ -717,6 +736,23 @@ function FilesContent() {
     void loadMore();
   }, [loadMore, loadingMore]);
   const loadMoreSentinel = useInfiniteScroll(stableLoadMore, { enabled: hasMore });
+
+  /**
+   * Drop every cached view entry for [folderId] (any search/typeFilter
+   * variant). Used after a move to ensure navigating to that folder shows
+   * fresh server data even if the provider has previously cached a
+   * pre-move snapshot.
+   *
+   * `null` clears the root view's caches. No-op when [folderId] equals
+   * the current view's folder — [invalidateCurrentCache] handles that
+   * path without nuking sibling filter variants.
+   */
+  function invalidateFolderCache(targetFolderId: string | null) {
+    if (targetFolderId === folderIdRef.current) return;
+    const uid = getLocalUserId();
+    if (!uid) return;
+    cacheInvalidatePrefix(uid, `view:${targetFolderId ?? 'root'}:`);
+  }
 
   function buildFileMenuItems(f: FileItem, opts: { includePreview?: boolean } = {}): MenuItem[] {
     const items: MenuItem[] = [

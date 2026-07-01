@@ -16,7 +16,7 @@ import {
   type FileItem,
   type Folder as FolderType,
 } from '@/lib/api';
-import { cacheGet, cacheSet } from '@/lib/cache';
+import { cacheGet, cacheRemove, cacheSet } from '@/lib/cache';
 import { useAuth } from '@/components/AuthProvider';
 
 export function getLocalUserId(): string {
@@ -83,6 +83,14 @@ type Ctx = {
   upsertFile: (f: FileItem) => void;
   renameFolder: (id: string, name: string) => void;
   renameFile: (id: string, name: string) => void;
+  /**
+   * Drop the cache entry for the current view. Use after destructive
+   * mutations (move/delete) so navigating away and back doesn't show a
+   * stale snapshot before the background refetch completes. Removes only
+   * the exact key — does NOT nuke sibling views of the same folder that
+   * happen to differ by search/type filter.
+   */
+  invalidateCurrentCache: () => void;
 };
 
 const FilesStoreContext = createContext<Ctx | null>(null);
@@ -373,6 +381,18 @@ export function FilesStoreProvider({
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, name } : f)));
   }, []);
 
+  /**
+   * Eagerly drop the cache entry for the current view so a remount
+   * (e.g. user navigates to folder then back) shows the post-mutation
+   * state instead of a stale snapshot. The optimistic `setFiles`/`setFolders`
+   * removal still applies for the in-memory view; this just guards the
+   * disk cache for the race window between unmount and re-mount.
+   */
+  const invalidateCurrentCache = useCallback(() => {
+    if (!userId) return;
+    cacheRemove(userId, currentKey);
+  }, [userId, currentKey]);
+
   const revalidate = useCallback(() => fetchAndReconcile(false), [fetchAndReconcile]);
 
   const value: Ctx = {
@@ -397,6 +417,7 @@ export function FilesStoreProvider({
     upsertFile,
     renameFolder,
     renameFile,
+    invalidateCurrentCache,
   };
 
   return <FilesStoreContext.Provider value={value}>{children}</FilesStoreContext.Provider>;
