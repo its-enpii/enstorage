@@ -574,6 +574,7 @@ function FilesContent() {
     // "come back" in the source view.
     invalidateCurrentCache();
     invalidateFolderCache(targetFolderId);
+    invalidateFoldersPageCache();
     const results: MovedFileResult[] = [];
     let failed = 0;
     for (const f of targets) {
@@ -624,6 +625,7 @@ function FilesContent() {
     // Eagerly invalidate cache for source + destination so a remount
     // doesn't restore the stale snapshot. See runDirectMove comment.
     invalidateCurrentCache();
+    invalidateFoldersPageCache();
     const renamed = results.filter((r) => r.renamed);
     if (renamed.length > 0) {
       await alert(
@@ -771,6 +773,20 @@ function FilesContent() {
     const uid = getLocalUserId();
     if (!uid) return;
     cacheInvalidatePrefix(uid, `view:${targetFolderId ?? 'root'}:`);
+  }
+
+  /**
+   * Drop every cached /folders page entry (any parent variant). The
+   * /folders page maintains its own cache shape under
+   * `folders:parent:*` — its folder list and per-folder `files_count`
+   * need to refetch after a file move, otherwise the "X items" badge
+   * on each folder card stays stale until the user navigates away
+   * and back.
+   */
+  function invalidateFoldersPageCache() {
+    const uid = getLocalUserId();
+    if (!uid) return;
+    cacheInvalidatePrefix(uid, 'folders:parent:');
   }
 
   function buildFileMenuItems(f: FileItem, opts: { includePreview?: boolean } = {}): MenuItem[] {
