@@ -2,6 +2,10 @@
 # GitHub Secrets injected via docker-compose. Never commit.
 .env
 
+# Production env templates (committed as .example, real values stay local)
+.env.production
+backend/.env.production
+
 # OS
 .DS_Store
 Thumbs.db
