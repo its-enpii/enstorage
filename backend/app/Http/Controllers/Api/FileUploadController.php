@@ -47,6 +47,10 @@ class FileUploadController extends Controller
             }
         }
 
+        // Auto-generate share token (default ON, opt-out via shareable=0)
+        $shareable = $request->boolean('shareable', true);
+        $shareBaseUrl = rtrim(config('app.frontend_url', config('app.url')), '/');
+
         $tempDir = storage_path('app/temp');
         if (! is_dir($tempDir)) {
             mkdir($tempDir, 0775, true);
@@ -81,6 +85,7 @@ class FileUploadController extends Controller
                     'size' => $size,
                     'gdrive_file_id' => 'pending-'.Str::uuid(),
                     'upload_status' => FileModel::STATUS_PENDING,
+                    'share_token' => $shareable ? bin2hex(random_bytes(16)) : null,
                 ]);
 
                 // Override gdrive_file_id dengan uuid asli
@@ -98,6 +103,9 @@ class FileUploadController extends Controller
                     'name' => $file->name,
                     'size' => $file->size,
                     'status' => $file->upload_status,
+                    'shareable' => (bool) $file->share_token,
+                    'share_token' => $file->share_token,
+                    'share_url' => $file->share_token ? $shareBaseUrl.'/s/'.$file->share_token : null,
                 ];
             } catch (Throwable $e) {
                 $rejected[] = ['name' => $uploadedFile->getClientOriginalName() ?? 'unknown', 'reason' => $e->getMessage()];
