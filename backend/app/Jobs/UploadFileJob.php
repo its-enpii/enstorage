@@ -95,19 +95,10 @@ class UploadFileJob implements ShouldQueue
                 ],
             );
 
-            $webhooks->dispatch($file->user_id, 'file.upload.completed', [
-                'file_id' => $file->id,
-                'client_key' => $file->client_key,
-                'name' => $file->name,
-                'size' => $file->size,
-                'mime_type' => $file->mime_type,
-                'gdrive_file_id' => $file->gdrive_file_id,
-                'uploaded_at' => $file->uploaded_at?->toIso8601String(),
-                'share_token' => $file->share_token,
-                'share_url' => $file->share_token ? WebhookService::shareUrlFor($file->share_token) : null,
-                'share_preview_url' => $file->share_token ? WebhookService::shareUrlFor($file->share_token, true) : null,
-                'expires_at' => null,
-            ]);
+            $webhooks->dispatch($file->user_id, 'file.upload.completed', \App\Support\WebhookPayload::fileUploaded($file));
+
+            // Broadcast ke WebSocket subscribers (web/mobile UI realtime).
+            \App\Events\FileUploadedBroadcast::dispatch($file);
 
             // Push notification — upload complete. data.type = 'upload.complete'
             // agar mobile append file baru ke list (gak refresh seluruh halaman).
@@ -155,12 +146,10 @@ class UploadFileJob implements ShouldQueue
             ],
         );
 
-        $webhooks->dispatch($file->user_id, 'file.upload.failed', [
-            'file_id' => $file->id,
-            'client_key' => $file->client_key,
-            'name' => $file->name,
-            'reason' => $reason,
-        ]);
+        $webhooks->dispatch($file->user_id, 'file.upload.failed', \App\Support\WebhookPayload::fileUploadFailed($file, $reason));
+
+        // Broadcast failure ke WebSocket subscribers (ganti pending row jadi failed di UI).
+        \App\Events\FileUploadFailedBroadcast::dispatch($file, $reason);
 
         // Push notification — upload gagal. Mobile ganti ongoing progress jadi failed.
         $notifications->sendUploadFailed($file, $reason);

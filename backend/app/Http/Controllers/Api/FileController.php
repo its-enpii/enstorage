@@ -235,6 +235,9 @@ class FileController extends Controller
         }
         $file->save();
 
+        // Broadcast update ke WebSocket subscribers (UI upsert row in place).
+        \App\Events\FileUpdatedBroadcast::dispatch($file);
+
         if (array_key_exists('name', $data)) {
             $this->activityLog->log(
                 ActivityLog::ACTION_FILE_RENAME,
@@ -293,6 +296,9 @@ class FileController extends Controller
 
         $renamed = false;
         $originalName = $file->name;
+        // Capture previous folder id BEFORE transaction mutates $file->folder_id.
+        // getOriginal() returns the column value before this request's updates.
+        $previousFolderId = $file->getOriginal('folder_id');
 
         DB::transaction(function () use ($file, $newFolderId, &$renamed) {
             $file->folder_id = $newFolderId;
@@ -339,9 +345,18 @@ class FileController extends Controller
             'mime_type' => $file->mime_type,
             'size' => $file->size,
             'folder_id' => $file->folder_id,
-            'previous_folder_id' => $renamed ? null : null, // tidak disimpan pre-state; biarkan null
+            'previous_folder_id' => $previousFolderId,
             'renamed' => $renamed,
         ]);
+
+        // Realtime broadcast — both source folder subscribers (remove)
+        // and destination folder subscribers (append) hear this.
+        \App\Events\FileMovedBroadcast::dispatch(
+            $file,
+            $previousFolderId,
+            $originalName,
+            $renamed,
+        );
 
         return $this->ok(
             array_merge(
@@ -396,7 +411,16 @@ class FileController extends Controller
             return $this->fail(__('File tidak ditemukan.'), 404);
         }
 
+        // Capture channel-routing fields BEFORE deletion (the model is
+        // detached from the DB after deleteOne).
+        $clientKey = $file->client_key;
+        $folderId = $file->folder_id;
+        $fileId = $file->id;
+
         $this->deleteOne($file, $request->user()->id);
+
+        // Realtime broadcast — subscribers remove the file from view.
+        \App\Events\FileDeletedBroadcast::dispatch($fileId, $clientKey, $folderId);
 
         return $this->ok(null, __('File berhasil dihapus.'));
     }
@@ -420,8 +444,17 @@ class FileController extends Controller
         $notFound = array_diff($data['ids'], $files->pluck('id')->toArray());
 
         foreach ($files as $file) {
+            // Snapshot for broadcast before the row goes away.
+            $clientKey = $file->client_key;
+            $folderId = $file->folder_id;
+            $fileId = $file->id;
+
             $this->deleteOne($file, $userId);
             $deleted[] = $file->id;
+
+            // Per-file realtime broadcast. Multiple subscribers across
+            // folders each receive their copy via their own channel auth.
+            \App\Events\FileDeletedBroadcast::dispatch($fileId, $clientKey, $folderId);
         }
 
         return $this->ok([
@@ -450,6 +483,9 @@ class FileController extends Controller
         }
 
         $shareUrl = WebhookService::shareUrlFor($file->share_token);
+
+        // Realtime broadcast — UI shows the share button as "active".
+        \App\Events\FileUpdatedBroadcast::dispatch($file);
 
         $this->webhooks->dispatch($request->user()->id, 'file.shared', [
             'file_id' => $file->id,
@@ -480,6 +516,9 @@ class FileController extends Controller
 
         $file->share_token = null;
         $file->save();
+
+        // Realtime broadcast — UI shows the share button as "inactive".
+        \App\Events\FileUpdatedBroadcast::dispatch($file);
 
         return $this->ok(null, __('Link share dihapus.'));
     }

@@ -155,6 +155,9 @@ class FolderController extends Controller
             request: $request,
         );
 
+        // Realtime broadcast — subscribers viewing the parent see the new folder.
+        \App\Events\FolderCreatedBroadcast::dispatch($folder);
+
         return $this->created(new FolderResource($folder), __('Folder berhasil dibuat.'));
     }
 
@@ -190,6 +193,9 @@ class FolderController extends Controller
         }
 
         $starChanged = array_key_exists('is_starred', $data) && (bool) $data['is_starred'] !== (bool) $folder->is_starred;
+        // Capture pre-update name so we can decide whether to fire the
+        // rename broadcast and pass it as `previous_name`.
+        $previousName = $folder->getOriginal('name');
 
         DB::transaction(function () use ($folder, $data) {
             if (array_key_exists('name', $data)) $folder->name = $data['name'];
@@ -198,7 +204,7 @@ class FolderController extends Controller
             if (array_key_exists('name', $data)) $this->paths->refreshSubtree($folder);
         });
 
-        if (isset($data['name']) && $data['name'] !== $folder->getOriginal('name')) {
+        if (isset($data['name']) && $data['name'] !== $previousName) {
             $this->activityLog->log(
                 ActivityLog::ACTION_FOLDER_RENAME ?? 'FOLDER_RENAME',
                 userId: $request->user()->id,
@@ -206,6 +212,9 @@ class FolderController extends Controller
                 metadata: ['name' => $folder->name],
                 request: $request,
             );
+
+            // Realtime broadcast — only on actual rename.
+            \App\Events\FolderRenamedBroadcast::dispatch($folder, $previousName);
         }
         if ($starChanged) {
             $this->activityLog->log(
@@ -262,6 +271,9 @@ class FolderController extends Controller
             return $this->fail(__('Sudah ada folder dengan nama yang sama di lokasi tujuan.'), 409);
         }
 
+        // Capture pre-move parent BEFORE transaction mutates $folder->parent_id.
+        $previousParentId = $folder->getOriginal('parent_id');
+
         DB::transaction(function () use ($folder, $newParentId) {
             $folder->parent_id = $newParentId;
             $folder->save();
@@ -276,6 +288,10 @@ class FolderController extends Controller
             request: $request,
         );
 
+        // Realtime broadcast — both source parent (remove) and destination
+        // parent (append) subscribers hear this.
+        \App\Events\FolderMovedBroadcast::dispatch($folder, $previousParentId);
+
         return $this->ok(new FolderResource($folder->fresh()), __('Folder berhasil dipindahkan.'));
     }
 
@@ -288,6 +304,14 @@ class FolderController extends Controller
         if (! $folder) {
             return $this->fail(__('Folder tidak ditemukan.'), 404);
         }
+
+        // Capture channel-routing fields BEFORE delete + capture every
+        // file that lives here so we can emit FileMovedBroadcast for
+        // each (cascade sets folder_id=null on remaining files).
+        $userId = $folder->user_id;
+        $parentId = $folder->parent_id;
+        $folderId = $folder->id;
+        $filesInFolder = \App\Models\File::where('folder_id', $folder->id)->get();
 
         DB::transaction(function () use ($folder) {
             // File di folder ini: set folder_id = NULL (file tetap ada, jadi root)
@@ -304,6 +328,22 @@ class FolderController extends Controller
             metadata: ['folder_id' => $id, 'name' => $folder->name],
             request: $request,
         );
+
+        // Realtime broadcast — folder gone from parent view.
+        \App\Events\FolderDeletedBroadcast::dispatch($folderId, $userId, $parentId);
+
+        // Per-file cascade: each file moved from (deleted folder) to null (root).
+        // Subscribers viewing the now-deleted folder should drop the row;
+        // subscribers at root will see the file via FileMovedBroadcast's
+        // channel gymnastics (folder_id=null on the destination channel).
+        foreach ($filesInFolder as $file) {
+            \App\Events\FileMovedBroadcast::dispatch(
+                $file,
+                $folderId,        // previous_folder_id
+                $file->name,      // previous_name (no rename happened)
+                false,            // renamed
+            );
+        }
 
         return $this->ok(null, __('Folder berhasil dihapus.'));
     }
@@ -335,6 +375,9 @@ class FolderController extends Controller
             'expires_at' => null,
         ]);
 
+        // Realtime broadcast — share state changed in-place.
+        \App\Events\FolderRenamedBroadcast::dispatch($folder, $folder->name);
+
         return $this->ok([
             'share_token' => $folder->share_token,
             'share_url' => $shareUrl,
@@ -353,6 +396,9 @@ class FolderController extends Controller
 
         $folder->share_token = null;
         $folder->save();
+
+        // Realtime broadcast — share state changed in-place.
+        \App\Events\FolderRenamedBroadcast::dispatch($folder, $folder->name);
 
         return $this->ok(null, __('Link share dihapus.'));
     }

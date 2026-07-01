@@ -555,6 +555,18 @@ class AuthController extends Controller
                 'files' => (int) ($user->files_count ?? 0),
                 'api_keys' => (int) ($user->api_keys_count ?? 0),
             ];
+
+            // Distinct client_keys owned by this user. Frontend uses these
+            // to subscribe to Reverb channels for realtime file updates
+            // (`client.{client_key}.folder.{folder_id}`). Empty array for
+            // users with no files yet is fine — frontend treats empty as
+            // "no realtime file subscriptions".
+            $payload['client_keys'] = \App\Models\File::query()
+                ->where('user_id', $user->id)
+                ->whereNotNull('client_key')
+                ->distinct()
+                ->pluck('client_key')
+                ->all();
         }
 
         return $payload;
