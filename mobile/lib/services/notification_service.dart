@@ -43,7 +43,7 @@ const AndroidNotificationChannel _uploadChannel = AndroidNotificationChannel(
 const int _uploadNotifBaseId = 9000;
 
 Future<void> _initLocalNotifications() async {
-  const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const androidInit = AndroidInitializationSettings('@drawable/ic_launcher');
   const initSettings = InitializationSettings(android: androidInit);
   await _localNotifs.initialize(settings: initSettings);
 
@@ -71,7 +71,7 @@ void _showLocalNotification(RemoteMessage message) {
         channelDescription: _channel.description,
         importance: Importance.high,
         priority: Priority.high,
-        icon: '@mipmap/ic_launcher',
+        icon: '@drawable/ic_launcher',
       ),
     ),
     payload: message.data.toString(),
@@ -230,7 +230,7 @@ void showUploadProgress({
         channelDescription: _uploadChannel.description,
         importance: Importance.defaultImportance,
         priority: Priority.defaultPriority,
-        icon: '@mipmap/ic_launcher',
+        icon: '@drawable/ic_launcher',
         showProgress: true,
         maxProgress: 100,
         progress: percent,
@@ -268,7 +268,7 @@ void finishUpload({
         channelDescription: _channel.description,
         importance: success ? Importance.defaultImportance : Importance.high,
         priority: success ? Priority.defaultPriority : Priority.high,
-        icon: '@mipmap/ic_launcher',
+        icon: '@drawable/ic_launcher',
         ongoing: false,
         autoCancel: true,
       ),
