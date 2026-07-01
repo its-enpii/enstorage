@@ -30,6 +30,8 @@ class Webhook extends Model
         'file.upload.completed',
         'file.upload.failed',
         'file.deleted',
+        'file.shared',
+        'folder.shared',
     ];
 
     protected function casts(): array

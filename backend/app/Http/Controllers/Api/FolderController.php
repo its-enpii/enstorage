@@ -8,6 +8,7 @@ use App\Models\ActivityLog;
 use App\Models\Folder;
 use App\Services\ActivityLogService;
 use App\Services\Folder\FolderPathService;
+use App\Services\WebhookService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,7 @@ class FolderController extends Controller
     public function __construct(
         private readonly FolderPathService $paths,
         private readonly ActivityLogService $activityLog,
+        private readonly WebhookService $webhooks,
     ) {}
 
     /**
@@ -321,9 +323,20 @@ class FolderController extends Controller
             $folder->save();
         }
 
+        $shareUrl = WebhookService::shareUrlFor($folder->share_token);
+
+        $this->webhooks->dispatch($request->user()->id, 'folder.shared', [
+            'folder_id' => $folder->id,
+            'name' => $folder->name,
+            'path' => $folder->path,
+            'share_token' => $folder->share_token,
+            'share_url' => $shareUrl,
+            'expires_at' => null,
+        ]);
+
         return $this->ok([
             'share_token' => $folder->share_token,
-            'share_url' => rtrim(config('app.frontend_url', config('app.url')), '/').'/s/'.$folder->share_token,
+            'share_url' => $shareUrl,
         ], __('Folder share berhasil dibuat.'));
     }
 

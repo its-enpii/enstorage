@@ -102,6 +102,9 @@ class UploadFileJob implements ShouldQueue
                 'mime_type' => $file->mime_type,
                 'gdrive_file_id' => $file->gdrive_file_id,
                 'uploaded_at' => $file->uploaded_at?->toIso8601String(),
+                'share_token' => $file->share_token,
+                'share_url' => $file->share_token ? WebhookService::shareUrlFor($file->share_token) : null,
+                'expires_at' => null,
             ]);
 
             // Push notification — upload complete. data.type = 'upload.complete'

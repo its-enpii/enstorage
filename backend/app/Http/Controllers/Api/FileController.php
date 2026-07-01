@@ -344,9 +344,21 @@ class FileController extends Controller
             $file->save();
         }
 
+        $shareUrl = WebhookService::shareUrlFor($file->share_token);
+
+        $this->webhooks->dispatch($request->user()->id, 'file.shared', [
+            'file_id' => $file->id,
+            'name' => $file->name,
+            'mime_type' => $file->mime_type,
+            'size' => $file->size,
+            'share_token' => $file->share_token,
+            'share_url' => $shareUrl,
+            'expires_at' => null,
+        ]);
+
         return $this->ok([
             'share_token' => $file->share_token,
-            'share_url' => rtrim(config('app.frontend_url', config('app.url')), '/').'/s/'.$file->share_token,
+            'share_url' => $shareUrl,
         ], __('File share berhasil dibuat.'));
     }
 
