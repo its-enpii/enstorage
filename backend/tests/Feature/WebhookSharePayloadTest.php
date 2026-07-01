@@ -12,6 +12,7 @@ use App\Services\WebhookService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -43,6 +44,10 @@ class WebhookSharePayloadTest extends TestCase
             'size' => 2048,
             'gdrive_file_id' => 'gdrive_'.uniqid(),
             'upload_status' => File::STATUS_DONE,
+            // client_key is NOT NULL on production. Seed a ULID for fixtures so
+            // tests don't violate the constraint. Each fixture row gets a
+            // distinct value to avoid the per-user unique index colliding.
+            'client_key' => strtolower((string) Str::ulid()),
         ]);
     }
 

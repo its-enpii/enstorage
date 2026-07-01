@@ -7,6 +7,7 @@ use App\Models\Folder;
 use App\Models\GoogleAccount;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -47,6 +48,9 @@ class SearchFilesTest extends TestCase
             'gdrive_file_id' => 'gdrive_'.uniqid(),
             'upload_status' => File::STATUS_DONE,
             'is_starred' => false,
+            // client_key is NOT NULL on production. Seed a unique ULID per fixture
+            // so we don't collide on the per-user unique index.
+            'client_key' => strtolower((string) Str::ulid()),
         ], $extra));
     }
 
