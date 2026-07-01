@@ -173,6 +173,16 @@ class FileMoveTest extends TestCase
         $response->assertJsonPath('data.folder_id', $target->id);
 
         $this->assertSame('laporan (1).pdf', $incoming->fresh()->name);
+
+        // CRITICAL: source folder MUST be empty post-move, and dest MUST
+        // have both the existing file and the renamed one. If the source
+        // still contains a file with the new name, the frontend will
+        // show a phantom "A (1)" in the source view after navigating
+        // away and back.
+        $sourceFiles = File::where('folder_id', $source->id)->pluck('name')->all();
+        $this->assertSame([], $sourceFiles, 'Source folder must be empty after move');
+        $destFiles = File::where('folder_id', $target->id)->orderBy('name')->pluck('name')->all();
+        $this->assertSame(['laporan (1).pdf', 'laporan.pdf'], $destFiles);
     }
 
     public function test_move_with_multiple_collisions_increments_suffix(): void
@@ -301,5 +311,42 @@ class FileMoveTest extends TestCase
         ]);
 
         $response->assertStatus(401);
+    }
+
+    /**
+     * Regression: GET /files (no folder_id param) used to return files from
+     * EVERY folder, leaking a file moved to another folder back into the
+     * root view. Server must default to root-only when the parameter is
+     * absent.
+     */
+    public function test_files_index_without_folder_id_defaults_to_root(): void
+    {
+        $user = $this->actingUser();
+        Sanctum::actingAs($user);
+        $folder = $this->makeFolder($user, 'Some Folder');
+
+        // 1 file in root, 2 files inside the folder.
+        $this->makeFile($user, 'in-root.txt', null);
+        $this->makeFile($user, 'in-folder-a.txt', $folder);
+        $this->makeFile($user, 'in-folder-b.txt', $folder);
+
+        // No folder_id → must ONLY return root files.
+        $response = $this->getJson('/api/v1/files');
+        $response->assertOk();
+        $names = collect($response->json('data'))->pluck('name')->all();
+        sort($names);
+        $this->assertSame(['in-root.txt'], $names);
+
+        // Explicit null also returns only root.
+        $response = $this->getJson('/api/v1/files?folder_id=null');
+        $names = collect($response->json('data'))->pluck('name')->all();
+        sort($names);
+        $this->assertSame(['in-root.txt'], $names);
+
+        // Explicit folder_id returns only files in that folder.
+        $response = $this->getJson("/api/v1/files?folder_id={$folder->id}");
+        $names = collect($response->json('data'))->pluck('name')->all();
+        sort($names);
+        $this->assertSame(['in-folder-a.txt', 'in-folder-b.txt'], $names);
     }
 }

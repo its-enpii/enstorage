@@ -42,10 +42,15 @@ class FileController extends Controller
 
         $query = FileModel::where('user_id', $userId);
 
-        // Filter folder
+        // Filter folder. Default to root when no folder_id param is sent —
+        // a missing param should NOT mean "no filter" because that would
+        // leak files from every folder into the root view. Clients that
+        // want all files must explicitly pass `folder_id=` (or `null`).
         if ($request->has('folder_id')) {
             $fid = $request->query('folder_id');
             $query->where('folder_id', $fid === 'null' || $fid === '' ? null : $fid);
+        } else {
+            $query->whereNull('folder_id');
         }
 
         // Filter mime — accepts full mime (e.g. "image/png") or shortcut (?type=image|pdf|doc)
