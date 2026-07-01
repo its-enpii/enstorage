@@ -802,9 +802,13 @@ Content-Disposition: form-data; name="folder_id"
 - Maks 1 GB per file
 - `folder_id` harus milik user (kalau diisi)
 
-**Form fields (opsional):**
+**Form fields:**
 
-- `shareable` (boolean, default `true`) — kalau `true`, setiap file langsung mendapat `share_token` + `share_url` publik yang siap di-share begitu upload selesai (akses via `GET /s/{token}`, tanpa auth). Set `shareable=0` untuk opt-out. Token bisa di-regenerate atau di-revoke via `POST /files/{id}/share` & `DELETE /files/{id}/share`.
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `file` / `file[]` | binary | ya | — | Single atau array (max 10 file per request, max 1 GB per file) |
+| `folder_id` | uuid | tidak | `null` | Harus folder milik user (kalau diisi) |
+| `shareable` | boolean | tidak | `true` | `true` → auto-generate `share_token` + `share_url` publik per file. `false` → tanpa share token. Token bisa di-regenerate atau di-revoke via `POST /files/{id}/share` & `DELETE /files/{id}/share` |
 
 **Response 202:**
 
