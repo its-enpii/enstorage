@@ -37,18 +37,24 @@ jobs:
             # so leaving them empty falls back to the in-compose
             # defaults — useful for first-time deploys.
             #
-            # Reverb vars are required for the web build to bake the
-            # WSS endpoint config into the JS bundle. If NEXT_PUBLIC_REVERB_APP_KEY
-            # is missing, Next.js emits `process.env.NEXT_PUBLIC_REVERB_APP_KEY`
-            # literally and the browser throws "process is not defined",
-            # killing the entire Echo WS connection.
+            # Reverb vars: source the public key from backend/.env on the
+            # VPS (single source of truth, set once by the operator). The
+            # matching NEXT_PUBLIC_REVERB_* values are written here for
+            # `docker compose build web` to consume as build args. This
+            # avoids re-keying the same secret into GitHub Secrets (drift
+            # risk) and avoids the silent failure mode of an empty
+            # NEXT_PUBLIC_REVERB_APP_KEY baking `process.env.*` literally
+            # into the web bundle (browser throws "process is not defined"
+            # and Echo never connects).
+            REVERB_KEY=$(grep '^REVERB_APP_KEY=' backend/.env | head -1 | cut -d= -f2-)
+            [ -z "$REVERB_KEY" ] && { echo "::error::backend/.env missing REVERB_APP_KEY — set it before deploying"; exit 1; }
             cat > .env <<EOF
             NEXT_PUBLIC_API_BASE=${{ secrets.NEXT_PUBLIC_API_BASE }}
             NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
-            NEXT_PUBLIC_REVERB_SCHEME=${{ secrets.NEXT_PUBLIC_REVERB_SCHEME }}
-            NEXT_PUBLIC_REVERB_HOST=${{ secrets.NEXT_PUBLIC_REVERB_HOST }}
-            NEXT_PUBLIC_REVERB_PORT=${{ secrets.NEXT_PUBLIC_REVERB_PORT }}
-            NEXT_PUBLIC_REVERB_APP_KEY=${{ secrets.NEXT_PUBLIC_REVERB_APP_KEY }}
+            NEXT_PUBLIC_REVERB_SCHEME=wss
+            NEXT_PUBLIC_REVERB_HOST=enstorage.enpiistudio.com
+            NEXT_PUBLIC_REVERB_PORT=443
+            NEXT_PUBLIC_REVERB_APP_KEY=${REVERB_KEY}
             EOF
 
             git pull origin main
