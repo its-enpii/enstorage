@@ -142,6 +142,31 @@ services:
       - enstorage-net
     restart: unless-stopped
 
+  # Laravel Reverb WebSocket server.
+  # Image terpisah (php-cli, bukan fpm) karena reverb:start adalah
+  # long-lived process, tidak cocok dengan php-fpm.
+  # Port 8083 host → 8083 container (frontend connect ke ws://localhost:8083).
+  # vendor/ dibake ke image dari composer.lock — tidak shadow oleh
+  # bind-mount karena tidak ada mount ke /var/www/html. Hanya .env yang
+  # di-mount untuk baca REVERB_APP_SECRET dll.
+  reverb:
+    build:
+      context: .
+      dockerfile: docker/reverb.Dockerfile
+    image: enstorage-reverb
+    container_name: enstorage-reverb
+    working_dir: /var/www/html
+    volumes:
+      - ./.env:/var/www/html/.env:ro
+    environment:
+      APP_ENV: local
+    ports:
+      # Host port 8083 → container port 8080 (Reverb listens on 8080 inside).
+      - "8083:8080"
+    networks:
+      - enstorage-net
+    restart: unless-stopped
+
 volumes:
   app-storage:
   app-bootstrap-cache:

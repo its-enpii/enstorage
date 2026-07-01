@@ -15,4 +15,5 @@ docker-compose.yml
 tests
 phpunit.xml
 docker/worker.Dockerfile
+docker/reverb.Dockerfile
 docker/nginx

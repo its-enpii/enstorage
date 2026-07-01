@@ -11,6 +11,7 @@
         "google/auth": "^1.51",
         "intervention/image": "^3.11",
         "laravel/framework": "^13.8",
+        "laravel/reverb": "^1.10",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0"
     },
