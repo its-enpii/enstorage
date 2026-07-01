@@ -23,6 +23,15 @@ name: enstorage-prod
 include:
   - path: ./backend/docker-compose.yml
 
+# Production overrides for included services. The backend's reverb
+# container listens on 0.0.0.0:8080 (any interface) by default, which
+# works for NPM-over-web-network, but we also want a stable public
+# hostname the web client can resolve when the browser opens the WS
+# connection. The host/port of the WS endpoint is encoded in
+# NEXT_PUBLIC_REVERB_* (set on `web` above) and the matching TLS
+# termination must be configured in NPM. See README "Reverb / WSS" for
+# the reverse-proxy location block that pairs with this stack.
+
 services:
   web:
     build:
@@ -33,6 +42,14 @@ services:
       args:
         NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-https://enpii.enpiistudio.com/api/v1}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
+        # Reverb WS endpoint — defaults to same host as API (port 443
+        # for wss://). NPM must terminate the WSS upgrade and forward
+        # to reverb:8080 over web-network. Override in .env if your
+        # NPM proxy lives on a different path/host.
+        NEXT_PUBLIC_REVERB_SCHEME: ${NEXT_PUBLIC_REVERB_SCHEME:-wss}
+        NEXT_PUBLIC_REVERB_HOST: ${NEXT_PUBLIC_REVERB_HOST:-enpii.enpiistudio.com}
+        NEXT_PUBLIC_REVERB_PORT: ${NEXT_PUBLIC_REVERB_PORT:-443}
+        NEXT_PUBLIC_REVERB_APP_KEY: ${NEXT_PUBLIC_REVERB_APP_KEY:-}
     image: enstorage-web:latest
     container_name: enstorage-web
     environment:
@@ -40,6 +57,10 @@ services:
       # Mirror to runtime env so SSR (server components) can read them too.
       NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-https://enpii.enpiistudio.com/api/v1}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
+      NEXT_PUBLIC_REVERB_SCHEME: ${NEXT_PUBLIC_REVERB_SCHEME:-wss}
+      NEXT_PUBLIC_REVERB_HOST: ${NEXT_PUBLIC_REVERB_HOST:-enpii.enpiistudio.com}
+      NEXT_PUBLIC_REVERB_PORT: ${NEXT_PUBLIC_REVERB_PORT:-443}
+      NEXT_PUBLIC_REVERB_APP_KEY: ${NEXT_PUBLIC_REVERB_APP_KEY:-}
     depends_on:
       - app   # just so web waits; it actually talks to `app` via NPM, not directly
     networks:

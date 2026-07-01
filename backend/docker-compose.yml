@@ -162,9 +162,17 @@ services:
       APP_ENV: local
     ports:
       # Host port 8083 → container port 8080 (Reverb listens on 8080 inside).
+      # Used for local dev workstation testing (curl ws://localhost:8083).
+      # Production traffic flows through NPM via web-network on container
+      # port 8080 — NPM forwards e.g. wss://enpii.enpiistudio.com/ws/*
+      # → reverb:8080. The host port mapping is a fallback only.
       - "8083:8080"
     networks:
       - enstorage-net
+      # Attached to web-network so the host's NPM (running outside this
+      # stack) can resolve `reverb` by name and proxy WSS traffic to it.
+      # Without this, WSS in prod has nowhere to terminate.
+      - web-network
     restart: unless-stopped
 
 volumes:

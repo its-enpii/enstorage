@@ -27,6 +27,19 @@ ARG NEXT_PUBLIC_API_BASE
 ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
 ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID
 ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+# Reverb WS endpoint — public DNS/port that the browser opens the WS
+# connection to. Prod: wss://<domain>/ws (NPM terminates TLS, forwards
+# to reverb:8080 over web-network). The host/port can be left empty to
+# fall back to the API origin (then NPM must upgrade /api/v1/ws or
+# similar — adjust REVERSE_PROXY_LOCATION to match).
+ARG NEXT_PUBLIC_REVERB_SCHEME
+ENV NEXT_PUBLIC_REVERB_SCHEME=${NEXT_PUBLIC_REVERB_SCHEME}
+ARG NEXT_PUBLIC_REVERB_HOST
+ENV NEXT_PUBLIC_REVERB_HOST=${NEXT_PUBLIC_REVERB_HOST}
+ARG NEXT_PUBLIC_REVERB_PORT
+ENV NEXT_PUBLIC_REVERB_PORT=${NEXT_PUBLIC_REVERB_PORT}
+ARG NEXT_PUBLIC_REVERB_APP_KEY
+ENV NEXT_PUBLIC_REVERB_APP_KEY=${NEXT_PUBLIC_REVERB_APP_KEY}
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
