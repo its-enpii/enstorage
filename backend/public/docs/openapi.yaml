@@ -303,8 +303,56 @@ paths:
                 folder_id:
                   type: string
                   format: uuid
+                client_key:
+                  oneOf:
+                    - type: string
+                      maxLength: 128
+                      pattern: '^[A-Za-z0-9._-]{1,128}$'
+                    - type: array
+                      items:
+                        type: string
+                        maxLength: 128
+                        pattern: '^[A-Za-z0-9._-]{1,128}$'
+                  description: |
+                    Opsional. ID korelasi yang dikembalikan di response dan di payload webhook
+                    `file.upload.completed` / `file.upload.failed`. Unik per user. Jika kosong,
+                    server akan generate ULID. Jika scalar + multi-file → auto-suffix `-1`, `-2`,
+                    dst. Jika array → harus sepanjang jumlah file.
+                    - 422 jika charset di luar `[A-Za-z0-9._-]` atau > 128 karakter
+                      (`data.errors.client_key.0` berisi
+                      `"client_key hanya boleh berisi huruf, angka, \".\", \"_\", \"-\" (maks 128 karakter)."`).
+                    - 422 jika `client_key[]` dikirim sebagai array dengan panjang ≠ jumlah file
+                      (`data.errors.client_key.0` berisi
+                      `"client_key[] harus sepanjang jumlah file (:count)."`).
+                    - 422 jika client_key dikirim sebagai tipe selain string/array (boolean, number, object)
+                      (`data.errors.client_key.0` berisi
+                      `"client_key harus berupa string atau array."`).
+                    - 409 jika ada key yang duplikat dengan file existing milik user yang sama
+                      (`data.error = "duplicate_client_key"`, `data.collisions[].existing_file_id`).
+              required: [file]
       responses:
         '202': { description: Accepted }
+        '409':
+          description: Duplicate client_key — minimal satu key sudah dipakai oleh file lain milik user yang sama.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: false }
+                  data:
+                    type: object
+                    properties:
+                      error: { type: string, example: duplicate_client_key }
+                      collisions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            client_key: { type: string }
+                            existing_file_id: { type: string, format: uuid }
+                  message: { type: string }
+                  meta: { type: object }
         '422': { $ref: '#/components/responses/ValidationError' }
   /files:
     get:

@@ -97,6 +97,7 @@ class UploadFileJob implements ShouldQueue
 
             $webhooks->dispatch($file->user_id, 'file.upload.completed', [
                 'file_id' => $file->id,
+                'client_key' => $file->client_key,
                 'name' => $file->name,
                 'size' => $file->size,
                 'mime_type' => $file->mime_type,
@@ -156,6 +157,7 @@ class UploadFileJob implements ShouldQueue
 
         $webhooks->dispatch($file->user_id, 'file.upload.failed', [
             'file_id' => $file->id,
+            'client_key' => $file->client_key,
             'name' => $file->name,
             'reason' => $reason,
         ]);

@@ -809,6 +809,7 @@ Content-Disposition: form-data; name="folder_id"
 | `file` / `file[]` | binary | ya | — | Single atau array (max 10 file per request, max 1 GB per file) |
 | `folder_id` | uuid | tidak | `null` | Harus folder milik user (kalau diisi) |
 | `shareable` | boolean | tidak | `true` | `true` → auto-generate `share_token` + `share_url` publik per file. `false` → tanpa share token. Token bisa di-regenerate atau di-revoke via `POST /files/{id}/share` & `DELETE /files/{id}/share` |
+| `client_key` | string | tidak | server-generated | ID korelasi opsional per file. Charset `[A-Za-z0-9._-]`, maks 128 karakter, **unik per user**. Jika dikirim scalar saat multi-file → auto-suffix `-1`, `-2`, dst. Jika dikirim array → harus sepanjang jumlah file. Jika kosong/diabaikan → server generate ULID. Response selalu mengembalikan `client_key` per file; `client_key` yang sama ikut di payload webhook `file.upload.completed` / `file.upload.failed`. |
 
 **Response 202:**
 
@@ -819,6 +820,7 @@ Content-Disposition: form-data; name="folder_id"
     "accepted": [
       {
         "file_id": "uuid",
+        "client_key": "01j9zq8k5x3n2p7r4b6y8w0v5c",
         "name": "photo1.jpg",
         "size": 524288,
         "status": "pending",
@@ -828,6 +830,7 @@ Content-Disposition: form-data; name="folder_id"
       },
       {
         "file_id": "uuid",
+        "client_key": "01j9zq8k5x3n2p7r4b6y8w0v5d",
         "name": "photo2.jpg",
         "size": 314572,
         "status": "pending",
@@ -845,6 +848,60 @@ Content-Disposition: form-data; name="folder_id"
 }
 ```
 
+**Response 409 — duplicate `client_key`:**
+
+```json
+{
+  "success": false,
+  "data": {
+    "error": "duplicate_client_key",
+    "collisions": [
+      { "client_key": "invoice-2026-07-001", "existing_file_id": "uuid" }
+    ]
+  },
+  "message": "Satu atau lebih client_key sudah dipakai. Gunakan key lain atau kosongkan untuk auto-generate.",
+  "meta": {}
+}
+```
+
+**Response 422 — invalid `client_key`:**
+
+Charset violation (di luar `[A-Za-z0-9._-]` atau > 128 karakter):
+
+```json
+{
+  "success": false,
+  "data": {
+    "errors": {
+      "client_key": [
+        "client_key hanya boleh berisi huruf, angka, \".\", \"_\", \"-\" (maks 128 karakter)."
+      ]
+    }
+  },
+  "message": "Validasi gagal.",
+  "meta": {}
+}
+```
+
+`client_key[]` dikirim sebagai array tapi panjangnya ≠ jumlah file (placeholder `:count` ter-substitusi dengan jumlah file):
+
+```json
+{
+  "success": false,
+  "data": {
+    "errors": {
+      "client_key": [
+        "client_key[] harus sepanjang jumlah file (2)."
+      ]
+    }
+  },
+  "message": "Validasi gagal.",
+  "meta": {}
+}
+```
+
+`client_key` dikirim sebagai tipe yang bukan string/array (mis. boolean, number, object): response shape sama dengan 422 di atas, message `"client_key harus berupa string atau array."`.
+
 > ℹ️ Field name di form adalah `file` (single) atau `file[]` (multiple), BUKAN `files[]` seperti endpoint lain.
 
 ```bash
@@ -860,9 +917,22 @@ curl -X POST http://localhost:8080/api/v1/files/upload \
   -H "Authorization: Bearer en_xxx" \
   -F "file[]=@./private.pdf" \
   -F "shareable=0"
+
+# Pakai client_key sendiri (dikirim) — server akan mengembalikan client_key yang sama
+curl -X POST http://localhost:8080/api/v1/files/upload \
+  -H "Authorization: Bearer en_xxx" \
+  -F "file[]=@./invoice.pdf" \
+  -F "client_key=invoice-2026-07-001"
+
+# Tanpa client_key — server generate ULID dan mengembalikannya di response
+curl -X POST http://localhost:8080/api/v1/files/upload \
+  -H "Authorization: Bearer en_xxx" \
+  -F "file[]=@./photo.jpg"
 ```
 
 > Backend pilih akun Google tujuan via `QuotaManager::getAvailableAccount($user, $fileSize)` (free space terbesar yang muat).
+>
+> Webhook `file.upload.completed` & `file.upload.failed` memuat `client_key` di payload `data`, sehingga client bisa mengkorelasikan callback dengan request upload tanpa menyimpan `file_id` lokal.
 
 ---
 

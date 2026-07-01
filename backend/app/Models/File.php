@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'gdrive_file_id',
     'shareable_link',
     'share_token',
+    'client_key',
     'upload_status',
     'uploaded_at',
 ])]
