@@ -35,6 +35,11 @@ use Illuminate\Support\Facades\Broadcast;
 */
 
 Broadcast::channel('client-{clientKey}.folder.{folderId}', function ($user, string $clientKey, string $folderId) {
+    \Illuminate\Support\Facades\Log::debug('broadcast.client.auth', [
+        'user_id' => $user?->id,
+        'client_key' => $clientKey,
+        'folder_id' => $folderId,
+    ]);
     if (! $user) {
         return false;
     }
@@ -46,6 +51,10 @@ Broadcast::channel('client-{clientKey}.folder.{folderId}', function ($user, stri
         ->exists();
 
     if (! $ownsClientKey) {
+        \Illuminate\Support\Facades\Log::debug('broadcast.client.no-key', [
+            'user_id' => $user->id,
+            'client_key' => $clientKey,
+        ]);
         return false;
     }
 
@@ -65,12 +74,21 @@ Broadcast::channel('client-{clientKey}.folder.{folderId}', function ($user, stri
 // users, not to client_keys. Any of the user's devices/devices using
 // any client_key can subscribe.
 Broadcast::channel('folder-{userId}.{folderId}', function ($user, string $userId, string $folderId) {
+    \Illuminate\Support\Facades\Log::debug('broadcast.folder.auth', [
+        'user_id' => $user?->id,
+        'url_user_id' => $userId,
+        'folder_id' => $folderId,
+    ]);
     if (! $user) {
         return false;
     }
 
     // URL userId must match the authenticated user — no cross-user sniff.
     if ((string) $user->id !== $userId) {
+        \Illuminate\Support\Facades\Log::debug('broadcast.folder.mismatch', [
+            'auth_user_id' => $user->id,
+            'url_user_id' => $userId,
+        ]);
         return false;
     }
 
