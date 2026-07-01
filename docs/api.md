@@ -802,6 +802,10 @@ Content-Disposition: form-data; name="folder_id"
 - Maks 1 GB per file
 - `folder_id` harus milik user (kalau diisi)
 
+**Form fields (opsional):**
+
+- `shareable` (boolean, default `true`) — kalau `true`, setiap file langsung mendapat `share_token` + `share_url` publik yang siap di-share begitu upload selesai (akses via `GET /s/{token}`, tanpa auth). Set `shareable=0` untuk opt-out. Token bisa di-regenerate atau di-revoke via `POST /files/{id}/share` & `DELETE /files/{id}/share`.
+
 **Response 202:**
 
 ```json
@@ -809,8 +813,24 @@ Content-Disposition: form-data; name="folder_id"
   "success": true,
   "data": {
     "accepted": [
-      { "file_id": "uuid", "name": "photo1.jpg", "size": 524288, "status": "pending" },
-      { "file_id": "uuid", "name": "photo2.jpg", "size": 314572, "status": "pending" }
+      {
+        "file_id": "uuid",
+        "name": "photo1.jpg",
+        "size": 524288,
+        "status": "pending",
+        "shareable": true,
+        "share_token": "a1b2c3...",
+        "share_url": "https://app.enstorage.id/s/a1b2c3..."
+      },
+      {
+        "file_id": "uuid",
+        "name": "photo2.jpg",
+        "size": 314572,
+        "status": "pending",
+        "shareable": true,
+        "share_token": "d4e5f6...",
+        "share_url": "https://app.enstorage.id/s/d4e5f6..."
+      }
     ],
     "rejected": [
       { "name": "huge.bin", "reason": "File melebihi 1GB" }
@@ -824,11 +844,18 @@ Content-Disposition: form-data; name="folder_id"
 > ℹ️ Field name di form adalah `file` (single) atau `file[]` (multiple), BUKAN `files[]` seperti endpoint lain.
 
 ```bash
+# Default: auto-share ON — setiap file langsung punya share_url
 curl -X POST http://localhost:8080/api/v1/files/upload \
   -H "Authorization: Bearer en_xxx" \
   -F "file[]=@./photo1.jpg" \
   -F "file[]=@./photo2.jpg" \
   -F "folder_id=ROOT"
+
+# Opt-out: shareable=0 → share_token/share_url = null
+curl -X POST http://localhost:8080/api/v1/files/upload \
+  -H "Authorization: Bearer en_xxx" \
+  -F "file[]=@./private.pdf" \
+  -F "shareable=0"
 ```
 
 > Backend pilih akun Google tujuan via `QuotaManager::getAvailableAccount($user, $fileSize)` (free space terbesar yang muat).

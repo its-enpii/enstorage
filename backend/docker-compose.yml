@@ -75,9 +75,17 @@ services:
     container_name: enstorage-worker
     working_dir: /var/www/html
     volumes:
-      - ./:/var/www/html
+      # vendor + source are baked into enstorage-worker image (see
+      # docker/worker.Dockerfile). Mount only runtime-mutable dirs and
+      # credentials — same pattern as the `app` service above. A blanket
+      # ./:/var/www/html bind-mount would shadow the baked vendor/ and
+      # break artisan (the original crashloop cause).
       - app-storage:/var/www/html/storage
       - ./storage/app/firebase-service-account.json:/var/www/html/storage/app/firebase-service-account.json:ro
+      # .env must be in the container for artisan to read APP_KEY,
+      # DB_*, REDIS_*, GOOGLE_* secrets at runtime. Read-only to avoid
+      # permission issues if the host file is owned by a different UID.
+      - ./.env:/var/www/html/.env:ro
     environment:
       DB_CONNECTION: pgsql
       DB_HOST: postgres

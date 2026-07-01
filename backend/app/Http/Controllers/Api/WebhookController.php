@@ -57,7 +57,7 @@ class WebhookController extends Controller
             'is_active' => $webhook->is_active,
             'secret' => $secret,
             'created_at' => $webhook->created_at,
-        ], __('Webhook berhasil dibuat. Simpan secret — tidak akan ditampilkan lagi.'), 201);
+        ], __('Webhook berhasil dibuat. Simpan secret — tidak akan ditampilkan lagi.'), [], 201);
     }
 
     /**
