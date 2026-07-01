@@ -47,7 +47,7 @@ directly, so NPM must terminate TLS and forward the WSS upgrade.
 
 ### NPM Location Block
 
-In NPM → your domain (`enpii.enpiistudio.com`) → **Advanced** tab →
+In NPM → your frontend domain (`enstorage.enpiistudio.com`) → **Advanced** tab →
 add a new location:
 
 | Field | Value |
@@ -100,7 +100,7 @@ set them in the **shell** before running `docker compose build web`.
 ```bash
 # On the VPS, in the project root:
 export NEXT_PUBLIC_REVERB_SCHEME=wss
-export NEXT_PUBLIC_REVERB_HOST=enpii.enpiistudio.com
+export NEXT_PUBLIC_REVERB_HOST=enstorage.enpiistudio.com
 export NEXT_PUBLIC_REVERB_PORT=443
 # MUST equal REVERB_APP_KEY from backend/.env
 export NEXT_PUBLIC_REVERB_APP_KEY=<paste-the-same-public-key>
@@ -111,7 +111,7 @@ docker compose up -d web
 ```
 
 Defaults already exist in `docker-compose.yml` (scheme=wss, host=
-enpii.enpiistudio.com, port=443, app_key blank). Override only what
+enstorage.enpiistudio.com, port=443, app_key blank). Override only what
 differs from your domain.
 
 ---
@@ -167,10 +167,10 @@ docker compose exec app curl -sS -X POST http://localhost/api/v1/broadcasting/au
 
 ### C. Browser WSS handshake
 
-1. Open `https://enpii.enpiistudio.com` in Chrome.
+1. Open `https://enstorage.enpiistudio.com` in Chrome.
 2. Open DevTools → **Network** tab → filter by **WS**.
 3. Log in, open the files page.
-4. You should see a `wss://enpii.enpiistudio.com/app/...` connection
+4. You should see a `wss://enstorage.enpiistudio.com/app/...` connection
    with status **101 Switching Protocols**.
 5. From another browser/Postman, upload a file via API as the same user.
 6. The files page should show the new file within ~1 second, **without

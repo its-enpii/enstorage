@@ -40,14 +40,14 @@ services:
       # NEXT_PUBLIC_* are baked into the JS bundle at build time,
       # so they must be passed as build args (not just runtime env).
       args:
-        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-https://enpii.enpiistudio.com/api/v1}
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-https://api-enstorage.enpiistudio.com/api/v1}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
-        # Reverb WS endpoint — defaults to same host as API (port 443
+        # Reverb WS endpoint — defaults to frontend host (port 443
         # for wss://). NPM must terminate the WSS upgrade and forward
         # to reverb:8080 over web-network. Override in .env if your
         # NPM proxy lives on a different path/host.
         NEXT_PUBLIC_REVERB_SCHEME: ${NEXT_PUBLIC_REVERB_SCHEME:-wss}
-        NEXT_PUBLIC_REVERB_HOST: ${NEXT_PUBLIC_REVERB_HOST:-enpii.enpiistudio.com}
+        NEXT_PUBLIC_REVERB_HOST: ${NEXT_PUBLIC_REVERB_HOST:-enstorage.enpiistudio.com}
         NEXT_PUBLIC_REVERB_PORT: ${NEXT_PUBLIC_REVERB_PORT:-443}
         NEXT_PUBLIC_REVERB_APP_KEY: ${NEXT_PUBLIC_REVERB_APP_KEY:-}
     image: enstorage-web:latest
@@ -55,10 +55,10 @@ services:
     environment:
       NODE_ENV: production
       # Mirror to runtime env so SSR (server components) can read them too.
-      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-https://enpii.enpiistudio.com/api/v1}
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-https://api-enstorage.enpiistudio.com/api/v1}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
       NEXT_PUBLIC_REVERB_SCHEME: ${NEXT_PUBLIC_REVERB_SCHEME:-wss}
-      NEXT_PUBLIC_REVERB_HOST: ${NEXT_PUBLIC_REVERB_HOST:-enpii.enpiistudio.com}
+      NEXT_PUBLIC_REVERB_HOST: ${NEXT_PUBLIC_REVERB_HOST:-enstorage.enpiistudio.com}
       NEXT_PUBLIC_REVERB_PORT: ${NEXT_PUBLIC_REVERB_PORT:-443}
       NEXT_PUBLIC_REVERB_APP_KEY: ${NEXT_PUBLIC_REVERB_APP_KEY:-}
     depends_on:
@@ -66,8 +66,9 @@ services:
     networks:
       - web-network
     # host:3001 because host:3000 is taken by another container on the
-    # VPS. NPM forwards `enpii.studio` → `web:3000` over web-network
-    # (NOT through the host port — the port mapping is only a fallback).
+    # VPS. NPM forwards `enstorage.enpiistudio.com` → `web:3000` over
+    # web-network (NOT through the host port — the port mapping is
+    # only a fallback).
     ports:
       - "3001:3000"
     restart: unless-stopped
