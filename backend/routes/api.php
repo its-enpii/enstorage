@@ -35,6 +35,7 @@ Route::get('docs/openapi.yaml', [DocsController::class, 'spec']);
 
 // Public share link (tanpa auth)
 Route::get('s/{token}', [FileController::class, 'viewByToken']);
+Route::get('s/{token}/view', [FileController::class, 'view']);
 
 // Google OAuth bridge — public, no auth. Google's redirect_uri MUST
 // be a valid HTTPS public domain (custom URI schemes are rejected

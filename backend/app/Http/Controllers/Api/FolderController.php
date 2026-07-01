@@ -331,6 +331,7 @@ class FolderController extends Controller
             'path' => $folder->path,
             'share_token' => $folder->share_token,
             'share_url' => $shareUrl,
+            'share_preview_url' => WebhookService::shareUrlFor($folder->share_token, true),
             'expires_at' => null,
         ]);
 

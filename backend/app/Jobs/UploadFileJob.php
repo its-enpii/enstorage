@@ -104,6 +104,7 @@ class UploadFileJob implements ShouldQueue
                 'uploaded_at' => $file->uploaded_at?->toIso8601String(),
                 'share_token' => $file->share_token,
                 'share_url' => $file->share_token ? WebhookService::shareUrlFor($file->share_token) : null,
+                'share_preview_url' => $file->share_token ? WebhookService::shareUrlFor($file->share_token, true) : null,
                 'expires_at' => null,
             ]);
 

@@ -130,4 +130,68 @@ class WebhookSharePayloadTest extends TestCase
         $url = WebhookService::shareUrlFor('abc123');
         $this->assertSame('https://enstorage.test/s/abc123', $url);
     }
+
+    public function test_share_url_helper_with_preview_flag_appends_view_segment(): void
+    {
+        $url = WebhookService::shareUrlFor('abc123', true);
+        $this->assertSame('https://enstorage.test/s/abc123/view', $url);
+    }
+
+    public function test_file_share_payload_includes_share_preview_url(): void
+    {
+        Bus::fake();
+        $user = $this->makeUser();
+        $this->makeWebhook($user, ['file.shared']);
+        $file = $this->makeFile($user);
+
+        Sanctum::actingAs($user);
+        $this->postJson("/api/v1/files/{$file->id}/share")->assertOk();
+
+        Bus::assertDispatched(FireWebhookJob::class, function (FireWebhookJob $job) {
+            return ($job->payload['share_preview_url'] ?? null) === 'https://enstorage.test/s/'.$job->payload['share_token'].'/view';
+        });
+    }
+
+    public function test_folder_share_payload_includes_share_preview_url(): void
+    {
+        Bus::fake();
+        $user = $this->makeUser();
+        $this->makeWebhook($user, ['folder.shared']);
+        $folder = $this->makeFolder($user);
+
+        Sanctum::actingAs($user);
+        $this->postJson("/api/v1/folders/{$folder->id}/share")->assertOk();
+
+        Bus::assertDispatched(FireWebhookJob::class, function (FireWebhookJob $job) {
+            return ($job->payload['share_preview_url'] ?? null) === 'https://enstorage.test/s/'.$job->payload['share_token'].'/view';
+        });
+    }
+
+    public function test_view_route_redirects_to_fe_preview_url_for_file(): void
+    {
+        $user = $this->makeUser();
+        $file = $this->makeFile($user);
+        $file->share_token = 'preview-tok-1';
+        $file->save();
+
+        $response = $this->get('/api/v1/s/preview-tok-1/view');
+        $response->assertRedirect('https://enstorage.test/s/preview-tok-1/view');
+    }
+
+    public function test_view_route_redirects_to_fe_preview_url_for_folder(): void
+    {
+        $user = $this->makeUser();
+        $folder = $this->makeFolder($user);
+        $folder->share_token = 'preview-tok-2';
+        $folder->save();
+
+        $response = $this->get('/api/v1/s/preview-tok-2/view');
+        $response->assertRedirect('https://enstorage.test/s/preview-tok-2/view');
+    }
+
+    public function test_view_route_404_for_unknown_token(): void
+    {
+        $response = $this->get('/api/v1/s/no-such-token/view');
+        $response->assertNotFound();
+    }
 }

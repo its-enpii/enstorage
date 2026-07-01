@@ -12,6 +12,7 @@ use App\Services\ActivityLogService;
 use App\Services\Google\GoogleDriveUploader;
 use App\Services\WebhookService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
@@ -353,6 +354,7 @@ class FileController extends Controller
             'size' => $file->size,
             'share_token' => $file->share_token,
             'share_url' => $shareUrl,
+            'share_preview_url' => WebhookService::shareUrlFor($file->share_token, true),
             'expires_at' => null,
         ]);
 
@@ -397,6 +399,22 @@ class FileController extends Controller
         }
 
         return $this->fail(__('Link share tidak ditemukan atau tidak valid.'), 404);
+    }
+
+    /**
+     * GET /s/{token}/view — public (no auth).
+     * Redirect ke FE preview page (FE handle rendering UI preview).
+     */
+    public function view(string $token): RedirectResponse
+    {
+        $exists = FileModel::where('share_token', $token)->exists()
+            || Folder::where('share_token', $token)->exists();
+
+        if (! $exists) {
+            abort(404, __('Link share tidak ditemukan atau tidak valid.'));
+        }
+
+        return redirect(WebhookService::shareUrlFor($token, true), 302);
     }
 
     /**
