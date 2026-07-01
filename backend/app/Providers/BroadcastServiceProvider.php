@@ -3,45 +3,52 @@
 namespace App\Providers;
 
 use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
 /**
- * Re-register /broadcasting/auth with our API-key middleware stack.
+ * Override the auto-registered /broadcasting/auth route so it uses
+ * our API-key auth stack instead of the default `web` middleware
+ * group (which expects a session cookie + CSRF token and rejects
+ * Bearer API keys with 403).
  *
- * Laravel 11's withRouting(channels: ...) auto-registers the route
- * under the default `web` middleware group (session cookie + CSRF).
- * The frontend posts from a different origin with a Bearer API key
- * (or X-API-Key header) — that fails the web stack's auth check
- * with 403, even though AuthApiKey middleware would accept the same
- * token on /api/v1/* routes.
- *
- * We therefore unregister the auto-route and register our own under
- * the same URL but with auth.apikey + (optionally) auth.sanctum.only,
- * mirroring how the rest of the API authenticates.
+ * Laravel 11's withRouting(channels: ...) auto-mounts
+ * `Illuminate\Broadcasting\BroadcastController@authenticate` at
+ * POST /broadcasting/auth. We find that route in the live collection
+ * and rewrite its middleware set in place — no removal, no re-add.
+ * The Closure channels from routes/channels.php still resolve
+ * normally because we only swap the wrapping middleware.
  */
 class BroadcastServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
-        // Drop the auto-registered /broadcasting/auth route (registered
-        // by withRouting(channels: ...) under the web group).
         $router = $this->app['router'];
-        foreach ($router->getRoutes() as $route) {
-            if ($route->uri() === 'broadcasting/auth' && in_array('POST', $route->methods(), true)) {
-                $router->remove($route->uri());
-            }
-        }
+        $collection = $router->getRoutes();
 
-        // Re-register with our middleware stack. Use explicit route
-        // binding so CSRF and session middleware don't run — we are
-        // stateless, token-based.
-        $router->post('/broadcasting/auth', function (\Illuminate\Http\Request $request) {
-            return Broadcast::auth($request);
-        })->middleware([
-            'auth.apikey',
-            'auth.sanctum.only:false',
-        ])->withoutMiddleware([
-            \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
-        ]);
+        foreach ($collection as $route) {
+            $action = $route->getAction();
+            $uses = is_string($action['uses'] ?? null) ? $action['uses'] : '';
+            if (! str_contains($uses, 'BroadcastController@authenticate')) {
+                continue;
+            }
+
+            // Strip the web group's session/CSRF/cookie middleware and
+            // attach our token-based stack. The route already matches
+            // POST /broadcasting/auth so Echo's pusher-js POST will
+            // hit it; only the middleware list changes.
+            $route->middleware([
+                'auth.apikey',
+                'auth.sanctum.only:false',
+            ]);
+            $route->withoutMiddleware([
+                \Illuminate\Cookie\Middleware\EncryptCookies::class,
+                \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+                \Illuminate\Session\Middleware\StartSession::class,
+                \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+                \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
+                \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            ]);
+        }
     }
 }
