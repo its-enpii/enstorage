@@ -21,6 +21,15 @@ return Application::configure(basePath: dirname(__DIR__))
         // Throttle default untuk API
         $middleware->throttleApi();
 
+        // Handle CORS preflight + Access-Control-* headers for ALL routes
+        // (api + broadcasting/auth + share pages). Without this, OPTIONS
+        // preflight from the web app on a different origin (frontend
+        // enstorage.enpiistudio.com → API api-enstorage.enpiistudio.com)
+        // returns 403 and the browser blocks the /broadcasting/auth
+        // request that Reverb's pusher-js needs to subscribe to private
+        // channels. Allowed origins are read from config/cors.php.
+        $middleware->prepend(\Illuminate\Http\Middleware\HandleCors::class);
+
         // Alias middleware custom
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureUserRole::class,
