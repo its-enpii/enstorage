@@ -14,6 +14,7 @@ import 'state/auth_state.dart';
 import 'state/locale_state.dart';
 import 'state/refresh_signal_state.dart';
 import 'state/theme_state.dart';
+import 'data/realtime/realtime_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -90,6 +91,11 @@ Future<void> main() async {
   // Share container globally so background FCM handler (yang gak punya
   // BuildContext) bisa emit refresh signals. Di-set SEBELUM runApp.
   setAppContainer(container);
+
+  // Install realtime bridges: registers the filesControllerProvider
+  // accessor so WS folder events can trigger listings refresh, and
+  // starts the WS service if the cached auth token is still valid.
+  installRealtimeBridges(container);
 
   // Firebase + FCM setup — pakai container untuk register token
   // saat FCM ready (baik initial token maupun rotation).

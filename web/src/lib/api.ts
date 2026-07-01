@@ -22,6 +22,14 @@ export type User = {
     files: number;
     api_keys: number;
   };
+  /**
+   * Distinct client_keys owned by this user (one per unique browser/install).
+   * Returned by `/auth/me?with_counts=1` and consumed by `RealtimeProvider`
+   * to subscribe to private Reverb channels
+   * `client.{client_key}.folder.{folder_id|root}` for live file updates.
+   * Empty array for users with no files yet.
+   */
+  client_keys?: string[];
 };
 
 export type AuthResponse = {

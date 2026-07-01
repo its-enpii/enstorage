@@ -18,6 +18,33 @@ import 'storage/token_storage.dart';
 ///   Production                  : https://api.example.com/api/v1
 const String kApiBase = String.fromEnvironment('API_BASE');
 
+/// Laravel Reverb WebSocket connection.
+///
+/// Host/port/scheme/appKey forward to `lib/data/realtime/`:
+///   REVERB_HOST  — bare hostname or LAN IP (no scheme/port).
+///   REVERB_PORT  — container port (8080) inside docker-compose, but
+///                  the host port exposed to the dev workstation is 8083.
+///                  For Android emulator on the same host: use the
+///                  host's LAN IP and the published port (8083).
+///   REVERB_SCHEME — 'ws' for HTTP, 'wss' for HTTPS (prod).
+///   REVERB_APP_KEY — matches backend .env (enstorage-reverb-key).
+const String kReverbHost = String.fromEnvironment(
+  'REVERB_HOST',
+  defaultValue: 'localhost',
+);
+const int kReverbPort = int.fromEnvironment(
+  'REVERB_PORT',
+  defaultValue: 8083,
+);
+const String kReverbScheme = String.fromEnvironment(
+  'REVERB_SCHEME',
+  defaultValue: 'ws',
+);
+const String kReverbAppKey = String.fromEnvironment(
+  'REVERB_APP_KEY',
+  defaultValue: '',
+);
+
 /// Validates and returns [kApiBase], throwing a clear [StateError] if it
 /// was never supplied. Called eagerly so the failure shows up in the same
 /// stack frame as `runApp()` rather than as a confusing network error on

@@ -1,7 +1,7 @@
 name: enstorage
 description: EnStorage mobile client — Never Leaves Your Drive.
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -21,6 +21,18 @@ dependencies:
 
   # Networking
   dio: ^5.7.0
+  # Used by realtime_service to POST /broadcasting/auth for channel
+  # subscribe signatures (Pusher protocol). Kept separate so the WS
+  # layer doesn't depend on dio's interceptor chain.
+  http: ^1.2.2
+
+  # WebSocket transport. We talk to Laravel Reverb directly via the
+  # Pusher wire protocol using web_socket_channel — the Pusher Flutter
+  # SDK's init API doesn't expose host/port for self-hosted brokers
+  # like Reverb. The protocol surface we use is small (connect +
+  # subscribe + a few event types) so a hand-rolled client is simpler
+  # than fighting the SDK's assumption of Pusher Cloud (cluster-based).
+  web_socket_channel: ^3.0.1
 
   # Storage
   shared_preferences: ^2.3.2
