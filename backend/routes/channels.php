@@ -13,12 +13,12 @@ use Illuminate\Support\Facades\Broadcast;
 | applied by PrivateChannel):
 |
 | 1. File events (per client_key):
-|      client.{client_key}.folder.{folder_id|root}
+|      client-{client_key}.folder.{folder_id|root}
 |    One client_key may be in use by multiple devices of the same user.
 |    Folder id scopes the broadcast to subscribers viewing that folder.
 |
 | 2. Folder events (per user — folder model has no client_key):
-|      folder.{user_id}.{folder_id|root}
+|      folder-{user_id}.{folder_id|root}
 |    Folder changes apply across all of the user's client_keys/devices.
 |    Frontend subscribes to BOTH families so it sees every event.
 |
@@ -34,7 +34,7 @@ use Illuminate\Support\Facades\Broadcast;
 |
 */
 
-Broadcast::channel('client.{clientKey}.folder.{folderId}', function ($user, string $clientKey, string $folderId) {
+Broadcast::channel('client-{clientKey}.folder.{folderId}', function ($user, string $clientKey, string $folderId) {
     if (! $user) {
         return false;
     }
@@ -64,7 +64,7 @@ Broadcast::channel('client.{clientKey}.folder.{folderId}', function ($user, stri
 // Folder event channel — no client_key needed because folders belong to
 // users, not to client_keys. Any of the user's devices/devices using
 // any client_key can subscribe.
-Broadcast::channel('folder.{userId}.{folderId}', function ($user, string $userId, string $folderId) {
+Broadcast::channel('folder-{userId}.{folderId}', function ($user, string $userId, string $folderId) {
     if (! $user) {
         return false;
     }
