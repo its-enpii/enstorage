@@ -178,8 +178,10 @@ $postBody = http_build_query(['socket_id' => $socketId, 'channel_name' => $chann
 // Resolve auth endpoint from API_INTERNAL_BASE env (defaults to the
 // in-compose nginx → app URL). 127.0.0.1:80 in the app container is
 // NOT nginx — app is fpm 9000 — so we MUST use the compose hostname.
+// Note: /broadcasting/auth is registered WITHOUT the /api/v1 prefix
+// (see BroadcastServiceProvider::boot) so we hit the root path.
 $apiInternal = getenv('API_INTERNAL_BASE') ?: 'http://enstorage-nginx';
-$ch = curl_init(rtrim($apiInternal, '/') . '/api/v1/broadcasting/auth');
+$ch = curl_init(rtrim($apiInternal, '/') . '/broadcasting/auth');
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_POST           => true,
