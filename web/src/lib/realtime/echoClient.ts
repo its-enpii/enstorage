@@ -92,14 +92,25 @@ export function getEcho(cfg: RealtimeConfig): EchoInstance {
 function _build(cfg: RealtimeConfig): EchoInstance {
   // Cast to our permissive EchoInstance type — the constructor's strict
   // generic types don't fit runtime usage.
+  //
+  // NOTE on port/transport: with forceTLS=true, pusher-js connects to
+  // `wss://{wsHost}:{wssPort ?? 443}`. Setting `wsPort` to 443 here
+  // (it matches our public port) lets pusher-js pick wssPort cleanly
+  // — leaving wsPort unset makes the default 6001 trip some
+  // production deployments behind reverse proxies. Keeping the two
+  // aligned is the safest combo for the Laravel-Proxied-via-NPM
+  // shape (one public HTTPS endpoint, one internal Reverb).
   const echo = new Echo({
     broadcaster: 'reverb',
     key: cfg.appKey,
     wsHost: cfg.wsHost,
-    wsPort: cfg.wsPort,
-    wssPort: cfg.wssPort ?? 443,
+    wsPort: cfg.wssPort ?? cfg.wsPort,
+    wssPort: cfg.wssPort ?? cfg.wsPort,
     forceTLS: cfg.forceTLS,
-    enabledTransports: ['ws', 'wss'],
+    // Don't restrict enabledTransports — pusher-js will pick ws vs
+    // wss based on forceTLS alone. Setting only `['ws', 'wss']` is
+    // the default; keeping it implicit avoids edge cases where one
+    // is missing in older pusher-js builds.
     authEndpoint: cfg.authEndpoint,
     // Bearer matches AuthApiKey middleware priority (Bearer → API key).
     auth: { headers: { Authorization: `Bearer ${cfg.token}` } },
