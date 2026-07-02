@@ -102,12 +102,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       setState('idle');
       return;
     }
+    // clientKey is optional: a user with no uploads yet (or only external
+    // uploads) has no real device key. They still receive file events
+    // via the `user.*` catch-all channel — only the per-device
+    // `client.*` channel is gated on having a key.
     const clientKey = user.client_keys?.[0];
-    if (!clientKey) {
-      // User has no files / no client_key yet — skip subscription.
-      setState('idle');
-      return;
-    }
 
     const cfg = readRealtimeConfig(token, API_BASE);
     if (!cfg) {
@@ -141,9 +140,26 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     }
 
     // Subscribe.
+    //
+    // Three channel families, all private:
+    //   - client.{clientKey}.folder.*   → file events from THIS device
+    //                                    (only subscribed if the user has
+    //                                    a real device key)
+    //   - user.{user.id}.folder.*       → file events catch-all (external
+    //                                    API uploads, server-generated
+    //                                    keys, sibling devices)
+    //   - folder.{user.id}.*            → folder events (always)
+    //
+    // Backend routes each file event to exactly one of {client.*, user.*}
+    // (mutually exclusive — see ReverbChannel::fileEventChannels), so
+    // each event arrives in this tab exactly once. No dedup needed.
     const unsubs: Array<() => void> = [];
-    const fileChannelName = `client.${clientKey}.folder.${folderId ?? 'root'}`;
-    const folderChannelName = `folder.${user.id}.${folderId ?? 'root'}`;
+    const folderScope = folderId ?? 'root';
+    const clientFileChannel = clientKey
+      ? `client.${clientKey}.folder.${folderScope}`
+      : null;
+    const userFileChannel = `user.${user.id}.folder.${folderScope}`;
+    const folderChannelName = `folder.${user.id}.${folderScope}`;
 
     const dispatch = (eventName: string) => (payload: unknown) => {
       const ev = parseRealtimePayload(eventName, payload);
@@ -156,7 +172,14 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     };
 
     for (const name of FILE_EVENTS) {
-      unsubs.push(subscribeToChannel(echo, fileChannelName, name, dispatch(name)));
+      // Per-device channel — only when we have a client key. Backend
+      // routes events from THIS device here.
+      if (clientFileChannel) {
+        unsubs.push(subscribeToChannel(echo, clientFileChannel, name, dispatch(name)));
+      }
+      // Per-user catch-all — backend routes external/synthetic events
+      // here, and any other device's events.
+      unsubs.push(subscribeToChannel(echo, userFileChannel, name, dispatch(name)));
     }
     for (const name of FOLDER_EVENTS) {
       unsubs.push(subscribeToChannel(echo, folderChannelName, name, dispatch(name)));

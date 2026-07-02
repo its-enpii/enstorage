@@ -25,10 +25,7 @@ class FileUpdatedBroadcast implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [new PrivateChannel(ReverbChannel::file(
-            $this->file->client_key,
-            $this->file->folder_id
-        ))];
+        return ReverbChannel::fileEventChannels($this->file);
     }
 
     public function broadcastWith(): array

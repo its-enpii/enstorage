@@ -416,11 +416,12 @@ class FileController extends Controller
         $clientKey = $file->client_key;
         $folderId = $file->folder_id;
         $fileId = $file->id;
+        $userId = $file->user_id;
 
         $this->deleteOne($file, $request->user()->id);
 
         // Realtime broadcast — subscribers remove the file from view.
-        \App\Events\FileDeletedBroadcast::dispatch($fileId, $clientKey, $folderId);
+        \App\Events\FileDeletedBroadcast::dispatch($fileId, $clientKey, $folderId, $userId);
 
         return $this->ok(null, __('File berhasil dihapus.'));
     }
@@ -448,13 +449,14 @@ class FileController extends Controller
             $clientKey = $file->client_key;
             $folderId = $file->folder_id;
             $fileId = $file->id;
+            $fileUserId = $file->user_id;
 
             $this->deleteOne($file, $userId);
             $deleted[] = $file->id;
 
             // Per-file realtime broadcast. Multiple subscribers across
             // folders each receive their copy via their own channel auth.
-            \App\Events\FileDeletedBroadcast::dispatch($fileId, $clientKey, $folderId);
+            \App\Events\FileDeletedBroadcast::dispatch($fileId, $clientKey, $folderId, $fileUserId);
         }
 
         return $this->ok([

@@ -6,9 +6,16 @@
 /// Pusher SDK that assumes a clustered Pusher Cloud broker.
 ///
 /// One connection per app session. Auto-reconnect with exponential
-/// backoff. Channels:
-///   - `client.{client_key}.folder.{folder_id|root}`  (file events)
+/// backoff. Channels (all private):
+///   - `client.{client_key}.folder.{folder_id|root}`  (file events from THIS device)
+///   - `user.{user_id}.folder.{folder_id|root}`       (file event catch-all:
+///                                                      external API uploads,
+///                                                      sibling devices,
+///                                                      users with no uploads yet)
 ///   - `folder.{user_id}.{folder_id|root}`            (folder events)
+///
+/// `clientKey` is optional: a freshly-registered user with no uploads
+/// doesn't have one yet but still receives file events via `user.*`.
 library;
 
 import 'dart:async';
@@ -61,8 +68,8 @@ class RealtimeService {
 
   Future<void> connect({
     required RealtimeConfig config,
-    required String clientKey,
     required String userId,
+    String? clientKey,
     String? currentFolderId,
   }) async {
     await disconnect();
@@ -210,13 +217,19 @@ class RealtimeService {
     final clientKey = _clientKey;
     final userId = _userId;
     final channel = _channel;
-    if (clientKey == null || userId == null || channel == null) return;
+    if (userId == null || channel == null) return;
 
-    final fileChannel = 'client.$clientKey.folder.${_currentFolderId ?? 'root'}';
-    final folderChannel = 'folder.$userId.${_currentFolderId ?? 'root'}';
-
-    await _subscribe(fileChannel);
-    await _subscribe(folderChannel);
+    // client.* — only when this device has a real client_key. Backend
+    // routes uploads from THIS device to this channel.
+    if (clientKey != null) {
+      await _subscribe('client.$clientKey.folder.${_currentFolderId ?? 'root'}');
+    }
+    // user.* — always. Backend routes external/synthetic uploads and
+    // uploads from sibling devices here, so this tab keeps in sync
+    // even when it never uploaded anything.
+    await _subscribe('user.$userId.folder.${_currentFolderId ?? 'root'}');
+    // folder.* — folder events (rename/move/delete), always.
+    await _subscribe('folder.$userId.${_currentFolderId ?? 'root'}');
   }
 
   Future<void> _subscribe(String channelName) async {
@@ -237,12 +250,20 @@ class RealtimeService {
     final clientKey = _clientKey;
     final userId = _userId;
     final channel = _channel;
-    if (clientKey == null || userId == null || channel == null) return;
+    if (userId == null || channel == null) return;
 
+    if (clientKey != null) {
+      try {
+        channel.sink.add(jsonEncode({
+          'event': 'pusher:unsubscribe',
+          'data': {'channel': 'client.$clientKey.folder.${_currentFolderId ?? 'root'}'},
+        }));
+      } catch (_) {}
+    }
     try {
       channel.sink.add(jsonEncode({
         'event': 'pusher:unsubscribe',
-        'data': {'channel': 'client.$clientKey.folder.${_currentFolderId ?? 'root'}'},
+        'data': {'channel': 'user.$userId.folder.${_currentFolderId ?? 'root'}'},
       }));
     } catch (_) {}
     try {

@@ -23,14 +23,16 @@ class FileDeletedBroadcast implements ShouldBroadcastNow
         public string $fileId,
         public string $clientKey,
         public ?string $folderId,
+        public string $userId,
     ) {}
 
     public function broadcastOn(): array
     {
-        return [new PrivateChannel(ReverbChannel::file(
+        return ReverbChannel::fileEventChannelsForDeleted(
+            $this->userId,
             $this->clientKey,
-            $this->folderId
-        ))];
+            $this->folderId,
+        );
     }
 
     public function broadcastWith(): array

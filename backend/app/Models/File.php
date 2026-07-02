@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'shareable_link',
     'share_token',
     'client_key',
+    'client_key_origin',
     'upload_status',
     'uploaded_at',
 ])]

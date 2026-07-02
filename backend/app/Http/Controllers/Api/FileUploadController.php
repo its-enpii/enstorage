@@ -52,7 +52,15 @@ class FileUploadController extends Controller
         // - Tidak dikirim          → server generate ULID per file.
         // - Dikirim single value  → dipakai untuk file ke-1; jika multi-file, auto-suffix `-1`, `-2`, dst.
         // - Dikirim array         → harus sama panjang dengan file[]; setiap file pakai key-nya sendiri.
+        //
+        // `client_key_origin` di-tabel `files` merekam apakah key ini
+        // datang dari client (real device) atau di-generate server.
+        // Routing broadcast file event di ReverbChannel::fileEventChannels()
+        // pakai flag ini: 'client' → channel client.* (optimistic update
+        // device tsb), 'server' → channel user.* (semua tab user).
         $rawKey = $request->input('client_key');
+        $rawKeyProvided = $rawKey !== null && $rawKey !== '';
+        $origin = $rawKeyProvided ? 'client' : 'server';
         $userKeys = $this->normalizeClientKeys($rawKey, count($files));
         foreach ($userKeys as $i => $k) {
             if (! preg_match('/^[A-Za-z0-9._-]{1,128}$/', $k)) {
@@ -123,6 +131,7 @@ class FileUploadController extends Controller
                     'upload_status' => FileModel::STATUS_PENDING,
                     'share_token' => $shareable ? bin2hex(random_bytes(16)) : null,
                     'client_key' => $userKeys[$index],
+                    'client_key_origin' => $origin,
                 ]);
 
                 // Override gdrive_file_id dengan uuid asli

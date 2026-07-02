@@ -81,6 +81,7 @@ class FileUploadClientKeyTest extends TestCase
                 'id' => $row['file_id'],
                 'user_id' => $user->id,
                 'client_key' => $row['client_key'],
+                'client_key_origin' => 'server',
             ]);
         }
 
@@ -111,6 +112,7 @@ class FileUploadClientKeyTest extends TestCase
             'id' => $row['file_id'],
             'user_id' => $user->id,
             'client_key' => $key,
+            'client_key_origin' => 'client',
         ]);
     }
 

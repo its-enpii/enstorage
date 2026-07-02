@@ -556,14 +556,17 @@ class AuthController extends Controller
                 'api_keys' => (int) ($user->api_keys_count ?? 0),
             ];
 
-            // Distinct client_keys owned by this user. Frontend uses these
-            // to subscribe to Reverb channels for realtime file updates
-            // (`client.{client_key}.folder.{folder_id}`). Empty array for
-            // users with no files yet is fine — frontend treats empty as
-            // "no realtime file subscriptions".
+            // Distinct client_keys supplied by real devices of this user.
+            // We filter by `client_key_origin = 'client'` so server-generated
+            // ULIDs (assigned when no key is provided to the upload API)
+            // don't appear here — they aren't real device identifiers and
+            // routing file events through them would be wrong. Frontend
+            // uses this list to know which `client.*` Reverb channel to
+            // subscribe to for that device's optimistic self-update path.
+            // The `user.*` catch-all channel is subscribed independently.
             $payload['client_keys'] = \App\Models\File::query()
                 ->where('user_id', $user->id)
-                ->whereNotNull('client_key')
+                ->where('client_key_origin', 'client')
                 ->distinct()
                 ->pluck('client_key')
                 ->all();

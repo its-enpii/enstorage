@@ -180,4 +180,146 @@ class FileBroadcastEventsTest extends TestCase
 
         Event::assertDispatched(FileUpdatedBroadcast::class);
     }
+
+    /**
+     * Extract the channel name strings from a list of PrivateChannel
+     * instances. The Pusher wire format prefixes them with "private-"
+     * automatically; we strip that to compare against our route patterns.
+     */
+    private function channelNames(array $channels): array
+    {
+        return array_map(
+            fn ($ch) => substr((string) $ch, strlen('private-')),
+            $channels,
+        );
+    }
+
+    public function test_uploaded_routes_to_user_channel_when_client_key_origin_is_server(): void
+    {
+        $user = $this->actingUser();
+        $file = $this->makeFile($user, 'a.txt');
+        // makeFile() doesn't set origin → migration backfilled 'server'.
+        $file->refresh();
+
+        $event = new FileUploadedBroadcast($file);
+        $names = $this->channelNames($event->broadcastOn());
+
+        $this->assertCount(1, $names);
+        $this->assertSame("user-{$user->id}.folder.root", $names[0]);
+    }
+
+    public function test_uploaded_routes_to_client_channel_when_origin_is_client(): void
+    {
+        $user = $this->actingUser();
+        $clientKey = 'my-device-key';
+        $folder = $this->makeFolder($user, 'Docs');
+        $file = File::create([
+            'user_id' => $user->id,
+            'folder_id' => $folder->id,
+            'google_account_id' => $this->makeAccount($user)->id,
+            'name' => 'a.txt',
+            'original_name' => 'a.txt',
+            'mime_type' => 'text/plain',
+            'size' => 5,
+            'gdrive_file_id' => 'gd_x',
+            'upload_status' => File::STATUS_DONE,
+            'client_key' => $clientKey,
+            'client_key_origin' => 'client',
+        ]);
+
+        $event = new FileUploadedBroadcast($file);
+        $names = $this->channelNames($event->broadcastOn());
+
+        $this->assertCount(1, $names);
+        $this->assertSame("client-{$clientKey}.folder.{$folder->id}", $names[0]);
+    }
+
+    public function test_uploaded_routes_to_user_channel_for_orphan_device_key(): void
+    {
+        // File was uploaded from a device that supplied a client_key, but
+        // no other file in the system has the same key + origin='client'
+        // for this user → the key is "orphan" (e.g. user cleared their
+        // account) and the event should fall through to user.*.
+        $user = $this->actingUser();
+        $orphanKey = 'device-once-only';
+        $file = File::create([
+            'user_id' => $user->id,
+            'folder_id' => null,
+            'google_account_id' => $this->makeAccount($user)->id,
+            'name' => 'lonely.txt',
+            'original_name' => 'lonely.txt',
+            'mime_type' => 'text/plain',
+            'size' => 1,
+            'gdrive_file_id' => 'gd_o',
+            'upload_status' => File::STATUS_DONE,
+            'client_key' => $orphanKey,
+            'client_key_origin' => 'client',
+        ]);
+
+        $event = new FileUploadedBroadcast($file);
+        $names = $this->channelNames($event->broadcastOn());
+
+        $this->assertCount(1, $names);
+        $this->assertSame("user-{$user->id}.folder.root", $names[0]);
+    }
+
+    public function test_deleted_routes_via_helper_with_user_id(): void
+    {
+        $user = $this->actingUser();
+        $file = $this->makeFile($user, 'a.txt');
+        $file->refresh();
+
+        $event = new FileDeletedBroadcast(
+            $file->id,
+            $file->client_key,
+            $file->folder_id,
+            (string) $user->id,
+        );
+        $names = $this->channelNames($event->broadcastOn());
+
+        $this->assertCount(1, $names);
+        $this->assertSame("user-{$user->id}.folder.root", $names[0]);
+    }
+
+    public function test_updated_routes_to_user_channel_for_server_origin(): void
+    {
+        $user = $this->actingUser();
+        $file = $this->makeFile($user, 'a.txt');
+        $file->refresh();
+
+        $event = new FileUpdatedBroadcast($file);
+        $names = $this->channelNames($event->broadcastOn());
+
+        $this->assertCount(1, $names);
+        $this->assertSame("user-{$user->id}.folder.root", $names[0]);
+    }
+
+    public function test_upload_failed_routes_to_user_channel_for_server_origin(): void
+    {
+        $user = $this->actingUser();
+        $file = $this->makeFile($user, 'a.txt', status: File::STATUS_FAILED);
+        $file->refresh();
+
+        $event = new FileUploadFailedBroadcast($file, 'simulated');
+        $names = $this->channelNames($event->broadcastOn());
+
+        $this->assertCount(1, $names);
+        $this->assertSame("user-{$user->id}.folder.root", $names[0]);
+    }
+
+    public function test_moved_routes_both_legs_to_user_channel_for_server_origin(): void
+    {
+        $user = $this->actingUser();
+        $source = $this->makeFolder($user, 'Source');
+        $target = $this->makeFolder($user, 'Target');
+        $file = $this->makeFile($user, 'a.txt', $source);
+        $file->refresh();
+
+        $event = new FileMovedBroadcast($file, $source->id, 'a.txt', false);
+        $names = $this->channelNames($event->broadcastOn());
+
+        $this->assertCount(2, $names);
+        $this->assertContains("user-{$user->id}.folder.{$source->id}", $names);
+        $this->assertContains("user-{$user->id}.folder.{$target->id}", $names);
+    }
 }

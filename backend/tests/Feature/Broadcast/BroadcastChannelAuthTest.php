@@ -194,4 +194,57 @@ class BroadcastChannelAuthTest extends TestCase
             ->where('user_id', $user->id)
             ->exists();
     }
+
+    // ─── user-* channel (file event catch-all) ────────────────────────
+    // Mirrors the closure in routes/channels.php. The closure shape is
+    // the same as folder-{userId}.{folderId} minus the client_key check
+    // — any folder owned by the user is allowed, no client_key needed.
+    //
+    // We dispatch on family='user_file' and pass userId as $idA.
+
+    public function test_user_file_channel_denies_unauthenticated_user(): void
+    {
+        $result = $this->callChannelClosure('user_file', null, 'any-user', 'root');
+        $this->assertFalse($result);
+    }
+
+    public function test_user_file_channel_denies_cross_user_url_user_id(): void
+    {
+        $user = User::factory()->create();
+        $otherId = (string) User::factory()->create()->id;
+        $result = $this->callChannelClosure('user_file', $user, $otherId, 'root');
+        $this->assertFalse($result);
+    }
+
+    public function test_user_file_channel_allows_root_for_own_user_id(): void
+    {
+        $user = User::factory()->create();
+        $result = $this->callChannelClosure('user_file', $user, (string) $user->id, 'root');
+        $this->assertTrue($result);
+    }
+
+    public function test_user_file_channel_allows_folder_owned_by_user(): void
+    {
+        $user = User::factory()->create();
+        $folder = Folder::create([
+            'user_id' => $user->id,
+            'name' => 'Docs',
+            'path' => '/',
+        ]);
+        $result = $this->callChannelClosure('user_file', $user, (string) $user->id, $folder->id);
+        $this->assertTrue($result);
+    }
+
+    public function test_user_file_channel_denies_folder_owned_by_other_user(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        $folder = Folder::create([
+            'user_id' => $other->id,
+            'name' => 'OtherDocs',
+            'path' => '/',
+        ]);
+        $result = $this->callChannelClosure('user_file', $user, (string) $user->id, $folder->id);
+        $this->assertFalse($result);
+    }
 }

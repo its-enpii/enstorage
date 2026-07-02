@@ -37,21 +37,41 @@ class FileMovedBroadcast implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
+        // A move event has TWO legs (source + destination). The
+        // client.*/user.* routing decision is the same for both —
+        // only the folder_id changes — so we resolve the device-key
+        // membership ONCE and synthesize both channels here, instead
+        // of calling fileEventChannels() twice (which would do two
+        // identical DB lookups).
+        $userDeviceKeys = \App\Models\File::query()
+            ->where('user_id', $this->file->user_id)
+            ->where('client_key_origin', 'client')
+            ->pluck('client_key')
+            ->all();
+
+        $isFromKnownDevice = in_array($this->file->client_key, $userDeviceKeys, true);
+
         $channels = [];
 
-        // Source folder — subscribers viewing the origin remove the file.
-        $channels[] = new PrivateChannel(ReverbChannel::file(
-            $this->file->client_key,
-            $this->previousFolderId
-        ));
-
-        // Destination — appended if same folder (in-place rename) OR
-        // different folder. Same id may appear twice in this list; Reverb
-        // dedupes per subscription.
-        $channels[] = new PrivateChannel(ReverbChannel::file(
-            $this->file->client_key,
-            $this->file->folder_id
-        ));
+        if ($isFromKnownDevice) {
+            $name = ReverbChannel::file($this->file->client_key, $this->previousFolderId);
+            $channels[] = new PrivateChannel($name);
+            if ($this->previousFolderId !== $this->file->folder_id) {
+                $channels[] = new PrivateChannel(
+                    ReverbChannel::file($this->file->client_key, $this->file->folder_id)
+                );
+            }
+        } else {
+            $userId = (string) $this->file->user_id;
+            $channels[] = new PrivateChannel(
+                ReverbChannel::userFile($userId, $this->previousFolderId)
+            );
+            if ($this->previousFolderId !== $this->file->folder_id) {
+                $channels[] = new PrivateChannel(
+                    ReverbChannel::userFile($userId, $this->file->folder_id)
+                );
+            }
+        }
 
         return $channels;
     }
