@@ -176,6 +176,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       });
     };
 
+    // DEBUG TEMP
+    console.log('[realtime] subscribe', { clientFileChannel, userFileChannel, folderChannelName });
+
     for (const name of FILE_EVENTS) {
       // Per-device channel — only when we have a client key. Backend
       // routes events from THIS device here.
