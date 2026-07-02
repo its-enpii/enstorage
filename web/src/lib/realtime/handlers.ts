@@ -56,6 +56,8 @@ export type ApplyContext = {
 export function applyEvent(e: RealtimeEvent, ctx: ApplyContext): boolean {
   const { store, currentFolderId, visibleFolderIds } = ctx;
   if (!store) return false;
+  // DEBUG TEMP
+  console.log('[realtime] applyEvent', e.type, 'view=', currentFolderId);
 
   switch (e.type) {
     case 'file.uploaded': {
@@ -254,6 +256,8 @@ export function parseRealtimePayload(
   rawData: unknown,
 ): RealtimeEvent | null {
   const data = (rawData ?? {}) as Record<string, unknown>;
+  // DEBUG TEMP
+  console.log('[realtime] parse', rawEventName, data);
 
   if (rawEventName === 'App\\Events\\FileUploadedBroadcast') {
     const file = normaliseFile(data);
