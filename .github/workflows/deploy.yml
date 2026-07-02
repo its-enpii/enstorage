@@ -77,14 +77,10 @@ jobs:
             # doesn't exist yet. Once present we leave it alone — operator
             # edits on the VPS are preserved across deploys.
             if [ ! -f .env ]; then
-              cat > .env <<EOF
-              NEXT_PUBLIC_API_BASE=${{ secrets.NEXT_PUBLIC_API_BASE }}
-              NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
-              NEXT_PUBLIC_REVERB_SCHEME=wss
-              NEXT_PUBLIC_REVERB_HOST=enstorage.enpiistudio.com
-              NEXT_PUBLIC_REVERB_PORT=443
-              NEXT_PUBLIC_REVERB_APP_KEY=${REVERB_KEY}
-              EOF
+              printf 'NEXT_PUBLIC_API_BASE=%s\nNEXT_PUBLIC_GOOGLE_CLIENT_ID=%s\nNEXT_PUBLIC_REVERB_SCHEME=wss\nNEXT_PUBLIC_REVERB_HOST=enstorage.enpiistudio.com\nNEXT_PUBLIC_REVERB_PORT=443\nNEXT_PUBLIC_REVERB_APP_KEY=%s\n' \
+                "${{ secrets.NEXT_PUBLIC_API_BASE }}" \
+                "${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}" \
+                "$REVERB_KEY" > .env
             fi
 
             # Ensure `web-network` (the bridge to Nginx Proxy Manager
