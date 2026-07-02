@@ -33,7 +33,18 @@ services:
       - ./backend/.env:/var/www/html/.env:ro
       - app-storage:/var/www/html/storage
       - app-bootstrap-cache:/var/www/html/bootstrap/cache
+    # env_file loads backend/.env into the container's $_ENV so Laravel's
+    # env() helper resolves APP_KEY / DB_* / REDIS_* / GOOGLE_* etc.
+    # Bind-mount of the same file above keeps /var/www/html/.env in sync
+    # for artisan commands that read it directly (tinker vars(), pail).
+    env_file:
+      - ./backend/.env
     environment:
+      # These vars are NOT secret — they're connection coordinates that
+      # must match service names above. They override anything in
+      # backend/.env (env_file precedence) so even if a dev commits a
+      # stray DB_HOST=localhost, the container still talks to the
+      # `postgres` service.
       DB_CONNECTION: pgsql
       DB_HOST: postgres
       DB_PORT: 5432
@@ -87,7 +98,10 @@ services:
       - app-storage:/var/www/html/storage
       - ./backend/storage/app/firebase-service-account.json:/var/www/html/storage/app/firebase-service-account.json:ro
       - ./backend/.env:/var/www/html/.env:ro
+    env_file:
+      - ./backend/.env
     environment:
+      # See `app` service for the rationale on these override-only vars.
       DB_CONNECTION: pgsql
       DB_HOST: postgres
       DB_PORT: 5432
@@ -153,6 +167,8 @@ services:
     working_dir: /var/www/html
     volumes:
       - ./backend/.env:/var/www/html/.env:ro
+    env_file:
+      - ./backend/.env
     environment:
       APP_ENV: production
     ports:

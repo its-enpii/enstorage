@@ -50,6 +50,15 @@ jobs:
             # JS bundle as NEXT_PUBLIC_REVERB_APP_KEY. If they diverge,
             # WSS auth on private channels fails with 403.
             [ -f backend/.env ] || { echo "::error::backend/.env missing on VPS — see memory enstorage-env-file-split"; exit 1; }
+            # Sanity-check the secrets the app container needs at runtime.
+            # Without these, services like Google OAuth resolve to `null`
+            # inside the container and the API returns
+            # "Google OAuth belum dikonfigurasi." — see AuthController.
+            # Warn (not fail) so we don't block dev deploys where
+            # GOOGLE_* are intentionally empty.
+            grep -q '^GOOGLE_CLIENT_ID=' backend/.env \
+              && grep -q '^GOOGLE_CLIENT_SECRET=' backend/.env \
+              || echo "::warning::backend/.env missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET — Google OAuth endpoints will return 'belum dikonfigurasi'"
             # Export backend/.env so docker compose reads DB_PASSWORD,
             # REDIS_PASSWORD, GOOGLE_* etc. from the same source the app
             # container reads. Without this, compose's ${DB_PASSWORD:-enstorage}
