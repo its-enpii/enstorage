@@ -144,23 +144,34 @@ if ($token === '') {
 }
 
 // ─── Step 3: open WS + subscribe + broadcast on the user's channel ──
-$user = \App\Models\User::query()
-    ->whereHas('tokens', function ($q) use ($token) {
-        // Sanctum personal access token: the first segment is the id.
-        // Matching by raw token hash would need hash check; for the
-        // probe we just need any user that owns *some* file.
-        $q->where('id', (int) (explode('|', $token)[0] ?? 0));
-    })
-    ->orWhere('id', $token)
-    ->first();
+// We avoid bootstrapping Laravel here — the probe runs in isolation.
+// Resolve user_id by querying `personal_access_tokens` directly with
+// the database credentials from the environment.
+[$userId] = explode('|', $token, 2);
+$userId   = (int) $userId;
 
-if (!$user) {
-    $user = \App\Models\User::query()->orderBy('id')->first();
+// Quick DB lookup using pdo directly.
+$pdo = new PDO(
+    sprintf('pgsql:host=%s;port=%s;dbname=%s',
+        getenv('DB_HOST') ?: 'postgres',
+        getenv('DB_PORT') ?: '5432',
+        getenv('DB_DATABASE') ?: 'enstorage'),
+    getenv('DB_USERNAME') ?: 'enstorage',
+    getenv('DB_PASSWORD') ?: 'enstorage',
+    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+);
+$stmt = $pdo->prepare('SELECT tokenable_id FROM personal_access_tokens WHERE id = :id LIMIT 1');
+$stmt->execute([':id' => $userId]);
+$resolved = $stmt->fetchColumn();
+if (!$resolved) {
+    fwrite(STDERR, "[bcast] step 3 token id={$userId} not found in personal_access_tokens\n");
+    fwrite(STDERR, "[bcast]   using first user from users table as fallback\n");
+    $resolved = (int) $pdo->query('SELECT id FROM users ORDER BY id LIMIT 1')->fetchColumn();
 }
-fprintf(STDERR, "[bcast] step 3 using user_id=%s (token=%.6s...)\n",
-    (string) $user->id, $token);
+$userId = (string) $resolved;
+fprintf(STDERR, "[bcast] step 3 user_id=%s (token=%.6s...)\n", $userId, $token);
 
-$channelName = "private-user-{$user->id}.folder.{$folderId}";
+$channelName = "private-user-{$userId}.folder.{$folderId}";
 $socketId    = '123456.789';
 $signature   = hash_hmac('sha256', $socketId . ':' . $channelName, $appSecret);
 $postBody = http_build_query(['socket_id' => $socketId, 'channel_name' => $channelName]);
@@ -226,7 +237,12 @@ fprintf(STDERR, "[bcast] step 3b subscribed to %s\n", $channelName);
 // (give the broker ~200ms to register).
 usleep(300_000);
 
-$latest = $user->files()->latest('id')->first();
+$latestStmt = $pdo->prepare(
+    'SELECT id, name, folder_id, mime_type, size FROM files '
+  . 'WHERE user_id = :uid ORDER BY id DESC LIMIT 1'
+);
+$latestStmt->execute([':uid' => $userId]);
+$latest = $latestStmt->fetch(PDO::FETCH_ASSOC);
 if (!$latest) {
     fwrite(STDERR, "[bcast] no files for this user; cannot fabricate event\n");
     exit(0);
@@ -235,11 +251,11 @@ $payload = [
     'name'    => 'App\\Events\\FileUploadedBroadcast',
     'channel' => $channelName,
     'data'    => json_encode([
-        'file_id'   => $latest->id,
-        'name'      => $latest->name,
-        'folder_id' => $latest->folder_id,
-        'mime_type' => $latest->mime_type,
-        'size'      => (int) $latest->size,
+        'file_id'   => $latest['id'],
+        'name'      => $latest['name'],
+        'folder_id' => $latest['folder_id'],
+        'mime_type' => $latest['mime_type'],
+        'size'      => (int) $latest['size'],
     ], JSON_UNESCAPED_SLASHES),
 ];
 $body     = json_encode($payload, JSON_UNESCAPED_SLASHES);
