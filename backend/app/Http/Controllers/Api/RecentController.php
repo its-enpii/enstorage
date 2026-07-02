@@ -41,6 +41,7 @@ class RecentController extends Controller
         $filesQuery = FileModel::query()
             ->where('user_id', $userId)
             ->whereNull('folder_id')
+            ->where('upload_status', '!=', FileModel::STATUS_FAILED)
             ->orderByDesc('updated_at')
             ->orderByDesc('id');
 
