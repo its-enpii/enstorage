@@ -66,14 +66,15 @@ if ($reachCode === 0 && $reachErr !== '') {
 fprintf(STDERR, "[bcast] step 1 OK: Reverb reachable (HTTP %d on /, expected 404 — no GET route)\n", $reachCode);
 
 // ─── Step 2: broadcaster HMAC accept ──────────────────────────────
-// Pusher HTTP API for /apps/{id}/events:
-//   Body MUST be JSON { name, channel, data, socket_id? } where
-//     - name    = event name (e.g. "App\\Events\\FileUploadedBroadcast")
-//     - channel = the channel to publish on (e.g. "private-user-X.folder.root")
-//     - data    = payload as a JSON string (Pusher spec)
-//     - socket_id optional — restricts to one connection if set
-// Reverb matches Pusher's signature scheme:
-//   md5(body) + auth_key + auth_timestamp + auth_version
+// Reverb's signature scheme (see vendor/laravel/reverb/.../Controller.php):
+//   sig = HMAC-SHA256(secret,
+//       METHOD + "\n" + path + "\n" + sorted_query_params)
+// Pusher docs say similar but Reverb implements the exact same scheme
+// over `path + sorted_query` instead of `key:ts:ver:body_md5`. Body MD5
+// is only added to query when the body is non-empty.
+//
+// Query params (sorted alphabetically when signed):
+//   auth_key, auth_signature, auth_timestamp, auth_version, body_md5
 $now     = time();
 $eventName = 'bcast-test';
 $channel   = 'test-channel';
@@ -83,16 +84,29 @@ $body      = json_encode([
     'channel' => $channel,
     'data'    => $dataStr,
 ], JSON_UNESCAPED_SLASHES);
-$md5     = md5($body);
-$strToSign = "{$appKey}:{$now}:1.0:{$md5}";
-$sig     = hash_hmac('sha256', $strToSign, $appSecret);
-$qs      = http_build_query([
+$bodyMd5   = md5($body);
+$path      = "/apps/{$appId}/events";
+
+// Build signed params (sorted alphabetically before concat).
+$signed = [
+    'auth_key'       => $appKey,
+    'auth_timestamp' => (string) $now,
+    'auth_version'   => '1.0',
+    'body_md5'       => $bodyMd5,
+];
+ksort($signed);
+$signedStr = http_build_query($signed, '', '&', PHP_QUERY_RFC3986);
+
+$strToSign = "POST\n{$path}\n{$signedStr}";
+$sig       = hash_hmac('sha256', $strToSign, $appSecret);
+
+$qs = http_build_query([
     'auth_key'       => $appKey,
     'auth_timestamp' => $now,
     'auth_version'   => '1.0',
-    'body_md5'       => $md5,
+    'body_md5'       => $bodyMd5,
     'auth_signature' => $sig,
-]);
+], '', '&', PHP_QUERY_RFC3986);
 $url = "http://{$reverbHost}:{$reverbPort}/apps/{$appId}/events?{$qs}";
 
 $ch = curl_init($url);
@@ -231,11 +245,20 @@ $payload = [
 $body     = json_encode($payload, JSON_UNESCAPED_SLASHES);
 $md5      = md5($body);
 $now      = time();
-$sig      = hash_hmac('sha256', "{$appKey}:{$now}:1.0:{$md5}", $appSecret);
-$qs       = http_build_query([
+$path3    = "/apps/{$appId}/events";
+$signed3  = [
+    'auth_key'       => $appKey,
+    'auth_timestamp' => (string) $now,
+    'auth_version'   => '1.0',
+    'body_md5'       => $md5,
+];
+ksort($signed3);
+$signedStr3 = http_build_query($signed3, '', '&', PHP_QUERY_RFC3986);
+$sig       = hash_hmac('sha256', "POST\n{$path3}\n{$signedStr3}", $appSecret);
+$qs        = http_build_query([
     'auth_key' => $appKey, 'auth_timestamp' => $now,
     'auth_version' => '1.0', 'body_md5' => $md5, 'auth_signature' => $sig,
-]);
+], '', '&', PHP_QUERY_RFC3986);
 $ch = curl_init("http://{$reverbHost}:{$reverbPort}/apps/{$appId}/events?{$qs}");
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
