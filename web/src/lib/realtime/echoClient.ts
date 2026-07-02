@@ -104,6 +104,25 @@ function _build(cfg: RealtimeConfig): EchoInstance {
     // Bearer matches AuthApiKey middleware priority (Bearer → API key).
     auth: { headers: { Authorization: `Bearer ${cfg.token}` } },
   });
+
+  // Diagnostic: every raw Pusher frame before Echo's channel layer
+  // filters anything. Useful to distinguish "Reverb never pushes"
+  // (no frames) from "Echo ignores the event name" (frames present
+  // but no React/UI update).
+  try {
+    const pusher = (echo as unknown as {
+      connector?: { pusher?: { connection?: { bind: (e: string, h: (data: unknown) => void) => void } } };
+    }).connector?.pusher;
+    const conn = pusher?.connection as unknown as {
+      bind?: (e: string, h: (data: unknown) => void) => void;
+    } | undefined;
+    conn?.bind?.('message', (raw: unknown) => {
+      // eslint-disable-next-line no-console
+      console.log('[realtime-frame]', raw);
+    });
+  } catch {
+    // ignore — diagnostics, not critical
+  }
   return echo as unknown as EchoInstance;
 }
 
