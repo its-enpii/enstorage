@@ -66,9 +66,23 @@ if ($reachCode === 0 && $reachErr !== '') {
 fprintf(STDERR, "[bcast] step 1 OK: Reverb reachable (HTTP %d on /, expected 404 — no GET route)\n", $reachCode);
 
 // ─── Step 2: broadcaster HMAC accept ──────────────────────────────
+// Pusher HTTP API for /apps/{id}/events:
+//   Body MUST be JSON { name, channel, data, socket_id? } where
+//     - name    = event name (e.g. "App\\Events\\FileUploadedBroadcast")
+//     - channel = the channel to publish on (e.g. "private-user-X.folder.root")
+//     - data    = payload as a JSON string (Pusher spec)
+//     - socket_id optional — restricts to one connection if set
+// Reverb matches Pusher's signature scheme:
+//   md5(body) + auth_key + auth_timestamp + auth_version
 $now     = time();
-$payload = ['name' => 'channel:test', 'data' => ['hi' => 'bcast-test', 't' => $now]];
-$body    = json_encode($payload, JSON_UNESCAPED_SLASHES);
+$eventName = 'bcast-test';
+$channel   = 'test-channel';
+$dataStr   = json_encode(['hi' => 'bcast-test', 't' => $now], JSON_UNESCAPED_SLASHES);
+$body      = json_encode([
+    'name'    => $eventName,
+    'channel' => $channel,
+    'data'    => $dataStr,
+], JSON_UNESCAPED_SLASHES);
 $md5     = md5($body);
 $strToSign = "{$appKey}:{$now}:1.0:{$md5}";
 $sig     = hash_hmac('sha256', $strToSign, $appSecret);
@@ -204,18 +218,15 @@ if (!$latest) {
     exit(0);
 }
 $payload = [
-    'name' => "private-{$channelName}",
-    'data' => [
-        'event' => 'App\\Events\\FileUploadedBroadcast',
-        'data'  => [
-            'file_id'  => $latest->id,
-            'name'     => $latest->name,
-            'folder_id' => $latest->folder_id,
-            'mime_type' => $latest->mime_type,
-            'size'     => (int) $latest->size,
-        ],
-        'channel' => $channelName,
-    ],
+    'name'    => 'App\\Events\\FileUploadedBroadcast',
+    'channel' => $channelName,
+    'data'    => json_encode([
+        'file_id'   => $latest->id,
+        'name'      => $latest->name,
+        'folder_id' => $latest->folder_id,
+        'mime_type' => $latest->mime_type,
+        'size'      => (int) $latest->size,
+    ], JSON_UNESCAPED_SLASHES),
 ];
 $body     = json_encode($payload, JSON_UNESCAPED_SLASHES);
 $md5      = md5($body);
