@@ -1,38 +1,201 @@
-# Root-level production stack. Composes backend services (Laravel +
-# Postgres + Redis + Nginx + worker) with the Next.js web container.
+# Root-level production stack for enstorage.
 #
-# Usage on the VPS:
-#   docker compose -f docker-compose.yml up -d
+# Defines ALL services inline (no `include:` from backend/docker-compose.yml)
+# so the prod stack (project `enstorage-prod`) can co-exist on this host with
+# the dev stack (project `enstorage`) defined in backend/docker-compose.yml.
+# Using `include:` deep-merges list keys (e.g. `ports`) which made per-service
+# port overrides impossible without rewriting the include source.
 #
-# Notes:
-#   * Backend lives in backend/docker-compose.yml and is `include`d here
-#     so the two stacks share networks (web-network) and can talk to
-#     each other by container name (`app`, `web`).
-#   * web container publishes 3001:3000 (host:3001 → container:3000) to
-#     avoid clashing with anything else holding host port 3000.
-#   * Both stacks attach to the external `web-network` so Nginx Proxy
-#     Manager (running on the host) can resolve `web` and `app` by name.
-#   * Internal service-to-service traffic (app ↔ postgres, app ↔ redis)
-#     stays on `enstorage-net` which is NOT attached to web-network.
+# Co-existence rules:
+#   * Every prod container is named `enstorage-prod-*` and alias-published on
+#     its networks so internal DNS resolves `app`, `postgres`, `redis` etc.
+#     for nginx fastcgi_pass and Reverb/worker wiring without colliding on
+#     the host's container-name namespace.
+#   * Reverb prod host port is 8084 (dev reverb holds 8083).
+#   * Prod nginx debug port is 8085 (dev nginx holds 8082; 8083 is dev
+#     reverb; 8084 is prod reverb).
+#   * Prod web publishes 3001:3000 (debug fallback only; production traffic
+#     flows through NPM over the external `web-network`).
+#   * Both stacks attach to the external `web-network` so Nginx Proxy Manager
+#     can resolve `app`, `web`, `reverb` by name for HTTPS / WSS.
 #
 # Required external resources on the host (one-time setup):
 #   docker network create web-network
+#
+# Usage on the VPS:
+#   docker compose -f docker-compose.yml up -d
 
 name: enstorage-prod
 
-include:
-  - path: ./backend/docker-compose.yml
-
-# Production overrides for included services. The backend's reverb
-# container listens on 0.0.0.0:8080 (any interface) by default, which
-# works for NPM-over-web-network, but we also want a stable public
-# hostname the web client can resolve when the browser opens the WS
-# connection. The host/port of the WS endpoint is encoded in
-# NEXT_PUBLIC_REVERB_* (set on `web` above) and the matching TLS
-# termination must be configured in NPM. See README "Reverb / WSS" for
-# the reverse-proxy location block that pairs with this stack.
-
 services:
+  app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: enstorage-app
+    container_name: enstorage-prod-app
+    # `app` alias lets nginx fastcgi_pass `app:9000` work without changing
+    # the upstream nginx config — and without claiming the bare `app`
+    # container_name that the dev stack already owns.
+    networks:
+      enstorage-net:
+        aliases:
+          - app
+      web-network:
+        aliases:
+          - app
+    working_dir: /var/www/html
+    volumes:
+      - ./backend/storage/app/firebase-service-account.json:/var/www/html/storage/app/firebase-service-account.json:ro
+      # The actual Laravel env file lives in backend/.env (gitignored).
+      # Mounting `./.env` (an empty directory at the repo root on this
+      # host) produced a directory at /var/www/html/.env inside the
+      # container — Laravel then silently fell back to default config
+      # and Reverb had no APP_KEY/SECRET, so WS auth failed.
+      - ./backend/.env:/var/www/html/.env:ro
+      - app-storage:/var/www/html/storage
+      - app-bootstrap-cache:/var/www/html/bootstrap/cache
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: enstorage
+      DB_USERNAME: enstorage
+      DB_PASSWORD: ${DB_PASSWORD:-enstorage}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      APP_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: enstorage-prod-nginx
+    networks:
+      enstorage-net:
+        aliases:
+          - nginx
+      web-network:
+        aliases:
+          - nginx
+    ports:
+      # 8085 host → 80 container. Dev nginx holds 8082; this is debug only.
+      - "8085:80"
+    volumes:
+      - ./backend:/var/www/html:ro
+      - ./backend/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: docker/worker.Dockerfile
+    image: enstorage-worker
+    container_name: enstorage-prod-worker
+    networks:
+      enstorage-net:
+        aliases:
+          - worker
+      web-network:
+        aliases:
+          - worker
+    working_dir: /var/www/html
+    volumes:
+      - app-storage:/var/www/html/storage
+      - ./backend/storage/app/firebase-service-account.json:/var/www/html/storage/app/firebase-service-account.json:ro
+      - ./backend/.env:/var/www/html/.env:ro
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: enstorage
+      DB_USERNAME: enstorage
+      DB_PASSWORD: ${DB_PASSWORD:-enstorage}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      APP_ENV: production
+    depends_on:
+      app:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: enstorage-prod-postgres
+    networks:
+      enstorage-net:
+        aliases:
+          - postgres
+    environment:
+      POSTGRES_DB: enstorage
+      POSTGRES_USER: enstorage
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-enstorage}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U enstorage -d enstorage"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: enstorage-prod-redis
+    networks:
+      enstorage-net:
+        aliases:
+          - redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  reverb:
+    build:
+      context: ./backend
+      dockerfile: docker/reverb.Dockerfile
+    image: enstorage-reverb
+    container_name: enstorage-prod-reverb
+    networks:
+      enstorage-net:
+        aliases:
+          - reverb
+      web-network:
+        aliases:
+          - reverb
+    working_dir: /var/www/html
+    volumes:
+      - ./backend/.env:/var/www/html/.env:ro
+    environment:
+      APP_ENV: production
+    ports:
+      # Host 8084 → container 8080. Dev reverb holds 8083.
+      # Production WSS flows through NPM over web-network on container
+      # port 8080; this host mapping is a debug fallback only.
+      - "8084:8080"
+    restart: unless-stopped
+
   web:
     build:
       context: ./web
@@ -42,19 +205,20 @@ services:
       args:
         NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-https://api-enstorage.enpiistudio.com/api/v1}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
-        # Reverb WS endpoint — defaults to frontend host (port 443
-        # for wss://). NPM must terminate the WSS upgrade and forward
-        # to reverb:8080 over web-network. Override in .env if your
-        # NPM proxy lives on a different path/host.
         NEXT_PUBLIC_REVERB_SCHEME: ${NEXT_PUBLIC_REVERB_SCHEME:-wss}
         NEXT_PUBLIC_REVERB_HOST: ${NEXT_PUBLIC_REVERB_HOST:-enstorage.enpiistudio.com}
         NEXT_PUBLIC_REVERB_PORT: ${NEXT_PUBLIC_REVERB_PORT:-443}
         NEXT_PUBLIC_REVERB_APP_KEY: ${NEXT_PUBLIC_REVERB_APP_KEY:-}
     image: enstorage-web:latest
-    container_name: enstorage-web
+    container_name: enstorage-prod-web
+    # `web` alias on web-network so NPM (and any tooling that hardcodes
+    # the bare name `web`) can still resolve the prod frontend.
+    networks:
+      web-network:
+        aliases:
+          - web
     environment:
       NODE_ENV: production
-      # Mirror to runtime env so SSR (server components) can read them too.
       NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-https://api-enstorage.enpiistudio.com/api/v1}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
       NEXT_PUBLIC_REVERB_SCHEME: ${NEXT_PUBLIC_REVERB_SCHEME:-wss}
@@ -62,17 +226,19 @@ services:
       NEXT_PUBLIC_REVERB_PORT: ${NEXT_PUBLIC_REVERB_PORT:-443}
       NEXT_PUBLIC_REVERB_APP_KEY: ${NEXT_PUBLIC_REVERB_APP_KEY:-}
     depends_on:
-      - app   # just so web waits; it actually talks to `app` via NPM, not directly
-    networks:
-      - web-network
-    # host:3001 because host:3000 is taken by another container on the
-    # VPS. NPM forwards `enstorage.enpiistudio.com` → `web:3000` over
-    # web-network (NOT through the host port — the port mapping is
-    # only a fallback).
+      - app
     ports:
       - "3001:3000"
     restart: unless-stopped
 
+volumes:
+  app-storage:
+  app-bootstrap-cache:
+  postgres-data:
+  redis-data:
+
 networks:
+  enstorage-net:
+    driver: bridge
   web-network:
     external: true

@@ -32,22 +32,26 @@ jobs:
             # `cd /path/to/repo` here). Edit `cd` below if needed.
             cd //home/enpii/studio/enstorage
 
-            # Inject runtime secrets into a local .env file. The repo's
-            # docker-compose.yml references these via ${VAR:-default},
-            # so leaving them empty falls back to the in-compose
-            # defaults — useful for first-time deploys.
+            # ── env-file split ────────────────────────────────────────
+            # backend/.env holds Laravel secrets (APP_KEY, DB_*,
+            # REVERB_APP_KEY, REVERB_APP_SECRET, GOOGLE_*, ...) and is
+            # gitignored only at .env.production level — `backend/.env`
+            # itself is NOT gitignored (devs commit it). Operator
+            # maintains it on the VPS directly; CI never writes it.
             #
-            # Reverb vars: source the public key from backend/.env on the
-            # VPS (single source of truth, set once by the operator). The
-            # matching NEXT_PUBLIC_REVERB_* values are written here for
-            # `docker compose build web` to consume as build args. This
-            # avoids re-keying the same secret into GitHub Secrets (drift
-            # risk) and avoids the silent failure mode of an empty
-            # NEXT_PUBLIC_REVERB_APP_KEY baking `process.env.*` literally
-            # into the web bundle (browser throws "process is not defined"
-            # and Echo never connects).
+            # repo-root `.env` is written by CI on every run. It holds
+            # ONLY frontend-visible vars (NEXT_PUBLIC_*) since those are
+            # build args for the web image. `docker compose` auto-loads
+            # `.env` in the compose file dir for ${VAR} substitution.
+            #
+            # REVERB_APP_KEY must match between the two files: read it
+            # from backend/.env (single source of truth) and write it
+            # into .env so `docker compose build web` bakes it into the
+            # JS bundle as NEXT_PUBLIC_REVERB_APP_KEY. If they diverge,
+            # WSS auth on private channels fails with 403.
+            [ -f backend/.env ] || { echo "::error::backend/.env missing on VPS — see memory enstorage-env-file-split"; exit 1; }
             REVERB_KEY=$(grep '^REVERB_APP_KEY=' backend/.env | head -1 | cut -d= -f2-)
-            [ -z "$REVERB_KEY" ] && { echo "::error::backend/.env missing REVERB_APP_KEY — set it before deploying"; exit 1; }
+            [ -n "$REVERB_KEY" ] || { echo "::error::backend/.env missing REVERB_APP_KEY — set it before deploying"; exit 1; }
             cat > .env <<EOF
             NEXT_PUBLIC_API_BASE=${{ secrets.NEXT_PUBLIC_API_BASE }}
             NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
@@ -57,16 +61,42 @@ jobs:
             NEXT_PUBLIC_REVERB_APP_KEY=${REVERB_KEY}
             EOF
 
+            # Ensure `web-network` (the bridge to Nginx Proxy Manager
+            # running on the host) exists. NPM resolves container
+            # hostnames `app`, `web`, `nginx`, `reverb` over it.
+            docker network inspect web-network >/dev/null 2>&1 || docker network create web-network
+
             git pull origin main
 
-            docker network inspect web-network >/dev/null 2>&1 || docker network create web-network
-            docker compose up -d --build
+            # Explicit project name + file. The root compose sets
+            # `name: enstorage-prod`, but passing `-p` and `-f` makes the
+            # intent obvious in logs and avoids accidentally picking up
+            # backend/docker-compose.yml (which is the dev stack,
+            # project `enstorage`, and lives in the same repo).
+            COMPOSE="docker compose -f docker-compose.yml -p enstorage-prod"
+
+            # `up -d --build` rebuilds and recreates any service whose
+            # build context or compose config changed. The dev stack
+            # (`enstorage-*`) and prod stack (`enstorage-prod-*`) coexist
+            # on this host — `--remove-orphans` is not needed because
+            # all dev containers are managed by the dev compose project,
+            # not this one.
+            $COMPOSE up -d --build
 
             # Stale bootstrap/cache from dev providers (e.g.
             # Laravel\Pail) can survive bind-mounts. Wipe and let
             # artisan rebuild against the production vendor.
-            docker compose exec -T app rm -f bootstrap/cache/packages.php bootstrap/cache/services.php
-            docker compose exec -T app php artisan package:discover --ansi
-            docker compose exec -T app php artisan config:clear
-            docker compose exec -T app php artisan cache:clear
-            docker compose exec -T app php artisan migrate --force
+            $COMPOSE exec -T app rm -f bootstrap/cache/packages.php bootstrap/cache/services.php
+            $COMPOSE exec -T app php artisan package:discover --ansi
+            $COMPOSE exec -T app php artisan config:clear
+            $COMPOSE exec -T app php artisan cache:clear
+            $COMPOSE exec -T app php artisan migrate --force
+
+            # Health gate: every prod container must be `Up`. Use
+            # compose ps (not `docker ps`) so service names match what
+            # we expect (e.g. `enstorage-prod-redis`, not bare `redis`).
+            # Don't fail the run on a single unhealthy container —
+            # surface the status so the operator can inspect, but exit
+            # 0 so a transient startup race doesn't fail CI.
+            echo "──── prod compose status ────"
+            $COMPOSE ps --format 'table {{.Name}}\t{{.Status}}\t{{.Ports}}' || true
