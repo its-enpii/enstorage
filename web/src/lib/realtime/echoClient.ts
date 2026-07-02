@@ -138,15 +138,7 @@ export function subscribeToChannel(
   handler: (payload: unknown) => void,
 ): () => void {
   const channel = echo.private(channelName);
-  // DEBUG TEMP
-  console.log('[realtime] subscribeToChannel', channelName, event);
   channel.listen(event, handler);
-  // Some pusher-js events (error / subscription_succeeded) bubble via
-  // channel.error / pusher subscription callbacks — log them here to
-  // distinguish "subscribe failed" from "subscribe ok but no events".
-  (channel as unknown as { error?: (cb: (err: unknown) => void) => void }).error?.(
-    (err) => console.warn('[realtime] channel error', channelName, err),
-  );
   return () => {
     try {
       channel.stopListening(event);
