@@ -233,6 +233,7 @@ function normaliseFolder(data: Record<string, unknown>): FolderType | null {
     is_starred: Boolean(data.is_starred ?? false),
     path: String(data.path ?? '/'),
     parent_id: (data.parent_id as string | null) ?? null,
+    user_id: String(data.user_id ?? ''),
     share_token: (data.share_token as string | null) ?? null,
     created_at: String(data.created_at ?? new Date().toISOString()),
     updated_at: String(data.updated_at ?? new Date().toISOString()),
