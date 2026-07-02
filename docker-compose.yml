@@ -191,10 +191,12 @@ services:
     depends_on:
       - app
     ports:
-      # Host 3000 → container 3000. NPM forwards the public domain to
-      # `web:3000` over web-network; this host mapping is a debug
-      # fallback only.
-      - "3000:3000"
+      # Host 3002 → container 3000. Host 3000 is held by another
+      # project's frontend container (`encenter-frontend`) on this VPS,
+      # so the debug fallback was bumped here. Production traffic flows
+      # through NPM over web-network on container port 3000; this host
+      # mapping is a debug fallback only.
+      - "3002:3000"
     networks:
       - web-network
     restart: unless-stopped
