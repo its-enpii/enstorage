@@ -30,9 +30,7 @@ class FolderMovedBroadcast implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [new PrivateChannel(ReverbChannel::user(
-            (string) $this->folder->user_id
-        ))];
+        return [new PrivateChannel(ReverbChannel::user((string) $this->folder->user_id))];
     }
 
     public function broadcastWith(): array
