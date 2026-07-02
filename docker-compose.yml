@@ -60,10 +60,12 @@ services:
     image: nginx:1.27-alpine
     container_name: enstorage-nginx
     ports:
-      # Host 8080 → container 80. Production traffic flows through NPM
+      # Host 8008 → container 80. Host 8080 is held by another project's
+      # nginx on this VPS (`encenter-evolution`), so the debug port
+      # mapping was bumped here. Production traffic flows through NPM
       # over web-network (container port 80); this host mapping is a
       # debug fallback only.
-      - "8080:80"
+      - "8008:80"
     volumes:
       - ./backend:/var/www/html:ro
       - ./backend/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
