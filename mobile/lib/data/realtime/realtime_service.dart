@@ -219,17 +219,23 @@ class RealtimeService {
     final channel = _channel;
     if (userId == null || channel == null) return;
 
+    // Channel names use DASH between the group prefix and the leading
+    // identifier — same format the backend `ReverbChannel` helpers
+    // emit and the closures in routes/channels.php match. Using a
+    // dot here would make Laravel fail to match any closure pattern
+    // and `/broadcasting/auth` would return 403.
+
     // client.* — only when this device has a real client_key. Backend
     // routes uploads from THIS device to this channel.
     if (clientKey != null) {
-      await _subscribe('client.$clientKey.folder.${_currentFolderId ?? 'root'}');
+      await _subscribe('client-$clientKey.folder.${_currentFolderId ?? 'root'}');
     }
     // user.* — always. Backend routes external/synthetic uploads and
     // uploads from sibling devices here, so this tab keeps in sync
     // even when it never uploaded anything.
-    await _subscribe('user.$userId.folder.${_currentFolderId ?? 'root'}');
+    await _subscribe('user-$userId.folder.${_currentFolderId ?? 'root'}');
     // folder.* — folder events (rename/move/delete), always.
-    await _subscribe('folder.$userId.${_currentFolderId ?? 'root'}');
+    await _subscribe('folder-$userId.${_currentFolderId ?? 'root'}');
   }
 
   Future<void> _subscribe(String channelName) async {
@@ -256,20 +262,20 @@ class RealtimeService {
       try {
         channel.sink.add(jsonEncode({
           'event': 'pusher:unsubscribe',
-          'data': {'channel': 'client.$clientKey.folder.${_currentFolderId ?? 'root'}'},
+          'data': {'channel': 'client-$clientKey.folder.${_currentFolderId ?? 'root'}'},
         }));
       } catch (_) {}
     }
     try {
       channel.sink.add(jsonEncode({
         'event': 'pusher:unsubscribe',
-        'data': {'channel': 'user.$userId.folder.${_currentFolderId ?? 'root'}'},
+        'data': {'channel': 'user-$userId.folder.${_currentFolderId ?? 'root'}'},
       }));
     } catch (_) {}
     try {
       channel.sink.add(jsonEncode({
         'event': 'pusher:unsubscribe',
-        'data': {'channel': 'folder.$userId.${_currentFolderId ?? 'root'}'},
+        'data': {'channel': 'folder-$userId.${_currentFolderId ?? 'root'}'},
       }));
     } catch (_) {}
   }

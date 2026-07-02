@@ -155,11 +155,16 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     // each event arrives in this tab exactly once. No dedup needed.
     const unsubs: Array<() => void> = [];
     const folderScope = folderId ?? 'root';
+    // Channel names use DASH between the group prefix and the leading
+    // identifier — same format the backend `ReverbChannel` helpers
+    // emit and the closures in routes/channels.php match. Using a
+    // dot here would make Laravel fail to match any closure pattern
+    // and `/broadcasting/auth` would return 403.
     const clientFileChannel = clientKey
-      ? `client.${clientKey}.folder.${folderScope}`
+      ? `client-${clientKey}.folder.${folderScope}`
       : null;
-    const userFileChannel = `user.${user.id}.folder.${folderScope}`;
-    const folderChannelName = `folder.${user.id}.${folderScope}`;
+    const userFileChannel = `user-${user.id}.folder.${folderScope}`;
+    const folderChannelName = `folder-${user.id}.${folderScope}`;
 
     const dispatch = (eventName: string) => (payload: unknown) => {
       const ev = parseRealtimePayload(eventName, payload);
