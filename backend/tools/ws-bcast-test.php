@@ -175,7 +175,11 @@ $channelName = "private-user-{$userId}.folder.{$folderId}";
 $socketId    = '123456.789';
 $signature   = hash_hmac('sha256', $socketId . ':' . $channelName, $appSecret);
 $postBody = http_build_query(['socket_id' => $socketId, 'channel_name' => $channelName]);
-$ch = curl_init('http://127.0.0.1:80/api/v1/broadcasting/auth');
+// Resolve auth endpoint from API_INTERNAL_BASE env (defaults to the
+// in-compose nginx → app URL). 127.0.0.1:80 in the app container is
+// NOT nginx — app is fpm 9000 — so we MUST use the compose hostname.
+$apiInternal = getenv('API_INTERNAL_BASE') ?: 'http://enstorage-nginx';
+$ch = curl_init(rtrim($apiInternal, '/') . '/api/v1/broadcasting/auth');
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_POST           => true,
