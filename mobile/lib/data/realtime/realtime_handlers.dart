@@ -120,22 +120,54 @@ void _refreshParentListing(Ref ref, String? parentId) {
 }
 
 FileItem? _tryParseFile(Map<String, dynamic> payload) {
-  if (payload['id'] == null) return null;
-  // Cast to Map<String, dynamic> for fromJson; payload conforms to
-  // backend FileResource shape (snake_case fields).
-  final json = Map<String, dynamic>.from(payload);
+  // Broadcast payload is flatter than the REST FileResource shape:
+  // uses `file_id` (not `id`), omits is_starred/upload_status/etc.
+  // Normalise before handing to FileItem.fromJson so the rest of the
+  // app sees a uniform shape.
+  final id = payload['file_id'] ?? payload['id'];
+  if (id == null) return null;
+  final name = payload['name']?.toString() ?? '';
+  final uploadedAt = payload['uploaded_at']?.toString();
+  final normalised = <String, dynamic>{
+    'id': id,
+    'name': name,
+    'original_name': payload['original_name'] ?? name,
+    'mime_type': payload['mime_type'] ?? 'application/octet-stream',
+    'size': payload['size'] ?? 0,
+    'folder_id': payload['folder_id'],
+    'google_account_id': payload['google_account_id'],
+    'gdrive_file_id': payload['gdrive_file_id'] ?? '',
+    'shareable_link': payload['share_url'] ?? payload['shareable_link'],
+    'share_token': payload['share_token'],
+    'upload_status': payload['upload_status'] ?? 'done',
+    'uploaded_at': uploadedAt,
+    'has_thumbnail': payload['has_thumbnail'] ?? false,
+    'is_starred': payload['is_starred'] ?? false,
+    'created_at': payload['created_at'] ?? uploadedAt ?? DateTime.now().toIso8601String(),
+    'updated_at': payload['updated_at'] ?? uploadedAt ?? DateTime.now().toIso8601String(),
+  };
   try {
-    return FileItem.fromJson(json);
+    return FileItem.fromJson(normalised);
   } catch (_) {
     return null;
   }
 }
 
 Folder? _tryParseFolder(Map<String, dynamic> payload) {
-  if (payload['id'] == null) return null;
-  final json = Map<String, dynamic>.from(payload);
+  final id = payload['folder_id'] ?? payload['id'];
+  if (id == null) return null;
+  final normalised = <String, dynamic>{
+    'id': id,
+    'name': payload['name'] ?? '',
+    'is_starred': payload['is_starred'] ?? false,
+    'path': payload['path'] ?? '/',
+    'parent_id': payload['parent_id'],
+    'share_token': payload['share_token'],
+    'created_at': payload['created_at'] ?? DateTime.now().toIso8601String(),
+    'updated_at': payload['updated_at'] ?? DateTime.now().toIso8601String(),
+  };
   try {
-    return Folder.fromJson(json);
+    return Folder.fromJson(normalised);
   } catch (_) {
     return null;
   }

@@ -78,28 +78,31 @@ RealtimeEvent? parseRealtimePayload(String eventName, Object? rawData) {
 
   switch (eventName) {
     case 'App\\Events\\FileUploadedBroadcast':
-      if (data['id'] == null) return null;
+      if (data['file_id'] == null) return null;
       return RealtimeEvent.fileUploaded(data);
     case 'App\\Events\\FileUploadFailedBroadcast':
+      if (data['file_id'] == null) return null;
       return RealtimeEvent.fileUploadFailed(data);
     case 'App\\Events\\FileMovedBroadcast':
-      if (data['id'] == null) return null;
+      if (data['file_id'] == null) return null;
       return RealtimeEvent.fileMoved(data);
     case 'App\\Events\\FileDeletedBroadcast':
+      if (data['file_id'] == null) return null;
       return RealtimeEvent.fileDeleted(data);
     case 'App\\Events\\FileUpdatedBroadcast':
-      if (data['id'] == null) return null;
+      if (data['file_id'] == null) return null;
       return RealtimeEvent.fileUpdated(data);
     case 'App\\Events\\FolderCreatedBroadcast':
-      if (data['id'] == null) return null;
+      if (data['folder_id'] == null) return null;
       return RealtimeEvent.folderCreated(data);
     case 'App\\Events\\FolderDeletedBroadcast':
+      if (data['folder_id'] == null) return null;
       return RealtimeEvent.folderDeleted(data);
     case 'App\\Events\\FolderRenamedBroadcast':
-      if (data['id'] == null) return null;
+      if (data['folder_id'] == null) return null;
       return RealtimeEvent.folderRenamed(data);
     case 'App\\Events\\FolderMovedBroadcast':
-      if (data['id'] == null) return null;
+      if (data['folder_id'] == null) return null;
       return RealtimeEvent.folderMoved(data);
     default:
       return null;

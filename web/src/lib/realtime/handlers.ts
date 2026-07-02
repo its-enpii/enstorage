@@ -193,11 +193,58 @@ function matchesView(eventFolderId: string | null, currentFolderId: string | nul
 }
 
 /**
- * Coerce a raw Pusher payload into a typed RealtimeEvent. Throws on
- * unrecognized shapes — caller logs + drops.
+ * Backend broadcast payloads (see `backend/app/Support/WebhookPayload.php`)
+ * are flatter than the rest-API `FileItem`/`Folder` shape — they use
+ * `file_id` / `folder_id` instead of `id`, and omit a few client-only
+ * fields (`is_starred`, `has_thumbnail`, `created_at`, etc.). The
+ * downstream store expects the canonical shapes, so we normalise here
+ * before constructing the typed `RealtimeEvent`.
+ */
+function normaliseFile(data: Record<string, unknown>): FileItem | null {
+  const id = String(data.file_id ?? data.id ?? '');
+  if (!id) return null;
+  const uploadedAt = (data.uploaded_at as string | null) ?? null;
+  return {
+    id,
+    name: String(data.name ?? ''),
+    original_name: String(data.original_name ?? data.name ?? ''),
+    is_starred: Boolean(data.is_starred ?? false),
+    mime_type: String(data.mime_type ?? 'application/octet-stream'),
+    size: Number(data.size ?? 0),
+    folder_id: (data.folder_id as string | null) ?? null,
+    google_account_id: (data.google_account_id as string | null) ?? null,
+    gdrive_file_id: String(data.gdrive_file_id ?? ''),
+    shareable_link: (data.share_url as string | null) ?? (data.shareable_link as string | null) ?? null,
+    share_token: (data.share_token as string | null) ?? null,
+    upload_status: ((data.upload_status as FileItem['upload_status']) ?? 'done'),
+    uploaded_at: uploadedAt,
+    has_thumbnail: Boolean(data.has_thumbnail ?? false),
+    created_at: String(data.created_at ?? uploadedAt ?? new Date().toISOString()),
+    updated_at: String(data.updated_at ?? uploadedAt ?? new Date().toISOString()),
+  };
+}
+
+function normaliseFolder(data: Record<string, unknown>): FolderType | null {
+  const id = String(data.folder_id ?? data.id ?? '');
+  if (!id) return null;
+  return {
+    id,
+    name: String(data.name ?? ''),
+    is_starred: Boolean(data.is_starred ?? false),
+    path: String(data.path ?? '/'),
+    parent_id: (data.parent_id as string | null) ?? null,
+    share_token: (data.share_token as string | null) ?? null,
+    created_at: String(data.created_at ?? new Date().toISOString()),
+    updated_at: String(data.updated_at ?? new Date().toISOString()),
+  };
+}
+
+/**
+ * Coerce a raw Pusher payload into a typed RealtimeEvent. Returns null
+ * on unrecognised event names or payloads missing the required id.
  *
  * Backend broadcasts come through Pusher as:
- *   { event: 'App\\Events\\FileUploadedBroadcast', data: { file_id, ... }, channel: 'private-client....' }
+ *   { event: 'App\\Events\\FileUploadedBroadcast', data: { file_id, ... }, channel: 'private-...' }
  *
  * The `event` field is the FQCN and tells us which variant to map to.
  */
@@ -208,22 +255,24 @@ export function parseRealtimePayload(
   const data = (rawData ?? {}) as Record<string, unknown>;
 
   if (rawEventName === 'App\\Events\\FileUploadedBroadcast') {
-    const file = data as unknown as FileItem;
-    if (!file?.id) return null;
+    const file = normaliseFile(data);
+    if (!file) return null;
     return { type: 'file.uploaded', file };
   }
   if (rawEventName === 'App\\Events\\FileUploadFailedBroadcast') {
+    const fileId = String(data.file_id ?? '');
+    if (!fileId) return null;
     return {
       type: 'file.upload_failed',
-      fileId: String(data.file_id ?? ''),
+      fileId,
       folderId: (data.folder_id as string | null) ?? null,
       uploadStatus: String(data.upload_status ?? 'failed'),
       reason: String(data.reason ?? ''),
     };
   }
   if (rawEventName === 'App\\Events\\FileMovedBroadcast') {
-    const file = data as unknown as FileItem;
-    if (!file?.id) return null;
+    const file = normaliseFile(data);
+    if (!file) return null;
     return {
       type: 'file.moved',
       file,
@@ -232,38 +281,50 @@ export function parseRealtimePayload(
     };
   }
   if (rawEventName === 'App\\Events\\FileDeletedBroadcast') {
+    const fileId = String(data.file_id ?? '');
+    if (!fileId) return null;
     return {
       type: 'file.deleted',
-      fileId: String(data.file_id ?? ''),
+      fileId,
       folderId: (data.folder_id as string | null) ?? null,
     };
   }
   if (rawEventName === 'App\\Events\\FileUpdatedBroadcast') {
-    const file = data as unknown as FileItem;
-    if (!file?.id) return null;
+    const file = normaliseFile(data);
+    if (!file) return null;
     return { type: 'file.updated', file };
   }
   if (rawEventName === 'App\\Events\\FolderCreatedBroadcast') {
-    const folder = data as unknown as FolderType;
-    if (!folder?.id) return null;
+    const folder = normaliseFolder(data);
+    if (!folder) return null;
     return { type: 'folder.created', folder };
   }
   if (rawEventName === 'App\\Events\\FolderDeletedBroadcast') {
+    const folderId = String(data.folder_id ?? '');
+    if (!folderId) return null;
     return {
       type: 'folder.deleted',
-      folderId: String(data.folder_id ?? ''),
+      folderId,
       parentId: (data.parent_id as string | null) ?? null,
     };
   }
   if (rawEventName === 'App\\Events\\FolderRenamedBroadcast') {
-    const folder = data as unknown as FolderType;
-    if (!folder?.id) return null;
-    return { type: 'folder.renamed', folder, previousName: String(data.previous_name ?? folder.name) };
+    const folder = normaliseFolder(data);
+    if (!folder) return null;
+    return {
+      type: 'folder.renamed',
+      folder,
+      previousName: String(data.previous_name ?? folder.name),
+    };
   }
   if (rawEventName === 'App\\Events\\FolderMovedBroadcast') {
-    const folder = data as unknown as FolderType;
-    if (!folder?.id) return null;
-    return { type: 'folder.moved', folder, previousParentId: (data.previous_parent_id as string | null) ?? null };
+    const folder = normaliseFolder(data);
+    if (!folder) return null;
+    return {
+      type: 'folder.moved',
+      folder,
+      previousParentId: (data.previous_parent_id as string | null) ?? null,
+    };
   }
   return null;
 }
