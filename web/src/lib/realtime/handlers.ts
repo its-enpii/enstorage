@@ -6,6 +6,15 @@
  * `src/lib/filesStore.tsx` (upsertFile, removeFile, etc.). Keeping the
  * mapping pure lets us unit-test each branch in isolation and reuse the
  * same logic from a future cross-tab BroadcastChannel bridge.
+ *
+ * View-side filtering: the server now broadcasts ALL events for the user
+ * on a single per-user channel (`user-{userId}`). It is the client's job
+ * to decide whether the event touches the current view (via
+ * `matchesView()`) — used for `upsertFile` / `removeFile` into the visible
+ * file list. Sidebar folder-card counters, however, must update
+ * regardless of the current view, so we increment/decrement them when
+ * the folder is present in `visibleFolderIds` even when `matchesView()`
+ * is false.
  */
 
 import type { FileItem, Folder as FolderType } from '@/lib/api';
@@ -42,9 +51,9 @@ export type ApplyContext = {
   currentFolderId: string | null;
   /**
    * Folder IDs visible as cards in the current view's `folders` array.
-   * Used by `updateFolderCounts` no-op detection — folders outside the
-   * current view don't need count adjustments (server-side count wins
-   * on next revalidate).
+   * Used by `updateFolderCounts` to decide whether a count bump is in
+   * scope — folders outside the current view don't need it (server-side
+   * count wins on next revalidate).
    */
   visibleFolderIds: Set<string>;
 };
@@ -59,21 +68,24 @@ export function applyEvent(e: RealtimeEvent, ctx: ApplyContext): boolean {
 
   switch (e.type) {
     case 'file.uploaded': {
-      // Only insert when the broadcast's folder matches the view (or view
-      // is root and the upload landed at root). The Reverb channel split
-      // already filters by folder_id, but `root` subscribers also receive
-      // all folder uploads — gate at the view layer to avoid noise.
+      // Insert only when the upload landed in the current view. The
+      // server no longer filters by folder, so we gate at the view
+      // layer to avoid noise (a folder shown as a card does NOT receive
+      // a file row insertion — it only receives a count bump below).
       if (matchesView(e.file.folder_id, currentFolderId)) {
         store.upsertFile(e.file);
-        return true;
       }
-      return false;
+      // Sidebar folder card count bumps regardless of current view, as
+      // long as the destination folder is one of the visible cards.
+      const fid = e.file.folder_id;
+      if (fid && visibleFolderIds.has(fid)) {
+        store.updateFolderCounts(fid, +1, e.file.size ?? 0);
+      }
+      return true;
     }
 
     case 'file.upload_failed': {
-      // Mark existing pending row as failed (if visible). Backend fires
-      // this per folder_id so subscribers in non-current folders won't
-      // see it; only the file's owning folder receives it.
+      // Mark existing pending row as failed (if visible).
       if (matchesView(e.folderId, currentFolderId)) {
         // Remove from optimistic list — UI will refetch to see the final
         // state. Best-effort: if the row is absent, the next revalidate
@@ -100,15 +112,14 @@ export function applyEvent(e: RealtimeEvent, ctx: ApplyContext): boolean {
         store.upsertFile(e.file);
       }
 
-      // Adjust folder card counts. `updateFolderCounts` itself is a no-op
-      // when the folder id is absent from `folders` array, so the Set is
-      // informational only — we don't strictly need it. Skipping the set
-      // check keeps the function cheap.
-      if (wasInCurrentView && movedFrom && visibleFolderIds.has(movedFrom)) {
-        store.updateFolderCounts(movedFrom, -1, -((e.file as FileItem).size ?? 0));
+      // Sidebar folder card counts — always update when the affected
+      // folder is in the visible cards set, regardless of current view.
+      const size = e.file.size ?? 0;
+      if (movedFrom && movedFrom !== movedInto && visibleFolderIds.has(movedFrom)) {
+        store.updateFolderCounts(movedFrom, -1, -size);
       }
-      if (inCurrentView && movedInto && movedFrom !== movedInto && visibleFolderIds.has(movedInto)) {
-        store.updateFolderCounts(movedInto, +1, +((e.file as FileItem).size ?? 0));
+      if (movedInto && movedFrom !== movedInto && visibleFolderIds.has(movedInto)) {
+        store.updateFolderCounts(movedInto, +1, +size);
       }
       return inCurrentView || wasInCurrentView;
     }
@@ -116,18 +127,16 @@ export function applyEvent(e: RealtimeEvent, ctx: ApplyContext): boolean {
     case 'file.deleted': {
       if (matchesView(e.folderId, currentFolderId)) {
         store.removeFile(e.fileId);
-        // Folder card count — same no-op behavior as above.
-        if (e.folderId && visibleFolderIds.has(e.folderId)) {
-          store.updateFolderCounts(e.folderId, -1, 0);
-        }
-        return true;
       }
-      return false;
+      // Folder card count — independent of current view.
+      if (e.folderId && visibleFolderIds.has(e.folderId)) {
+        store.updateFolderCounts(e.folderId, -1, 0);
+      }
+      return true;
     }
 
     case 'file.updated': {
-      // File broadcasts are scoped to `client.{ck}.folder.{fid}` so we
-      // only receive this for the folder we're viewing.
+      // Only insert when the updated file is in the current view.
       if (matchesView(e.file.folder_id ?? null, currentFolderId)) {
         store.upsertFile(e.file);
         return true;

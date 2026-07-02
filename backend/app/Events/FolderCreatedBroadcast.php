@@ -13,12 +13,8 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Fired after a new folder is persisted (FolderController::store).
- * Broadcast to `folder.{user_id}.{parent_id|root}` so subscribers
- * viewing the parent_id see the new folder appended; subscribers
- * elsewhere are unaffected.
- *
- * Folder model has no client_key — this event uses the user-scoped
- * channel (see ReverbChannel::folder).
+ * Broadcast on the user's single per-user channel — clients filter by
+ * `parent_id` against their current view locally.
  */
 class FolderCreatedBroadcast implements ShouldBroadcastNow
 {
@@ -28,9 +24,8 @@ class FolderCreatedBroadcast implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [new PrivateChannel(ReverbChannel::folder(
-            $this->folder->user_id,
-            $this->folder->parent_id
+        return [new PrivateChannel(ReverbChannel::user(
+            (string) $this->folder->user_id
         ))];
     }
 

@@ -72,14 +72,20 @@ jobs:
             set +a
             REVERB_KEY=$(grep '^REVERB_APP_KEY=' backend/.env | head -1 | cut -d= -f2-)
             [ -n "$REVERB_KEY" ] || { echo "::error::backend/.env missing REVERB_APP_KEY — set it before deploying"; exit 1; }
-            cat > .env <<EOF
-            NEXT_PUBLIC_API_BASE=${{ secrets.NEXT_PUBLIC_API_BASE }}
-            NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
-            NEXT_PUBLIC_REVERB_SCHEME=wss
-            NEXT_PUBLIC_REVERB_HOST=enstorage.enpiistudio.com
-            NEXT_PUBLIC_REVERB_PORT=443
-            NEXT_PUBLIC_REVERB_APP_KEY=${REVERB_KEY}
-            EOF
+
+            # Write root .env (build args for the web image) only when it
+            # doesn't exist yet. Once present we leave it alone — operator
+            # edits on the VPS are preserved across deploys.
+            if [ ! -f .env ]; then
+              cat > .env <<EOF
+              NEXT_PUBLIC_API_BASE=${{ secrets.NEXT_PUBLIC_API_BASE }}
+              NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
+              NEXT_PUBLIC_REVERB_SCHEME=wss
+              NEXT_PUBLIC_REVERB_HOST=enstorage.enpiistudio.com
+              NEXT_PUBLIC_REVERB_PORT=443
+              NEXT_PUBLIC_REVERB_APP_KEY=${REVERB_KEY}
+              EOF
+            fi
 
             # Ensure `web-network` (the bridge to Nginx Proxy Manager
             # running on the host) exists. NPM resolves container

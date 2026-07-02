@@ -6,16 +6,12 @@
 /// Pusher SDK that assumes a clustered Pusher Cloud broker.
 ///
 /// One connection per app session. Auto-reconnect with exponential
-/// backoff. Channels (all private):
-///   - `client.{client_key}.folder.{folder_id|root}`  (file events from THIS device)
-///   - `user.{user_id}.folder.{folder_id|root}`       (file event catch-all:
-///                                                      external API uploads,
-///                                                      sibling devices,
-///                                                      users with no uploads yet)
-///   - `folder.{user_id}.{folder_id|root}`            (folder events)
+/// backoff. Single private channel per user:
+///   - `user.{user_id}`                                (all file + folder events)
 ///
-/// `clientKey` is optional: a freshly-registered user with no uploads
-/// doesn't have one yet but still receives file events via `user.*`.
+/// View-side filtering happens in the Riverpod state notifiers via
+/// `currentFolderId` — the server no longer scopes broadcasts by folder,
+/// so navigating between folders does not require WS re-subscribe.
 library;
 
 import 'dart:async';
@@ -54,9 +50,7 @@ class RealtimeService {
   RealtimeState _currentState = RealtimeState.disconnected;
   int _backoffMs = 1000;
   bool _shouldReconnect = false;
-  String? _clientKey;
   String? _userId;
-  String? _currentFolderId;
   Timer? _reconnectTimer;
 
   Stream<RealtimeEvent> get events => _events.stream;
@@ -69,15 +63,11 @@ class RealtimeService {
   Future<void> connect({
     required RealtimeConfig config,
     required String userId,
-    String? clientKey,
-    String? currentFolderId,
   }) async {
     await disconnect();
 
     _config = config;
-    _clientKey = clientKey;
     _userId = userId;
-    _currentFolderId = currentFolderId;
     _shouldReconnect = true;
     _backoffMs = 1000;
 
@@ -91,13 +81,6 @@ class RealtimeService {
       _setState(RealtimeState.reconnecting);
       _scheduleReconnect();
     }
-  }
-
-  Future<void> setCurrentFolder(String? folderId) async {
-    if (_currentFolderId == folderId || _channel == null) return;
-    await _unsubscribeAll();
-    _currentFolderId = folderId;
-    await _subscribeAll();
   }
 
   Future<void> disconnect() async {
@@ -214,28 +197,16 @@ class RealtimeService {
   }
 
   Future<void> _subscribeAll() async {
-    final clientKey = _clientKey;
     final userId = _userId;
     final channel = _channel;
     if (userId == null || channel == null) return;
 
-    // Channel names use DASH between the group prefix and the leading
-    // identifier — same format the backend `ReverbChannel` helpers
-    // emit and the closures in routes/channels.php match. Using a
-    // dot here would make Laravel fail to match any closure pattern
-    // and `/broadcasting/auth` would return 403.
-
-    // client.* — only when this device has a real client_key. Backend
-    // routes uploads from THIS device to this channel.
-    if (clientKey != null) {
-      await _subscribe('client-$clientKey.folder.${_currentFolderId ?? 'root'}');
-    }
-    // user.* — always. Backend routes external/synthetic uploads and
-    // uploads from sibling devices here, so this tab keeps in sync
-    // even when it never uploaded anything.
-    await _subscribe('user-$userId.folder.${_currentFolderId ?? 'root'}');
-    // folder.* — folder events (rename/move/delete), always.
-    await _subscribe('folder-$userId.${_currentFolderId ?? 'root'}');
+    // Single per-user channel. Backend broadcasts every file + folder
+    // event for the user on `user-{userId}` — the client filters by
+    // currentFolderId locally. Channel name uses DASH between the
+    // prefix and the user id (matches backend `ReverbChannel::user()`
+    // and the closure in routes/channels.php).
+    await _subscribe('user-$userId');
   }
 
   Future<void> _subscribe(String channelName) async {
@@ -250,34 +221,6 @@ class RealtimeService {
       },
     });
     _channel?.sink.add(msg);
-  }
-
-  Future<void> _unsubscribeAll() async {
-    final clientKey = _clientKey;
-    final userId = _userId;
-    final channel = _channel;
-    if (userId == null || channel == null) return;
-
-    if (clientKey != null) {
-      try {
-        channel.sink.add(jsonEncode({
-          'event': 'pusher:unsubscribe',
-          'data': {'channel': 'client-$clientKey.folder.${_currentFolderId ?? 'root'}'},
-        }));
-      } catch (_) {}
-    }
-    try {
-      channel.sink.add(jsonEncode({
-        'event': 'pusher:unsubscribe',
-        'data': {'channel': 'user-$userId.folder.${_currentFolderId ?? 'root'}'},
-      }));
-    } catch (_) {}
-    try {
-      channel.sink.add(jsonEncode({
-        'event': 'pusher:unsubscribe',
-        'data': {'channel': 'folder-$userId.${_currentFolderId ?? 'root'}'},
-      }));
-    } catch (_) {}
   }
 
   void _setState(RealtimeState s) {

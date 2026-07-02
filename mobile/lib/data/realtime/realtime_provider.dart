@@ -58,10 +58,6 @@ final realtimeEventsProvider = StreamProvider<RealtimeEvent>((ref) {
 /// Connects the realtime service when [RealtimeConnectionContext] is
 /// available (set by `main.dart` from auth state). Re-runs on auth
 /// change so a new user / token rotation picks up the right scope.
-///
-/// `clientKeys` must be fetched from `/auth/me` by the caller and
-/// passed in via the family parameter — the realtime layer doesn't
-/// know how to refresh the user object.
 final realtimeConnectionProvider = Provider.family<
     AsyncValue<void>, RealtimeConnectionContext>((ref, ctx) {
   final svc = ref.watch(realtimeServiceProvider);
@@ -69,14 +65,6 @@ final realtimeConnectionProvider = Provider.family<
     svc.disconnect();
     return const AsyncValue.data(null);
   }
-  final keys = ctx.clientKeys;
-  // clientKey is OPTIONAL — see RealtimeService.connect signature.
-  // A user with no real-device uploads yet (or only server-generated
-  // keys) still receives file events via the per-user `user.*` channel,
-  // so the connection is opened regardless. Passing null skips the
-  // per-device `client.*` subscription inside the service.
-  final clientKey = (keys != null && keys.isNotEmpty) ? keys.first : null;
-
   // Defer to microtask so we don't re-enter Provider observers on the
   // same frame the auth state changed.
   Future.microtask(() async {
@@ -90,9 +78,7 @@ final realtimeConnectionProvider = Provider.family<
           authEndpoint: ctx.authEndpoint,
           token: ctx.token!,
         ),
-        clientKey: clientKey,
         userId: ctx.userId,
-        currentFolderId: ctx.currentFolderId,
       );
     } catch (_) {
       // service has its own reconnect; surface failure via state stream.
@@ -109,39 +95,21 @@ class RealtimeConnectionContext {
     required this.isAuthenticated,
     required this.token,
     required this.userId,
-    required this.clientKeys,
     required this.wsHost,
     required this.wsPort,
     required this.wsScheme,
     required this.appKey,
     required this.authEndpoint,
-    this.currentFolderId,
   });
 
   final bool isAuthenticated;
   final String? token;
   final String userId;
-  final List<String>? clientKeys;
   final String wsHost;
   final int wsPort;
   final String wsScheme;
   final String appKey;
   final String authEndpoint;
-  final String? currentFolderId;
-
-  RealtimeConnectionContext copyWith({String? currentFolderId}) =>
-      RealtimeConnectionContext(
-        isAuthenticated: isAuthenticated,
-        token: token,
-        userId: userId,
-        clientKeys: clientKeys,
-        wsHost: wsHost,
-        wsPort: wsPort,
-        wsScheme: wsScheme,
-        appKey: appKey,
-        authEndpoint: authEndpoint,
-        currentFolderId: currentFolderId ?? this.currentFolderId,
-      );
 }
 
 /// Set up the accessor + bridge so realtime handlers can refresh the
@@ -154,13 +122,4 @@ void installRealtimeBridges(ProviderContainer container) {
   registerFoldersProviderAccessor((String? parentId) {
     return fs.filesControllerProvider(parentId);
   });
-}
-
-/// Update the active folder id without restarting the connection.
-void updateRealtimeFolder(
-  ProviderContainer container,
-  String? folderId,
-) {
-  final svc = container.read(realtimeServiceProvider);
-  svc.setCurrentFolder(folderId);
 }

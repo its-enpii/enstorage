@@ -1,12 +1,13 @@
 /**
  * Reverb WS client (Pusher protocol) — singleton.
  *
- * Backend broadcasts on:
- *   private-client.{client_key}.folder.{folder_id|root}   → file events
- *   private-folder.{user_id}.{folder_id|root}             → folder events
+ * Backend broadcasts on a single channel per user:
+ *   private-user.{user_id}     → all file + folder events
  *
  * (Pusher auto-prefixes `private-` on the wire; channel names below
- * stay without the prefix.)
+ * stay without the prefix.) Clients subscribe once to their user's
+ * channel and filter by current view locally (see handlers.ts
+ * `matchesView()`).
  *
  * Frontend uses one connection per tab. Connection lifecycle is owned
  * by RealtimeProvider — this file only provides the factory + cleanup

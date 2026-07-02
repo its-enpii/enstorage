@@ -8,107 +8,45 @@ use Illuminate\Broadcasting\PrivateChannel;
 /**
  * Helper for the canonical Reverb broadcast channel names.
  *
- * Three scopes:
+ * Single per-user broadcast channel: `user-{user_id}`. Every event for a
+ * user — file + folder, server-origin + client-origin — fans out on this
+ * one channel. Subscribed clients (web / mobile) do the view-side filter
+ * by inspecting the payload's `folder_id` / `parent_id` against their
+ * own current view, so the server never has to know who is viewing what.
  *
- * 1. File events (per client_key — known device):
- *    client-{client_key}.folder.{folder_id|'root'}
- *    One client_key may be in use by multiple devices of the same user;
- *    folder_id scopes the broadcast to subscribers viewing that folder.
- *
- * 2. Folder events (per user — folder model has no client_key):
- *    folder-{user_id}.{folder_id|'root'}
- *    Folder changes apply across all of the user's client_keys/devices.
- *
- * 3. File events catch-all (per user — external API / unknown device):
- *    user-{user_id}.folder.{folder_id|'root'}
- *    Used when the file event's client_key did NOT come from a real
- *    device the user controls (e.g. external API upload with no
- *    device key, or server-generated ULID). Reaches every tab of the
- *    user so the UI stays in sync regardless of upload source.
- *
- * `null` folder_id → 'root' (broadcast to every tab/screen owned by
- * the channel scope).
- *
- * The Pusher wire format uses dash separators between the channel
- * group ("client", "folder", "user") and the leading identifier
- * (client_key or user_id) so the broadcast pattern can match it
- * without ambiguity. The rest of the path uses dots, mirroring how
- * routes/channels.php declares the patterns.
+ * Wire format: Pusher prefixes `private-` automatically on the wire; the
+ * channel names below stay without that prefix.
  */
 final class ReverbChannel
 {
-    public static function file(string $clientKey, ?string $folderId): string
+    public static function user(string $userId): string
     {
-        return 'client-'.$clientKey.'.folder.'.($folderId ?? 'root');
-    }
-
-    public static function folder(string $userId, ?string $folderId): string
-    {
-        return 'folder-'.$userId.'.'.($folderId ?? 'root');
-    }
-
-    public static function userFile(string $userId, ?string $folderId): string
-    {
-        return 'user-'.$userId.'.folder.'.($folderId ?? 'root');
+        return 'user-'.$userId;
     }
 
     /**
-     * Pick the right channel(s) for a file event based on whether the
-     * file's `client_key` was supplied by a known device or came from
-     * somewhere else (server-generated ULID, external API).
-     *
-     * Routing rule:
-     *   - client_key_origin = 'client' AND the key appears in the
-     *     user's set of device-supplied keys → route to client.*
-     *     (the owning tab's optimistic-update path).
-     *   - otherwise → route to user.* (every tab of the user).
-     *
-     * The two are mutually exclusive: an event goes to exactly one
-     * channel family, so subscribers receive each event exactly once
-     * without per-tab dedup logic.
+     * One channel for any file event: `user-{userId}`. Routing no longer
+     * branches on `client_key_origin` — the original device receives the
+     * same broadcast as every other tab of the user, and any dedup /
+     * view-routing is the client's job (see `matchesView()` in the web
+     * and mobile handlers).
      */
     public static function fileEventChannels(FileModel $file): array
     {
-        $userDeviceKeys = FileModel::query()
-            ->where('user_id', $file->user_id)
-            ->where('client_key_origin', 'client')
-            ->pluck('client_key')
-            ->all();
-
-        $isFromKnownDevice = in_array($file->client_key, $userDeviceKeys, true);
-
-        if ($isFromKnownDevice) {
-            return [new PrivateChannel(self::file($file->client_key, $file->folder_id))];
-        }
-
-        return [new PrivateChannel(self::userFile((string) $file->user_id, $file->folder_id))];
+        return [new PrivateChannel(self::user((string) $file->user_id))];
     }
 
     /**
      * Same routing decision as fileEventChannels() but takes plain
-     * scalars — used by events that fire AFTER the file row is
-     * gone from the DB (e.g. FileDeletedBroadcast). The caller must
-     * capture `user_id`, `client_key`, and `folder_id` from the
-     * model before deletion.
+     * scalars — used by events that fire AFTER the file row is gone
+     * from the DB (e.g. FileDeletedBroadcast). The caller must capture
+     * `user_id` from the model before deletion.
      */
     public static function fileEventChannelsForDeleted(
         string $userId,
-        string $clientKey,
-        ?string $folderId,
+        string $clientKey, // kept in signature for call-site compat; unused for routing now.
+        ?string $folderId, // ditto.
     ): array {
-        $userDeviceKeys = FileModel::query()
-            ->where('user_id', $userId)
-            ->where('client_key_origin', 'client')
-            ->pluck('client_key')
-            ->all();
-
-        $isFromKnownDevice = in_array($clientKey, $userDeviceKeys, true);
-
-        if ($isFromKnownDevice) {
-            return [new PrivateChannel(self::file($clientKey, $folderId))];
-        }
-
-        return [new PrivateChannel(self::userFile($userId, $folderId))];
+        return [new PrivateChannel(self::user($userId))];
     }
 }
-

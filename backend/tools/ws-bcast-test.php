@@ -171,7 +171,7 @@ if (!$resolved) {
 $userId = (string) $resolved;
 fprintf(STDERR, "[bcast] step 3 user_id=%s (token=%.6s...)\n", $userId, $token);
 
-$channelName = "private-user-{$userId}.folder.{$folderId}";
+$channelName = "private-user-{$userId}";
 $socketId    = '123456.789';
 $signature   = hash_hmac('sha256', $socketId . ':' . $channelName, $appSecret);
 $postBody = http_build_query(['socket_id' => $socketId, 'channel_name' => $channelName]);

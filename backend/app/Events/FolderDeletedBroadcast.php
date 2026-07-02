@@ -31,10 +31,7 @@ class FolderDeletedBroadcast implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [new PrivateChannel(ReverbChannel::folder(
-            $this->userId,
-            $this->parentId
-        ))];
+        return [new PrivateChannel(ReverbChannel::user($this->userId))];
     }
 
     public function broadcastWith(): array

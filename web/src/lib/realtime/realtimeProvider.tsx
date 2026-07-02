@@ -95,18 +95,18 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener(AUTH_INVALID_EVENT, onInvalid);
   }, []);
 
-  // Connect + subscribe loop. Recreates on (user, token, folderId) change.
+  // Connect + subscribe loop. Recreates on (user, folderId) change —
+  // WS subscription is now per-user (not per-folder), so the WS layer
+  // doesn't churn on navigation, but the dispatch lambda still needs the
+  // fresh `folderId` to filter via matchesView(). Token is read inside
+  // the effect via getToken() and refreshed by the AUTH_INVALID_EVENT
+  // listener above on logout.
   useEffect(() => {
     const token = getToken();
     if (!user || !token) {
       setState('idle');
       return;
     }
-    // clientKey is optional: a user with no uploads yet (or only external
-    // uploads) has no real device key. They still receive file events
-    // via the `user.*` catch-all channel — only the per-device
-    // `client.*` channel is gated on having a key.
-    const clientKey = user.client_keys?.[0];
 
     const cfg = readRealtimeConfig(token, API_BASE);
     if (!cfg) {
@@ -141,30 +141,18 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
     // Subscribe.
     //
-    // Three channel families, all private:
-    //   - client.{clientKey}.folder.*   → file events from THIS device
-    //                                    (only subscribed if the user has
-    //                                    a real device key)
-    //   - user.{user.id}.folder.*       → file events catch-all (external
-    //                                    API uploads, server-generated
-    //                                    keys, sibling devices)
-    //   - folder.{user.id}.*            → folder events (always)
-    //
-    // Backend routes each file event to exactly one of {client.*, user.*}
-    // (mutually exclusive — see ReverbChannel::fileEventChannels), so
-    // each event arrives in this tab exactly once. No dedup needed.
+    // One private channel per user: `user-{userId}`. Backend broadcasts
+    // every file + folder event for the user on this single channel
+    // (no folder scope). Clients filter by the payload's `folder_id` /
+    // `parent_id` against their current view (`matchesView()` in
+    // handlers.ts). Folder navigation no longer churns the WS subscription.
     const unsubs: Array<() => void> = [];
-    const folderScope = folderId ?? 'root';
-    // Channel names use DASH between the group prefix and the leading
-    // identifier — same format the backend `ReverbChannel` helpers
-    // emit and the closures in routes/channels.php match. Using a
-    // dot here would make Laravel fail to match any closure pattern
-    // and `/broadcasting/auth` would return 403.
-    const clientFileChannel = clientKey
-      ? `client-${clientKey}.folder.${folderScope}`
-      : null;
-    const userFileChannel = `user-${user.id}.folder.${folderScope}`;
-    const folderChannelName = `folder-${user.id}.${folderScope}`;
+    const userChannel = `user-${user.id}`;
+    // Channel name uses DASH between the prefix and the user id — same
+    // format the backend `ReverbChannel::user()` emits and the closure
+    // in routes/channels.php matches. Using a dot here would make
+    // Laravel fail to match the closure pattern and `/broadcasting/auth`
+    // would return 403.
 
     const dispatch = (eventName: string) => (payload: unknown) => {
       const ev = parseRealtimePayload(eventName, payload);
@@ -176,18 +164,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       });
     };
 
-    for (const name of FILE_EVENTS) {
-      // Per-device channel — only when we have a client key. Backend
-      // routes events from THIS device here.
-      if (clientFileChannel) {
-        unsubs.push(subscribeToChannel(echo, clientFileChannel, name, dispatch(name)));
-      }
-      // Per-user catch-all — backend routes external/synthetic events
-      // here, and any other device's events.
-      unsubs.push(subscribeToChannel(echo, userFileChannel, name, dispatch(name)));
-    }
-    for (const name of FOLDER_EVENTS) {
-      unsubs.push(subscribeToChannel(echo, folderChannelName, name, dispatch(name)));
+    for (const name of [...FILE_EVENTS, ...FOLDER_EVENTS]) {
+      unsubs.push(subscribeToChannel(echo, userChannel, name, dispatch(name)));
     }
 
     // Eagerly mark "connected" if we made it this far without throwing.

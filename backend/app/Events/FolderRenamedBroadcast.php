@@ -31,9 +31,8 @@ class FolderRenamedBroadcast implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [new PrivateChannel(ReverbChannel::folder(
-            $this->folder->user_id,
-            $this->folder->parent_id
+        return [new PrivateChannel(ReverbChannel::user(
+            (string) $this->folder->user_id
         ))];
     }
 

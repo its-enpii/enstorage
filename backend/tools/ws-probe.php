@@ -9,8 +9,8 @@
  *       <USER_ID> <TOKEN> [FOLDER_ID|root]
  *
  * What it does:
- *   1. POST /broadcasting/auth for `private-user-{USER_ID}.folder.{folderId}`
- *      using Bearer token. Exits non-zero on 403.
+ *   1. POST /broadcasting/auth for `private-user-{USER_ID}` using Bearer
+ *      token. Exits non-zero on 403.
  *   2. Reverb HTTP broadcaster trigger: dispatches a synthetic
  *      `FileUploadedBroadcast` for the latest file belonging to USER_ID.
  *      (Reverb accepts the event regardless of auth — broadcaster uses
@@ -30,13 +30,12 @@
  */
 
 if ($argc < 3) {
-    fwrite(STDERR, "usage: php ws-probe.php <USER_ID> <TOKEN> [FOLDER_ID|root]\n");
+    fwrite(STDERR, "usage: php ws-probe.php <USER_ID> <TOKEN>\n");
     exit(2);
 }
 
-$userId   = $argv[1];
-$token    = $argv[2];
-$folderId = $argv[3] ?? 'root';
+$userId = $argv[1];
+$token  = $argv[2];
 $appKey   = getenv('REVERB_APP_KEY') ?: '';
 $appSecret = getenv('REVERB_APP_SECRET') ?: '';
 $appId    = getenv('REVERB_APP_ID') ?: '';
@@ -48,7 +47,7 @@ if ($appKey === '' || $appSecret === '' || $appId === '') {
 }
 
 // 1. Auth the channel via /broadcasting/auth (loopback).
-$channelName = "private-user-{$userId}.folder.{$folderId}";
+$channelName = "private-user-{$userId}";
 $socketId    = '123456.789';
 $toSign      = $socketId . ':' . $channelName;
 $signature   = hash_hmac('sha256', $toSign, $appSecret);

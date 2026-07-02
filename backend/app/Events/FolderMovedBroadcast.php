@@ -12,10 +12,9 @@ use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Fired after FolderController::move completes. Broadcast to BOTH the
- * source parent channel (subscribers there remove the folder) AND the
- * destination parent channel (subscribers there append it). Same
- * convention as FileMovedBroadcast.
+ * Fired after FolderController::move completes. Single broadcast on the
+ * user's per-user channel — subscribers handle the move by inspecting
+ * the payload's `previous_parent_id` against the post-state `parent_id`.
  *
  * `previous_parent_id` is captured before the Eloquent update mutates
  * `$folder->parent_id`.
@@ -31,21 +30,9 @@ class FolderMovedBroadcast implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        $channels = [];
-
-        // Source parent — subscribers viewing the origin remove the folder.
-        $channels[] = new PrivateChannel(ReverbChannel::folder(
-            $this->folder->user_id,
-            $this->previousParentId
-        ));
-
-        // Destination parent — appended if same parent (no-op) or different.
-        $channels[] = new PrivateChannel(ReverbChannel::folder(
-            $this->folder->user_id,
-            $this->folder->parent_id
-        ));
-
-        return $channels;
+        return [new PrivateChannel(ReverbChannel::user(
+            (string) $this->folder->user_id
+        ))];
     }
 
     public function broadcastWith(): array

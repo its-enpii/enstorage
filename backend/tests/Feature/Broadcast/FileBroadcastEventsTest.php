@@ -205,11 +205,14 @@ class FileBroadcastEventsTest extends TestCase
         $names = $this->channelNames($event->broadcastOn());
 
         $this->assertCount(1, $names);
-        $this->assertSame("user-{$user->id}.folder.root", $names[0]);
+        $this->assertSame("user-{$user->id}", $names[0]);
     }
 
-    public function test_uploaded_routes_to_client_channel_when_origin_is_client(): void
+    public function test_uploaded_routes_to_user_channel_when_origin_is_client(): void
     {
+        // After the flat refactor: all file events go to the single
+        // per-user channel regardless of client_key_origin — the client
+        // does its own view-side filter.
         $user = $this->actingUser();
         $clientKey = 'my-device-key';
         $folder = $this->makeFolder($user, 'Docs');
@@ -231,15 +234,13 @@ class FileBroadcastEventsTest extends TestCase
         $names = $this->channelNames($event->broadcastOn());
 
         $this->assertCount(1, $names);
-        $this->assertSame("client-{$clientKey}.folder.{$folder->id}", $names[0]);
+        $this->assertSame("user-{$user->id}", $names[0]);
     }
 
     public function test_uploaded_routes_to_user_channel_for_orphan_device_key(): void
     {
-        // File was uploaded from a device that supplied a client_key, but
-        // no other file in the system has the same key + origin='client'
-        // for this user → the key is "orphan" (e.g. user cleared their
-        // account) and the event should fall through to user.*.
+        // Orphan device key is now irrelevant for routing — the single
+        // per-user channel catches every event.
         $user = $this->actingUser();
         $orphanKey = 'device-once-only';
         $file = File::create([
@@ -260,7 +261,7 @@ class FileBroadcastEventsTest extends TestCase
         $names = $this->channelNames($event->broadcastOn());
 
         $this->assertCount(1, $names);
-        $this->assertSame("user-{$user->id}.folder.root", $names[0]);
+        $this->assertSame("user-{$user->id}", $names[0]);
     }
 
     public function test_deleted_routes_via_helper_with_user_id(): void
@@ -278,7 +279,7 @@ class FileBroadcastEventsTest extends TestCase
         $names = $this->channelNames($event->broadcastOn());
 
         $this->assertCount(1, $names);
-        $this->assertSame("user-{$user->id}.folder.root", $names[0]);
+        $this->assertSame("user-{$user->id}", $names[0]);
     }
 
     public function test_updated_routes_to_user_channel_for_server_origin(): void
@@ -291,7 +292,7 @@ class FileBroadcastEventsTest extends TestCase
         $names = $this->channelNames($event->broadcastOn());
 
         $this->assertCount(1, $names);
-        $this->assertSame("user-{$user->id}.folder.root", $names[0]);
+        $this->assertSame("user-{$user->id}", $names[0]);
     }
 
     public function test_upload_failed_routes_to_user_channel_for_server_origin(): void
@@ -304,11 +305,15 @@ class FileBroadcastEventsTest extends TestCase
         $names = $this->channelNames($event->broadcastOn());
 
         $this->assertCount(1, $names);
-        $this->assertSame("user-{$user->id}.folder.root", $names[0]);
+        $this->assertSame("user-{$user->id}", $names[0]);
     }
 
-    public function test_moved_routes_both_legs_to_user_channel_for_server_origin(): void
+    public function test_moved_routes_to_user_channel_for_server_origin(): void
     {
+        // After the flat refactor: a move is a single broadcast on the
+        // per-user channel — the source-remove + destination-insert is
+        // driven by the payload's `previous_folder_id` vs post-state
+        // `folder_id` on the client.
         $user = $this->actingUser();
         $source = $this->makeFolder($user, 'Source');
         $target = $this->makeFolder($user, 'Target');
@@ -318,8 +323,7 @@ class FileBroadcastEventsTest extends TestCase
         $event = new FileMovedBroadcast($file, $source->id, 'a.txt', false);
         $names = $this->channelNames($event->broadcastOn());
 
-        $this->assertCount(2, $names);
-        $this->assertContains("user-{$user->id}.folder.{$source->id}", $names);
-        $this->assertContains("user-{$user->id}.folder.{$target->id}", $names);
+        $this->assertCount(1, $names);
+        $this->assertSame("user-{$user->id}", $names[0]);
     }
 }

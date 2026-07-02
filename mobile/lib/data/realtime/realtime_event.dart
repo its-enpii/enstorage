@@ -1,9 +1,8 @@
 /// Canonical event payload shapes for Reverb WS broadcasts.
 ///
 /// Backend (`app/Support/WebhookPayload.php` + event classes) emits
-/// these on channels:
-///   - file.* → `client.{client_key}.folder.{folder_id|root}`
-///   - folder.* → `folder.{user_id}.{folder_id|root}`
+/// every event for the user on a single channel:
+///   - file.* + folder.* → `user.{user_id}`
 ///
 /// Handlers (`handlers.dart`) consume these into Riverpod providers.
 library;

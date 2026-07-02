@@ -87,27 +87,15 @@ void _connectOrDisconnectRealtime(WidgetRef ref, bool isAuthed) async {
   if (user == null) return;
   final token = await ref.read(tokenStorageProvider).readToken();
   if (token == null || token.isEmpty) return;
-  // Wait — we don't have client_keys in mobile. The backend /auth/me
-  // response supplies them, but mobile auth state may not have refreshed
-  // from the server yet (cached User from secure storage lacks
-  // client_keys). Trigger a /auth/me refresh in the background.
   final ctx = RealtimeConnectionContext(
     isAuthenticated: true,
     token: token,
     userId: user.id,
-    clientKeys: user.clientKeys.isNotEmpty
-        ? user.clientKeys
-        : const <String>[],
     wsHost: kReverbHost,
     wsPort: kReverbPort,
     wsScheme: kReverbScheme,
     appKey: kReverbAppKey,
     authEndpoint: '${kApiBase.replaceFirst('/api/v1', '')}/broadcasting/auth',
   );
-  if (ctx.clientKeys == null || ctx.clientKeys!.isEmpty) {
-    // No client_keys → no file events possible yet. Skip until first
-    // upload completes (then refresh /auth/me from AuthController).
-    return;
-  }
   ref.read(realtimeConnectionProvider(ctx));
 }
