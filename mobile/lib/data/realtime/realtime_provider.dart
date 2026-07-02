@@ -70,14 +70,12 @@ final realtimeConnectionProvider = Provider.family<
     return const AsyncValue.data(null);
   }
   final keys = ctx.clientKeys;
-  if (keys == null || keys.isEmpty) {
-    // User hasn't uploaded anything yet — no subscriptions possible.
-    svc.disconnect();
-    return const AsyncValue.data(null);
-  }
-  // Use the first client_key — see plan Open Q #3 for multi-key
-  // reasoning. Multi-key opens N connections; defer.
-  final clientKey = keys.first;
+  // clientKey is OPTIONAL — see RealtimeService.connect signature.
+  // A user with no real-device uploads yet (or only server-generated
+  // keys) still receives file events via the per-user `user.*` channel,
+  // so the connection is opened regardless. Passing null skips the
+  // per-device `client.*` subscription inside the service.
+  final clientKey = (keys != null && keys.isNotEmpty) ? keys.first : null;
 
   // Defer to microtask so we don't re-enter Provider observers on the
   // same frame the auth state changed.
