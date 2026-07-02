@@ -50,6 +50,17 @@ jobs:
             # JS bundle as NEXT_PUBLIC_REVERB_APP_KEY. If they diverge,
             # WSS auth on private channels fails with 403.
             [ -f backend/.env ] || { echo "::error::backend/.env missing on VPS — see memory enstorage-env-file-split"; exit 1; }
+            # Export backend/.env so docker compose reads DB_PASSWORD,
+            # REDIS_PASSWORD, GOOGLE_* etc. from the same source the app
+            # container reads. Without this, compose's ${DB_PASSWORD:-enstorage}
+            # falls back to the default while the app container reads the
+            # real one from /var/www/html/.env → postgres password mismatch
+            # → SQLSTATE[08006]. `set -a` auto-exports every var assignment
+            # in the sourced file.
+            set -a
+            # shellcheck disable=SC1091
+            . backend/.env
+            set +a
             REVERB_KEY=$(grep '^REVERB_APP_KEY=' backend/.env | head -1 | cut -d= -f2-)
             [ -n "$REVERB_KEY" ] || { echo "::error::backend/.env missing REVERB_APP_KEY — set it before deploying"; exit 1; }
             cat > .env <<EOF
@@ -68,19 +79,12 @@ jobs:
 
             git pull origin main
 
-            # Explicit project name + file. The root compose sets
-            # `name: enstorage-prod`, but passing `-p` and `-f` makes the
-            # intent obvious in logs and avoids accidentally picking up
-            # backend/docker-compose.yml (which is the dev stack,
-            # project `enstorage`, and lives in the same repo).
-            COMPOSE="docker compose -f docker-compose.yml -p enstorage-prod"
+            # Explicit compose file. There is only one stack on the VPS
+            # now (no dev/prod split), so `-p` is unnecessary.
+            COMPOSE="docker compose -f docker-compose.yml"
 
             # `up -d --build` rebuilds and recreates any service whose
-            # build context or compose config changed. The dev stack
-            # (`enstorage-*`) and prod stack (`enstorage-prod-*`) coexist
-            # on this host — `--remove-orphans` is not needed because
-            # all dev containers are managed by the dev compose project,
-            # not this one.
+            # build context or compose config changed.
             $COMPOSE up -d --build
 
             # Stale bootstrap/cache from dev providers (e.g.

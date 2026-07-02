@@ -1,31 +1,24 @@
-# Root-level production stack for enstorage.
+# Production stack for enstorage. This is the ONLY compose stack on the VPS
+# (no separate dev stack — development is done on a local workstation).
 #
-# Defines ALL services inline (no `include:` from backend/docker-compose.yml)
-# so the prod stack (project `enstorage-prod`) can co-exist on this host with
-# the dev stack (project `enstorage`) defined in backend/docker-compose.yml.
-# Using `include:` deep-merges list keys (e.g. `ports`) which made per-service
-# port overrides impossible without rewriting the include source.
-#
-# Co-existence rules:
-#   * Every prod container is named `enstorage-prod-*` and alias-published on
-#     its networks so internal DNS resolves `app`, `postgres`, `redis` etc.
-#     for nginx fastcgi_pass and Reverb/worker wiring without colliding on
-#     the host's container-name namespace.
-#   * Reverb prod host port is 8084 (dev reverb holds 8083).
-#   * Prod nginx debug port is 8085 (dev nginx holds 8082; 8083 is dev
-#     reverb; 8084 is prod reverb).
-#   * Prod web publishes 3001:3000 (debug fallback only; production traffic
-#     flows through NPM over the external `web-network`).
-#   * Both stacks attach to the external `web-network` so Nginx Proxy Manager
-#     can resolve `app`, `web`, `reverb` by name for HTTPS / WSS.
+# Architecture:
+#   * Backend (Laravel + Postgres + Redis + Nginx + worker + Reverb) + Web
+#     (Next.js) — all services defined inline here.
+#   * `app`/`web`/`nginx`/`reverb` attach to the external `web-network` so
+#     Nginx Proxy Manager (running on the host, NOT in a container) can
+#     resolve them by bare hostname and terminate TLS / WSS.
+#   * `postgres` and `redis` stay on the internal `enstorage-net` only.
 #
 # Required external resources on the host (one-time setup):
 #   docker network create web-network
 #
+# Required file on host (operator-managed, NOT in repo):
+#   backend/.env — Laravel secrets (APP_KEY, DB_PASSWORD, REVERB_*,
+#                  GOOGLE_*, BROADCAST_CONNECTION, ...)
+#   .env         — frontend-only NEXT_PUBLIC_* (compose auto-loads)
+#
 # Usage on the VPS:
-#   docker compose -f docker-compose.yml up -d
-
-name: enstorage-prod
+#   docker compose up -d --build
 
 services:
   app:
@@ -33,25 +26,10 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     image: enstorage-app
-    container_name: enstorage-prod-app
-    # `app` alias lets nginx fastcgi_pass `app:9000` work without changing
-    # the upstream nginx config — and without claiming the bare `app`
-    # container_name that the dev stack already owns.
-    networks:
-      enstorage-net:
-        aliases:
-          - app
-      web-network:
-        aliases:
-          - app
+    container_name: enstorage-app
     working_dir: /var/www/html
     volumes:
       - ./backend/storage/app/firebase-service-account.json:/var/www/html/storage/app/firebase-service-account.json:ro
-      # The actual Laravel env file lives in backend/.env (gitignored).
-      # Mounting `./.env` (an empty directory at the repo root on this
-      # host) produced a directory at /var/www/html/.env inside the
-      # container — Laravel then silently fell back to default config
-      # and Reverb had no APP_KEY/SECRET, so WS auth failed.
       - ./backend/.env:/var/www/html/.env:ro
       - app-storage:/var/www/html/storage
       - app-bootstrap-cache:/var/www/html/bootstrap/cache
@@ -73,26 +51,27 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - enstorage-net
+      - web-network
     restart: unless-stopped
 
   nginx:
     image: nginx:1.27-alpine
-    container_name: enstorage-prod-nginx
-    networks:
-      enstorage-net:
-        aliases:
-          - nginx
-      web-network:
-        aliases:
-          - nginx
+    container_name: enstorage-nginx
     ports:
-      # 8085 host → 80 container. Dev nginx holds 8082; this is debug only.
-      - "8085:80"
+      # Host 8080 → container 80. Production traffic flows through NPM
+      # over web-network (container port 80); this host mapping is a
+      # debug fallback only.
+      - "8080:80"
     volumes:
       - ./backend:/var/www/html:ro
       - ./backend/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - app
+    networks:
+      - enstorage-net
+      - web-network
     restart: unless-stopped
 
   worker:
@@ -100,14 +79,7 @@ services:
       context: ./backend
       dockerfile: docker/worker.Dockerfile
     image: enstorage-worker
-    container_name: enstorage-prod-worker
-    networks:
-      enstorage-net:
-        aliases:
-          - worker
-      web-network:
-        aliases:
-          - worker
+    container_name: enstorage-worker
     working_dir: /var/www/html
     volumes:
       - app-storage:/var/www/html/storage
@@ -132,15 +104,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - enstorage-net
+      - web-network
     restart: unless-stopped
 
   postgres:
     image: postgres:15-alpine
-    container_name: enstorage-prod-postgres
-    networks:
-      enstorage-net:
-        aliases:
-          - postgres
+    container_name: enstorage-postgres
     environment:
       POSTGRES_DB: enstorage
       POSTGRES_USER: enstorage
@@ -152,15 +123,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - enstorage-net
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
-    container_name: enstorage-prod-redis
-    networks:
-      enstorage-net:
-        aliases:
-          - redis
+    container_name: enstorage-redis
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
@@ -169,6 +138,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks:
+      - enstorage-net
     restart: unless-stopped
 
   reverb:
@@ -176,24 +147,20 @@ services:
       context: ./backend
       dockerfile: docker/reverb.Dockerfile
     image: enstorage-reverb
-    container_name: enstorage-prod-reverb
-    networks:
-      enstorage-net:
-        aliases:
-          - reverb
-      web-network:
-        aliases:
-          - reverb
+    container_name: enstorage-reverb
     working_dir: /var/www/html
     volumes:
       - ./backend/.env:/var/www/html/.env:ro
     environment:
       APP_ENV: production
     ports:
-      # Host 8084 → container 8080. Dev reverb holds 8083.
-      # Production WSS flows through NPM over web-network on container
-      # port 8080; this host mapping is a debug fallback only.
-      - "8084:8080"
+      # Host 8083 → container 8080. Production WSS flows through NPM
+      # over web-network (container port 8080); this host mapping is a
+      # debug fallback only.
+      - "8083:8080"
+    networks:
+      - enstorage-net
+      - web-network
     restart: unless-stopped
 
   web:
@@ -210,13 +177,7 @@ services:
         NEXT_PUBLIC_REVERB_PORT: ${NEXT_PUBLIC_REVERB_PORT:-443}
         NEXT_PUBLIC_REVERB_APP_KEY: ${NEXT_PUBLIC_REVERB_APP_KEY:-}
     image: enstorage-web:latest
-    container_name: enstorage-prod-web
-    # `web` alias on web-network so NPM (and any tooling that hardcodes
-    # the bare name `web`) can still resolve the prod frontend.
-    networks:
-      web-network:
-        aliases:
-          - web
+    container_name: enstorage-web
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-https://api-enstorage.enpiistudio.com/api/v1}
@@ -228,7 +189,12 @@ services:
     depends_on:
       - app
     ports:
-      - "3001:3000"
+      # Host 3000 → container 3000. NPM forwards the public domain to
+      # `web:3000` over web-network; this host mapping is a debug
+      # fallback only.
+      - "3000:3000"
+    networks:
+      - web-network
     restart: unless-stopped
 
 volumes:
