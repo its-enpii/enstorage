@@ -314,12 +314,19 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
       final res = await repo.createShareLink(widget.fileId);
       // Backend returns { share_token, share_url }. Prefer share_url
       // (already includes the public host) and fall back to building
-      // it locally from the token.
+      // it locally from the configured API base + token.
       String? url = res['share_url'] as String?;
       if (url == null) {
         final token = res['share_token'] as String?;
         if (token != null) {
-          url = 'https://enstorage.enpii.studio/s/$token';
+          // Strip trailing slash + `/api/v1` segment so we end up at
+          // the web origin (where the public share page is served).
+          final base = kApiBase.endsWith('/')
+              ? kApiBase.substring(0, kApiBase.length - 1)
+              : kApiBase;
+          final origin =
+              base.replaceFirst(RegExp(r'/api/v[0-9]+/?$'), '');
+          url = '$origin/s/$token';
         }
       }
       if (url == null) {
@@ -346,19 +353,19 @@ class _FileViewerScreenState extends ConsumerState<FileViewerScreen> {
     final l10n = AppLocalizations.of(context)!;
     final confirmed = await showAppDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppDialogBody(
         title: Text(l10n.filesConfirmDeleteTitle),
-        content: Text(l10n.filesConfirmDeleteBody),
+        body: Text(l10n.filesConfirmDeleteBody),
         actions: [
-          TextButton(
+          EthericButton(
+            label: l10n.commonCancel,
+            variant: EthericButtonVariant.secondary,
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(l10n.commonCancel),
           ),
-          TextButton(
+          EthericButton(
+            label: l10n.filesConfirmDeleteConfirm,
+            variant: EthericButtonVariant.danger,
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(
-                foregroundColor: Theme.of(ctx).colorScheme.error),
-            child: Text(l10n.filesConfirmDeleteConfirm),
           ),
         ],
       ),

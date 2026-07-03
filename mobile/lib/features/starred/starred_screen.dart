@@ -147,10 +147,13 @@ class _Body extends StatelessWidget {
         140,
       ),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: Breakpoints.gridCount(context),
+        // Cap landscape at 4 columns — see files_screen.dart.
+        crossAxisCount: Breakpoints.gridCountCapped(context),
         mainAxisSpacing: AppSpacing.cardGap,
         crossAxisSpacing: AppSpacing.cardGap,
-        childAspectRatio: 1.1,
+        // See files_screen.dart — mainAxisExtent gives stable card
+        // height across phone and tablet landscape.
+        mainAxisExtent: 168,
       ),
       itemCount: folders.length + files.length,
       itemBuilder: (ctx, i) {

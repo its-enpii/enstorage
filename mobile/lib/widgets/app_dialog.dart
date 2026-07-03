@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/breakpoints.dart';
 import '../theme/radii.dart';
+import '../theme/spacing.dart';
 
 /// Adaptive max widths for app dialogs.
 ///
@@ -72,6 +73,86 @@ Future<T?> showAppDialog<T>({
       );
     },
   );
+}
+
+/// Shared body layout for dialogs shown via [showAppDialog].
+///
+/// Use this in the `builder` of [showAppDialog] so every dialog gets
+/// the same padding, vertical rhythm, and button-row styling. Do NOT
+/// wrap this in another `Dialog` / `ConstrainedBox` — [showAppDialog]
+/// already provides the outer shell (background, shape, max width,
+/// inset padding).
+class AppDialogBody extends StatelessWidget {
+  const AppDialogBody({
+    super.key,
+    required this.title,
+    this.body,
+    this.children = const [],
+    this.actions = const [],
+  });
+
+  /// Title row. Usually a `Text` styled with `AppTypography.headlineLgMobile`,
+  /// but a `Row` of `Icon + Text` is also fine (see ShareDialog).
+  final Widget title;
+
+  /// Optional description rendered between the title and [children].
+  /// For a single descriptive text, prefer wrapping in `Text` and
+  /// using `body:`. For mixed content (text + chip + link, etc.) use
+  /// `children:` instead.
+  final Widget? body;
+
+  /// Extra content rendered between [body] and [actions]. Use this for
+  /// custom widgets like text fields, share-link rows, or lists that
+  /// need to share the dialog's column layout.
+  final List<Widget> children;
+
+  /// Action buttons. Each entry is rendered inside an `Expanded` with
+  /// 12px gaps between them. Pass `EthericButton` widgets directly —
+  /// they'll fill their slot evenly.
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.innerPadding),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DefaultTextStyle(
+              style: Theme.of(context).textTheme.headlineSmall ?? const TextStyle(),
+              child: title,
+            ),
+            if (body != null) ...[
+              const SizedBox(height: 8),
+              DefaultTextStyle.merge(
+                style: Theme.of(context).textTheme.bodyMedium ?? const TextStyle(),
+                child: body!,
+              ),
+            ],
+            for (final child in children) ...[
+              const SizedBox(height: 16),
+              child,
+            ],
+            if (actions.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              IntrinsicHeight(
+                child: Row(
+                  children: [
+                    for (var i = 0; i < actions.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 12),
+                      Expanded(child: actions[i]),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Show an adaptive bottom sheet.

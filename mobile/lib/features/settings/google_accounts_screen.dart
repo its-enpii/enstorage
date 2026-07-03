@@ -19,6 +19,7 @@ import '../../widgets/etheric_card.dart';
 import '../../widgets/etheric_fab.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/app_dialog.dart';
+import '../../widgets/etheric_button.dart';
 import '../../widgets/list_menu_sheet.dart';
 import '../../widgets/nav_aware_sheet.dart';
 
@@ -335,19 +336,19 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
     final l10n = AppLocalizations.of(context)!;
     final confirmed = await showAppDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppDialogBody(
         title: Text(l10n.googleAccountsDisconnectTitle),
-        content: Text(l10n.googleAccountsDisconnectBody),
+        body: Text(l10n.googleAccountsDisconnectBody),
         actions: [
-          TextButton(
+          EthericButton(
+            label: l10n.commonCancel,
+            variant: EthericButtonVariant.secondary,
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(l10n.commonCancel),
           ),
-          TextButton(
-            style: TextButton.styleFrom(
-                foregroundColor: Theme.of(ctx).colorScheme.error),
+          EthericButton(
+            label: l10n.googleAccountsDisconnectConfirm,
+            variant: EthericButtonVariant.danger,
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(l10n.googleAccountsDisconnectConfirm),
           ),
         ],
       ),
@@ -685,42 +686,30 @@ class _EditLabelDialogState extends State<_EditLabelDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final scheme = Theme.of(context).colorScheme;
-    return AlertDialog(
-      backgroundColor: scheme.surfaceContainer,
+    return AppDialogBody(
       title: Text(l10n.googleAccountsEditLabelTitle),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            l10n.googleAccountsEditLabelDesc,
-            style: AppTypography.bodySm.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _ctrl,
-            autofocus: true,
-            decoration: InputDecoration(
-              hintText: widget.initial,
-              border: const OutlineInputBorder(),
-            ),
-            textInputAction: TextInputAction.done,
-            onSubmitted: (v) => Navigator.of(context).pop(v.trim()),
-          ),
-        ],
-      ),
+      body: Text(l10n.googleAccountsEditLabelDesc),
       actions: [
-        TextButton(
+        EthericButton(
+          label: l10n.commonCancel,
+          variant: EthericButtonVariant.secondary,
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.commonCancel),
         ),
-        TextButton(
-          onPressed: () =>
-              Navigator.of(context).pop(_ctrl.text.trim()),
-          child: Text(l10n.googleAccountsEditLabelSave),
+        EthericButton(
+          label: l10n.googleAccountsEditLabelSave,
+          onPressed: () => Navigator.of(context).pop(_ctrl.text.trim()),
+        ),
+      ],
+      children: [
+        TextField(
+          controller: _ctrl,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: widget.initial,
+            border: const OutlineInputBorder(),
+          ),
+          textInputAction: TextInputAction.done,
+          onSubmitted: (v) => Navigator.of(context).pop(v.trim()),
         ),
       ],
     );

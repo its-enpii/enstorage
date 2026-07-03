@@ -24,6 +24,7 @@ import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/etheric_fab.dart';
+import '../../widgets/etheric_button.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/app_dialog.dart';
 import 'create_action_sheet.dart';
@@ -33,6 +34,7 @@ import 'sort_sheet.dart';
 import 'filter_sheet.dart';
 import 'share_dialog.dart';
 import 'move_sheet.dart';
+import 'rename_dialog.dart';
 import 'widgets/file_card.dart';
 import 'widgets/folder_card.dart';
 
@@ -272,25 +274,160 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     await showMoveSheet(context, ref, files: [f], currentFolderId: widget.folderId);
   }
 
+  /// Tampilkan bottom sheet menu untuk aksi per-file (Move, Rename,
+  /// Share, Download, Delete). Dipanggil dari titik tiga di pojok
+  /// card. Mengikuti pola action web di FilesClient.buildFileMenuItems
+  /// — kecuali Star (sudah ada tombol star di pojok card) dan Preview
+  /// (route sudah ada di /viewer/:id, dipanggil dari tap card).
+  Future<void> _showFileOverflowMenu(FileItem f) async {
+    final l10n = AppLocalizations.of(context)!;
+    final repo = ref.read(filesRepositoryProvider);
+
+    Future<void> doRename() async {
+      final newName = await showAppDialog<String>(
+        context: context,
+        builder: (_) => RenameDialog(currentName: f.name),
+      );
+      if (newName == null || newName.isEmpty || newName == f.name) return;
+      try {
+        final updated = await repo.renameFile(f.id, newName);
+        if (!mounted) return;
+        ref.read(filesControllerProvider(widget.folderId).notifier).replaceFile(updated);
+      } catch (_) {
+        if (!mounted) return;
+        showAppSnackBar(context, l10n.filesRenameFailed, variant: AppSnackBarVariant.error);
+      }
+    }
+
+    Future<void> doShare() async {
+      await showAppDialog<void>(
+        context: context,
+        builder: (_) => ShareDialog(target: ShareFileTarget(f)),
+      );
+    }
+
+    Future<void> doDownload() async {
+      final token = await ref.read(tokenStorageProvider).readToken();
+      final api = ref.read(apiClientProvider);
+      try {
+        final dir = await getTemporaryDirectory();
+        final local = File('${dir.path}/${f.id}_${f.name}');
+        final url = repo.downloadUrl(f.id, token: token, inline: false);
+        await api.dio.download(url, local.path);
+        if (!mounted) return;
+        await Share.shareXFiles([XFile(local.path)], text: f.name);
+      } catch (_) {
+        if (!mounted) return;
+        showAppSnackBar(context, l10n.filesDownloadFailed, variant: AppSnackBarVariant.error);
+      }
+    }
+
+    Future<void> doDelete() async {
+      final ok = await showAppDialog<bool>(
+        context: context,
+        builder: (_) => AppDialogBody(
+          title: Text(l10n.filesConfirmDeleteTitle),
+          body: Text(l10n.filesConfirmDeleteBody),
+          actions: [
+            EthericButton(
+              label: l10n.commonCancel,
+              variant: EthericButtonVariant.secondary,
+              onPressed: () => Navigator.pop(_, false),
+            ),
+            EthericButton(
+              label: l10n.filesConfirmDeleteConfirm,
+              variant: EthericButtonVariant.danger,
+              onPressed: () => Navigator.pop(_, true),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      // Optimistic remove from list, rollback on failure.
+      ref.read(filesControllerProvider(widget.folderId).notifier).removeFile(f.id);
+      try {
+        await repo.deleteFile(f.id);
+      } catch (_) {
+        if (!mounted) return;
+        ref.read(filesControllerProvider(widget.folderId).notifier).refresh();
+        showAppSnackBar(context, l10n.filesDeleteFailed, variant: AppSnackBarVariant.error);
+      }
+    }
+
+    await showAppBottomSheet<void>(
+      context: context,
+      builder: (sheetCtx) {
+        final scheme = Theme.of(sheetCtx).colorScheme;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.drive_file_move_outline, color: scheme.onSurface),
+                title: Text(l10n.filesActionsMove),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _moveSingle(f);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.edit_outlined, color: scheme.onSurface),
+                title: Text(l10n.filesActionsRename),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  doRename();
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.link, color: scheme.onSurface),
+                title: Text(l10n.filesActionsShare),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  doShare();
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.download_outlined, color: scheme.onSurface),
+                title: Text(l10n.filesActionsDownload),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  doDownload();
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.delete_outline, color: scheme.error),
+                title: Text(l10n.filesConfirmDeleteConfirm, style: TextStyle(color: scheme.error)),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  doDelete();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _bulkDelete() async {
     final l10n = AppLocalizations.of(context)!;
     final selection = ref.read(selectionControllerProvider);
     final count = selection.count;
     final confirmed = await showAppDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppDialogBody(
         title: Text(l10n.filesConfirmBulkDeleteTitle(count)),
-        content: Text(l10n.filesConfirmBulkDeleteBody(count)),
+        body: Text(l10n.filesConfirmBulkDeleteBody(count)),
         actions: [
-          TextButton(
+          EthericButton(
+            label: l10n.commonCancel,
+            variant: EthericButtonVariant.secondary,
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(l10n.commonCancel),
           ),
-          TextButton(
+          EthericButton(
+            label: l10n.filesConfirmDeleteConfirm,
+            variant: EthericButtonVariant.danger,
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(
-                foregroundColor: Theme.of(ctx).colorScheme.error),
-            child: Text(l10n.filesConfirmDeleteConfirm),
           ),
         ],
       ),
@@ -433,7 +570,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                   _openFile(f);
                 }
               },
-              onFileOverflow: _moveSingle,
+              onFileOverflow: _showFileOverflowMenu,
               onLongPress: _enterSelectMode,
               onSortTap: () => _openSortSheet(context, controller),
               onFilterTap: () => _openFilterSheet(context, controller),
@@ -672,10 +809,20 @@ class _BodyState extends State<_Body> {
           ),
           sliver: SliverGrid(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: Breakpoints.gridCount(context),
+              // Cap landscape at 4 columns so card content (~142dp tall)
+              // stays readable on wide screens. Default expanded (>840dp)
+              // is 5 — fine for folders but too narrow for file rows.
+              crossAxisCount: Breakpoints.gridCountCapped(context),
               mainAxisSpacing: AppSpacing.cardGap,
               crossAxisSpacing: AppSpacing.cardGap,
-              childAspectRatio: 1.1,
+              // FileCard content is ~142dp tall (16 padding + 56 icon +
+              // 12 gap + ~21 name + 4 gap + ~17 size + 16 padding).
+              // Using mainAxisExtent instead of childAspectRatio keeps the
+              // row height stable across phone (2 col, ~154dp) and tablet
+              // landscape (5 col, narrow ~70dp) — aspectRatio would shrink
+              // cell height below content height on landscape and Flutter
+              // would paint an overflow banner on every row.
+              mainAxisExtent: 168,
             ),
             delegate: SliverChildBuilderDelegate(
               (ctx, i) {

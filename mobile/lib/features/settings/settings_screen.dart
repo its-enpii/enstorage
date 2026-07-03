@@ -11,6 +11,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/app_dialog.dart';
+import '../../widgets/etheric_button.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -31,7 +32,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _onEditName() async {
     final user = ref.read(authControllerProvider).user;
     final l10n = AppLocalizations.of(context)!;
-    final newName = await showDialog<String>(
+    final newName = await showAppDialog<String>(
       context: context,
       builder: (_) => _EditNameDialog(initial: user?.name ?? ''),
     );
@@ -267,19 +268,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   onTap: () async {
                     final confirmed = await showAppDialog<bool>(
                       context: context,
-                      builder: (ctx) => AlertDialog(
+                      builder: (ctx) => AppDialogBody(
                         title: Text(l10n.logoutConfirmTitle),
-                        content: Text(l10n.logoutConfirmBody),
+                        body: Text(l10n.logoutConfirmBody),
                         actions: [
-                          TextButton(
+                          EthericButton(
+                            label: l10n.commonCancel,
+                            variant: EthericButtonVariant.secondary,
                             onPressed: () => Navigator.of(ctx).pop(false),
-                            child: Text(l10n.commonCancel),
                           ),
-                          TextButton(
-                            style: TextButton.styleFrom(
-                                foregroundColor: Theme.of(ctx).colorScheme.error),
+                          EthericButton(
+                            label: l10n.logoutConfirmAction,
+                            variant: EthericButtonVariant.danger,
                             onPressed: () => Navigator.of(ctx).pop(true),
-                            child: Text(l10n.logoutConfirmAction),
                           ),
                         ],
                       ),
@@ -416,28 +417,29 @@ class _EditNameDialogState extends State<_EditNameDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final scheme = Theme.of(context).colorScheme;
-    return AlertDialog(
-      backgroundColor: scheme.surfaceContainer,
+    return AppDialogBody(
       title: Text(l10n.settingsEditNameTitle),
-      content: TextField(
-        controller: _ctrl,
-        autofocus: true,
-        textInputAction: TextInputAction.done,
-        onSubmitted: (v) => Navigator.of(context).pop(v.trim()),
-        decoration: InputDecoration(
-          hintText: widget.initial,
-          border: const OutlineInputBorder(),
-        ),
-      ),
       actions: [
-        TextButton(
+        EthericButton(
+          label: l10n.commonCancel,
+          variant: EthericButtonVariant.secondary,
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.commonCancel),
         ),
-        TextButton(
+        EthericButton(
+          label: l10n.settingsEditNameSave,
           onPressed: () => Navigator.of(context).pop(_ctrl.text.trim()),
-          child: Text(l10n.settingsEditNameSave),
+        ),
+      ],
+      children: [
+        TextField(
+          controller: _ctrl,
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (v) => Navigator.of(context).pop(v.trim()),
+          decoration: InputDecoration(
+            hintText: widget.initial,
+            border: const OutlineInputBorder(),
+          ),
         ),
       ],
     );

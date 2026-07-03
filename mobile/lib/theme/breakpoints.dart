@@ -46,4 +46,27 @@ class Breakpoints {
     if (isMedium(context)) return medium;
     return compact;
   }
+
+  /// Same as [gridCount] but caps landscape at 2 columns so wide
+  /// viewports give each card enough room for the icon + name + size
+  /// rows without clipping. Phone portrait keeps the standard
+  /// compact/medium/expanded picks.
+  static int gridCountCapped(
+    BuildContext context, {
+    int compact = 2,
+    int medium = 3,
+    int expanded = 5,
+    int landscapeMax = 2,
+  }) {
+    final landscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final raw = gridCount(
+      context,
+      compact: compact,
+      medium: medium,
+      expanded: expanded,
+    );
+    if (landscape && raw > landscapeMax) return landscapeMax;
+    return raw;
+  }
 }
