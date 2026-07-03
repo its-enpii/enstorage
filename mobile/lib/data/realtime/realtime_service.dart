@@ -52,6 +52,10 @@ class RealtimeService {
   bool _shouldReconnect = false;
   String? _userId;
   Timer? _reconnectTimer;
+  // Pusher server assigns a socket_id on `pusher:connection_established`.
+  // We need that exact id when calling /broadcasting/auth — passing a
+  // hard-coded placeholder fails the HMAC check on the server side.
+  String? _socketId;
 
   Stream<RealtimeEvent> get events => _events.stream;
   Stream<RealtimeState> get state => _state.stream;
@@ -151,6 +155,12 @@ class RealtimeService {
     final channel = msg['channel'] as String?;
     final data = msg['data'];
 
+    // TEMP DEBUG — surface every WS frame so we can see whether events
+    // are arriving on the mobile side and whether parseRealtimePayload
+    // matches them.
+    // ignore: avoid_print
+    print('[rt-ws] event=$event channel=$channel data=$data');
+
     // Pusher control events.
     if (event == 'pusher:error') {
       _setState(RealtimeState.reconnecting);
@@ -159,6 +169,17 @@ class RealtimeService {
     }
     if (event == 'pusher:connection_established' ||
         event == 'pusher:subscription_succeeded') {
+      // Pull socket_id off the connection_established payload so the
+      // next /broadcasting/auth call has the correct value to sign.
+      if (event == 'pusher:connection_established' && data is String) {
+        try {
+          final m = jsonDecode(data) as Map<String, dynamic>;
+          final sid = m['socket_id'] as String?;
+          if (sid != null && sid.isNotEmpty) _socketId = sid;
+        } catch (_) {
+          // ignore malformed payload
+        }
+      }
       // Connection or subscription confirmed — nothing to do, state
       // already updated on subscribe call.
       return;
@@ -168,6 +189,8 @@ class RealtimeService {
     // channel-prefixed event names — extract the payload from `data`
     // (always JSON string per Pusher spec).
     final parsed = parseRealtimePayload(event, data);
+    // ignore: avoid_print
+    print('[rt-ws] parsed=${parsed?.type ?? "null"} for event=$event');
     if (parsed != null && !_events.isClosed) {
       _events.add(parsed);
     }
@@ -177,6 +200,23 @@ class RealtimeService {
 
   Future<Map<String, dynamic>> _authorizeChannel(String channel) async {
     final url = Uri.parse(_config!.authEndpoint);
+    // Pusher requires the socket_id assigned by the broker on
+    // `pusher:connection_established`. If we don't have one yet (race
+    // between WS open and the established frame), wait briefly — the
+    // server sends it within milliseconds of `WebSocketChannel.ready`.
+    var socketId = _socketId;
+    if (socketId == null) {
+      for (var i = 0; i < 25; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        socketId = _socketId;
+        if (socketId != null) break;
+      }
+    }
+    if (socketId == null) {
+      throw StateError(
+        'No socket_id from pusher:connection_established; cannot auth channel.',
+      );
+    }
     final res = await http.post(
       url,
       headers: {
@@ -185,10 +225,14 @@ class RealtimeService {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: {
-        'socket_id': 'placeholder',
+        'socket_id': socketId,
         'channel_name': channel,
       },
     );
+    // TEMP DEBUG — surface auth response so we can see the HTTP code
+    // and any error body the backend returns.
+    // ignore: avoid_print
+    print('[rt-ws] auth POST $url → ${res.statusCode} body=${res.body}');
     if (res.statusCode != 200) {
       throw StateError('Channel auth failed (${res.statusCode}): ${res.body}');
     }
@@ -201,12 +245,16 @@ class RealtimeService {
     final channel = _channel;
     if (userId == null || channel == null) return;
 
-    // Single per-user channel. Backend broadcasts every file + folder
-    // event for the user on `user-{userId}` — the client filters by
-    // currentFolderId locally. Channel name uses DASH between the
-    // prefix and the user id (matches backend `ReverbChannel::user()`
-    // and the closure in routes/channels.php).
-    await _subscribe('user-$userId');
+    // Single per-user channel. Backend wraps the channel name in
+    // PrivateChannel('user-{userId}') which Laravel prefixes with
+    // 'private-' on the wire, so the actual Reverb/Pusher channel is
+    // 'private-user-{userId}'. The subscribe frame must include that
+    // prefix — without it, Reverb classifies it as a public channel and
+    // events published to the private channel never reach the subscriber.
+    // The matching auth closure in routes/channels.php is registered for
+    // 'user-{userId}' (Laravel strips the 'private-' prefix before the
+    // match), so we still authorize with the bare 'user-X' form.
+    await _subscribe('private-user-$userId');
   }
 
   Future<void> _subscribe(String channelName) async {

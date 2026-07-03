@@ -391,9 +391,9 @@ class FilesController
     if (current == null) return;
     // Cek folder cocok: kalau controller di-scope ke folder tertentu,
     // cuma append kalau file.folderId match. Untuk root (parentId == null),
-    // cuma append kalau file.folderId juga null.
+    // cuma append kalau file.folderId juga null (root files).
     final myFolder = _parentId;
-    if (myFolder != (file.folderId ?? '')) return;
+    if (myFolder != file.folderId) return;
     // Skip kalau udah ada
     if (current.files.any((f) => f.id == file.id)) return;
     state = AsyncValue.data(current.copyWith(

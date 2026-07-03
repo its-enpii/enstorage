@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/models/file_item.dart';
 import '../../data/models/recent_entry.dart';
 import '../../data/repositories/files_repository.dart';
 import '../../data/repositories/recent_repository.dart';
@@ -12,6 +13,7 @@ import '../../l10n/gen/app_localizations.dart';
 import '../../services/notification_service.dart';
 import '../../state/auth_state.dart';
 import '../../state/files_state.dart';
+import '../../state/refresh_signal_state.dart';
 import '../../state/storage_state.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
@@ -488,6 +490,33 @@ class _RecentListState extends ConsumerState<_RecentList> {
     _loadMore();
   }
 
+  void _onRealtimeAppend(FileItem? file) {
+    if (file == null) return;
+    if (file.folderId != null) return; // recent only shows root files
+    final now = DateTime.now();
+    final entry = RecentEntry(
+      type: RecentEntryType.file,
+      id: file.id,
+      name: file.name,
+      isStarred: file.isStarred,
+      updatedAt: now,
+      createdAt: now,
+      mimeType: file.mimeType,
+      size: file.size,
+      folderId: file.folderId,
+      hasThumbnail: file.hasThumbnail,
+      uploadStatus: file.uploadStatus.name,
+      shareToken: file.shareToken,
+      originalName: file.name,
+    );
+    if (!mounted) return;
+    setState(() {
+      // Dedup against existing items.
+      _items.removeWhere((e) => e.id == entry.id);
+      _items.insert(0, entry);
+    });
+  }
+
   Future<void> _loadMore() async {
     if (_loading || !_hasMore) return;
     setState(() {
@@ -517,6 +546,13 @@ class _RecentListState extends ConsumerState<_RecentList> {
 
   @override
   Widget build(BuildContext context) {
+    // Forward realtime file.uploaded events into the recent list. The
+    // /recent endpoint is separate from /files and doesn't go through
+    // FilesController — without this listener, uploads only show up
+    // after the user pulls to refresh. ref.listen must be inside build.
+    ref.listen<FileItem?>(appendFileProvider(null), (_, next) {
+      _onRealtimeAppend(next);
+    });
     if (_initialLoad) {
       return const SliverToBoxAdapter(
         child: Padding(

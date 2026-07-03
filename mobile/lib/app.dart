@@ -55,6 +55,13 @@ class _EnStorageAppState extends ConsumerState<EnStorageApp> {
     final router = ref.watch(routerConfigProvider);
     final locale = ref.watch(localeControllerProvider);
     final themeMode = ref.watch(themeModeControllerProvider);
+    // Keep the realtime events StreamProvider alive for the lifetime of
+    // the app. The provider's body subscribes to `svc.events` and
+    // forwards each RealtimeEvent into Riverpod state via
+    // `applyEventToRiverpod` — without an active watch, the subscription
+    // never starts and incoming WS events are silently dropped before
+    // they reach the UI.
+    ref.watch(realtimeEventsProvider);
     return MaterialApp.router(
       title: 'EnStorage',
       debugShowCheckedModeBanner: false,
