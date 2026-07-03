@@ -128,7 +128,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     // Bind to Pusher's connection state. Echo exposes this via its
     // `connector.pusher` reference (typed as `any` in laravel-echo).
     const pusherConnection = (echo as unknown as {
-      connector?: { pusher?: { connection?: { bind: (e: string, h: (s: { current: string }) => void) => void; unbind: (e: string, h: (s: { current: string }) => void) => void } } };
+      connector?: { pusher?: { connection?: { bind: (e: string, h: (s: { current: string }) => void) => void; unbind: (e: string, h: (s: { current: string }) => void) => void; bind_global?: (h: (data: unknown) => void) => void; unbind_global?: (h: (data: unknown) => void) => void } } };
     }).connector?.pusher?.connection;
     const onStateChange = ({ current }: { current: string }) => {
       if (current === 'connected') setState('connected');
@@ -137,6 +137,20 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     };
     if (pusherConnection) {
       pusherConnection.bind('state_change', onStateChange);
+      // TEMP DEBUG — raw frame listener, sebelum Echo filter. Buktiin event
+      // name exact string yang sampai dari WS, dan apakah listen() match.
+      const onRaw = (data: unknown) => {
+        const d = data as { event?: string; channel?: string; data?: unknown };
+        if (d?.event && !d.event.startsWith('pusher:')) {
+          console.log('[rt-raw] event=', JSON.stringify(d.event), '| channel=', d.channel, '| hasData=', !!d.data);
+        }
+      };
+      // pusher-js >=8: connection.bind_global(handler). Fallback: skip kalau ga ada.
+      const connAny = pusherConnection as unknown as { bind_global?: (h: (data: unknown) => void) => void; unbind_global?: (h: (data: unknown) => void) => void };
+      if (typeof connAny.bind_global === 'function') {
+        connAny.bind_global(onRaw);
+        cleanupFns.push(() => connAny.unbind_global?.(onRaw));
+      }
     }
 
     // Subscribe.
@@ -147,6 +161,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     // `parent_id` against their current view (`matchesView()` in
     // handlers.ts). Folder navigation no longer churns the WS subscription.
     const unsubs: Array<() => void> = [];
+    const cleanupFns: Array<() => void> = [];
     const userChannel = `user-${user.id}`;
     // Channel name uses DASH between the prefix and the user id — same
     // format the backend `ReverbChannel::user()` emits and the closure
@@ -189,6 +204,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         } catch {
           // ignore
         }
+      }
+      for (const u of cleanupFns) {
+        try { u(); } catch { /* ignore */ }
       }
     };
   }, [user, folderId]);
