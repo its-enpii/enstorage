@@ -182,10 +182,11 @@ export function readRealtimeConfig(
   if (!Number.isFinite(wsPort)) return null;
 
   // Auth endpoint sits under the API base — Reverb's channel auth
-  // route is mounted at /broadcasting/auth by Laravel 11's withRouting
-  // channels: arg.
+  // route is mounted at /api/v1/broadcasting/auth (alongside the rest
+  // of the API surface, so it shares the same auth.apikey middleware
+  // pipeline).
   const base = apiBase.replace(/\/$/, '');
-  const authEndpoint = `${base.replace(/\/api\/v\d+$/, '')}/broadcasting/auth`;
+  const authEndpoint = `${base}/broadcasting/auth`;
 
   return {
     appKey,

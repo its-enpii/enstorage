@@ -45,7 +45,7 @@ class BroadcastServiceProvider extends ServiceProvider
         //    + socket_id; we forward to the framework's
         //    BroadcastController@authenticate, which evaluates the
         //    closure and returns the Pusher HMAC signature.
-        Route::post('/broadcasting/auth', [
+        Route::post('/api/v1/broadcasting/auth', [
             \Illuminate\Broadcasting\BroadcastController::class,
             'authenticate',
         ])->middleware([

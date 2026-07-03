@@ -95,7 +95,7 @@ void _connectOrDisconnectRealtime(WidgetRef ref, bool isAuthed) async {
     wsPort: kReverbPort,
     wsScheme: kReverbScheme,
     appKey: kReverbAppKey,
-    authEndpoint: '${kApiBase.replaceFirst('/api/v1', '')}/broadcasting/auth',
+    authEndpoint: '$kApiBase/broadcasting/auth',
   );
   ref.read(realtimeConnectionProvider(ctx));
 }
