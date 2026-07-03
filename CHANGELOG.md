@@ -17,6 +17,20 @@ project ini adheres ke [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [0.3.0] - 2026-07-03
+
+### Fixed
+- **Realtime WS — Web**: list file + folder auto-update saat upload via API key / external app. Sebelumnya WS event sampai di browser tapi handler ter-skip karena Echo `EventFormatter` double-prefix nama event FQCN (`App\Events\App\Events\X`). Fix: listen pakai short basename (`FileUploadedBroadcast`), biar formatter build wire name yang benar.
+- **Realtime WS — Mobile**: list file auto-update di `/files` route + Recent Files di homepage.
+  - Capture `socket_id` dari `pusher:connection_established` (sebelumnya hard-coded `'placeholder'` → backend reject 500).
+  - Subscribe pakai `private-user-X` (sebelumnya `user-X` → Reverb ChannelBroker classify sebagai public channel, broadcast private tidak sampai).
+  - `realtimeEventsProvider` di-watch di app shell supaya subscription `svc.events` aktif; tanpa watch, StreamProvider body tidak pernah jalan dan event silently dropped.
+  - `FilesController.prependFile` perbandingan `_parentId != (file.folderId ?? '')` di-fix jadi `_parentId != file.folderId` — root uploads (`null` vs `null`) sebelumnya ke-return early.
+  - `_RecentList` di homepage listen `appendFileProvider(null)` lalu prepend constructed `RecentEntry`; sebelumnya cuma manage local `_items` jadi tidak react ke realtime event.
+- **`/broadcasting/auth` route**: dipindah dari root ke `/api/v1/broadcasting/auth` supaya share middleware pipeline (auth.apikey + auth.sanctum.only:false) + nginx upstream rule yang sama dengan API surface lain.
+
+---
+
 ## [0.1.0] - 2026-06-XX
 
 Initial alpha release. Backend + Web dashboard + Mobile app kerangka dasar.
@@ -30,5 +44,6 @@ Initial alpha release. Backend + Web dashboard + Mobile app kerangka dasar.
 - Activity log system-wide
 - OpenAPI docs di `/api/documentation`
 
-[Unreleased]: https://github.com/enpii/enstorage/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/enpii/enstorage/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/enpii/enstorage/compare/v0.1.0...v0.3.0
 [0.1.0]: https://github.com/enpii/enstorage/releases/tag/v0.1.0
