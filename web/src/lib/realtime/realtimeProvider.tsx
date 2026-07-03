@@ -155,13 +155,19 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     // would return 403.
 
     const dispatch = (eventName: string) => (payload: unknown) => {
+      // TEMP DEBUG — hapus setelah fix WS UI update
+      console.log('[rt] event:', eventName, '| payload:', payload, '| store:', !!storeRef.current, '| folderId:', folderId);
       const ev = parseRealtimePayload(eventName, payload);
-      if (!ev) return;
-      applyEvent(ev, {
+      if (!ev) {
+        console.log('[rt] parseRealtimePayload returned null for', eventName);
+        return;
+      }
+      const applied = applyEvent(ev, {
         store: storeRef.current,
         currentFolderId: folderId,
         visibleFolderIds: visibleFolderIdsRef.current,
       });
+      console.log('[rt] applyEvent returned:', applied, '| type:', ev.type);
     };
 
     for (const name of [...FILE_EVENTS, ...FOLDER_EVENTS]) {
