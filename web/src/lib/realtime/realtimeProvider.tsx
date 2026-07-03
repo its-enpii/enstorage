@@ -129,28 +129,28 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     // `connector.pusher` reference (typed as `any` in laravel-echo).
     const cleanupFns: Array<() => void> = [];
     const pusherConnection = (echo as unknown as {
-      connector?: { pusher?: { connection?: { bind: (e: string, h: (s: { current: string }) => void) => void; unbind: (e: string, h: (s: { current: string }) => void) => void; bind_global?: (h: (data: unknown) => void) => void; unbind_global?: (h: (data: unknown) => void) => void } } };
-    }).connector?.pusher?.connection;
+      connector?: { pusher?: { connection?: { bind: (e: string, h: (s: { current: string }) => void) => void; unbind: (e: string, h: (s: { current: string }) => void) => void }; bind_global?: (h: (data: unknown) => void) => void; unbind_global?: (h: (data: unknown) => void) => void } };
+    }).connector?.pusher;
+    const connection = pusherConnection?.connection;
     const onStateChange = ({ current }: { current: string }) => {
       if (current === 'connected') setState('connected');
       else if (current === 'unavailable' || current === 'disconnected') setState('reconnecting');
       else if (current === 'failed') setState('offline');
     };
-    if (pusherConnection) {
-      pusherConnection.bind('state_change', onStateChange);
-      // TEMP DEBUG — raw frame listener, sebelum Echo filter. Buktiin event
-      // name exact string yang sampai dari WS, dan apakah listen() match.
+    if (connection) {
+      connection.bind('state_change', onStateChange);
+      // TEMP DEBUG — bind_global ada di Pusher instance, bukan Connection.
       const onRaw = (data: unknown) => {
         const d = data as { event?: string; channel?: string; data?: unknown };
         if (d?.event && !d.event.startsWith('pusher:')) {
           console.log('[rt-raw] event=', JSON.stringify(d.event), '| channel=', d.channel, '| hasData=', !!d.data);
         }
       };
-      // pusher-js >=8: connection.bind_global(handler). Fallback: skip kalau ga ada.
-      const connAny = pusherConnection as unknown as { bind_global?: (h: (data: unknown) => void) => void; unbind_global?: (h: (data: unknown) => void) => void };
-      if (typeof connAny.bind_global === 'function') {
-        connAny.bind_global(onRaw);
-        cleanupFns.push(() => connAny.unbind_global?.(onRaw));
+      if (typeof pusherConnection?.bind_global === 'function') {
+        pusherConnection.bind_global(onRaw);
+        cleanupFns.push(() => pusherConnection.unbind_global?.(onRaw));
+      } else {
+        console.log('[rt-raw] bind_global not available');
       }
     }
 
@@ -194,7 +194,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
     return () => {
       try {
-        if (pusherConnection) pusherConnection.unbind('state_change', onStateChange);
+        if (connection) connection.unbind('state_change', onStateChange);
       } catch {
         // ignore
       }
