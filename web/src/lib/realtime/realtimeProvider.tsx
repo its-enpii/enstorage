@@ -133,8 +133,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       connector?: {
         pusher?: {
           connection?: { bind: (e: string, h: (s: { current: string }) => void) => void; unbind: (e: string, h: (s: { current: string }) => void) => void };
-          bind_global?: (h: (data: unknown) => void) => void;
-          unbind_global?: (h: (data: unknown) => void) => void;
+          bind_global?: (h: (eventName: unknown, data: unknown) => void) => void;
+          unbind_global?: (h: (eventName: unknown, data: unknown) => void) => void;
         };
       };
     }).connector;
@@ -151,11 +151,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       connection.bind('state_change', onStateChange);
     }
     // TEMP DEBUG — raw frame listener, BEFORE Echo's per-event filter.
-    const onRaw = (data: unknown) => {
-      const d = data as { event?: string; channel?: string; data?: unknown };
-      if (d?.event && !d.event.startsWith('pusher:')) {
-        console.log('[rt-raw] event=', JSON.stringify(d.event), '| channel=', d.channel, '| hasData=', !!d.data);
-      }
+    // Pusher's bind_global callback signature is (eventName, data).
+    const onRaw = (eventName: unknown, data: unknown) => {
+      if (typeof eventName !== 'string') return;
+      if (eventName.startsWith('pusher:') || eventName.startsWith('pusher_internal:')) return;
+      console.log('[rt-raw] event=', JSON.stringify(eventName), '| data=', data);
     };
     if (typeof pusherInstance?.bind_global === 'function') {
       pusherInstance.bind_global(onRaw);
