@@ -128,10 +128,18 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     // Bind to Pusher's connection state. Echo exposes this via its
     // `connector.pusher` reference (typed as `any` in laravel-echo).
     const cleanupFns: Array<() => void> = [];
-    const pusherConnection = (echo as unknown as {
-      connector?: { pusher?: { connection?: { bind: (e: string, h: (s: { current: string }) => void) => void; unbind: (e: string, h: (s: { current: string }) => void) => void }; bind_global?: (h: (data: unknown) => void) => void; unbind_global?: (h: (data: unknown) => void) => void } };
-    }).connector?.pusher;
-    const connection = pusherConnection?.connection;
+    // Echo: echo.connector = PusherConnector, .pusher = Pusher instance.
+    const connector = (echo as unknown as {
+      connector?: {
+        pusher?: {
+          connection?: { bind: (e: string, h: (s: { current: string }) => void) => void; unbind: (e: string, h: (s: { current: string }) => void) => void };
+          bind_global?: (h: (data: unknown) => void) => void;
+          unbind_global?: (h: (data: unknown) => void) => void;
+        };
+      };
+    }).connector;
+    const pusherInstance = connector?.pusher;
+    const connection = pusherInstance?.connection;
     const onStateChange = ({ current }: { current: string }) => {
       if (current === 'connected') setState('connected');
       else if (current === 'unavailable' || current === 'disconnected') setState('reconnecting');
@@ -139,19 +147,19 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     };
     if (connection) {
       connection.bind('state_change', onStateChange);
-      // TEMP DEBUG — bind_global ada di Pusher instance, bukan Connection.
-      const onRaw = (data: unknown) => {
-        const d = data as { event?: string; channel?: string; data?: unknown };
-        if (d?.event && !d.event.startsWith('pusher:')) {
-          console.log('[rt-raw] event=', JSON.stringify(d.event), '| channel=', d.channel, '| hasData=', !!d.data);
-        }
-      };
-      if (typeof pusherConnection?.bind_global === 'function') {
-        pusherConnection.bind_global(onRaw);
-        cleanupFns.push(() => pusherConnection.unbind_global?.(onRaw));
-      } else {
-        console.log('[rt-raw] bind_global not available');
+    }
+    // TEMP DEBUG — raw frame listener, BEFORE Echo's per-event filter.
+    const onRaw = (data: unknown) => {
+      const d = data as { event?: string; channel?: string; data?: unknown };
+      if (d?.event && !d.event.startsWith('pusher:')) {
+        console.log('[rt-raw] event=', JSON.stringify(d.event), '| channel=', d.channel, '| hasData=', !!d.data);
       }
+    };
+    if (typeof pusherInstance?.bind_global === 'function') {
+      pusherInstance.bind_global(onRaw);
+      cleanupFns.push(() => pusherInstance.unbind_global?.(onRaw));
+    } else {
+      console.log('[rt-raw] bind_global not available on echo.connector.pusher');
     }
 
     // Subscribe.
