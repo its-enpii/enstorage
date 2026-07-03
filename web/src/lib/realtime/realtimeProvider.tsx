@@ -127,6 +127,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
     // Bind to Pusher's connection state. Echo exposes this via its
     // `connector.pusher` reference (typed as `any` in laravel-echo).
+    const cleanupFns: Array<() => void> = [];
     const pusherConnection = (echo as unknown as {
       connector?: { pusher?: { connection?: { bind: (e: string, h: (s: { current: string }) => void) => void; unbind: (e: string, h: (s: { current: string }) => void) => void; bind_global?: (h: (data: unknown) => void) => void; unbind_global?: (h: (data: unknown) => void) => void } } };
     }).connector?.pusher?.connection;
@@ -161,7 +162,6 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     // `parent_id` against their current view (`matchesView()` in
     // handlers.ts). Folder navigation no longer churns the WS subscription.
     const unsubs: Array<() => void> = [];
-    const cleanupFns: Array<() => void> = [];
     const userChannel = `user-${user.id}`;
     // Channel name uses DASH between the prefix and the user id — same
     // format the backend `ReverbChannel::user()` emits and the closure
