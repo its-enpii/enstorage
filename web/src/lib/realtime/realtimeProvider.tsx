@@ -45,20 +45,25 @@ export function useRealtime(): RealtimeContextValue {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080/api/v1';
 
-// Pusher FQCN event names used as `.listen()` arguments. Echo maps
-// these directly to the backend ShouldBroadcastNow events.
+// Pusher event names used as `.listen()` arguments. Laravel Echo's
+// EventFormatter prepends `App.Events.` and replaces `.` → `\` when the
+// input is a bare basename (it special-cases inputs starting with `.`
+// or `\` to skip the prefix). Passing the FQCN `App\Events\X` here would
+// double-prefix and produce `App\Events\App\Events\X`, which never
+// matches the server-side broadcast name. Use the short class name and
+// let the formatter build the wire name.
 const FILE_EVENTS = [
-  'App\\Events\\FileUploadedBroadcast',
-  'App\\Events\\FileUploadFailedBroadcast',
-  'App\\Events\\FileMovedBroadcast',
-  'App\\Events\\FileDeletedBroadcast',
-  'App\\Events\\FileUpdatedBroadcast',
+  'FileUploadedBroadcast',
+  'FileUploadFailedBroadcast',
+  'FileMovedBroadcast',
+  'FileDeletedBroadcast',
+  'FileUpdatedBroadcast',
 ];
 const FOLDER_EVENTS = [
-  'App\\Events\\FolderCreatedBroadcast',
-  'App\\Events\\FolderDeletedBroadcast',
-  'App\\Events\\FolderRenamedBroadcast',
-  'App\\Events\\FolderMovedBroadcast',
+  'FolderCreatedBroadcast',
+  'FolderDeletedBroadcast',
+  'FolderRenamedBroadcast',
+  'FolderMovedBroadcast',
 ];
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {

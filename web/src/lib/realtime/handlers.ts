@@ -264,12 +264,15 @@ export function parseRealtimePayload(
 ): RealtimeEvent | null {
   const data = (rawData ?? {}) as Record<string, unknown>;
 
-  if (rawEventName === 'App\\Events\\FileUploadedBroadcast') {
+  // Echo's channel listener dispatches via a closure that captures the
+  // short basename (e.g. "FileUploadedBroadcast"), not the wire FQCN.
+  // Match on the short name so the handler routes the event correctly.
+  if (rawEventName === 'FileUploadedBroadcast' || rawEventName === 'App\\Events\\FileUploadedBroadcast') {
     const file = normaliseFile(data);
     if (!file) return null;
     return { type: 'file.uploaded', file };
   }
-  if (rawEventName === 'App\\Events\\FileUploadFailedBroadcast') {
+  if (rawEventName === 'FileUploadFailedBroadcast' || rawEventName === 'App\\Events\\FileUploadFailedBroadcast') {
     const fileId = String(data.file_id ?? '');
     if (!fileId) return null;
     return {
@@ -280,7 +283,7 @@ export function parseRealtimePayload(
       reason: String(data.reason ?? ''),
     };
   }
-  if (rawEventName === 'App\\Events\\FileMovedBroadcast') {
+  if (rawEventName === 'FileMovedBroadcast' || rawEventName === 'App\\Events\\FileMovedBroadcast') {
     const file = normaliseFile(data);
     if (!file) return null;
     return {
@@ -290,7 +293,7 @@ export function parseRealtimePayload(
       renamed: Boolean(data.renamed),
     };
   }
-  if (rawEventName === 'App\\Events\\FileDeletedBroadcast') {
+  if (rawEventName === 'FileDeletedBroadcast' || rawEventName === 'App\\Events\\FileDeletedBroadcast') {
     const fileId = String(data.file_id ?? '');
     if (!fileId) return null;
     return {
@@ -299,17 +302,17 @@ export function parseRealtimePayload(
       folderId: (data.folder_id as string | null) ?? null,
     };
   }
-  if (rawEventName === 'App\\Events\\FileUpdatedBroadcast') {
+  if (rawEventName === 'FileUpdatedBroadcast' || rawEventName === 'App\\Events\\FileUpdatedBroadcast') {
     const file = normaliseFile(data);
     if (!file) return null;
     return { type: 'file.updated', file };
   }
-  if (rawEventName === 'App\\Events\\FolderCreatedBroadcast') {
+  if (rawEventName === 'FolderCreatedBroadcast' || rawEventName === 'App\\Events\\FolderCreatedBroadcast') {
     const folder = normaliseFolder(data);
     if (!folder) return null;
     return { type: 'folder.created', folder };
   }
-  if (rawEventName === 'App\\Events\\FolderDeletedBroadcast') {
+  if (rawEventName === 'FolderDeletedBroadcast' || rawEventName === 'App\\Events\\FolderDeletedBroadcast') {
     const folderId = String(data.folder_id ?? '');
     if (!folderId) return null;
     return {
@@ -318,7 +321,7 @@ export function parseRealtimePayload(
       parentId: (data.parent_id as string | null) ?? null,
     };
   }
-  if (rawEventName === 'App\\Events\\FolderRenamedBroadcast') {
+  if (rawEventName === 'FolderRenamedBroadcast' || rawEventName === 'App\\Events\\FolderRenamedBroadcast') {
     const folder = normaliseFolder(data);
     if (!folder) return null;
     return {
@@ -327,7 +330,7 @@ export function parseRealtimePayload(
       previousName: String(data.previous_name ?? folder.name),
     };
   }
-  if (rawEventName === 'App\\Events\\FolderMovedBroadcast') {
+  if (rawEventName === 'FolderMovedBroadcast' || rawEventName === 'App\\Events\\FolderMovedBroadcast') {
     const folder = normaliseFolder(data);
     if (!folder) return null;
     return {
