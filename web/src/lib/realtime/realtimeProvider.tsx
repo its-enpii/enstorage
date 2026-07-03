@@ -140,6 +140,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     }).connector;
     const pusherInstance = connector?.pusher;
     const connection = pusherInstance?.connection;
+    // TEMP DEBUG — surface actual runtime structure so we stop guessing.
+    console.log('[rt-debug] echo keys=', Object.keys(echo as object), '| connector keys=', connector ? Object.keys(connector) : null, '| connector.pusher keys=', pusherInstance ? Object.keys(pusherInstance as object) : null, '| has bind_global=', typeof (pusherInstance as { bind_global?: unknown } | undefined)?.bind_global, '| has connection=', !!connection);
     const onStateChange = ({ current }: { current: string }) => {
       if (current === 'connected') setState('connected');
       else if (current === 'unavailable' || current === 'disconnected') setState('reconnecting');
