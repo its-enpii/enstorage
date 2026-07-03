@@ -256,10 +256,9 @@ class FilesController
         hasMoreFolders: moreFolders,
         hasMoreFiles: moreFiles,
       ));
-    } catch (e, st) {
+    } catch (_) {
       // Keep existing data on pagination failure; surface a snackbar
       // from the caller if desired. Don't blow away the page.
-      debugPrint('loadMore failed: $e\n$st');
     } finally {
       _loadingMore = false;
     }
@@ -303,7 +302,6 @@ class FilesController
         state = AsyncValue.error(e, st);
       } else {
         // Preserve last good data; UI continues to render it.
-        debugPrint('refresh failed: $e\n$st');
       }
     } finally {
       _isRefreshing = false;

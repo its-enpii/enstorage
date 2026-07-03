@@ -1,6 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -83,7 +82,6 @@ void _showLocalNotification(RemoteMessage message) {
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  debugPrint('[FCM] background message: ${message.messageId}');
 }
 
 /// Initializes Firebase + FCM, requests permission, and sets up
@@ -109,17 +107,13 @@ Future<void> initNotifications({
   for (var attempt = 1; attempt <= 5; attempt++) {
     initialToken = await messaging.getToken();
     if (initialToken != null) break;
-    debugPrint('[FCM] getToken returned null, attempt $attempt/5, retrying...');
     await Future<void>.delayed(Duration(seconds: attempt * 2));
   }
   if (initialToken != null) {
-    debugPrint('[FCM] initial token: ${initialToken.substring(0, 20)}...');
     if (onTokenReady != null) {
       // ignore: discarded_futures
       onTokenReady(initialToken);
     }
-  } else {
-    debugPrint('[FCM] initial token still null after 5 attempts — FCM may be unavailable on this device');
   }
 
   // Request permission (iOS + Android 13+).
@@ -135,8 +129,6 @@ Future<void> initNotifications({
   // Foreground handler — route to upload handler or generic.
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
     final type = message.data['type'];
-    debugPrint('[FCM] foreground message: ${message.messageId} '
-        'type=$type');
     if (type is String &&
         (type == 'upload.progress' ||
             type == 'upload.complete' ||
@@ -149,13 +141,11 @@ Future<void> initNotifications({
 
   // When user taps a notification that opened the app from terminated.
   FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-    debugPrint('[FCM] opened from notification: ${message.messageId}');
     // TODO: navigate based on message.data['type']
   });
 
   // Token rotation listener — re-register when FCM rotates the token.
   messaging.onTokenRefresh.listen((String newToken) async {
-    debugPrint('[FCM] token refreshed: ${newToken.substring(0, 20)}...');
     if (onTokenReady != null) {
       await onTokenReady(newToken);
     }
@@ -180,8 +170,6 @@ void _handleUploadMessage(RemoteMessage message, String type) {
     );
     // Append file baru ke list di folder yang relevan — no API call.
     final fileId = data['file_id'] as String?;
-    debugPrint('[FCM] upload.complete fileId=$fileId folderId=$folderId '
-        'has_thumb=${data['has_thumbnail']}');
     if (fileId != null) {
       final file = FileItem(
         id: fileId,
@@ -193,7 +181,6 @@ void _handleUploadMessage(RemoteMessage message, String type) {
         isStarred: false,
         folderId: folderId,
       );
-      debugPrint('[FCM] calling notifyAppendFile($folderId, $fileId)');
       notifyAppendFile(folderId, file);
     }
   } else if (type == 'upload.failed') {
@@ -281,32 +268,21 @@ void finishUpload({
 /// Call after login succeeds.
 Future<void> registerDeviceToken(Ref ref) async {
   try {
-    debugPrint('[FCM] registerDeviceToken: getting token...');
     final token = await FirebaseMessaging.instance.getToken();
     if (token == null) {
-      debugPrint('[FCM] getToken returned NULL — FCM belum ready');
       return;
     }
-    debugPrint('[FCM] getToken returned: ${token.substring(0, 20)}...');
     final repo = ref.read(notificationRepositoryProvider);
-    debugPrint('[FCM] POST /notifications/token ...');
     await repo.registerToken(token);
-    debugPrint('[FCM] POST /notifications/token OK');
-  } catch (e, st) {
-    debugPrint('[FCM] registerDeviceToken FAILED: $e\n$st');
-  }
+  } catch (_) {}
 }
 
 /// Register an already-obtained FCM token with the backend.
 /// Used by token rotation listener + initial token path.
 Future<void> registerDeviceTokenByToken(String token, ProviderContainer container) async {
   try {
-    debugPrint('[FCM] POST /notifications/token ...');
     await container.read(notificationRepositoryProvider).registerToken(token);
-    debugPrint('[FCM] POST /notifications/token OK');
-  } catch (e, st) {
-    debugPrint('[FCM] POST /notifications/token FAILED: $e\n$st');
-  }
+  } catch (_) {}
 }
 
 /// Removes the FCM token from the backend + local.
@@ -318,7 +294,5 @@ Future<void> clearDeviceToken(Ref ref) async {
       await ref.read(notificationRepositoryProvider).removeToken(token);
     }
     await FirebaseMessaging.instance.deleteToken();
-  } catch (e) {
-    debugPrint('[FCM] clearDeviceToken failed: $e');
-  }
+  } catch (_) {}
 }

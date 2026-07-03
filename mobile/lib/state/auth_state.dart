@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
@@ -100,21 +99,17 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<bool> googleLogin(String code) async {
-    debugPrint('[AuthController.googleLogin] start');
     state = state.copyWith(loading: true, clearError: true);
     try {
       final user = await _repo.googleAuth(code: code);
-      debugPrint('[AuthController.googleLogin] success user=${user.email}');
       state = state.copyWith(user: user, loading: false);
       // Register FCM token with backend after login.
       registerDeviceToken(_ref);
       return true;
     } on AuthException catch (e) {
-      debugPrint('[AuthController.googleLogin] auth error: ${e.message}');
       state = state.copyWith(loading: false, error: e.message);
       return false;
-    } catch (e, st) {
-      debugPrint('[AuthController.googleLogin] UNEXPECTED: $e\n$st');
+    } catch (e) {
       state = state.copyWith(loading: false, error: e.toString());
       return false;
     }
@@ -122,20 +117,16 @@ class AuthController extends StateNotifier<AuthState> {
 
   /// Kept for backward compatibility (email/password login).
   Future<bool> login(String email, String password) async {
-    debugPrint('[AuthController.login] start');
     state = state.copyWith(loading: true, clearError: true);
     try {
       final user = await _repo.login(email: email, password: password);
-      debugPrint('[AuthController.login] success user=${user.email}');
       state = state.copyWith(user: user, loading: false);
       registerDeviceToken(_ref);
       return true;
     } on AuthException catch (e) {
-      debugPrint('[AuthController.login] auth error: ${e.message}');
       state = state.copyWith(loading: false, error: e.message);
       return false;
-    } catch (e, st) {
-      debugPrint('[AuthController.login] UNEXPECTED: $e\n$st');
+    } catch (e) {
       state = state.copyWith(loading: false, error: e.toString());
       return false;
     }
@@ -167,8 +158,7 @@ class AuthController extends StateNotifier<AuthState> {
     } on AuthException catch (e) {
       state = state.copyWith(loading: false, error: e.message);
       return false;
-    } catch (e, st) {
-      debugPrint('[AuthController.updateMe] UNEXPECTED: $e\n$st');
+    } catch (e) {
       state = state.copyWith(loading: false, error: e.toString());
       return false;
     }
@@ -189,8 +179,7 @@ class AuthController extends StateNotifier<AuthState> {
     } on AuthException catch (e) {
       state = state.copyWith(loading: false, error: e.message);
       return false;
-    } catch (e, st) {
-      debugPrint('[AuthController.changePassword] UNEXPECTED: $e\n$st');
+    } catch (e) {
       state = state.copyWith(loading: false, error: e.toString());
       return false;
     }

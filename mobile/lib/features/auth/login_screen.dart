@@ -64,13 +64,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final GoogleSignInAccount? account = await _googleSignIn.signIn();
       if (account == null) {
-        debugPrint('[auth] signIn returned null (user cancelled)');
         return;
       }
 
       final String? code = account.serverAuthCode;
       if (code == null || code.isEmpty) {
-        debugPrint('[auth] serverAuthCode null/empty');
         if (!mounted) return;
         showAppSnackBar(
           context,
@@ -93,7 +91,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
       // On success the router auto-switches to the home shell.
     } on PlatformException catch (e) {
-      debugPrint('[auth] PlatformException: code=${e.code} message=${e.message}');
       if (e.code == 'sign_in_canceled') return;
       if (!mounted) return;
       showAppSnackBar(
@@ -101,8 +98,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         l10n.authGoogleFailed,
         variant: AppSnackBarVariant.error,
       );
-    } catch (e, st) {
-      debugPrint('[auth] UNEXPECTED: $e\n$st');
+    } catch (_) {
       if (!mounted) return;
       showAppSnackBar(
         context,

@@ -101,12 +101,10 @@ Future<void> main() async {
   // saat FCM ready (baik initial token maupun rotation).
   await initNotifications(
     onTokenReady: (token) async {
-      debugPrint('[main] onTokenReady: ${token.substring(0, 20)}...');
       // Skip kalau user belum login — endpoint butuh Bearer token.
       // FCM rotation listener akan memanggil ulang setelah auth ready.
       final hasAuth = await container.read(tokenStorageProvider).readToken() != null;
       if (!hasAuth) {
-        debugPrint('[main] onTokenReady: no auth token, deferring register');
         return;
       }
       await registerDeviceTokenByToken(token, container);

@@ -145,8 +145,6 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     }).connector;
     const pusherInstance = connector?.pusher;
     const connection = pusherInstance?.connection;
-    // TEMP DEBUG — surface actual runtime structure so we stop guessing.
-    console.log('[rt-debug] echo keys=', Object.keys(echo as object), '| connector keys=', connector ? Object.keys(connector) : null, '| connector.pusher keys=', pusherInstance ? Object.keys(pusherInstance as object) : null, '| has bind_global=', typeof (pusherInstance as { bind_global?: unknown } | undefined)?.bind_global, '| has connection=', !!connection);
     const onStateChange = ({ current }: { current: string }) => {
       if (current === 'connected') setState('connected');
       else if (current === 'unavailable' || current === 'disconnected') setState('reconnecting');
@@ -155,18 +153,15 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     if (connection) {
       connection.bind('state_change', onStateChange);
     }
-    // TEMP DEBUG — raw frame listener, BEFORE Echo's per-event filter.
+    // Raw frame listener, BEFORE Echo's per-event filter.
     // Pusher's bind_global callback signature is (eventName, data).
     const onRaw = (eventName: unknown, data: unknown) => {
       if (typeof eventName !== 'string') return;
       if (eventName.startsWith('pusher:') || eventName.startsWith('pusher_internal:')) return;
-      console.log('[rt-raw] event=', JSON.stringify(eventName), '| data=', data);
     };
     if (typeof pusherInstance?.bind_global === 'function') {
       pusherInstance.bind_global(onRaw);
       cleanupFns.push(() => pusherInstance.unbind_global?.(onRaw));
-    } else {
-      console.log('[rt-raw] bind_global not available on echo.connector.pusher');
     }
 
     // Subscribe.
@@ -185,19 +180,15 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     // would return 403.
 
     const dispatch = (eventName: string) => (payload: unknown) => {
-      // TEMP DEBUG — hapus setelah fix WS UI update
-      console.log('[rt] event:', eventName, '| payload:', payload, '| store:', !!storeRef.current, '| folderId:', folderId);
       const ev = parseRealtimePayload(eventName, payload);
       if (!ev) {
-        console.log('[rt] parseRealtimePayload returned null for', eventName);
         return;
       }
-      const applied = applyEvent(ev, {
+      applyEvent(ev, {
         store: storeRef.current,
         currentFolderId: folderId,
         visibleFolderIds: visibleFolderIdsRef.current,
       });
-      console.log('[rt] applyEvent returned:', applied, '| type:', ev.type);
     };
 
     for (const name of [...FILE_EVENTS, ...FOLDER_EVENTS]) {

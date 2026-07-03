@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'storage/token_storage.dart';
@@ -75,12 +74,6 @@ class ApiClient {
           sendTimeout: const Duration(minutes: 10),
           headers: {'Accept': 'application/json'},
         )) {
-    // Log once so the dev can see which backend the build is pointed at.
-    // Strip trailing slashes for readability.
-    final shown = kApiBase.endsWith('/')
-        ? kApiBase.substring(0, kApiBase.length - 1)
-        : kApiBase;
-    debugPrint('[ApiClient] baseUrl = $shown');
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         final token = await _tokenStorage.readToken();

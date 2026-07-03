@@ -32,12 +32,10 @@ class _EnStorageAppState extends ConsumerState<EnStorageApp> {
     // the controller framework-agnostic and avoids fighting the
     // StateNotifier API.
     ref.listen<AuthState>(authControllerProvider, (prev, next) {
-      debugPrint('[App] auth state: user=${next.user?.email} loading=${next.loading} error=${next.error}');
       final wasAuthed = _lastAuthed ?? next.isAuthenticated;
       final isAuthed = next.isAuthenticated;
       _lastAuthed = isAuthed;
       if (wasAuthed != isAuthed) {
-        debugPrint('[App] auth flipped $wasAuthed->$isAuthed, swapping router');
         ref.read(routerConfigProvider.notifier).state =
             isAuthed ? buildHomeRouter() : buildAuthRouter();
 

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -156,13 +155,8 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
       // `null` = user dismissed.
       final GoogleSignInAccount? account = await _googleSignIn.signIn();
       if (account == null) {
-        debugPrint('[google_accounts] signIn returned null (user cancelled)');
         return;
       }
-      debugPrint(
-        '[google_accounts] account: id=${account.id} '
-        'email=${account.email} displayName=${account.displayName}',
-      );
 
       // v6.x exposes `serverAuthCode` on `GoogleSignInAccount`. The
       // code is only populated when `serverClientId` is set on the
@@ -198,10 +192,6 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
       //   'network_error'           — no connectivity
       //   'sign_in_failed'          — generic failure
       //   'sign_in_required'        — no active session
-      debugPrint(
-        '[google_accounts] PlatformException: code=${e.code} '
-        'message=${e.message} details=${e.details}',
-      );
       if (e.code == 'sign_in_canceled') return;
       if (!mounted) return;
       showAppSnackBar(
@@ -210,17 +200,7 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
         variant: AppSnackBarVariant.error,
         duration: const Duration(seconds: 6),
       );
-    } catch (e, st) {
-      debugPrint('[google_accounts] UNEXPECTED: $e\n$st');
-      // Surface backend error body (422 from exchange) so we can see
-      // the exact OAuth error message without going through laravel.log.
-      if (e is DioException && e.response != null) {
-        debugPrint(
-          '[google_accounts] backend response '
-          'status=${e.response?.statusCode} '
-          'body=${e.response?.data}',
-        );
-      }
+    } catch (e) {
       if (!mounted) return;
       showAppSnackBar(
         context,
@@ -234,7 +214,6 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
   }
 
   Future<void> _showError(String msg) async {
-    debugPrint('[google_accounts] $msg');
     if (!mounted) return;
     final l10n = AppLocalizations.of(context)!;
     showAppSnackBar(
@@ -255,12 +234,7 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
       if (!mounted) return;
       showAppSnackBar(context, l10n.googleAccountsSyncSuccess,
           variant: AppSnackBarVariant.success);
-    } on DioException catch (e, st) {
-      debugPrint(
-        '[google_accounts] syncQuota failed: '
-        'status=${e.response?.statusCode} '
-        'body=${e.response?.data}\n$st',
-      );
+    } on DioException catch (e) {
       if (!mounted) return;
       // Backend balikin 502 dengan `{ success:false, message:"Sinkronisasi
       // quota gagal: <reason>" }` — ekstrak reason-nya agar user bisa
@@ -298,8 +272,7 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
           variant: AppSnackBarVariant.error,
         );
       }
-    } catch (e, st) {
-      debugPrint('[google_accounts] syncQuota unexpected: $e\n$st');
+    } catch (e) {
       if (!mounted) return;
       showAppSnackBar(
         context,

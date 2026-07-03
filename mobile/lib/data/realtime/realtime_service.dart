@@ -152,14 +152,7 @@ class RealtimeService {
     }
     final event = msg['event'] as String?;
     if (event == null) return;
-    final channel = msg['channel'] as String?;
     final data = msg['data'];
-
-    // TEMP DEBUG — surface every WS frame so we can see whether events
-    // are arriving on the mobile side and whether parseRealtimePayload
-    // matches them.
-    // ignore: avoid_print
-    print('[rt-ws] event=$event channel=$channel data=$data');
 
     // Pusher control events.
     if (event == 'pusher:error') {
@@ -189,13 +182,9 @@ class RealtimeService {
     // channel-prefixed event names — extract the payload from `data`
     // (always JSON string per Pusher spec).
     final parsed = parseRealtimePayload(event, data);
-    // ignore: avoid_print
-    print('[rt-ws] parsed=${parsed?.type ?? "null"} for event=$event');
     if (parsed != null && !_events.isClosed) {
       _events.add(parsed);
     }
-    // Reference channel so linter doesn't drop it.
-    void _ = channel;
   }
 
   Future<Map<String, dynamic>> _authorizeChannel(String channel) async {
@@ -229,10 +218,6 @@ class RealtimeService {
         'channel_name': channel,
       },
     );
-    // TEMP DEBUG — surface auth response so we can see the HTTP code
-    // and any error body the backend returns.
-    // ignore: avoid_print
-    print('[rt-ws] auth POST $url → ${res.statusCode} body=${res.body}');
     if (res.statusCode != 200) {
       throw StateError('Channel auth failed (${res.statusCode}): ${res.body}');
     }

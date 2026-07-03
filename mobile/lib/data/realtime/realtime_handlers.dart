@@ -30,12 +30,8 @@ bool applyEventToRiverpod(RealtimeEvent event, Ref ref) {
   switch (event.type) {
     case 'file.uploaded':
       final file = _tryParseFile(event.raw);
-      // ignore: avoid_print
-      print('[rt-handler] file.uploaded parsedFile=${file?.id} folderId=${file?.folderId}');
       if (file == null) return false;
       signals.notifyAppendFile(file.folderId, file);
-      // ignore: avoid_print
-      print('[rt-handler] notifyAppendFile called for folderId=${file.folderId}');
       return true;
 
     case 'file.upload.failed':
@@ -152,9 +148,7 @@ FileItem? _tryParseFile(Map<String, dynamic> payload) {
   };
   try {
     return FileItem.fromJson(normalised);
-  } catch (e) {
-    // ignore: avoid_print
-    print('[rt-handler] FileItem.fromJson threw: $e');
+  } catch (_) {
     return null;
   }
 }
