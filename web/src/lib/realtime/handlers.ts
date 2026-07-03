@@ -64,6 +64,10 @@ export type ApplyContext = {
  */
 export function applyEvent(e: RealtimeEvent, ctx: ApplyContext): boolean {
   const { store, currentFolderId, visibleFolderIds } = ctx;
+  // DEBUG: temporary diagnostic — log every event before store gate so we
+  // can see in DevTools whether the broadcast is reaching the client at
+  // all, and whether `store` is null (FilesStoreBinder not mounted).
+  console.debug('[realtime] applyEvent', { type: e.type, storeMounted: !!store, currentFolderId });
   if (!store) return false;
 
   switch (e.type) {

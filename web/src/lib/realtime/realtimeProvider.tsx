@@ -155,8 +155,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     // would return 403.
 
     const dispatch = (eventName: string) => (payload: unknown) => {
+      console.debug('[realtime] ws event', eventName, payload);
       const ev = parseRealtimePayload(eventName, payload);
-      if (!ev) return;
+      if (!ev) {
+        console.debug('[realtime] parseRealtimePayload returned null');
+        return;
+      }
       applyEvent(ev, {
         store: storeRef.current,
         currentFolderId: folderId,
