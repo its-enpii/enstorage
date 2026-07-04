@@ -7,12 +7,13 @@ import {
   Check,
   LinkOff,
   Link,
-  Event,
+  Event as EventIcon,
   Visibility,
   ArrowDropDown,
 } from '@mui/icons-material';
 import { Dialog } from '@/components/Dialog';
 import { Button } from '@/components/Button';
+import { DateTimePicker } from '@/components/DateTimePicker';
 import {
   apiRequest,
   type FileItem,
@@ -52,7 +53,7 @@ const PRESETS: PresetOption[] = [
   { id: 'custom', labelKey: 'share.expiryCustom' },
 ];
 
-function presetToIso(preset: ExpiryPresetId, customIso: string): string | null {
+function presetToIso(preset: ExpiryPresetId, customIso: string | null): string | null {
   if (preset === 'none') return null;
   if (preset === '1h') return new Date(Date.now() + 3600_000).toISOString();
   if (preset === '1d') return new Date(Date.now() + 86_400_000).toISOString();
@@ -195,7 +196,7 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
   const [links, setLinks] = useState<ShareLink[]>([]);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const [expiryPreset, setExpiryPreset] = useState<ExpiryPresetId>('none');
-  const [customExpiry, setCustomExpiry] = useState<string>('');
+  const [customExpiry, setCustomExpiry] = useState<string | null>(null);
   const [maxViews, setMaxViews] = useState<string>('');
 
   const isFolder = target.kind === 'folder';
@@ -246,7 +247,7 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
       setLinks((prev) => [res, ...prev]);
       // Reset form
       setExpiryPreset('none');
-      setCustomExpiry('');
+      setCustomExpiry(null);
       setMaxViews('');
     } catch {
       // ignore — host page error listener shows global message
@@ -363,7 +364,7 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
         <div className="pt-3 space-y-3">
           <div>
             <label className="flex items-center gap-2 text-sm text-on-surface mb-1">
-              <Event className="!text-base text-on-surface-variant" />
+              <EventIcon className="!text-base text-on-surface-variant" />
               {t('share.expiryLabel')}
             </label>
             <SearchablePresetSelect
@@ -374,14 +375,14 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
               ariaLabel={t('share.expiryLabel')}
             />
             {expiryPreset === 'custom' && (
-              <input
-                type="datetime-local"
-                value={customExpiry}
-                onChange={(e) => setCustomExpiry(e.target.value)}
-                disabled={loading}
-                style={{ colorScheme: 'dark' }}
-                className="mt-2 w-full rounded-lg bg-surface-container border border-outline-variant/20 px-3 py-2 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 [&::-webkit-calendar-picker-indicator]:invert"
-              />
+              <div className="mt-2">
+                <DateTimePicker
+                  value={customExpiry}
+                  onChange={setCustomExpiry}
+                  min={new Date()}
+                  disabled={loading}
+                />
+              </div>
             )}
           </div>
           <div>

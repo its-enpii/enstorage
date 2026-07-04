@@ -255,3 +255,82 @@ body {
 :root:not(.dark) .hover-lift:hover {
   box-shadow: 0px 6px 16px rgba(0, 0, 0, 0.1);
 }
+
+/* === VANILLA CALENDAR PRO OVERRIDES ===
+   Override default theme tokens untuk match Etheric Cloud palette
+   di dark mode. Library's CSS vars di-resolve dari background. */
+.vanilla-calendar {
+  --vc-bg: var(--color-surface-container-highest);
+  --vc-bg-hover: var(--color-surface-container-high);
+  --vc-bg-active: var(--color-primary-container);
+  --vc-text: var(--color-on-surface);
+  --vc-text-week: var(--color-on-surface-variant);
+  --vc-text-disabled: var(--color-outline);
+  --vc-border: var(--color-outline-variant);
+  --vc-border-radius: 0.75rem;
+  --vc-font-family: var(--font-body);
+  --vc-font-size: 14px;
+  --vc-weekday-color: var(--color-on-surface-variant);
+  --vc-popover-border-radius: 0.75rem;
+  --vc-popover-box-shadow: var(--shadow-ambient);
+  --vc-primary: var(--color-primary);
+  --vc-primary-text: var(--color-on-primary);
+  --vc-primary-bg: var(--color-primary-container);
+  --vc-primary-bg-hover: var(--color-primary-container);
+  --vc-primary-fg: var(--color-on-primary-container);
+  --vc-accent-500: var(--color-primary);
+  --vc-accent-600: var(--color-primary-container);
+  --vc-accent-700: var(--color-primary-fixed-dim);
+  background: var(--color-surface-container-highest);
+  color: var(--color-on-surface);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  font-family: var(--font-body);
+}
+.vanilla-calendar .vc-header,
+.vanilla-calendar .vc-months,
+.vanilla-calendar .vc-month,
+.vanilla-calendar .vc-weeks {
+  background: transparent;
+}
+.vanilla-calendar .vc-title,
+.vanilla-calendar .vc-day,
+.vanilla-calendar .vc-weekday {
+  color: var(--color-on-surface);
+}
+.vanilla-calendar .vc-day:hover {
+  background: var(--color-surface-container-high);
+}
+.vanilla-calendar .vc-day.is-selected,
+.vanilla-calendar .vc-day.is-today {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  border-radius: 0.5rem;
+}
+.vanilla-calendar .vc-day.is-disabled {
+  color: var(--color-outline);
+  opacity: 0.4;
+}
+.vanilla-calendar .vc-arrow {
+  color: var(--color-on-surface-variant);
+}
+.vanilla-calendar .vc-arrow:hover {
+  background: var(--color-surface-container-high);
+  border-radius: 0.5rem;
+}
+.vanilla-calendar .vc-time {
+  border-top: 1px solid var(--color-outline-variant);
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+  color: var(--color-on-surface);
+}
+.vanilla-calendar .vc-time input {
+  background: var(--color-surface-container);
+  color: var(--color-on-surface);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 0.5rem;
+}
+.vanilla-calendar .vc-time input:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}

@@ -49,23 +49,30 @@ type ListingState =
   | { status: 'error'; message: string }
   | { status: 'ready'; listing: FolderListing | FileListing };
 
-export default function ShareClient() {
+export type ShareClientMode = 'landing' | 'viewer';
+
+export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMode }) {
   const { t } = useTranslation();
   const params = useParams();
   const token = params.token as string;
   const [state, setState] = useState<ListingState>({ status: 'loading' });
   // Default while fetching: "Shared" — gets refined as soon as listing arrives.
-  usePageTitle(state.status === 'ready' && state.listing.kind === 'folder'
-    ? state.listing.folder.name
-    : state.status === 'error'
-      ? t('share.sharedNotFound')
-      : state.status === 'ready'
-        ? t('share.sharedFile')
-        : t('common.loadingLabel'));
+  usePageTitle(
+    mode === 'viewer'
+      ? t('common.loadingLabel')
+      : state.status === 'ready' && state.listing.kind === 'folder'
+        ? state.listing.folder.name
+        : state.status === 'error'
+          ? t('share.sharedNotFound')
+          : state.status === 'ready'
+            ? t('share.sharedFile')
+            : t('common.loadingLabel'),
+  );
 
   const viewUrl = `${API_BASE}/s/${token}`;
   const downloadUrl = `${API_BASE}/s/${token}?download=1`;
   const infoUrl = `${API_BASE}/s/${token}?info=1`;
+  const viewerUrl = `/s/${token}/view`;
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +85,11 @@ export default function ShareClient() {
           const env = await res.json();
           if (cancelled) return;
           if (env?.success && env.data?.kind === 'folder') {
+            // Viewer mode doesn't support folders — bounce back to landing.
+            if (mode === 'viewer') {
+              window.location.replace(`/s/${token}`);
+              return;
+            }
             setState({
               status: 'ready',
               listing: {
@@ -160,7 +172,7 @@ export default function ShareClient() {
     return () => {
       cancelled = true;
     };
-  }, [token, viewUrl, t]);
+  }, [token, viewUrl, t, infoUrl, mode]);
 
   if (state.status === 'loading') {
     return (
@@ -188,11 +200,18 @@ export default function ShareClient() {
 
   if (state.listing.kind === 'file') {
     return (
-      <FilePreview listing={state.listing} downloadUrl={downloadUrl} streamUrl={viewUrl} t={t} />
+      <FilePreview
+        listing={state.listing}
+        downloadUrl={downloadUrl}
+        streamUrl={viewUrl}
+        viewerUrl={viewerUrl}
+        mode={mode}
+        t={t}
+      />
     );
   }
 
-  // Folder listing (read-only browse)
+  // Folder listing — only landing mode reaches here (viewer bouncs in fetchListing).
   const { folder, subfolders, files } = state.listing;
   return (
     <div className="min-h-screen bg-background p-4">
@@ -266,17 +285,33 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
+function isPreviewable(mime: string): boolean {
+  return (
+    mime.startsWith('image/') ||
+    mime.startsWith('video/') ||
+    mime.startsWith('audio/') ||
+    mime === 'application/pdf' ||
+    mime.startsWith('text/') ||
+    mime.includes('json') ||
+    mime.includes('xml')
+  );
+}
+
 type PreviewTranslator = (key: string, opts?: Record<string, unknown>) => string;
 
 function FilePreview({
   listing,
   streamUrl,
   downloadUrl,
+  viewerUrl,
+  mode,
   t,
 }: {
   listing: FileListing;
   streamUrl: string;
   downloadUrl: string;
+  viewerUrl: string;
+  mode: ShareClientMode;
   t: PreviewTranslator;
 }) {
   const mime = listing.mime_type;
@@ -285,6 +320,25 @@ function FilePreview({
   const isAudio = mime.startsWith('audio/');
   const isPdf = mime === 'application/pdf';
   const isText = mime.startsWith('text/') || mime.includes('json') || mime.includes('xml');
+  const previewable = isPreviewable(mime);
+
+  // Viewer mode: zero chrome — only the media itself, dark background, no filename,
+  // no download, no footer. ESC → bounce back to landing.
+  if (mode === 'viewer') {
+    return (
+      <ViewerOnly
+        streamUrl={streamUrl}
+        isImage={isImage}
+        isVideo={isVideo}
+        isAudio={isAudio}
+        isPdf={isPdf}
+        isText={isText}
+        originalName={listing.original_name || listing.name}
+        textFetchUrl={streamUrl}
+        fallbackUrl={`/s/${(typeof window !== 'undefined' ? window.location.pathname.split('/').filter(Boolean)[1] : '') || ''}`}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-4">
@@ -341,23 +395,113 @@ function FilePreview({
           </div>
         )}
         {isText && <TextPreview streamUrl={streamUrl} />}
-        {!isImage && !isVideo && !isAudio && !isPdf && !isText && (
+        {!previewable && (
           <p className="text-metadata text-outline text-center py-6">
             {t('share.sharedDesc')}
           </p>
         )}
 
-        <div className="flex items-center justify-between mt-6 pt-4 border-t border-outline-variant/10">
-          <p className="text-xs text-outline">{t('share.sharedVia')}</p>
-          <a
-            href={downloadUrl}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary rounded-full hover:bg-primary/90 transition-colors font-medium text-sm"
-          >
-            <span className="material-symbols-outlined !text-lg">download</span>
-            {t('files.actions.download')}
-          </a>
+        <div className="flex items-center justify-between mt-6 pt-4 border-t border-outline-variant/10 gap-3">
+          <p className="text-xs text-outline shrink-0">{t('share.sharedVia')}</p>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {previewable && (
+              <a
+                href={viewerUrl}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-surface-container text-on-surface rounded-full hover:bg-surface-container/80 transition-colors font-medium text-sm"
+              >
+                <span className="material-symbols-outlined !text-lg">visibility</span>
+                {t('share.viewInline')}
+              </a>
+            )}
+            <a
+              href={downloadUrl}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary rounded-full hover:bg-primary/90 transition-colors font-medium text-sm"
+            >
+              <span className="material-symbols-outlined !text-lg">download</span>
+              {t('files.actions.download')}
+            </a>
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ViewerOnly({
+  streamUrl,
+  isImage,
+  isVideo,
+  isAudio,
+  isPdf,
+  isText,
+  originalName,
+  textFetchUrl,
+}: {
+  streamUrl: string;
+  isImage: boolean;
+  isVideo: boolean;
+  isAudio: boolean;
+  isPdf: boolean;
+  isText: boolean;
+  originalName: string;
+  textFetchUrl: string;
+  fallbackUrl: string;
+}) {
+  // ESC handler — bounce to landing.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        const segs = window.location.pathname.split('/').filter(Boolean);
+        // Path is /s/<token>/view → landing is /s/<token>
+        if (segs.length >= 2) {
+          window.location.href = `/s/${segs[1]}`;
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Full-bleed dark canvas. Only the media element itself. No metadata,
+  // no filename visible in DOM (alt kept for a11y but title hidden),
+  // no download affordance, no footer, no "Shared via" branding.
+  return (
+    <div className="fixed inset-0 z-50 bg-black flex items-center justify-center select-none">
+      <a
+        href={`/s/${typeof window !== 'undefined' ? window.location.pathname.split('/').filter(Boolean)[1] : ''}`}
+        className="absolute top-4 left-4 z-10 inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+        aria-label="Back"
+        title="Back"
+      >
+        <span className="material-symbols-outlined">arrow_back</span>
+      </a>
+      {isImage && (
+        <img
+          src={streamUrl}
+          alt={originalName}
+          className="max-h-full max-w-full object-contain"
+          draggable={false}
+        />
+      )}
+      {isVideo && (
+        <video
+          src={streamUrl}
+          controls
+          autoPlay
+          className="max-h-full max-w-full"
+        />
+      )}
+      {isAudio && (
+        <audio src={streamUrl} controls autoPlay className="w-80" />
+      )}
+      {isPdf && (
+        <iframe
+          src={streamUrl}
+          title={originalName}
+          className="w-full h-full"
+        />
+      )}
+      {isText && <TextPreviewDark streamUrl={textFetchUrl} />}
     </div>
   );
 }
@@ -392,6 +536,42 @@ function TextPreview({ streamUrl }: { streamUrl: string }) {
       {error && <p className="text-sm text-error p-4">{error}</p>}
       {content !== null && (
         <pre className="text-xs text-on-surface p-4 overflow-x-auto max-h-[70vh] whitespace-pre-wrap break-words font-mono">
+          {content}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+function TextPreviewDark({ streamUrl }: { streamUrl: string }) {
+  const [content, setContent] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(streamUrl)
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((text) => {
+        if (!cancelled) {
+          setContent(text.length > 65536 ? text.slice(0, 65536) + '\n…' : text);
+        }
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setError(e.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [streamUrl]);
+
+  return (
+    <div className="w-full h-full overflow-auto p-6">
+      {content === null && error === null && (
+        <p className="text-sm text-white/60">Loading…</p>
+      )}
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      {content !== null && (
+        <pre className="text-xs text-white/90 whitespace-pre-wrap break-words font-mono">
           {content}
         </pre>
       )}

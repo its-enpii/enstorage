@@ -7,13 +7,12 @@ type Params = { token: string };
 export async function generateMetadata(
   { params }: { params: Promise<Params> },
 ): Promise<Metadata> {
-  // Token doesn't reveal share contents server-side. Use a generic loading
-  // label and let the client usePageTitle refine to "<folder/file name> · EnStorage"
-  // once the listing fetch lands.
   await params;
+  // Viewer page should never leak file/folder name into <title> since the
+  // whole point is chrome-less preview. Generic label only.
   return pageTitle('common.loadingLabel');
 }
 
 export default function Page() {
-  return <ShareClient />;
+  return <ShareClient mode="viewer" />;
 }
