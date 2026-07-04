@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 export type MenuItem = {
   label: string;
@@ -16,15 +17,23 @@ type Props = {
   align?: 'left' | 'right';
 };
 
+// useLayoutEffect warns on SSR; use useEffect on server.
+const useIsoLayoutEffect =
+  typeof window !== 'undefined' ? useLayoutEffect : useEffect;
+
 export function DropdownMenu({ trigger, items, align = 'right' }: Props) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const posRef = useRef<'below' | 'above'>('below');
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const onClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      const inTrigger = triggerRef.current?.contains(target);
+      const inMenu = menuRef.current?.contains(target);
+      if (!inTrigger && !inMenu) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
@@ -37,32 +46,49 @@ export function DropdownMenu({ trigger, items, align = 'right' }: Props) {
     };
   }, [open]);
 
-  function handleToggle() {
+  useIsoLayoutEffect(() => {
     if (!open) {
-      // Determine if dropdown should open above or below
-      const el = ref.current;
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        const spaceBelow = window.innerHeight - rect.bottom;
-        posRef.current = spaceBelow < 300 ? 'above' : 'below';
-      }
+      setPos(null);
+      return;
     }
+    function place() {
+      const el = triggerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const menuEl = menuRef.current;
+      const menuWidth = menuEl?.offsetWidth ?? 180;
+      const menuHeight = menuEl?.offsetHeight ?? 220;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUp = spaceBelow < menuHeight + 8 && rect.top > spaceBelow;
+      const top = openUp ? rect.top - menuHeight - 4 : rect.bottom + 4;
+      const left = align === 'right'
+        ? Math.max(8, rect.right - menuWidth)
+        : Math.max(8, rect.left);
+      setPos({ top, left });
+    }
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open, align]);
+
+  function handleToggle() {
     setOpen((v) => !v);
   }
 
-  const posClass = posRef.current === 'above'
-    ? 'bottom-full mb-1'
-    : 'top-full mt-1';
-  const alignClass = align === 'right' ? 'right-0' : 'left-0';
-
   return (
-    <div ref={ref} className="relative">
+    <div ref={triggerRef} className="relative">
       <div onClick={(e) => { e.stopPropagation(); handleToggle(); }}>
         {trigger}
       </div>
-      {open && (
+      {open && pos && typeof document !== 'undefined' && createPortal(
         <div
-          className={`absolute ${posClass} ${alignClass} z-50 min-w-[180px] bg-surface-container-highest rounded-xl shadow-2xl py-1 border border-outline-variant/20`}
+          ref={menuRef}
+          style={{ position: 'fixed', top: pos.top, left: pos.left }}
+          className="z-[1000] min-w-[180px] bg-surface-container-highest rounded-xl shadow-2xl py-1 border border-outline-variant/20"
           onClick={(e) => e.stopPropagation()}
         >
           {items.map((item, i) => (
@@ -81,7 +107,8 @@ export function DropdownMenu({ trigger, items, align = 'right' }: Props) {
               {item.dividerAfter && <div className="my-1 border-t border-outline-variant/20" />}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

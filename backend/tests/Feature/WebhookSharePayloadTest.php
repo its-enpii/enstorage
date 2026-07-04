@@ -199,4 +199,49 @@ class WebhookSharePayloadTest extends TestCase
         $response = $this->get('/api/v1/s/no-such-token/view');
         $response->assertNotFound();
     }
+
+    public function test_view_by_token_with_info_flag_returns_json_metadata(): void
+    {
+        // Endpoint dipakai oleh ShareClient FE untuk render inline preview
+        // (image/video/audio/pdf/text) tanpa download stream.
+        $user = $this->makeUser();
+        $file = $this->makeFile($user, 'laporan-q3.pdf');
+        $file->share_token = 'preview-meta-tok';
+        $file->save();
+
+        $response = $this->get('/api/v1/s/preview-meta-tok?info=1');
+
+        $response->assertOk();
+        $response->assertJsonPath('success', true);
+        $response->assertJsonPath('data.kind', 'file');
+        $response->assertJsonPath('data.name', 'laporan-q3.pdf');
+        $response->assertJsonPath('data.original_name', 'laporan-q3.pdf');
+        $response->assertJsonPath('data.mime_type', 'application/pdf');
+        $response->assertJsonPath('data.size', 2048);
+    }
+
+    public function test_view_by_token_with_info_flag_resolves_via_pivot(): void
+    {
+        // Token harusnya bisa di-resolve lewat pivot share_links juga,
+        // bukan cuma legacy share_token column.
+        $user = $this->makeUser();
+        $file = $this->makeFile($user, 'image.png');
+        // Override mime biar test assertion lebih informatif
+        $file->mime_type = 'image/png';
+        $file->save();
+
+        \App\Models\ShareLink::create([
+            'user_id' => $user->id,
+            'shareable_type' => File::class,
+            'shareable_id' => $file->id,
+            'token' => 'pivot-info-tok',
+        ]);
+
+        $response = $this->get('/api/v1/s/pivot-info-tok?info=1');
+
+        $response->assertOk();
+        $response->assertJsonPath('data.kind', 'file');
+        $response->assertJsonPath('data.mime_type', 'image/png');
+        $response->assertJsonPath('data.name', 'image.png');
+    }
 }

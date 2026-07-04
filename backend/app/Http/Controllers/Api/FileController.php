@@ -598,6 +598,10 @@ class FileController extends Controller
      * Dispatches by token: share_links pivot (new) → legacy share_token
      * di files/folders. share_links menang kalau ada token yang cocok,
      * karena pivot membawa expiry/max_views.
+     *
+     * Query params:
+     *   - info=1 → return JSON metadata (no streaming) untuk FE preview
+     *   - download=1 → Content-Disposition: attachment (default inline)
      */
     public function viewByToken(Request $request, string $token): StreamedResponse|JsonResponse
     {
@@ -606,7 +610,7 @@ class FileController extends Controller
         if ($link) {
             $subject = $link->shareable;
             if ($subject instanceof FileModel) {
-                return $this->streamSharedFile($request, $subject);
+                return $this->resolveFileResponse($request, $subject);
             }
             if ($subject instanceof Folder) {
                 return $this->respondSharedFolder($subject);
@@ -616,7 +620,7 @@ class FileController extends Controller
         // 2) Legacy: file token first (most common).
         $file = FileModel::where('share_token', $token)->first();
         if ($file) {
-            return $this->streamSharedFile($request, $file);
+            return $this->resolveFileResponse($request, $file);
         }
 
         // 3) Legacy fallback: folder token → JSON read-only listing.
@@ -629,6 +633,27 @@ class FileController extends Controller
             __('Link share tidak ditemukan, sudah kadaluarsa, atau sudah di-revoke.'),
             410,
         );
+    }
+
+    /**
+     * Dispatch by request: info=1 → JSON metadata; else → stream file.
+     * Dipakai oleh viewByToken untuk token file (pivot + legacy).
+     */
+    private function resolveFileResponse(Request $request, FileModel $file): StreamedResponse|JsonResponse
+    {
+        if ($request->boolean('info')) {
+            return $this->ok([
+                'kind' => 'file',
+                'id' => $file->id,
+                'name' => $file->name,
+                'original_name' => $file->original_name,
+                'mime_type' => $file->mime_type,
+                'size' => $file->size,
+                'updated_at' => $file->updated_at?->toIso8601String(),
+            ]);
+        }
+
+        return $this->streamSharedFile($request, $file);
     }
 
     /**

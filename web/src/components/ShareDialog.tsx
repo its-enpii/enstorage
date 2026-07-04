@@ -379,7 +379,8 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
                 value={customExpiry}
                 onChange={(e) => setCustomExpiry(e.target.value)}
                 disabled={loading}
-                className="mt-2 w-full rounded-lg bg-surface-container px-3 py-2 text-sm text-on-surface [color-scheme:dark]"
+                style={{ colorScheme: 'dark' }}
+                className="mt-2 w-full rounded-lg bg-surface-container border border-outline-variant/20 px-3 py-2 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 [&::-webkit-calendar-picker-indicator]:invert"
               />
             )}
           </div>

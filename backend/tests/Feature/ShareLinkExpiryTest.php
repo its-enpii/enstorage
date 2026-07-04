@@ -14,6 +14,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -26,6 +27,9 @@ class ShareLinkExpiryTest extends TestCase
     {
         parent::setUp();
         Config::set('app.frontend_url', 'https://enstorage.test');
+        // Broadcast di-fake supaya test tidak butuh Reverb running.
+        // ShareLinkExpiryTest fokus ke expiry/revoke, bukan broadcast.
+        Event::fake();
     }
 
     private function makeUser(): User
