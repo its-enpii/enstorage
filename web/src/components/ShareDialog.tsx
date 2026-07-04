@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ContentCopy,
@@ -9,6 +9,7 @@ import {
   Link,
   Event,
   Visibility,
+  ArrowDropDown,
 } from '@mui/icons-material';
 import { Dialog } from '@/components/Dialog';
 import { Button } from '@/components/Button';
@@ -36,14 +37,27 @@ type Props = {
   onUpdate: (target: ShareTarget) => void;
 };
 
-type ExpiryPreset = 'none' | '1h' | '1d' | '1w' | 'custom';
+type ExpiryPresetId = 'none' | '1h' | '1d' | '1w' | 'custom';
 
-function presetToIso(preset: ExpiryPreset, customIso: string): string | null {
+type PresetOption = {
+  id: ExpiryPresetId;
+  labelKey: string;
+};
+
+const PRESETS: PresetOption[] = [
+  { id: 'none', labelKey: 'share.expiryNone' },
+  { id: '1h', labelKey: 'share.expiryHour' },
+  { id: '1d', labelKey: 'share.expiryDay' },
+  { id: '1w', labelKey: 'share.expiryWeek' },
+  { id: 'custom', labelKey: 'share.expiryCustom' },
+];
+
+function presetToIso(preset: ExpiryPresetId, customIso: string): string | null {
   if (preset === 'none') return null;
   if (preset === '1h') return new Date(Date.now() + 3600_000).toISOString();
   if (preset === '1d') return new Date(Date.now() + 86_400_000).toISOString();
   if (preset === '1w') return new Date(Date.now() + 7 * 86_400_000).toISOString();
-  return customIso || null;
+  return customIso ? new Date(customIso).toISOString() : null;
 }
 
 function formatExpiry(iso: string | null, t: Translator): string {
@@ -60,6 +74,113 @@ function formatExpiry(iso: string | null, t: Translator): string {
   return t('share.linkExpiresIn', { when: `${days}d` });
 }
 
+/**
+ * Searchable preset picker — like <select> tapi bisa di-search.
+ * Native <select> tidak support typeahead/filter, dan <datalist>
+ * juga terbatas (tidak bisa dropdown panel). Implementasi custom
+ * ringan tanpa dependency eksternal.
+ */
+function SearchablePresetSelect({
+  value,
+  onChange,
+  options,
+  disabled,
+  ariaLabel,
+}: {
+  value: ExpiryPresetId;
+  onChange: (v: ExpiryPresetId) => void;
+  options: PresetOption[];
+  disabled?: boolean;
+  ariaLabel: string;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((o) => t(o.labelKey).toLowerCase().includes(q));
+  }, [query, options, t]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const current = options.find((o) => o.id === value);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => !disabled && setOpen((v) => !v)}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        className="w-full flex items-center justify-between rounded-lg bg-surface-container px-3 py-2 text-sm text-on-surface disabled:opacity-50"
+      >
+        <span className="truncate">
+          {current ? t(current.labelKey) : ''}
+        </span>
+        <ArrowDropDown className="!text-base shrink-0 text-on-surface-variant" />
+      </button>
+      {open && (
+        <div className="absolute z-10 left-0 right-0 mt-1 bg-surface-container-high border border-outline-variant/20 rounded-lg shadow-ambient max-h-60 overflow-hidden flex flex-col">
+          <div className="p-2 border-b border-outline-variant/10 shrink-0">
+            <input
+              autoFocus
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('share.searchPlaceholder')}
+              className="w-full rounded-md bg-surface px-2 py-1.5 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          <ul role="listbox" className="flex-1 min-h-0 overflow-y-auto py-1">
+            {filtered.length === 0 ? (
+              <li className="px-3 py-2 text-sm text-outline">
+                {t('share.searchNoResults')}
+              </li>
+            ) : (
+              filtered.map((o) => (
+                <li
+                  key={o.id}
+                  role="option"
+                  aria-selected={o.id === value}
+                  onClick={() => {
+                    onChange(o.id);
+                    setOpen(false);
+                    setQuery('');
+                  }}
+                  className={`px-3 py-2 text-sm cursor-pointer ${
+                    o.id === value
+                      ? 'bg-primary-container text-on-primary-container'
+                      : 'text-on-surface hover:bg-surface-container'
+                  }`}
+                >
+                  {t(o.labelKey)}
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ShareDialog({ target, onClose, onUpdate }: Props) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
@@ -73,7 +194,7 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
   // Share links (new) state.
   const [links, setLinks] = useState<ShareLink[]>([]);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
-  const [expiryPreset, setExpiryPreset] = useState<ExpiryPreset>('none');
+  const [expiryPreset, setExpiryPreset] = useState<ExpiryPresetId>('none');
   const [customExpiry, setCustomExpiry] = useState<string>('');
   const [maxViews, setMaxViews] = useState<string>('');
 
@@ -213,7 +334,7 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
                 {t('share.disableLink')}
               </Button>
             )}
-            <Button onClick={() => onClose()}>{t('share.copyLink').split(' ')[0] === 'Copy' ? 'Done' : 'Selesai'}</Button>
+            <Button onClick={onClose}>{t('share.done')}</Button>
           </>
         ) : (
           <>
@@ -237,7 +358,7 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
         </div>
       )}
 
-      {/* New: form untuk create share link dengan expiry + max_views */}
+      {/* Form untuk create share link dengan expiry + max_views */}
       <div className="space-y-3 pt-2 border-t border-outline/10">
         <div className="pt-3 space-y-3">
           <div>
@@ -245,25 +366,20 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
               <Event className="!text-base text-on-surface-variant" />
               {t('share.expiryLabel')}
             </label>
-            <select
+            <SearchablePresetSelect
               value={expiryPreset}
-              onChange={(e) => setExpiryPreset(e.target.value as ExpiryPreset)}
+              onChange={setExpiryPreset}
+              options={PRESETS}
               disabled={loading}
-              className="w-full rounded-lg bg-surface-container px-3 py-2 text-sm text-on-surface"
-            >
-              <option value="none">{t('share.expiryNone')}</option>
-              <option value="1h">{t('share.expiryHour')}</option>
-              <option value="1d">{t('share.expiryDay')}</option>
-              <option value="1w">{t('share.expiryWeek')}</option>
-              <option value="custom">{t('share.expiryCustom')}</option>
-            </select>
+              ariaLabel={t('share.expiryLabel')}
+            />
             {expiryPreset === 'custom' && (
               <input
                 type="datetime-local"
                 value={customExpiry}
                 onChange={(e) => setCustomExpiry(e.target.value)}
                 disabled={loading}
-                className="mt-2 w-full rounded-lg bg-surface-container px-3 py-2 text-sm text-on-surface"
+                className="mt-2 w-full rounded-lg bg-surface-container px-3 py-2 text-sm text-on-surface [color-scheme:dark]"
               />
             )}
           </div>

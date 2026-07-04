@@ -47,9 +47,9 @@ export function Dialog({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`w-full max-w-sm bg-surface rounded-card shadow-ambient p-inner-padding ${accentRing}`}
+        className={`w-full max-w-sm max-h-[90vh] flex flex-col bg-surface rounded-card shadow-ambient p-inner-padding overflow-hidden ${accentRing}`}
       >
-        <div className="flex items-start gap-4">
+        <div className="flex items-start gap-4 shrink-0">
           {icon && (
             <div
               className={
@@ -72,8 +72,12 @@ export function Dialog({
             )}
           </div>
         </div>
-        {children && <div className="mt-6">{children}</div>}
-        {actions && <div className="mt-8 flex gap-2 justify-end">{actions}</div>}
+        {children && (
+          <div className="mt-6 flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
+            {children}
+          </div>
+        )}
+        {actions && <div className="mt-4 flex gap-2 justify-end shrink-0">{actions}</div>}
       </div>
     </div>
   );
