@@ -408,6 +408,7 @@
     "expiryWeek": "1 week",
     "expiryCustom": "Custom…",
     "dateTimePlaceholder": "Pick a date & time",
+    "timeLabel": "Time",
     "clear": "Clear",
     "maxViewsLabel": "Max views (optional)",
     "maxViewsNone": "Unlimited",

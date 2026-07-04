@@ -408,6 +408,7 @@
     "expiryWeek": "1 minggu",
     "expiryCustom": "Kustom…",
     "dateTimePlaceholder": "Pilih tanggal & waktu",
+    "timeLabel": "Waktu",
     "clear": "Hapus",
     "maxViewsLabel": "Maks tampilan (opsional)",
     "maxViewsNone": "Tanpa batas",

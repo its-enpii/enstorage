@@ -256,81 +256,58 @@ body {
   box-shadow: 0px 6px 16px rgba(0, 0, 0, 0.1);
 }
 
-/* === VANILLA CALENDAR PRO OVERRIDES ===
-   Override default theme tokens untuk match Etheric Cloud palette
-   di dark mode. Library's CSS vars di-resolve dari background. */
-.vanilla-calendar {
-  --vc-bg: var(--color-surface-container-highest);
-  --vc-bg-hover: var(--color-surface-container-high);
-  --vc-bg-active: var(--color-primary-container);
-  --vc-text: var(--color-on-surface);
-  --vc-text-week: var(--color-on-surface-variant);
-  --vc-text-disabled: var(--color-outline);
-  --vc-border: var(--color-outline-variant);
-  --vc-border-radius: 0.75rem;
-  --vc-font-family: var(--font-body);
-  --vc-font-size: 14px;
-  --vc-weekday-color: var(--color-on-surface-variant);
-  --vc-popover-border-radius: 0.75rem;
-  --vc-popover-box-shadow: var(--shadow-ambient);
-  --vc-primary: var(--color-primary);
-  --vc-primary-text: var(--color-on-primary);
-  --vc-primary-bg: var(--color-primary-container);
-  --vc-primary-bg-hover: var(--color-primary-container);
-  --vc-primary-fg: var(--color-on-primary-container);
-  --vc-accent-500: var(--color-primary);
-  --vc-accent-600: var(--color-primary-container);
-  --vc-accent-700: var(--color-primary-fixed-dim);
-  background: var(--color-surface-container-highest);
+/* === REACT DAY PICKER (v10) OVERRIDES ===
+   Override CSS vars dari library's stylesheet untuk match Etheric Cloud
+   palette di dark mode. */
+.rdp-dark {
+  --rdp-accent-color: var(--color-primary);
+  --rdp-accent-background-color: var(--color-primary-container);
+  --rdp-background-color: transparent;
+  --rdp-day-height: 2.25rem;
+  --rdp-day-width: 2.25rem;
+  --rdp-day_button-border-radius: 0.5rem;
+  --rdp-selected-border: none;
+  --rdp-today-color: var(--color-primary);
+  --rdp-weekday-text-color: var(--color-on-surface-variant);
+  --rdp-range_middle-color: var(--color-on-surface);
+  --rdp-outside-text-color: var(--color-outline);
+  --rdp-disabled-text-color: var(--color-outline);
   color: var(--color-on-surface);
-  border-radius: 0.75rem;
-  padding: 1rem;
   font-family: var(--font-body);
+  font-size: 14px;
 }
-.vanilla-calendar .vc-header,
-.vanilla-calendar .vc-months,
-.vanilla-calendar .vc-month,
-.vanilla-calendar .vc-weeks {
-  background: transparent;
-}
-.vanilla-calendar .vc-title,
-.vanilla-calendar .vc-day,
-.vanilla-calendar .vc-weekday {
+.rdp-dark .rdp-month_caption,
+.rdp-dark .rdp-weekday {
   color: var(--color-on-surface);
 }
-.vanilla-calendar .vc-day:hover {
-  background: var(--color-surface-container-high);
+.rdp-dark .rdp-day_button {
+  color: var(--color-on-surface);
 }
-.vanilla-calendar .vc-day.is-selected,
-.vanilla-calendar .vc-day.is-today {
+.rdp-dark .rdp-day_button:hover:not([disabled]) {
+  background: var(--color-surface-container-high);
+  border-radius: 0.5rem;
+}
+.rdp-dark .rdp-selected .rdp-day_button,
+.rdp-dark .rdp-day_selected,
+.rdp-dark .rdp-day_selected:focus-visible,
+.rdp-dark .rdp-day_selected:hover {
   background: var(--color-primary-container);
   color: var(--color-on-primary-container);
-  border-radius: 0.5rem;
+  border: none;
 }
-.vanilla-calendar .vc-day.is-disabled {
-  color: var(--color-outline);
-  opacity: 0.4;
+.rdp-dark .rdp-today:not(.rdp-selected) .rdp-day_button {
+  color: var(--color-primary);
+  font-weight: 600;
 }
-.vanilla-calendar .vc-arrow {
+.rdp-dark .rdp-nav button,
+.rdp-dark .rdp-button_previous,
+.rdp-dark .rdp-button_next {
   color: var(--color-on-surface-variant);
+  background: transparent;
 }
-.vanilla-calendar .vc-arrow:hover {
+.rdp-dark .rdp-nav button:hover,
+.rdp-dark .rdp-button_previous:hover,
+.rdp-dark .rdp-button_next:hover {
   background: var(--color-surface-container-high);
-  border-radius: 0.5rem;
-}
-.vanilla-calendar .vc-time {
-  border-top: 1px solid var(--color-outline-variant);
-  padding-top: 0.75rem;
-  margin-top: 0.75rem;
   color: var(--color-on-surface);
-}
-.vanilla-calendar .vc-time input {
-  background: var(--color-surface-container);
-  color: var(--color-on-surface);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 0.5rem;
-}
-.vanilla-calendar .vc-time input:focus {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 1px;
 }
