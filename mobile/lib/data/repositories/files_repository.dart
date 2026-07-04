@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mime/mime.dart';
@@ -9,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import '../api_client.dart';
 import '../models/file_item.dart';
 import '../models/folder.dart';
+import '../models/share_link.dart';
 import '../models/storage_summary.dart';
 import '../paged_result.dart';
 import '../storage/token_storage.dart';
@@ -186,6 +185,78 @@ class FilesRepository {
 
   Future<void> deleteFolderShareLink(String folderId) async {
     await _api.dio.delete<void>('/folders/$folderId/share');
+  }
+
+  // ─── Share Links (pivot: expiry + max_views) ────────────────────
+  //
+  // Coexist dengan legacy share_token di atas. Mobile UI panggil
+  // ini untuk dialog dengan opsi expiry/max_views; UI yang menentukan
+  // path mana yang dipakai.
+
+  /// Buat share link baru untuk file dengan opsi expiry & max_views.
+  /// Returns full [ShareLink] object (token, url, views_count, dll).
+  Future<ShareLink> createFileShareLink(
+    String fileId, {
+    DateTime? expiresAt,
+    int? maxViews,
+  }) async {
+    final res = await _api.dio.post<Map<String, dynamic>>(
+      '/files/$fileId/share-links',
+      data: {
+        if (expiresAt != null) 'expires_at': expiresAt.toUtc().toIso8601String(),
+        if (maxViews != null) 'max_views': maxViews,
+      },
+    );
+    return ShareLink.fromJson(_unwrap(res.data!));
+  }
+
+  /// Buat share link baru untuk folder dengan opsi expiry & max_views.
+  Future<ShareLink> createFolderShareLinkWithLimits(
+    String folderId, {
+    DateTime? expiresAt,
+    int? maxViews,
+  }) async {
+    final res = await _api.dio.post<Map<String, dynamic>>(
+      '/folders/$folderId/share-links',
+      data: {
+        if (expiresAt != null) 'expires_at': expiresAt.toUtc().toIso8601String(),
+        if (maxViews != null) 'max_views': maxViews,
+      },
+    );
+    return ShareLink.fromJson(_unwrap(res.data!));
+  }
+
+  /// List share links AKTIF untuk file (expired/revoked/over-quota
+  /// otomatis difilter server-side via scopeActive()).
+  Future<List<ShareLink>> listFileShareLinks(String fileId) async {
+    final res = await _api.dio.get<Map<String, dynamic>>(
+      '/files/$fileId/share-links',
+    );
+    final inner = _unwrap(res.data!);
+    final list = inner['data'] is List ? inner['data'] as List<dynamic> : const <dynamic>[];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(ShareLink.fromJson)
+        .toList(growable: false);
+  }
+
+  /// List share links aktif untuk folder.
+  Future<List<ShareLink>> listFolderShareLinks(String folderId) async {
+    final res = await _api.dio.get<Map<String, dynamic>>(
+      '/folders/$folderId/share-links',
+    );
+    final inner = _unwrap(res.data!);
+    final list = inner['data'] is List ? inner['data'] as List<dynamic> : const <dynamic>[];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(ShareLink.fromJson)
+        .toList(growable: false);
+  }
+
+  /// Manual revoke — DELETE /share-links/{id}. Top-level karena pivot
+  /// polymorphic, bukan nested di files/folders.
+  Future<void> revokeShareLink(String linkId) async {
+    await _api.dio.delete<void>('/share-links/$linkId');
   }
 
   // ─── Folders ─────────────────────────────────────────────────────

@@ -95,6 +95,24 @@ export default function ShareClient() {
           return;
         }
 
+        // 410 Gone dari pivot share_links — expired / over-quota / revoked.
+        // Backend sudah ada envelope.message yang informatif; pakai itu
+        // kalau ada, fallback ke translated key sharedExpired.
+        if (res.status === 410) {
+          let envMessage: string | undefined;
+          try {
+            const env = await res.json();
+            envMessage = env?.message;
+          } catch {
+            // ignore — pakai fallback
+          }
+          setState({
+            status: 'error',
+            message: envMessage ?? t('share.sharedExpired'),
+          });
+          return;
+        }
+
         setState({ status: 'error', message: t('share.sharedError') });
       } catch (e) {
         if (cancelled) return;

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\UploadFileJob;
 use App\Models\File as FileModel;
 use App\Models\Folder;
+use App\Models\ShareLink;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -91,9 +92,21 @@ class FileUploadController extends Controller
             );
         }
 
-        // Auto-generate share token (default ON, opt-out via shareable=0)
+        // Auto-generate share link (default ON, opt-out via shareable=0).
+        // share_links pivot adalah sumber kebenaran; files.share_token
+        // di-mirror dari pivot token supaya URL share existing yang
+        // resolve via legacy path (FileController::viewByToken fallback)
+        // tetap valid. Field opsional:
+        //   - share_expires_at: ISO 8601 datetime, null = aktif selamanya
+        //   - share_max_views:  integer 1-10000, null = unlimited
         $shareable = $request->boolean('shareable', true);
         $shareBaseUrl = rtrim(config('app.frontend_url', config('app.url')), '/');
+        $shareExpiresAt = $request->input('share_expires_at');
+        $shareMaxViews = $request->input('share_max_views');
+
+        if ($shareable) {
+            $this->validateShareOptions($shareExpiresAt, $shareMaxViews);
+        }
 
         $tempDir = storage_path('app/temp');
         if (! is_dir($tempDir)) {
@@ -119,6 +132,11 @@ class FileUploadController extends Controller
                 $size = $uploadedFile->getSize();
 
                 // Stream upload ke local storage
+                // share_token legacy di-set dulu agar response shape
+                // tidak berubah untuk client existing; pivot row dibuat
+                // setelahnya dengan token yang sama supaya viewByToken
+                // resolve ke pivot (expiry/max_views enforce).
+                $shareToken = $shareable ? bin2hex(random_bytes(16)) : null;
                 $file = FileModel::create([
                     'user_id' => $userId,
                     'folder_id' => $folderId,
@@ -129,7 +147,7 @@ class FileUploadController extends Controller
                     'size' => $size,
                     'gdrive_file_id' => 'pending-'.Str::uuid(),
                     'upload_status' => FileModel::STATUS_PENDING,
-                    'share_token' => $shareable ? bin2hex(random_bytes(16)) : null,
+                    'share_token' => $shareToken,
                     'client_key' => $userKeys[$index],
                     'client_key_origin' => $origin,
                 ]);
@@ -137,6 +155,20 @@ class FileUploadController extends Controller
                 // Override gdrive_file_id dengan uuid asli
                 $file->gdrive_file_id = $file->id;
                 $file->save();
+
+                // Buat pivot row share_links kalau shareable. expires_at
+                // null default = aktif selamanya (tidak akan kena
+                // ExpireShareLinksJob). max_views null = unlimited.
+                if ($shareable) {
+                    ShareLink::create([
+                        'user_id' => $userId,
+                        'shareable_type' => FileModel::class,
+                        'shareable_id' => $file->id,
+                        'token' => $shareToken,
+                        'expires_at' => $shareExpiresAt,
+                        'max_views' => $shareMaxViews,
+                    ]);
+                }
 
                 // Stream ke temp (pakai move, tidak buffer)
                 $uploadedFile->move($tempDir, $file->id);
@@ -153,6 +185,8 @@ class FileUploadController extends Controller
                     'shareable' => (bool) $file->share_token,
                     'share_token' => $file->share_token,
                     'share_url' => $file->share_token ? $shareBaseUrl.'/s/'.$file->share_token : null,
+                    'share_expires_at' => $shareExpiresAt,
+                    'share_max_views' => $shareMaxViews !== null ? (int) $shareMaxViews : null,
                 ];
             } catch (Throwable $e) {
                 $rejected[] = ['name' => $uploadedFile->getClientOriginalName() ?? 'unknown', 'reason' => $e->getMessage()];
@@ -203,5 +237,36 @@ class FileUploadController extends Controller
             ]);
         }
         return $values;
+    }
+
+    /**
+     * Validasi share options dari upload form. Dipanggil hanya kalau
+     * shareable=true. share_expires_at dan share_max_views keduanya
+     * opsional; null/unset = unlimited.
+     */
+    private function validateShareOptions(mixed $expiresAt, mixed $maxViews): void
+    {
+        $errors = [];
+
+        if ($expiresAt !== null && $expiresAt !== '') {
+            try {
+                $parsed = new \DateTimeImmutable((string) $expiresAt);
+            } catch (\Throwable) {
+                $errors['share_expires_at'] = __('Format share_expires_at tidak valid.');
+            }
+            if (! isset($errors['share_expires_at']) && $parsed <= new \DateTimeImmutable()) {
+                $errors['share_expires_at'] = __('share_expires_at harus di masa depan.');
+            }
+        }
+
+        if ($maxViews !== null && $maxViews !== '') {
+            if (! is_numeric($maxViews) || (int) $maxViews < 1 || (int) $maxViews > 10000) {
+                $errors['share_max_views'] = __('share_max_views harus integer 1-10000.');
+            }
+        }
+
+        if (! empty($errors)) {
+            throw ValidationException::withMessages($errors);
+        }
     }
 }

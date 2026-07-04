@@ -32,6 +32,10 @@ class Webhook extends Model
         'file.deleted',
         'file.shared',
         'folder.shared',
+        'file.share_link.created',
+        'file.share_link.revoked',
+        'folder.share_link.created',
+        'folder.share_link.revoked',
     ];
 
     protected function casts(): array

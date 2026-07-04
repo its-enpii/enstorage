@@ -640,7 +640,9 @@ Hapus folder. **Subfolders ikut hilang** (CASCADE FK). **File di dalamnya** dipi
 
 #### `POST /folders/{id}/share` — Scope: `read`
 
-Generate share token (kalau belum ada). Idempotent.
+Generate share token (kalau belum ada). Idempotent. Selalu create `share_links` pivot row.
+
+**Body (semua opsional):** sama dengan `POST /files/{id}/share` — `expires_at` (ISO 8601), `max_views` (integer 1-10000). Default null = aktif selamanya.
 
 **Response 200:**
 
@@ -649,7 +651,9 @@ Generate share token (kalau belum ada). Idempotent.
   "success": true,
   "data": {
     "share_token": "abc123...",
-    "share_url": "http://localhost:3000/s/abc123..."
+    "share_url": "https://app.enstorage.id/s/abc123...",
+    "expires_at": null,
+    "max_views": null
   },
   "message": "Folder share berhasil dibuat."
 }
@@ -659,7 +663,7 @@ Generate share token (kalau belum ada). Idempotent.
 
 #### `DELETE /folders/{id}/share` — Scope: `delete`
 
-Hapus share token.
+Hapus share token legacy dan semua pivot rows untuk folder ini.
 
 ---
 
@@ -808,7 +812,9 @@ Content-Disposition: form-data; name="folder_id"
 |-------|------|----------|---------|------------|
 | `file` / `file[]` | binary | ya | — | Single atau array (max 10 file per request, max 1 GB per file) |
 | `folder_id` | uuid | tidak | `null` | Harus folder milik user (kalau diisi) |
-| `shareable` | boolean | tidak | `true` | `true` → auto-generate `share_token` + `share_url` publik per file. `false` → tanpa share token. Token bisa di-regenerate atau di-revoke via `POST /files/{id}/share` & `DELETE /files/{id}/share` |
+| `shareable` | boolean | tidak | `true` | `true` → auto-generate share link publik per file (selalu via `share_links` pivot, mirror token ke `files.share_token` untuk backward-compat). `false` → tanpa share link. Batas bisa diubah / di-revoke via `DELETE /files/{id}/share` |
+| `share_expires_at` | ISO 8601 datetime | tidak | `null` (aktif selamanya) | Hanya berlaku kalau `shareable=true`. Auto-revoke setelah waktu ini lewat (lihat `ExpireShareLinksJob` hourly). Harus di masa depan. |
+| `share_max_views` | integer | tidak | `null` (unlimited) | Hanya berlaku kalau `shareable=true`. Auto-revoke setelah `views_count` mencapai angka ini. Range: 1-10000. |
 | `client_key` | string | tidak | server-generated | ID korelasi opsional per file. Charset `[A-Za-z0-9._-]`, maks 128 karakter, **unik per user**. Jika dikirim scalar saat multi-file → auto-suffix `-1`, `-2`, dst. Jika dikirim array → harus sepanjang jumlah file. Jika kosong/diabaikan → server generate ULID. Response selalu mengembalikan `client_key` per file; `client_key` yang sama ikut di payload webhook `file.upload.completed` / `file.upload.failed`. |
 
 **Response 202:**
@@ -826,7 +832,9 @@ Content-Disposition: form-data; name="folder_id"
         "status": "pending",
         "shareable": true,
         "share_token": "a1b2c3...",
-        "share_url": "https://app.enstorage.id/s/a1b2c3..."
+        "share_url": "https://app.enstorage.id/s/a1b2c3...",
+        "share_expires_at": null,
+        "share_max_views": null
       },
       {
         "file_id": "uuid",
@@ -836,7 +844,9 @@ Content-Disposition: form-data; name="folder_id"
         "status": "pending",
         "shareable": true,
         "share_token": "d4e5f6...",
-        "share_url": "https://app.enstorage.id/s/d4e5f6..."
+        "share_url": "https://app.enstorage.id/s/d4e5f6...",
+        "share_expires_at": "2026-07-10T12:00:00Z",
+        "share_max_views": 5
       }
     ],
     "rejected": [
@@ -1035,7 +1045,14 @@ Hapus banyak file sekaligus.
 
 #### `POST /files/{id}/share` — Scope: `read`
 
-Generate share token (idempotent).
+Generate share token (idempotent). Selalu create `share_links` pivot row sebagai sumber kebenaran, mirror token ke `files.share_token` untuk backward-compat URL share existing.
+
+**Body (semua opsional):**
+
+| Field | Type | Default | Keterangan |
+|-------|------|---------|------------|
+| `expires_at` | ISO 8601 datetime | `null` (aktif selamanya) | Auto-revoke setelah lewat. Harus di masa depan. |
+| `max_views` | integer 1-10000 | `null` (unlimited) | Auto-revoke setelah view count mencapai angka ini. |
 
 **Response 200:**
 
@@ -1044,19 +1061,97 @@ Generate share token (idempotent).
   "success": true,
   "data": {
     "share_token": "abc123...",
-    "share_url": "http://localhost:3000/s/abc123..."
+    "share_url": "https://app.enstorage.id/s/abc123...",
+    "expires_at": "2026-07-10T12:00:00Z",
+    "max_views": 10
   },
   "message": "File share berhasil dibuat."
 }
 ```
 
-**Errors:** 409 (file belum done)
+**Errors:** 409 (file belum done), 422 (`expires_at` di masa lalu atau `max_views` di luar range).
 
 ---
 
 #### `DELETE /files/{id}/share` — Scope: `delete`
 
-Hapus share token.
+Hapus share token legacy dan semua pivot rows untuk file ini. URL share yang sebelumnya dishare akan return 404 (token dihapus, bukan di-soft-revoke). Untuk cabut hanya satu link spesifik, pakai `DELETE /share-links/{id}`.
+
+---
+
+#### `POST /files/{id}/share-links` — Scope: `write`
+
+Generate share link baru dengan opsi expiry & max_views. Berbeda dari `POST /files/{id}/share` (legacy), endpoint ini menyimpan token di tabel pivot `share_links` dan mendukung multi-link per file dengan batasan各自.
+
+**Body:**
+
+| Field | Type | Wajib | Keterangan |
+|-------|------|-------|------------|
+| `expires_at` | ISO 8601 datetime | tidak | Auto-revoke setelah waktu ini. Harus di masa depan. |
+| `max_views` | integer 1-10000 | tidak | Auto-revoke setelah view count mencapai angka ini. |
+
+**Response 201:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "token": "abc123...",
+    "url": "https://enstorage.test/s/abc123...",
+    "preview_url": "https://enstorage.test/s/abc123.../view",
+    "expires_at": "2026-07-10T12:00:00Z",
+    "max_views": 10,
+    "views_count": 0,
+    "revoked_at": null,
+    "is_active": true,
+    "shareable_type": "App\\Models\\File",
+    "shareable_id": "uuid",
+    "created_at": "2026-07-03T..."
+  },
+  "message": "Share link berhasil dibuat."
+}
+```
+
+**Errors:** 404 (file bukan milik user), 422 (`expires_at` di masa lalu, `max_views` < 1 atau > 10000).
+
+---
+
+#### `GET /files/{id}/share-links` — Scope: `read`
+
+List share link **aktif** milik file. Link yang sudah expired, over-quota, atau di-revoke manual tidak dikembalikan.
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": [ /* array of ShareLinkResource, same shape as POST response */ ],
+  "message": "Daftar share link aktif."
+}
+```
+
+---
+
+#### `POST /folders/{id}/share-links` — Scope: `write`
+
+Sama dengan `POST /files/{id}/share-links` tapi untuk folder.
+
+---
+
+#### `GET /folders/{id}/share-links` — Scope: `read`
+
+Sama dengan `GET /files/{id}/share-links` tapi untuk folder.
+
+---
+
+#### `DELETE /share-links/{id}` — Scope: `write`
+
+Manual revoke satu share link. Setelah revoke, link return 410 di `GET /s/{token}`. Webhook event `file.share_link.revoked` (atau `folder.share_link.revoked`) ter-fire dengan `reason: "manual"`.
+
+**Errors:** 404 (bukan milik user), 409 (sudah di-revoke).
+
+**Catatan:** Endpoint ini **bukan** nested di `/files/{id}/` atau `/folders/{id}/` karena share link polymorphic — top-level agar URL tetap konsisten.
 
 ---
 
@@ -1387,10 +1482,21 @@ Purge log lama.
 
 **No auth.** Dispatch by token:
 
-- **File token** → stream file inline (atau `?download=1` untuk attachment)
-- **Folder token** → JSON listing read-only
+- **Share link pivot (`share_links`)** → file stream atau folder listing (dengan view counter)
+- **Legacy file token (`files.share_token`)** → stream file inline (atau `?download=1` untuk attachment)
+- **Legacy folder token (`folders.share_token`)** → JSON listing read-only
 
-**Errors:** 404 ("Link share tidak ditemukan atau tidak valid.")
+Resolution order: share_links pivot dulu, fallback ke legacy `share_token` di files/folders untuk backward-compat URL share yang sudah terlanjur dishare.
+
+**Errors:**
+- 404 ("Link share tidak ditemukan atau tidak valid.")
+- 410 ("Link share tidak ditemukan, sudah kadaluarsa, atau sudah di-revoke.") — untuk token pivot yang expired/revoked/over-quota
+
+---
+
+#### `GET /s/{token}/view`
+
+Redirect ke FE preview page (`{frontend_url}/s/{token}/view`). FE handle rendering UI preview.
 
 ---
 

@@ -73,6 +73,27 @@ export type FolderWithChildren = Folder & {
   files_count: number;
 };
 
+/**
+ * Polymorphic share link (mirip dengan tabel `share_links` di backend).
+ * Multi-link per file/folder, masing-masing bisa punya expiry &
+ * max_views sendiri. Coexists dengan kolom `share_token` legacy di
+ * `FileItem` / `Folder` — lihat ShareDialog untuk UI.
+ */
+export type ShareLink = {
+  id: string;
+  token: string;
+  url: string;
+  preview_url: string;
+  expires_at: string | null;
+  max_views: number | null;
+  views_count: number;
+  revoked_at: string | null;
+  is_active: boolean;
+  shareable_type: string;
+  shareable_id: string;
+  created_at: string;
+};
+
 export type FileItem = {
   id: string;
   name: string;

@@ -27,6 +27,7 @@ PostgreSQL 15 + UUID primary keys + JSONB metadata.
 | `api_keys` | API Key untuk akses eksternal |
 | `api_key_logs` | Log penggunaan API Key (volume tinggi) |
 | `activity_logs` | Audit log aksi sensitif |
+| `share_links` | Pivot polymorphic share link dengan expiry & max_views (multi-link per file/folder) |
 
 ---
 
@@ -252,6 +253,44 @@ CREATE INDEX idx_activity_logs_subject ON activity_logs(subject_type, subject_id
 
 - `metadata` JSONB bebas untuk simpan payload konteks (label, scopes, dst).
 - `user_id = NULL` jika user dihapus tapi log-nya tetap untuk audit (ON DELETE SET NULL).
+
+---
+
+### `share_links`
+
+Pivot polymorphic — satu file atau folder bisa punya banyak share link，各自-masing dengan `expires_at` & `max_views` sendiri. Coexists dengan kolom `share_token` legacy di `files` & `folders`; lihat catatan di bawah.
+
+```sql
+CREATE TABLE share_links (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    shareable_type  VARCHAR(64) NOT NULL,        -- 'App\Models\File' | 'App\Models\Folder'
+    shareable_id    UUID NOT NULL,
+    token           VARCHAR(64) NOT NULL UNIQUE, -- bagian URL /s/{token}
+    expires_at      TIMESTAMP WITH TIME ZONE,    -- NULL = tidak ada expiry
+    max_views       INTEGER,                     -- NULL = tidak ada batas view
+    views_count     INTEGER NOT NULL DEFAULT 0,
+    revoked_at      TIMESTAMP WITH TIME ZONE,    -- manual revoke, eksplisit
+    created_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_share_links_shareable ON share_links (shareable_type, shareable_id);
+CREATE INDEX idx_share_links_expires_at ON share_links (expires_at);
+CREATE INDEX idx_share_links_user_id ON share_links (user_id);
+```
+
+**Status state machine:**
+- `revoked_at IS NULL` + `expires_at IS NULL OR > NOW()` + `views_count < max_views` → **ACTIVE**
+- `revoked_at` set → **REVOKED** (manual; row tetap ada untuk audit trail)
+- `expires_at < NOW()` → **EXPIRED** (auto, row di-DELETE oleh `ExpireShareLinksJob` hourly)
+- `views_count >= max_views` → **EXHAUSTED** (auto, dicek runtime di `ShareLink::resolveActive`; row tetap ada sampai di-revoke manual atau expire)
+
+**Cleanup saat expire:**
+`ExpireShareLinksJob` (scheduled hourly) hard-delete semua row yang `expires_at <= NOW()`. Side effect: kalau token yang expire adalah token yang di-mirror ke `files.share_token` / `folders.share_token` legacy column, kosongkan juga kolom legacy supaya `viewByToken` return 404 (bukan 410). Multi-link edge case: pivot row expire dengan token A, tapi `files.share_token` masih pegang token B dari pivot lain yang aktif → legacy column TIDAK disentuh.
+
+**Coexistence dengan legacy `share_token`:**
+Kolom `files.share_token` & `folders.share_token` tetap dipakai untuk backward-compat URL share lama. Resolution di `FileController::viewByToken` cek pivot `share_links` dulu (yang menang, karena punya expiry/max_views), lalu fallback ke legacy. Saat create share via `POST /files/{id}/share`, `POST /folders/{id}/share`, atau `POST /files/upload` (default `shareable=true`), token SELALU dibuat via pivot row lalu di-mirror ke legacy column — jadi satu sumber kebenaran.
 
 ---
 

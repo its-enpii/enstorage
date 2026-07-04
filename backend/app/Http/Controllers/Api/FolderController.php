@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\FolderResource;
 use App\Models\ActivityLog;
 use App\Models\Folder;
+use App\Models\ShareLink;
 use App\Services\ActivityLogService;
 use App\Services\Folder\FolderPathService;
 use App\Services\WebhookService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class FolderController extends Controller
@@ -350,6 +352,10 @@ class FolderController extends Controller
 
     /**
      * POST /folders/{id}/share — generate share token.
+     *
+     * Accept opsional `expires_at` & `max_views` di body. Selalu pivot
+     * sebagai sumber kebenaran, mirror token ke legacy
+     * folders.share_token untuk backward-compat URL share.
      */
     public function share(Request $request, string $id): JsonResponse
     {
@@ -358,9 +364,25 @@ class FolderController extends Controller
             return $this->fail(__('Folder tidak ditemukan.'), 404);
         }
 
+        $expiresAt = $request->input('expires_at');
+        $maxViews = $request->input('max_views');
+        $this->validateShareOptions($expiresAt, $maxViews);
+
         if (! $folder->share_token) {
             $folder->share_token = bin2hex(random_bytes(16));
             $folder->save();
+        }
+
+        $existingPivot = ShareLink::where('token', $folder->share_token)->first();
+        if (! $existingPivot) {
+            ShareLink::create([
+                'user_id' => $request->user()->id,
+                'shareable_type' => Folder::class,
+                'shareable_id' => $folder->id,
+                'token' => $folder->share_token,
+                'expires_at' => $expiresAt,
+                'max_views' => $maxViews !== null && $maxViews !== '' ? (int) $maxViews : null,
+            ]);
         }
 
         $shareUrl = WebhookService::shareUrlFor($folder->share_token);
@@ -372,7 +394,8 @@ class FolderController extends Controller
             'share_token' => $folder->share_token,
             'share_url' => $shareUrl,
             'share_preview_url' => WebhookService::shareUrlFor($folder->share_token, true),
-            'expires_at' => null,
+            'expires_at' => $expiresAt,
+            'max_views' => $maxViews,
         ]);
 
         // Realtime broadcast — share state changed in-place.
@@ -381,11 +404,13 @@ class FolderController extends Controller
         return $this->ok([
             'share_token' => $folder->share_token,
             'share_url' => $shareUrl,
+            'expires_at' => $expiresAt,
+            'max_views' => $maxViews !== null && $maxViews !== '' ? (int) $maxViews : null,
         ], __('Folder share berhasil dibuat.'));
     }
 
     /**
-     * DELETE /folders/{id}/share — hapus share token.
+     * DELETE /folders/{id}/share — hapus share token + pivot rows.
      */
     public function unshare(Request $request, string $id): JsonResponse
     {
@@ -397,10 +422,48 @@ class FolderController extends Controller
         $folder->share_token = null;
         $folder->save();
 
+        // Hapus semua pivot rows untuk folder ini. Auto-expire
+        // (ExpireShareLinksJob) handle row yang expires_at-nya lewat.
+        ShareLink::where('user_id', $request->user()->id)
+            ->where('shareable_type', Folder::class)
+            ->where('shareable_id', $folder->id)
+            ->delete();
+
         // Realtime broadcast — share state changed in-place.
         \App\Events\FolderRenamedBroadcast::dispatch($folder, $folder->name);
 
         return $this->ok(null, __('Link share dihapus.'));
+    }
+
+    /**
+     * Validasi share options — shared semantics dengan upload flow &
+     * FileController::share(). Null/kosong = unlimited; kalau diisi,
+     * expires_at harus di masa depan & max_views 1-10000.
+     */
+    private function validateShareOptions(mixed $expiresAt, mixed $maxViews): void
+    {
+        $errors = [];
+
+        if ($expiresAt !== null && $expiresAt !== '') {
+            try {
+                $parsed = new \DateTimeImmutable((string) $expiresAt);
+            } catch (\Throwable) {
+                $errors['expires_at'] = __('Format expires_at tidak valid.');
+            }
+            if (! isset($errors['expires_at']) && $parsed <= new \DateTimeImmutable()) {
+                $errors['expires_at'] = __('expires_at harus di masa depan.');
+            }
+        }
+
+        if ($maxViews !== null && $maxViews !== '') {
+            if (! is_numeric($maxViews) || (int) $maxViews < 1 || (int) $maxViews > 10000) {
+                $errors['max_views'] = __('max_views harus integer 1-10000.');
+            }
+        }
+
+        if (! empty($errors)) {
+            throw ValidationException::withMessages($errors);
+        }
     }
 
     private function findOwned(Request $request, string $id): ?Folder

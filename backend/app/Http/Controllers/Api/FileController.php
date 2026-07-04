@@ -8,6 +8,7 @@ use App\Http\Resources\FolderResource;
 use App\Models\ActivityLog;
 use App\Models\File as FileModel;
 use App\Models\Folder;
+use App\Models\ShareLink;
 use App\Services\ActivityLogService;
 use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveUploader;
@@ -468,6 +469,11 @@ class FileController extends Controller
 
     /**
      * POST /files/{id}/share — generate share token.
+     *
+     * Accept opsional `expires_at` & `max_views` di body. Kalau diisi,
+     * bikin share_links pivot row dengan expiry/max_views. Selalu
+     * mirror token ke legacy files.share_token supaya URL share
+     * existing resolve via pivot (sumber kebenaran).
      */
     public function share(Request $request, string $id): JsonResponse
     {
@@ -479,9 +485,29 @@ class FileController extends Controller
             return $this->fail(__('File belum selesai di-upload.'), 409);
         }
 
+        $expiresAt = $request->input('expires_at');
+        $maxViews = $request->input('max_views');
+        $this->validateShareOptions($expiresAt, $maxViews);
+
         if (! $file->share_token) {
             $file->share_token = bin2hex(random_bytes(16));
             $file->save();
+        }
+
+        // Selalu pivot: kalau token sudah ada tapi tidak ada pivot row
+        // (legacy state), bikin sekarang. Kalau pivot row sudah ada,
+        // pakai (no-op expiry/max_views — owner perlu DELETE + recreate
+        // untuk ganti batas, atau pakai /share-links endpoint).
+        $existingPivot = ShareLink::where('token', $file->share_token)->first();
+        if (! $existingPivot) {
+            ShareLink::create([
+                'user_id' => $request->user()->id,
+                'shareable_type' => FileModel::class,
+                'shareable_id' => $file->id,
+                'token' => $file->share_token,
+                'expires_at' => $expiresAt,
+                'max_views' => $maxViews !== null && $maxViews !== '' ? (int) $maxViews : null,
+            ]);
         }
 
         $shareUrl = WebhookService::shareUrlFor($file->share_token);
@@ -497,17 +523,20 @@ class FileController extends Controller
             'share_token' => $file->share_token,
             'share_url' => $shareUrl,
             'share_preview_url' => WebhookService::shareUrlFor($file->share_token, true),
-            'expires_at' => null,
+            'expires_at' => $expiresAt,
+            'max_views' => $maxViews,
         ]);
 
         return $this->ok([
             'share_token' => $file->share_token,
             'share_url' => $shareUrl,
+            'expires_at' => $expiresAt,
+            'max_views' => $maxViews !== null && $maxViews !== '' ? (int) $maxViews : null,
         ], __('File share berhasil dibuat.'));
     }
 
     /**
-     * DELETE /files/{id}/share — hapus share token.
+     * DELETE /files/{id}/share — hapus share token + pivot rows.
      */
     public function unshare(Request $request, string $id): JsonResponse
     {
@@ -519,6 +548,14 @@ class FileController extends Controller
         $file->share_token = null;
         $file->save();
 
+        // Hapus semua pivot rows untuk file ini (manual unshare =
+        // owner cabut semua link). Auto-expire (ExpireShareLinksJob)
+        // handle pivot rows yang punya expires_at lewat saja.
+        ShareLink::where('user_id', $request->user()->id)
+            ->where('shareable_type', FileModel::class)
+            ->where('shareable_id', $file->id)
+            ->delete();
+
         // Realtime broadcast — UI shows the share button as "inactive".
         \App\Events\FileUpdatedBroadcast::dispatch($file);
 
@@ -526,24 +563,72 @@ class FileController extends Controller
     }
 
     /**
+     * Validasi share options — shared dengan upload flow. Null/kosong
+     * = unlimited; kalau diisi, expires_at harus di masa depan &
+     * max_views 1-10000.
+     */
+    private function validateShareOptions(mixed $expiresAt, mixed $maxViews): void
+    {
+        $errors = [];
+
+        if ($expiresAt !== null && $expiresAt !== '') {
+            try {
+                $parsed = new \DateTimeImmutable((string) $expiresAt);
+            } catch (\Throwable) {
+                $errors['expires_at'] = __('Format expires_at tidak valid.');
+            }
+            if (! isset($errors['expires_at']) && $parsed <= new \DateTimeImmutable()) {
+                $errors['expires_at'] = __('expires_at harus di masa depan.');
+            }
+        }
+
+        if ($maxViews !== null && $maxViews !== '') {
+            if (! is_numeric($maxViews) || (int) $maxViews < 1 || (int) $maxViews > 10000) {
+                $errors['max_views'] = __('max_views harus integer 1-10000.');
+            }
+        }
+
+        if (! empty($errors)) {
+            throw \Illuminate\Validation\ValidationException::withMessages($errors);
+        }
+    }
+
+    /**
      * GET /s/{token} — public (no auth).
-     * Dispatches by token: file → stream inline; folder → JSON listing.
+     * Dispatches by token: share_links pivot (new) → legacy share_token
+     * di files/folders. share_links menang kalau ada token yang cocok,
+     * karena pivot membawa expiry/max_views.
      */
     public function viewByToken(Request $request, string $token): StreamedResponse|JsonResponse
     {
-        // 1) Try file token first (most common).
+        // 1) New system: share_links pivot (polymorphic, with expiry/max_views).
+        $link = ShareLink::resolveActive($token);
+        if ($link) {
+            $subject = $link->shareable;
+            if ($subject instanceof FileModel) {
+                return $this->streamSharedFile($request, $subject);
+            }
+            if ($subject instanceof Folder) {
+                return $this->respondSharedFolder($subject);
+            }
+        }
+
+        // 2) Legacy: file token first (most common).
         $file = FileModel::where('share_token', $token)->first();
         if ($file) {
             return $this->streamSharedFile($request, $file);
         }
 
-        // 2) Fallback: folder token → JSON read-only listing.
+        // 3) Legacy fallback: folder token → JSON read-only listing.
         $folder = Folder::where('share_token', $token)->first();
         if ($folder) {
             return $this->respondSharedFolder($folder);
         }
 
-        return $this->fail(__('Link share tidak ditemukan atau tidak valid.'), 404);
+        return $this->fail(
+            __('Link share tidak ditemukan, sudah kadaluarsa, atau sudah di-revoke.'),
+            410,
+        );
     }
 
     /**
@@ -552,7 +637,11 @@ class FileController extends Controller
      */
     public function view(string $token): RedirectResponse
     {
-        $exists = FileModel::where('share_token', $token)->exists()
+        // Cek pivot dulu, lalu legacy. Status (active vs expired) tidak
+        // dicek di sini — FE yang akan render error state kalau token
+        // ternyata tidak valid saat fetch listing di ShareClient.
+        $exists = ShareLink::where('token', $token)->exists()
+            || FileModel::where('share_token', $token)->exists()
             || Folder::where('share_token', $token)->exists();
 
         if (! $exists) {

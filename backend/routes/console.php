@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\CleanupFailedFilesJob;
+use App\Jobs\ExpireShareLinksJob;
 use App\Jobs\SyncAllQuotasJob;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -15,3 +16,6 @@ Schedule::job(new SyncAllQuotasJob())->hourly()->name('sync-all-quotas')->withou
 
 // Hapus file gagal yang lebih dari 30 menit, tiap 15 menit
 Schedule::job(new CleanupFailedFilesJob())->everyFifteenMinutes()->name('cleanup-failed-files')->withoutOverlapping();
+
+// Auto-revoke share links yang sudah lewat expires_at, tiap jam
+Schedule::job(new ExpireShareLinksJob())->hourly()->name('expire-share-links')->withoutOverlapping();

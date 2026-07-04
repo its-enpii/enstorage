@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\GoogleAccountController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\RecentController;
 use App\Http\Controllers\Api\SearchController;
+use App\Http\Controllers\Api\ShareLinkController;
 use App\Http\Controllers\Api\StorageController;
 use App\Http\Controllers\Api\WebhookController;
 use Illuminate\Support\Facades\Route;
@@ -108,6 +109,12 @@ Route::middleware('auth.apikey')->group(function () {
     Route::post('files/{id}/share', [FileController::class, 'share']);
     Route::delete('files/{id}/share', [FileController::class, 'unshare']);
 
+    // Share links (multi-link per resource, dengan expiry + max_views).
+    // Coexists dengan /files/{id}/share (legacy) yang set kolom
+    // share_token di files/folders.
+    Route::get('files/{id}/share-links', [ShareLinkController::class, 'indexForFile']);
+    Route::post('files/{id}/share-links', [ShareLinkController::class, 'storeForFile']);
+
     // Folders
     Route::get('folders', [FolderController::class, 'index']);
     Route::post('folders', [FolderController::class, 'store']);
@@ -118,8 +125,16 @@ Route::middleware('auth.apikey')->group(function () {
     Route::post('folders/{id}/share', [FolderController::class, 'share']);
     Route::delete('folders/{id}/share', [FolderController::class, 'unshare']);
 
+    // Share links untuk folder.
+    Route::get('folders/{id}/share-links', [ShareLinkController::class, 'indexForFolder']);
+    Route::post('folders/{id}/share-links', [ShareLinkController::class, 'storeForFolder']);
+
     // Recent (root-level folders + files, mixed, cursor-paginated)
     Route::get('recent', [RecentController::class, 'index']);
+
+    // Share link revoke — top-level, bukan nested di files/folders
+    // karena share link bisa polymorphic. Owner check di controller.
+    Route::delete('share-links/{id}', [ShareLinkController::class, 'destroy']);
 
     // Owner-only
     Route::middleware('role:owner')->prefix('admin')->group(function () {
