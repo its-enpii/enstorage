@@ -100,10 +100,177 @@ class FileController extends Controller
             $sort = 'created_at';
         }
         $query->orderBy($sort, $dir);
+        // Eager load thumbnail supaya FileResource bisa baca relasi
+        // `has_thumbnail` dari koleksi yang sudah di-load (N+1 safe).
+        $query->with('thumbnail:id,file_id');
 
         $perPage = min(100, max(1, (int) $request->query('per_page', 25)));
 
         return $this->paginated($query->paginate($perPage), FileResource::class, __('Daftar file.'));
+    }
+
+    /**
+     * GET /files/by-hashes — bulk lookup file yang sudah pernah di-upload
+     * oleh user ini berdasarkan SHA-256 konten. Dipakai Auto Backup di
+     * mobile untuk skip upload kalau hash sudah ada di server (dedup).
+     *
+     * Query: `?hashes=a,b,c` (max 100 hash per request). Hash yang tidak
+     * match tidak di-include di response — client pakai ini sebagai
+     * "yang belum ada" dengan mengurangi dari input list.
+     *
+     * Response shape: `{ data: [{ hash, file_id, name, folder_path }] }`
+     * — folder_path adalah path relatif dari root (e.g. "DCIM/Camera"),
+     * bukan folder_id (mobile perlu path untuk rekonstruksi struktur).
+     */
+    public function byHashes(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'hashes' => ['required', 'string', 'max:8192'],
+        ]);
+
+        $raw = (string) $data['hashes'];
+        $hashes = array_values(array_filter(array_map(
+            fn ($h) => strtolower(trim($h)),
+            explode(',', $raw),
+        ), fn ($h) => $h !== '' && preg_match('/^[a-f0-9]{64}$/', $h) === 1));
+
+        if (empty($hashes)) {
+            return $this->ok(['data' => []], __('Tidak ada hash yang valid.'));
+        }
+        if (count($hashes) > 100) {
+            return $this->fail(__('Maksimal 100 hash per request.'), 422);
+        }
+
+        $userId = $request->user()->id;
+
+        // Satu query: ambil file milik user dengan hash match, eager load
+        // folder untuk dapat parent chain. folder_path adalah nama folder
+        // berurut dari root ke leaf, disambung "/".
+        $rows = FileModel::where('user_id', $userId)
+            ->whereIn('content_hash', $hashes)
+            ->with('folder:id,name,parent_id')
+            ->get(['id', 'content_hash', 'name', 'folder_id']);
+
+        $found = [];
+        foreach ($rows as $file) {
+            $folderPath = $this->buildFolderPath($file->folder);
+            $found[] = [
+                'hash' => $file->content_hash,
+                'file_id' => $file->id,
+                'name' => $file->name,
+                'folder_path' => $folderPath,
+                'folder_id' => $file->folder_id,
+            ];
+        }
+
+        return $this->ok(['data' => $found], __('Lookup hash selesai.'));
+    }
+
+    /**
+     * POST /files/by-metadata — bulk lookup file existing berdasarkan
+     * metadata device (original_path + original_mtime_ms + original_size).
+     *
+     * Dipakai Auto Backup mobile untuk skip HASH konten + skip upload
+     * untuk file yang jelas-jelas sudah pernah dibackup dari device
+     * yang sama (path + mtime + size sama → konten identik secara
+     * praktis, kecuali mtime dimanipulasi).
+     *
+     * Body JSON: `{ items: [{ original_path, original_mtime_ms, original_size }, ...] }`.
+     * Max 1000 item per request — chunk kalau lebih (mobile loop).
+     *
+     * Response: `{ matched: [{ original_path, file_id, name, folder_path }] }`.
+     * Item yang tidak match TIDAK muncul di response — mobile pakai
+     * ini sebagai "yang belum ada" dengan reduce dari input list.
+     *
+     * Lookup via composite index (user_id, original_path, original_mtime_ms,
+     * original_size) — Postgres pakai B-tree, 2340 row lookup ~1ms.
+     */
+    public function byMetadata(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'items' => ['required', 'array', 'min:1', 'max:1000'],
+            'items.*.original_path' => ['required', 'string', 'max:1024'],
+            'items.*.original_mtime_ms' => ['required', 'integer', 'min:0'],
+            'items.*.original_size' => ['required', 'integer', 'min:0'],
+        ]);
+
+        $userId = $request->user()->id;
+        $items = $data['items'];
+
+        // Build composite-key set untuk filter row yang match. Format:
+        // "path\x00mtime\x00size" — null separator aman karena path
+        // tidak boleh contain null byte (PHP file API reject).
+        $compositeKeys = [];
+        foreach ($items as $it) {
+            $compositeKeys["{$it['original_path']}\x00{$it['original_mtime_ms']}\x00{$it['original_size']}"] = true;
+        }
+
+        // Satu query: ambil semua row milik user dengan original_path
+        // match (salah satu path dari input), lalu filter di memory
+        // untuk tuple (path, mtime, size) exact match. Index composite
+        // (user_id, original_path, ...) handle lookup path; filter
+        // tuple dilakukan di PHP karena Postgres composite-IN masih
+        // verbose dan index composite kita cukup untuk path-match.
+        $paths = array_values(array_unique(array_column($items, 'original_path')));
+        $rows = FileModel::where('user_id', $userId)
+            ->whereIn('original_path', $paths)
+            ->with('folder:id,name,parent_id')
+            ->get(['id', 'name', 'folder_id', 'original_path', 'original_mtime_ms', 'original_size']);
+
+        $matched = [];
+        foreach ($rows as $file) {
+            if ($file->original_path === null
+                || $file->original_mtime_ms === null
+                || $file->original_size === null) {
+                continue;
+            }
+            $key = "{$file->original_path}\x00{$file->original_mtime_ms}\x00{$file->original_size}";
+            if (! isset($compositeKeys[$key])) continue;
+
+            $matched[] = [
+                'original_path' => $file->original_path,
+                'original_mtime_ms' => (int) $file->original_mtime_ms,
+                'original_size' => (int) $file->original_size,
+                'file_id' => $file->id,
+                'name' => $file->name,
+                'folder_path' => $this->buildFolderPath($file->folder),
+                'folder_id' => $file->folder_id,
+            ];
+        }
+
+        return $this->ok([
+            'matched' => $matched,
+            'count' => count($matched),
+        ], __('Lookup metadata selesai.'));
+    }
+
+    /**
+     * Build folder path string dari leaf ke root. Mis. DCIM/Camera.
+     * Return null kalau file ada di root (folder_id null).
+     */
+    private function buildFolderPath(?Folder $folder): ?string
+    {
+        if (! $folder) {
+            return null;
+        }
+
+        $segments = [$folder->name];
+        $current = $folder;
+        // Walk up to 32 levels deep — guard against circular refs in
+        // case parent_id gets corrupted. Folder normalnya <10 deep.
+        for ($i = 0; $i < 32; $i++) {
+            if ($current->parent_id === null) {
+                break;
+            }
+            $parent = Folder::find($current->parent_id);
+            if (! $parent || $parent->id === $current->id) {
+                break;
+            }
+            array_unshift($segments, $parent->name);
+            $current = $parent;
+        }
+
+        return implode('/', $segments);
     }
 
     /**

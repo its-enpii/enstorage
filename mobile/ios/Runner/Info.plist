@@ -63,6 +63,19 @@
 		<string>EnStorage — Never Leaves Your Drive. Needs access to your Desktop to upload files.</string>
 		<key>NSDownloadsFolderUsageDescription</key>
 		<string>EnStorage — Never Leaves Your Drive. Needs access to your Downloads folder to upload files.</string>
+		<!-- Auto Backup — iOS background scheduling. UIBackgroundModes
+		     "fetch" + "processing" mengaktifkan BGTaskScheduler untuk
+		     periodic backup. Identifier HARUS match yang di-register
+		     di AppDelegate.swift via BGTaskScheduler.shared.register. -->
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>fetch</string>
+			<string>processing</string>
+		</array>
+		<key>BGTaskSchedulerPermittedIdentifiers</key>
+		<array>
+			<string>com.enpiistudio.enstorage.backup</string>
+		</array>
 		<!-- Custom URL scheme untuk OAuth callback dari Google.
 	     Backend GOOGLE_REDIRECT_URI_MOBILE harus match persis. -->
 		<key>CFBundleURLTypes</key>

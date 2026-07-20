@@ -64,8 +64,8 @@ class FileUploadController extends Controller
         $origin = $rawKeyProvided ? 'client' : 'server';
         $userKeys = $this->normalizeClientKeys($rawKey, count($files));
         foreach ($userKeys as $i => $k) {
-            if (! preg_match('/^[A-Za-z0-9._-]{1,128}$/', $k)) {
-                throw ValidationException::withMessages(['client_key' => __('client_key hanya boleh berisi huruf, angka, ".", "_", "-" (maks 128 karakter).')]);
+            if (! preg_match('/^[A-Za-z0-9._:-]{1,128}$/', $k)) {
+                throw ValidationException::withMessages(['client_key' => __('client_key hanya boleh berisi huruf, angka, ".", "_", "-", ":" (maks 128 karakter).')]);
             }
         }
         $fileCount = count($files);
@@ -106,6 +106,40 @@ class FileUploadController extends Controller
 
         if ($shareable) {
             $this->validateShareOptions($shareExpiresAt, $shareMaxViews);
+        }
+
+        // content_hash opsional: SHA-256 hex (64 char) dari konten.
+        // Dipakai Auto Backup di mobile untuk skip upload kalau file
+        // dengan hash yang sama sudah pernah dibackup user ini.
+        // Tidak dipakai sebagai uniqueness check di sini — endpoint
+        // /files/by-hashes yang handle lookup. Kalau dua upload kirim
+        // hash sama (race), yang pertama masuk menang; kedua tetap
+        // upload normal. Idempotent di mobile karena client_key unik.
+        $rawHash = $request->input('content_hash');
+        $contentHash = null;
+        if ($rawHash !== null && $rawHash !== '') {
+            if (! preg_match('/^[A-Fa-f0-9]{64}$/', (string) $rawHash)) {
+                throw ValidationException::withMessages(['content_hash' => __('content_hash harus SHA-256 hex (64 karakter).')]);
+            }
+            $contentHash = strtolower((string) $rawHash);
+        }
+
+        // Metadata device opsional: (original_path, original_mtime_ms,
+        // original_size). Dipakai Auto Backup untuk dedup tanpa hash
+        // konten — endpoint /files/by-metadata lookup composite index
+        // dan return file yang sudah ada di server. Mobile skip upload
+        // kalau match (file device sama dengan yang sudah dibackup).
+        $originalPath = $this->normalizeOptionalString($request->input('original_path'), 1024);
+        $originalMtime = $this->normalizeOptionalInt($request->input('original_mtime_ms'), 0, PHP_INT_MAX);
+        $originalSize = $this->normalizeOptionalInt($request->input('original_size'), 0, PHP_INT_MAX);
+
+        // Kalau satu dikirim, semua harus dikirim (inkonsisten = reject).
+        $metadataProvided = ($originalPath !== null) || ($originalMtime !== null) || ($originalSize !== null);
+        $metadataComplete = ($originalPath !== null) && ($originalMtime !== null) && ($originalSize !== null);
+        if ($metadataProvided && ! $metadataComplete) {
+            throw ValidationException::withMessages([
+                'original_path' => __('original_path, original_mtime_ms, dan original_size harus dikirim bersamaan.'),
+            ]);
         }
 
         $tempDir = storage_path('app/temp');
@@ -150,6 +184,10 @@ class FileUploadController extends Controller
                     'share_token' => $shareToken,
                     'client_key' => $userKeys[$index],
                     'client_key_origin' => $origin,
+                    'content_hash' => $contentHash,
+                    'original_path' => $originalPath,
+                    'original_mtime_ms' => $originalMtime,
+                    'original_size' => $originalSize,
                 ]);
 
                 // Override gdrive_file_id dengan uuid asli
@@ -198,6 +236,275 @@ class FileUploadController extends Controller
             'rejected' => $rejected,
             'count' => count($created),
         ], __('File berhasil diupload.'));
+    }
+
+    /**
+     * POST /files/upload-from-url
+     * URL upload: url (string), name (optional), folder_id (optional), client_key (optional), shareable (optional), etc.
+     * Return 202 + array file_id.
+     */
+    public function uploadFromUrl(Request $request): JsonResponse
+    {
+        $userId = $request->user()->id;
+
+        $url = trim((string) $request->input('url', ''));
+        if ($url === '') {
+            throw ValidationException::withMessages(['url' => __('URL wajib diisi.')]);
+        }
+        if (strlen($url) > 2048) {
+            throw ValidationException::withMessages(['url' => __('URL terlalu panjang (maks 2048 karakter).')]);
+        }
+
+        $parts = parse_url($url);
+        $scheme = $parts['scheme'] ?? '';
+        if (! in_array($scheme, ['http', 'https'], true)) {
+            throw ValidationException::withMessages(['url' => __('URL harus menggunakan http atau https.')]);
+        }
+        if (! isset($parts['host']) || $parts['host'] === '') {
+            throw ValidationException::withMessages(['url' => __('URL tidak valid.')]);
+        }
+        $port = $parts['port'] ?? (($scheme === 'https') ? 443 : 80);
+        if (! in_array($port, [80, 443], true)) {
+            throw ValidationException::withMessages(['url' => __('Hanya port 80 atau 443 yang diizinkan.')]);
+        }
+
+        foreach ($this->resolveHost($parts['host']) as $ip) {
+            if ($this->isPrivateOrReservedIp($ip)) {
+                throw ValidationException::withMessages(['url' => __('URL tidak mengarah ke alamat publik.')]);
+            }
+        }
+
+        $folderId = $request->input('folder_id');
+        if ($folderId) {
+            if (! Folder::where('id', $folderId)->where('user_id', $userId)->exists()) {
+                throw ValidationException::withMessages(['folder_id' => __('Folder tidak ditemukan.')]);
+            }
+        }
+
+        $rawKey = $request->input('client_key');
+        $rawKeyProvided = $rawKey !== null && $rawKey !== '';
+        $origin = $rawKeyProvided ? 'client' : 'server';
+        $userKeys = $this->normalizeClientKeys($rawKey, 1);
+        foreach ($userKeys as $k) {
+            if (! preg_match('/^[A-Za-z0-9._:-]{1,128}$/', $k)) {
+                throw ValidationException::withMessages(['client_key' => __('client_key hanya boleh berisi huruf, angka, ".", "_", "-", ":" (maks 128 karakter).')]);
+            }
+        }
+        if (FileModel::where('user_id', $userId)->where('client_key', $userKeys[0])->exists()) {
+            return $this->fail(
+                __('client_key sudah dipakai. Gunakan key lain atau kosongkan untuk auto-generate.'),
+                409,
+                [
+                    'error' => 'duplicate_client_key',
+                    'collisions' => [['client_key' => $userKeys[0]]],
+                ],
+            );
+        }
+
+        $shareable = $request->boolean('shareable', true);
+        $shareBaseUrl = rtrim(config('app.frontend_url', config('app.url')), '/');
+        $shareExpiresAt = $request->input('share_expires_at');
+        $shareMaxViews = $request->input('share_max_views');
+        if ($shareable) {
+            $this->validateShareOptions($shareExpiresAt, $shareMaxViews);
+        }
+
+        $rawHash = $request->input('content_hash');
+        $contentHash = null;
+        if ($rawHash !== null && $rawHash !== '') {
+            if (! preg_match('/^[A-Fa-f0-9]{64}$/', (string) $rawHash)) {
+                throw ValidationException::withMessages(['content_hash' => __('content_hash harus SHA-256 hex (64 karakter).')]);
+            }
+            $contentHash = strtolower((string) $rawHash);
+        }
+
+        $originalPath = $this->normalizeOptionalString($request->input('original_path'), 1024);
+        $originalMtime = $this->normalizeOptionalInt($request->input('original_mtime_ms'), 0, PHP_INT_MAX);
+        $originalSize = $this->normalizeOptionalInt($request->input('original_size'), 0, PHP_INT_MAX);
+        $metadataProvided = ($originalPath !== null) || ($originalMtime !== null) || ($originalSize !== null);
+        $metadataComplete = ($originalPath !== null) && ($originalMtime !== null) && ($originalSize !== null);
+        if ($metadataProvided && ! $metadataComplete) {
+            throw ValidationException::withMessages([
+                'original_path' => __('original_path, original_mtime_ms, dan original_size harus dikirim bersamaan.'),
+            ]);
+        }
+
+        $nameOverride = $this->normalizeOptionalString($request->input('name'), 255);
+
+        $tempDir = storage_path('app/temp');
+        if (! is_dir($tempDir)) {
+            mkdir($tempDir, 0775, true);
+        }
+
+        $tmpPath = tempnam(sys_get_temp_dir(), 'enurl_');
+
+        try {
+            $response = \Illuminate\Support\Facades\Http::withOptions([
+                'timeout' => 300,
+                'connect_timeout' => 30,
+                'allow_redirects' => [
+                    'max' => 3,
+                    'on_redirect' => function ($request, $response, $uri) {
+                        $url = (string) $uri;
+                        $parts = parse_url($url);
+                        $scheme = $parts['scheme'] ?? '';
+                        if (! in_array($scheme, ['http', 'https'], true)) {
+                            throw new \RuntimeException('Redirect ke scheme tidak valid');
+                        }
+                        if (! isset($parts['host'])) {
+                            throw new \RuntimeException('Redirect tanpa host');
+                        }
+                        $port = $parts['port'] ?? (($scheme === 'https') ? 443 : 80);
+                        if (! in_array($port, [80, 443], true)) {
+                            throw new \RuntimeException('Redirect ke port tidak diizinkan');
+                        }
+                        foreach ($this->resolveHost($parts['host']) as $ip) {
+                            if ($this->isPrivateOrReservedIp($ip)) {
+                                throw new \RuntimeException('Redirect ke alamat privat');
+                            }
+                        }
+                    },
+                ],
+                'verify' => true,
+                'sink' => $tmpPath,
+            ])->get($url);
+
+            $status = $response->status();
+            if ($status < 200 || $status >= 300) {
+                @unlink($tmpPath);
+                throw ValidationException::withMessages(['url' => __('Server URL mengembalikan status :status.', ['status' => $status])]);
+            }
+
+            $size = filesize($tmpPath);
+            if ($size === false || $size <= 0) {
+                @unlink($tmpPath);
+                throw ValidationException::withMessages(['url' => __('File dari URL kosong.')]);
+            }
+            if ($size > self::MAX_FILE_SIZE_BYTES) {
+                @unlink($tmpPath);
+                throw ValidationException::withMessages(['url' => __('File melebihi 1GB.')]);
+            }
+
+            $filename = $nameOverride;
+            if (! $filename) {
+                $cd = $response->header('Content-Disposition') ?: '';
+                if ($cd !== '' && preg_match('/filename\*?\s*=\s*(?:UTF-8\'\')?("?)([^";]+)\1/i', $cd, $m)) {
+                    $filename = trim($m[2]);
+                }
+            }
+            if (! $filename) {
+                $filename = basename((string) (parse_url($url, PHP_URL_PATH) ?? ''));
+            }
+            if (! $filename) {
+                $filename = 'downloaded-file';
+            }
+            $filename = preg_replace('/[\\\\\/:*?"<>|]/', '_', $filename) ?? 'downloaded-file';
+            if (strlen($filename) > 255) {
+                $filename = substr($filename, 0, 255);
+            }
+
+            $mimeType = $response->header('Content-Type') ?: 'application/octet-stream';
+            if (strpos($mimeType, ';') !== false) {
+                $mimeType = trim(explode(';', $mimeType)[0]) ?: 'application/octet-stream';
+            }
+
+            $shareToken = $shareable ? bin2hex(random_bytes(16)) : null;
+            $file = FileModel::create([
+                'user_id' => $userId,
+                'folder_id' => $folderId,
+                'google_account_id' => null,
+                'name' => $filename,
+                'original_name' => $filename,
+                'mime_type' => $mimeType,
+                'size' => $size,
+                'gdrive_file_id' => 'pending-'.Str::uuid(),
+                'upload_status' => FileModel::STATUS_PENDING,
+                'share_token' => $shareToken,
+                'client_key' => $userKeys[0],
+                'client_key_origin' => $origin,
+                'content_hash' => $contentHash,
+                'original_path' => $originalPath,
+                'original_mtime_ms' => $originalMtime,
+                'original_size' => $originalSize,
+            ]);
+            $file->gdrive_file_id = $file->id;
+            $file->save();
+
+            if ($shareable) {
+                ShareLink::create([
+                    'user_id' => $userId,
+                    'shareable_type' => FileModel::class,
+                    'shareable_id' => $file->id,
+                    'token' => $shareToken,
+                    'expires_at' => $shareExpiresAt,
+                    'max_views' => $shareMaxViews,
+                ]);
+            }
+
+            if (! rename($tmpPath, $tempDir.'/'.$file->id)) {
+                @unlink($tmpPath);
+                throw new \RuntimeException(__('Gagal memindahkan file unduhan ke temp.'));
+            }
+
+            UploadFileJob::dispatch($file->id);
+
+            $created = [[
+                'file_id' => $file->id,
+                'client_key' => $file->client_key,
+                'name' => $file->name,
+                'size' => $file->size,
+                'status' => $file->upload_status,
+                'shareable' => (bool) $file->share_token,
+                'share_token' => $file->share_token,
+                'share_url' => $file->share_token ? $shareBaseUrl.'/s/'.$file->share_token : null,
+                'share_expires_at' => $shareExpiresAt,
+                'share_max_views' => $shareMaxViews !== null ? (int) $shareMaxViews : null,
+            ]];
+
+            return $this->accepted([
+                'accepted' => $created,
+                'rejected' => [],
+                'count' => 1,
+            ], __('File berhasil diupload.'));
+        } catch (\Throwable $e) {
+            if (file_exists($tmpPath)) {
+                @unlink($tmpPath);
+            }
+            if ($e instanceof ValidationException) {
+                throw $e;
+            }
+            return $this->fail($e->getMessage(), 502);
+        }
+    }
+
+    /**
+     * Trim string opsional, return null kalau kosong. Batasi panjang
+     * supaya payload besar dari client tidak masuk DB tanpa batas.
+     */
+    private function normalizeOptionalString(mixed $raw, int $maxLen): ?string
+    {
+        if ($raw === null || $raw === '') return null;
+        $s = trim((string) $raw);
+        if ($s === '') return null;
+        if (strlen($s) > $maxLen) {
+            throw ValidationException::withMessages([
+                'original_path' => __('Melebihi panjang maksimum :max karakter.', ['max' => $maxLen]),
+            ]);
+        }
+        return $s;
+    }
+
+    /**
+     * Normalisasi integer opsional. Null/kosong/non-numeric → null.
+     * Range check: kalau di luar [min, max] → reject.
+     */
+    private function normalizeOptionalInt(mixed $raw, int $min, int $max): ?int
+    {
+        if ($raw === null || $raw === '') return null;
+        if (! is_numeric($raw)) return null;
+        $i = (int) $raw;
+        if ($i < $min || $i > $max) return null;
+        return $i;
     }
 
     /**
@@ -268,5 +575,42 @@ class FileUploadController extends Controller
         if (! empty($errors)) {
             throw ValidationException::withMessages($errors);
         }
+    }
+
+    private function resolveHost(string $host): array
+    {
+        $h = trim($host, '[]');
+        if (filter_var($h, FILTER_VALIDATE_IP)) {
+            return [$h];
+        }
+        $ips = [];
+        $records = @dns_get_record($h, DNS_A | DNS_AAAA);
+        if (is_array($records)) {
+            foreach ($records as $r) {
+                if (! empty($r['ip'])) {
+                    $ips[] = $r['ip'];
+                } elseif (! empty($r['ipv6'])) {
+                    $ips[] = $r['ipv6'];
+                }
+            }
+        }
+        if (empty($ips)) {
+            $v4 = @gethostbynamel($h);
+            if (is_array($v4)) {
+                $ips = array_merge($ips, $v4);
+            }
+        }
+        if (empty($ips)) {
+            throw ValidationException::withMessages(['url' => __('Host URL tidak dapat di-resolve.')]);
+        }
+        return $ips;
+    }
+
+    private function isPrivateOrReservedIp(string $ip): bool
+    {
+        if (str_starts_with($ip, '::ffff:')) {
+            $ip = substr($ip, 7);
+        }
+        return ! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
     }
 }

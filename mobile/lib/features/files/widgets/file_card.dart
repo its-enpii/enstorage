@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/models/file_item.dart';
 import '../../../data/repositories/files_repository.dart';
 import '../../../data/storage/token_storage.dart';
-import '../../../state/files_state.dart';
 import '../../../state/selection_state.dart';
 import '../../../widgets/etheric_card.dart';
 
@@ -15,14 +14,14 @@ class FileCard extends ConsumerWidget {
     required this.file,
     required this.onTap,
     required this.onLongPress,
-    this.onOverflowTap,
+    required this.onOverflowTap,
     this.parentFolderId,
   });
 
   final FileItem file;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
-  final VoidCallback? onOverflowTap;
+  final VoidCallback onOverflowTap;
   final String? parentFolderId;
 
   @override
@@ -46,22 +45,20 @@ class FileCard extends ConsumerWidget {
           )
         : _iconFallback(file.mimeType, scheme);
 
-    // Indikator visual: cukup icon star filled vs outline, tanpa border/tint
-    // di kartu. Selected state (sudah ada di EthericCard) handle highlight
-    // via outset ring primary glow.
-    final isStarred = file.isStarred;
-
     return EthericCard(
       selected: selected,
       onTap: onTap,
       onLongPress: onLongPress,
       padding: const EdgeInsets.all(16),
-      child: Stack(
-        clipBehavior: Clip.none,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Column(
+          // Header row: thumbnail di kiri, ⋮ di kanan. Row + Spacer
+          // pattern sama dengan FolderCard's share icon — icon ⋮
+          // selalu nempel ke pojok kanan, tidak ter-overlap nama file.
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(14),
@@ -71,52 +68,35 @@ class FileCard extends ConsumerWidget {
                   child: iconContent,
                 ),
               ),
-              const SizedBox(height: 12),
               const Spacer(),
-              Text(
-                file.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: scheme.onSurface,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  height: 1.3,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                _humanSize(file.size),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: scheme.onSurfaceVariant,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
-                  height: 1.3,
-                ),
-              ),
+              _OverflowButton(onTap: onOverflowTap),
             ],
           ),
-          // Star button di pojok kanan-atas card.
-          Positioned(
-            top: -4,
-            right: -4,
-            child: _StarButton(
-              file: file,
-              isStarred: isStarred,
-              parentFolderId: parentFolderId,
+          const SizedBox(height: 12),
+          const Spacer(),
+          Text(
+            file.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: scheme.onSurface,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              height: 1.3,
             ),
           ),
-          // Overflow button (3 dots) pojok kanan-bawah — trigger menu
-          // (move to…). Disembunyikan ketika card lagi dalam selection mode
-          // (parent udah pass onOverflowTap=null) supaya gak ganggu UX.
-          if (onOverflowTap != null)
-            Positioned(
-              bottom: 0,
-              right: 0,
-              child: _OverflowButton(onTap: onOverflowTap!),
+          const SizedBox(height: 4),
+          Text(
+            _humanSize(file.size),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: scheme.onSurfaceVariant,
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              height: 1.3,
             ),
+          ),
         ],
       ),
     );
@@ -160,59 +140,11 @@ class FileCard extends ConsumerWidget {
   }
 }
 
-class _StarButton extends ConsumerWidget {
-  const _StarButton({
-    required this.file,
-    required this.isStarred,
-    required this.parentFolderId,
-  });
-  final FileItem file;
-  final bool isStarred;
-  final String? parentFolderId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: isStarred
-          ? scheme.primary
-          : Colors.black.withValues(alpha: 0.5),
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: () async {
-          try {
-            final updated = await ref
-                .read(filesRepositoryProvider)
-                .toggleStarFile(file.id, !file.isStarred);
-            // Update state lokal — UI langsung berubah tanpa nunggu reload.
-            // ignore: discarded_futures
-            ref
-                .read(filesControllerProvider(parentFolderId).notifier)
-                .replaceFile(updated);
-          } catch (_) {
-            // ignore — surface error in a follow-up
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(
-            isStarred ? Icons.star_rounded : Icons.star_border_rounded,
-            color: Colors.white,
-            size: 18,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Overflow "..." button — trigger menu action (saat ini: move to…).
-/// Tetap kelihatan subtle (low opacity) supaya gak ganggu visual card.
+/// Single overflow "..." button di kanan-atas Row. Tap → buka
+/// bottom sheet dengan opsi Star, Move, Rename, Share, Download, Delete.
 class _OverflowButton extends StatelessWidget {
   const _OverflowButton({required this.onTap});
   final VoidCallback onTap;
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -222,11 +154,10 @@ class _OverflowButton extends StatelessWidget {
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(6),
+        child: const Padding(
+          padding: EdgeInsets.all(6),
           child: Icon(
             Icons.more_vert,
-            color: scheme.onSurface,
             size: 18,
           ),
         ),

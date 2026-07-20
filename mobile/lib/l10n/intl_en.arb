@@ -18,6 +18,7 @@
   "commonMemuatLagi": "Loading…",
   "commonHide": "Hide",
   "commonReveal": "Reveal",
+  "commonBack": "Back",
 
   "navHome": "Home",
   "@navHome": {},
@@ -455,5 +456,67 @@
 
   "settingsLegalSection": "Legal",
   "settingsLegalPrivacy": "Privacy Policy",
-  "settingsLegalTerms": "Terms of Service"
+  "settingsLegalTerms": "Terms of Service",
+
+  "settingsAutoBackupSection": "Backup",
+  "settingsAutoBackupTitle": "Auto Backup",
+  "settingsAutoBackupToggle": "Enable Auto Backup",
+  "autoBackupToggleSection": "GENERAL",
+  "autoBackupToggleOnSubtitle": "Photos & videos backed up automatically.",
+  "autoBackupToggleOffSubtitle": "Turn on to back up photos & videos automatically.",
+  "autoBackupNetworkSection": "NETWORK",
+  "autoBackupWifiOnly": "Wi-Fi only",
+  "autoBackupWifiAndMobile": "Wi-Fi + Mobile Data",
+  "autoBackupOff": "Off",
+  "autoBackupIntervalSection": "CHECK INTERVAL",
+  "autoBackupInterval1h": "1 hour",
+  "autoBackupInterval6h": "6 hours",
+  "autoBackupInterval12h": "12 hours",
+  "autoBackupInterval24h": "24 hours",
+  "autoBackupStatusSection": "STATUS",
+  "autoBackupNeverRun": "Never run yet.",
+  "autoBackupLastRun": "Last run: {when}",
+  "@autoBackupLastRun": {
+    "placeholders": {
+      "when": {"type": "String"}
+    }
+  },
+  "autoBackupRunNow": "Run now",
+  "autoBackupViewProgress": "View progress",
+  "autoBackupProgressTitle": "Backup progress",
+  "autoBackupProgressScanning": "Scanning gallery...",
+  "autoBackupProgressIdle": "Idle. Tap Run now to start.",
+  "autoBackupProgressRunningSummary": "{done} of {total} files done",
+  "@autoBackupProgressRunningSummary": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "autoBackupProgressSectionInProgress": "In progress",
+  "autoBackupProgressSectionPending": "Pending",
+  "autoBackupProgressSectionDone": "Done / Skipped",
+  "autoBackupProgressSectionFailed": "Failed",
+  "autoBackupProgressPause": "Pause",
+  "autoBackupProgressResume": "Resume",
+  "autoBackupProgressCancel": "Cancel",
+  "autoBackupProgressEmpty": "No active backup.",
+  "autoBackupAndNMore": "and {n} more",
+  "@autoBackupAndNMore": {
+    "placeholders": {
+      "n": {"type": "int"}
+    }
+  },
+  "autoBackupFolderInfo": "Destination: {path}",
+  "autoBackupFolderMirrored": "Mirrored (Original Paths)",
+  "@autoBackupFolderInfo": {
+    "placeholders": {
+      "path": {"type": "String"}
+    }
+  },
+  "autoBackupItemPending": "Pending",
+  "autoBackupItemHashing": "Hashing…",
+  "autoBackupItemDone": "Done",
+  "autoBackupItemSkipped": "Skipped",
+  "autoBackupItemFailed": "Failed"
 }

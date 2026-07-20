@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,7 +11,9 @@ import 'data/repositories/auth_repository.dart';
 import 'data/storage/prefs.dart';
 import 'data/storage/token_storage.dart';
 import 'router/router.dart';
+import 'services/backup_worker.dart';
 import 'state/auth_state.dart';
+import 'state/backup_state.dart';
 import 'state/locale_state.dart';
 import 'state/refresh_signal_state.dart';
 import 'state/theme_state.dart';
@@ -56,6 +59,7 @@ Future<void> main() async {
 
   final container = ProviderContainer(
     overrides: [
+      appPrefsProvider.overrideWithValue(prefs),
       localeControllerProvider.overrideWith((ref) {
         final api = ref.read(apiClientProvider);
         final ctrl = LocaleController(prefs, api);
@@ -110,6 +114,15 @@ Future<void> main() async {
       await registerDeviceTokenByToken(token, container);
     },
   );
+
+  // Initialize WorkManager dispatcher for Auto Backup periodic task.
+  await initBackupWorkmanager(isInDebugMode: kDebugMode);
+
+  // Initialize Foreground Background Service
+  await initializeBackgroundService();
+
+  // Share container ke backup service (background isolate pattern).
+  setBackupAppContainer(container);
 
   runApp(
     UncontrolledProviderScope(

@@ -57,6 +57,7 @@ services:
       QUEUE_CONNECTION: redis
       SESSION_DRIVER: redis
       APP_ENV: production
+      REVERB_HOST: reverb
     depends_on:
       postgres:
         condition: service_healthy
@@ -113,6 +114,7 @@ services:
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
       APP_ENV: production
+      REVERB_HOST: reverb
     depends_on:
       app:
         condition: service_started

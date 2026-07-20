@@ -2,12 +2,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/login_screen.dart';
+import '../features/backup/backup_progress_screen.dart';
 import '../features/legal/terms_of_service_screen.dart' show TermsOfServiceScreen;
 
 import '../features/files/files_screen.dart';
 import '../features/files/widgets/files_pane_layout.dart';
 import '../features/home/home_screen.dart';
 import '../features/legal/privacy_policy_screen.dart';
+import '../features/settings/auto_backup_settings_screen.dart';
 import '../features/settings/change_password_screen.dart';
 import '../features/settings/google_accounts_screen.dart';
 import '../features/settings/settings_screen.dart';
@@ -86,6 +88,16 @@ GoRouter buildHomeRouter() {
                   GoRoute(
                     path: 'google-accounts',
                     builder: (ctx, st) => const GoogleAccountsScreen(),
+                  ),
+                  GoRoute(
+                    path: 'auto-backup',
+                    builder: (ctx, st) => const AutoBackupSettingsScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'progress',
+                        builder: (ctx, st) => const BackupProgressScreen(),
+                      ),
+                    ],
                   ),
                   GoRoute(
                     path: 'legal/privacy',

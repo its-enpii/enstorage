@@ -72,6 +72,18 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     super.dispose();
   }
 
+  void _handleBack() {
+    // Right-pane in expanded mode: just clear the selection so the
+    // parent layout shows the root list again. Otherwise we're on a
+    // real route `/files/:folderId` — pop to `/files` root.
+    if (Breakpoints.isExpanded(context)) {
+      ref.read(filesPaneSelectionProvider.notifier).state =
+          FilesPaneSelection.none;
+    } else {
+      context.go('/files');
+    }
+  }
+
   void _openFolder(Folder f) {
     if (Breakpoints.isExpanded(context)) {
       // Two-pane mode: render this folder in the right pane.
@@ -145,7 +157,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       showUploadProgress(filename: filename, progress: 0, indeterminate: true);
       // FCM upload.complete nanti append file baru ke list (no refresh).
     } catch (e) {
-      finishUpload(filename: filename, success: false, body: e.toString());
+      finishUpload(filename: filename, success: false, error: e);
     }
   }
 
@@ -363,6 +375,27 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
+                leading: Icon(
+                  f.isStarred ? Icons.star_rounded : Icons.star_border_rounded,
+                  color: scheme.onSurface,
+                ),
+                title: Text(f.isStarred
+                    ? l10n.filesActionsUnstar
+                    : l10n.filesActionsStar),
+                onTap: () async {
+                  Navigator.pop(sheetCtx);
+                  try {
+                    final updated = await repo.toggleStarFile(f.id, !f.isStarred);
+                    if (!mounted) return;
+                    ref
+                        .read(filesControllerProvider(widget.folderId).notifier)
+                        .replaceFile(updated);
+                  } catch (_) {
+                    // ignore
+                  }
+                },
+              ),
+              ListTile(
                 leading: Icon(Icons.drive_file_move_outline, color: scheme.onSurface),
                 title: Text(l10n.filesActionsMove),
                 onTap: () {
@@ -465,7 +498,16 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
 
     final title = _buildAppBarTitle(context, l10n);
 
-    return Scaffold(
+    return PopScope(
+      // We're inside a StatefulShell branch — Navigator.pop() exits the
+      // app instead of returning to `/files`. Intercept only when we're
+      // inside a folder; at root, let Android close the app normally.
+      canPop: widget.folderId == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleBack();
+      },
+      child: Scaffold(
       extendBody: true,
       appBar: inSelection
           ? AppBar(
@@ -520,6 +562,13 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
             )
           : AppBar(
               title: title,
+              leading: widget.folderId != null
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      tooltip: 'Back',
+                      onPressed: _handleBack,
+                    )
+                  : null,
               actions: [
                 Padding(
                   padding: const EdgeInsets.only(right: 12),
@@ -584,6 +633,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
               child: EthericFab(onTap: _onFab),
             ),
         ],
+      ),
       ),
     );
   }
@@ -843,7 +893,7 @@ class _BodyState extends State<_Body> {
                   parentFolderId: widget.folderId,
                   onTap: () => widget.onFileTap(f),
                   onLongPress: () => widget.onLongPress(f.id),
-                  onOverflowTap: widget.inSelection ? null : () => widget.onFileOverflow(f),
+                  onOverflowTap: () => widget.onFileOverflow(f),
                 );
               },
               childCount: visibleFolders.length + visibleFiles.length,

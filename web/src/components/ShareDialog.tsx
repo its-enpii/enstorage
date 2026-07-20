@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ContentCopy,
@@ -9,11 +9,11 @@ import {
   Link,
   Event as EventIcon,
   Visibility,
-  ArrowDropDown,
 } from '@mui/icons-material';
 import { Dialog } from '@/components/Dialog';
 import { Button } from '@/components/Button';
 import { DateTimePicker } from '@/components/DateTimePicker';
+import { Input, Select } from '@/components/Input';
 import {
   apiRequest,
   type FileItem,
@@ -76,12 +76,9 @@ function formatExpiry(iso: string | null, t: Translator): string {
 }
 
 /**
- * Searchable preset picker — like <select> tapi bisa di-search.
- * Native <select> tidak support typeahead/filter, dan <datalist>
- * juga terbatas (tidak bisa dropdown panel). Implementasi custom
- * ringan tanpa dependency eksternal.
+ * Preset picker — pakai design system <Select> (seragam dengan form lain).
  */
-function SearchablePresetSelect({
+function PresetSelect({
   value,
   onChange,
   options,
@@ -95,90 +92,19 @@ function SearchablePresetSelect({
   ariaLabel: string;
 }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return options;
-    return options.filter((o) => t(o.labelKey).toLowerCase().includes(q));
-  }, [query, options, t]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  const current = options.find((o) => o.id === value);
-
   return (
-    <div ref={containerRef} className="relative">
-      <button
-        type="button"
-        onClick={() => !disabled && setOpen((v) => !v)}
-        disabled={disabled}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={ariaLabel}
-        className="w-full flex items-center justify-between rounded-lg bg-surface-container px-3 py-2 text-sm text-on-surface disabled:opacity-50"
-      >
-        <span className="truncate">
-          {current ? t(current.labelKey) : ''}
-        </span>
-        <ArrowDropDown className="!text-base shrink-0 text-on-surface-variant" />
-      </button>
-      {open && (
-        <div className="absolute z-10 left-0 right-0 mt-1 bg-surface-container-high border border-outline-variant/20 rounded-lg shadow-ambient max-h-60 overflow-hidden flex flex-col">
-          <div className="p-2 border-b border-outline-variant/10 shrink-0">
-            <input
-              autoFocus
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('share.searchPlaceholder')}
-              className="w-full rounded-md bg-surface px-2 py-1.5 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          </div>
-          <ul role="listbox" className="flex-1 min-h-0 overflow-y-auto py-1">
-            {filtered.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-outline">
-                {t('share.searchNoResults')}
-              </li>
-            ) : (
-              filtered.map((o) => (
-                <li
-                  key={o.id}
-                  role="option"
-                  aria-selected={o.id === value}
-                  onClick={() => {
-                    onChange(o.id);
-                    setOpen(false);
-                    setQuery('');
-                  }}
-                  className={`px-3 py-2 text-sm cursor-pointer ${
-                    o.id === value
-                      ? 'bg-primary-container text-on-primary-container'
-                      : 'text-on-surface hover:bg-surface-container'
-                  }`}
-                >
-                  {t(o.labelKey)}
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-      )}
-    </div>
+    <Select
+      value={value}
+      onChange={(e) => onChange(e.target.value as ExpiryPresetId)}
+      disabled={disabled}
+      aria-label={ariaLabel}
+    >
+      {options.map((o) => (
+        <option key={o.id} value={o.id}>
+          {t(o.labelKey)}
+        </option>
+      ))}
+    </Select>
   );
 }
 
@@ -367,7 +293,7 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
               <EventIcon className="!text-base text-on-surface-variant" />
               {t('share.expiryLabel')}
             </label>
-            <SearchablePresetSelect
+            <PresetSelect
               value={expiryPreset}
               onChange={setExpiryPreset}
               options={PRESETS}
@@ -390,7 +316,7 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
               <Visibility className="!text-base text-on-surface-variant" />
               {t('share.maxViewsLabel')}
             </label>
-            <input
+            <Input
               type="number"
               min={1}
               max={10000}
@@ -398,11 +324,10 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
               value={maxViews}
               onChange={(e) => setMaxViews(e.target.value)}
               disabled={loading}
-              className="w-full rounded-lg bg-surface-container px-3 py-2 text-sm text-on-surface"
             />
           </div>
           <Button onClick={createShareLink} disabled={loading} className="w-full">
-            {t('share.createLink')}
+            {t('share.createWithOptions')}
           </Button>
         </div>
       </div>

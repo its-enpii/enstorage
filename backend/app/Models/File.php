@@ -22,6 +22,10 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'share_token',
     'client_key',
     'client_key_origin',
+    'content_hash',
+    'original_path',
+    'original_mtime_ms',
+    'original_size',
     'upload_status',
     'uploaded_at',
 ])]
@@ -41,6 +45,8 @@ class File extends Model
     {
         return [
             'size' => 'integer',
+            'original_mtime_ms' => 'integer',
+            'original_size' => 'integer',
             'uploaded_at' => 'datetime',
             'is_starred' => 'boolean',
         ];

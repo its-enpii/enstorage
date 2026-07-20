@@ -229,6 +229,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             const SizedBox(height: 24),
 
+            // Auto Backup
+            _SectionLabel(l10n.settingsAutoBackupSection),
+            const SizedBox(height: 12),
+            _SettingGroup(
+              children: [
+                _SettingRow(
+                  icon: Icons.cloud_sync_outlined,
+                  label: l10n.settingsAutoBackupTitle,
+                  trailing: Icon(
+                    Icons.chevron_right,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  onTap: () => context.push('/settings/auto-backup'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
             // Legal (Privacy Policy + Terms of Service)
             _SectionLabel(l10n.settingsLegalSection),
             const SizedBox(height: 12),
@@ -466,11 +484,10 @@ class _SettingGroup extends StatelessWidget {
   final List<Widget> children;
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        borderRadius: AppRadii.cardBorder,
-      ),
+    return Material(
+      borderRadius: AppRadii.cardBorder,
+      color: Theme.of(context).colorScheme.surfaceContainer,
+      clipBehavior: Clip.antiAlias,
       child: Column(children: children),
     );
   }

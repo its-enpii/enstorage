@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -193,6 +194,55 @@ void _handleUploadMessage(RemoteMessage message, String type) {
   }
 }
 
+/// Translate exception apapun jadi pesan singkat, ramah untuk user.
+/// Default mode: bahasa manusia umum. Kalau [technical] true, sertakan
+/// ringkasan teknis (untuk debugging).
+String friendlyErrorMessage(Object error, {bool technical = false}) {
+  // DioException — translate HTTP status code.
+  if (error is DioException) {
+    final code = error.response?.statusCode;
+    final msg = switch (code) {
+      400 => 'Permintaan tidak valid',
+      401 => 'Sesi berakhir, silakan login ulang',
+      403 => 'Akses ditolak',
+      404 => 'Tidak ditemukan di server',
+      409 => 'File sudah pernah diupload',
+      413 => 'File terlalu besar',
+      422 => 'File tidak valid',
+      429 => 'Terlalu banyak permintaan, coba lagi nanti',
+      500 => 'Server error, coba lagi',
+      502 || 503 || 504 => 'Server tidak tersedia, coba lagi',
+      _ => null,
+    };
+    if (msg != null) {
+      return technical ? '$msg (HTTP $code)' : msg;
+    }
+    // No HTTP response — network error.
+    final type = error.type.name;
+    return switch (type) {
+      'connectionTimeout' || 'sendTimeout' || 'receiveTimeout' =>
+        technical ? 'Koneksi timeout (${type})' : 'Koneksi timeout',
+      'connectionError' =>
+        technical ? 'Tidak bisa terhubung ke server' : 'Tidak ada koneksi internet',
+      'cancel' => 'Dibatalkan',
+      _ => technical ? 'Gagal: ${type}' : 'Upload gagal, coba lagi',
+    };
+  }
+  // Fallback — jangan tampilkan stack trace panjang.
+  final raw = error.toString();
+  if (technical) return raw.split('\n').first;
+  // Generic plain-text fallback.
+  if (raw.contains('SocketException') ||
+      raw.contains('Connection refused') ||
+      raw.contains('Network is unreachable')) {
+    return 'Tidak ada koneksi internet';
+  }
+  if (raw.contains('TimeoutException') || raw.contains('timeout')) {
+    return 'Koneksi timeout';
+  }
+  return 'Upload gagal, coba lagi';
+}
+
 /// Tampilkan notif upload progress di system tray (ongoing, update in-place).
 /// Panggil saat user mulai upload, lalu tiap ada progress update.
 ///
@@ -235,19 +285,37 @@ void showUploadProgress({
 }
 
 /// Cancel notif progress & tampilkan notifikasi terminal (selesai / gagal).
+///
+/// [error] Dio/Exception object — akan di-translate ke pesan ramah via
+/// [friendlyErrorMessage]. Kalau [error] null, pakai [title]/[body] langsung.
 void finishUpload({
   required String filename,
   required bool success,
   String? title,
   String? body,
+  Object? error,
+  bool technical = false,
 }) {
   _localNotifs.cancel(id: _uploadNotifBaseId);
+  final String resolvedBody;
+  final String resolvedTitle;
+  if (success) {
+    resolvedTitle = title ?? 'Upload Selesai';
+    resolvedBody = body ?? '$filename berhasil diupload.';
+  } else {
+    resolvedTitle = title ?? 'Upload Gagal';
+    if (body != null) {
+      resolvedBody = body;
+    } else if (error != null) {
+      resolvedBody = '$filename: ${friendlyErrorMessage(error, technical: technical)}';
+    } else {
+      resolvedBody = '$filename gagal diupload.';
+    }
+  }
   _localNotifs.show(
     id: _uploadNotifBaseId,
-    title: title ?? (success ? 'Upload Selesai' : 'Upload Gagal'),
-    body: body ?? (success
-        ? '$filename berhasil diupload.'
-        : '$filename gagal diupload.'),
+    title: resolvedTitle,
+    body: resolvedBody,
     notificationDetails: NotificationDetails(
       android: AndroidNotificationDetails(
         _channel.id,

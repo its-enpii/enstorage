@@ -162,7 +162,12 @@ class _Body extends StatelessWidget {
           return FolderCard(folder: f, onTap: () => onFolderTap(f), onLongPress: () {});
         }
         final f = files[i - folders.length];
-        return FileCard(file: f, onTap: () => onFileTap(f), onLongPress: () {});
+        return FileCard(
+          file: f,
+          onTap: () => onFileTap(f),
+          onLongPress: () {},
+          onOverflowTap: () {},
+        );
       },
     );
   }

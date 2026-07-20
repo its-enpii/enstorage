@@ -27,6 +27,38 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
+// Force JVM target 21 across plugin subprojects (e.g. photo_manager,
+// audioplayers_android) whose own android {} blocks pin VERSION_1_8 /
+// jvmTarget='1.8'. Registered BEFORE evaluationDependsOn(":app") so the
+// afterEvaluate listener fires AFTER each subproject's own config block
+// runs — overriding their VERSION_1_8 instead of being overridden by it.
+subprojects {
+    afterEvaluate {
+        if (plugins.hasPlugin("com.android.library")) {
+            extensions.configure(com.android.build.gradle.LibraryExtension::class.java) {
+                compileOptions {
+                    sourceCompatibility = JavaVersion.VERSION_21
+                    targetCompatibility = JavaVersion.VERSION_21
+                }
+            }
+        }
+        if (plugins.hasPlugin("com.android.application")) {
+            extensions.configure(com.android.build.gradle.AppExtension::class.java) {
+                compileOptions {
+                    sourceCompatibility = JavaVersion.VERSION_21
+                    targetCompatibility = JavaVersion.VERSION_21
+                }
+            }
+        }
+        if (plugins.hasPlugin("org.jetbrains.kotlin.android")) {
+            tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).configureEach {
+                compilerOptions {
+                    jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+                }
+            }
+        }
+    }
+}
 subprojects {
     project.evaluationDependsOn(":app")
 }

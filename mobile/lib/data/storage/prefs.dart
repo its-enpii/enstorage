@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Non-secret prefs: locale, theme, last-visited folder, etc.
@@ -9,6 +10,10 @@ class AppPrefs {
   static const _themeModeKey = 'enstorage_theme_mode';
 
   final SharedPreferences _prefs;
+
+  /// Direct accessor untuk repository lain yang butuh [SharedPreferences]
+  /// instance (mis. [BackupSettingsRepository] simpan JSON blob).
+  SharedPreferences get prefs => _prefs;
 
   static Future<AppPrefs> create() async {
     final prefs = await SharedPreferences.getInstance();
@@ -48,3 +53,11 @@ class AppPrefs {
     await _prefs.setString(_themeModeKey, value);
   }
 }
+
+/// Provider untuk [AppPrefs]. Override di `main.dart` ProviderScope dengan
+/// instance pre-warmed via `AppPrefs.create()` (lihat `main.dart`).
+final appPrefsProvider = Provider<AppPrefs>((ref) {
+  throw UnimplementedError(
+    'appPrefsProvider must be overridden in ProviderScope at app startup',
+  );
+});

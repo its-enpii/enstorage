@@ -402,9 +402,10 @@ class _ShareDialogState extends ConsumerState<ShareDialog> {
           ],
         ),
         const SizedBox(height: 6),
-        DropdownButton<String>(
+        DropdownButtonFormField<String>(
           value: _expiryPreset,
           isExpanded: true,
+          decoration: const InputDecoration(isDense: true),
           onChanged: _loading
               ? null
               : (v) {
