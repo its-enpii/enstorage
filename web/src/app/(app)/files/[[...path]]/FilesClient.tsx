@@ -830,6 +830,33 @@ function FilesContent() {
     }
   }
 
+  async function downloadFolder(id: string) {
+    const token = getToken();
+    const url = `${process.env.NEXT_PUBLIC_API_BASE}/folders/${id}/download`;
+    try {
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        if (res.status === 409) throw new Error(t('folders.errors.empty'));
+        throw new Error(t('files.errors.downloadFailed'));
+      }
+      const blob = await res.blob();
+      // Ambil nama file dari header Content-Disposition kalau ada.
+      const cd = res.headers.get('Content-Disposition') ?? '';
+      const m = /filename="?([^";]+)"?/i.exec(cd);
+      const filename = m?.[1] ?? 'folder.zip';
+      const dl = document.createElement('a');
+      dl.href = URL.createObjectURL(blob);
+      dl.download = filename;
+      document.body.appendChild(dl);
+      dl.click();
+      dl.remove();
+    } catch (e) {
+      await alert(e instanceof Error ? e.message : t('files.errors.downloadFailed'));
+    }
+  }
+
   const visibleFolders = tab === 'files' ? [] : folders;
   const visibleFiles = tab === 'folders' ? [] : files;
 
@@ -940,6 +967,17 @@ function FilesContent() {
           />
         </h1>
         <div className="flex items-center gap-3">
+          {folderId && (
+            <button
+              type="button"
+              onClick={() => void downloadFolder(folderId)}
+              aria-label={t('folders.downloadFolder')}
+              className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors text-sm font-medium"
+            >
+              <span className="material-symbols-outlined !text-lg">folder_zip</span>
+              <span>{t('folders.downloadFolder')}</span>
+            </button>
+          )}
           <span className="text-metadata text-outline tabular-nums">
             {t('files.filter.summary', { folders: totalFolders, files: totalFiles })}
           </span>

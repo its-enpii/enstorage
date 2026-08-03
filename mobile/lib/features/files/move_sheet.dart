@@ -94,6 +94,17 @@ Future<void> showMoveSheet(
         .removeFiles(files.where((f) => !failedIds.contains(f.id)).map((f) => f.id));
   }
 
+  // Refresh destination controller supaya file yang dipindahkan langsung
+  // muncul di sana (terutama untuk mode tablet/expanded yang pane-nya
+  // menyimpan state page-1 cached). Kalau destination belum pernah dibuka,
+  // no-op efektif — visit berikutnya akan fresh fetch.
+  if (success > 0 && target.folderId != null) {
+    ref.read(filesControllerProvider(target.folderId).notifier).refresh();
+  } else if (success > 0 && target.folderId == null) {
+    // Destination = root (My Files).
+    ref.read(filesControllerProvider(null).notifier).refresh();
+  }
+
   // Hasil ke user.
   if (success == files.length) {
     final folderLabel = target.folderId == null

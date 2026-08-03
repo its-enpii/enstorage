@@ -122,6 +122,7 @@ Route::middleware('auth.apikey')->group(function () {
     Route::get('folders', [FolderController::class, 'index']);
     Route::post('folders', [FolderController::class, 'store']);
     Route::get('folders/{id}', [FolderController::class, 'show']);
+    Route::get('folders/{id}/download', [FolderController::class, 'download']);
     Route::patch('folders/{id}', [FolderController::class, 'update']);
     Route::put('folders/{id}/move', [FolderController::class, 'move']);
     Route::delete('folders/{id}', [FolderController::class, 'destroy']);
@@ -189,6 +190,7 @@ Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(funct
         Route::get('files/{id}/thumbnail', [FileController::class, 'thumbnail']);
         Route::get('folders', [FolderController::class, 'index']);
         Route::get('folders/{id}', [FolderController::class, 'show']);
+        Route::get('folders/{id}/download', [FolderController::class, 'download']);
         Route::get('recent', [RecentController::class, 'index']);
         Route::get('search/files', [SearchController::class, 'searchFiles']);
     });

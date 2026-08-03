@@ -7,14 +7,20 @@ use App\Http\Resources\FolderResource;
 use App\Models\ActivityLog;
 use App\Models\Folder;
 use App\Models\ShareLink;
+use App\Models\File;
 use App\Services\ActivityLogService;
 use App\Services\Folder\FolderPathService;
+use App\Services\Google\GoogleClientFactory;
+use App\Services\Google\GoogleTokenService;
 use App\Services\WebhookService;
+use Google\Service\Drive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
+use ZipArchive;
 
 class FolderController extends Controller
 {
@@ -407,6 +413,128 @@ class FolderController extends Controller
             'expires_at' => $expiresAt,
             'max_views' => $maxViews !== null && $maxViews !== '' ? (int) $maxViews : null,
         ], __('Folder share berhasil dibuat.'));
+    }
+
+    /**
+     * GET /folders/{id}/download — stream semua file di folder ini sebagai ZIP.
+     *
+     * 1-level: file langsung di folder + subfolder kosong sebagai entry
+     * direktori di zip. Subfolder tidak di-recurse — kalau perlu nested,
+     * buka folder per-satu. (ponytail: ceiling = 1-level; upgrade ke
+     * rekursi + zip64 kalau user butuh.)
+     */
+    public function download(Request $request, string $id): StreamedResponse|JsonResponse
+    {
+        $folder = $this->findOwned($request, $id);
+        if (! $folder) {
+            return $this->fail(__('Folder tidak ditemukan.'), 404);
+        }
+
+        $files = File::where('folder_id', $folder->id)
+            ->where('user_id', $folder->user_id)
+            ->where('upload_status', File::STATUS_DONE)
+            ->orderBy('original_name')
+            ->get();
+
+        $subfolders = Folder::where('parent_id', $folder->id)
+            ->where('user_id', $folder->user_id)
+            ->orderBy('name')
+            ->get();
+
+        if ($files->isEmpty() && $subfolders->isEmpty()) {
+            return $this->fail(__('Folder kosong, tidak ada yang bisa di-download.'), 409);
+        }
+
+        // Pre-resolve Drive streams per file. Pakai satu client per akun Google
+        // untuk batch — supaya upload_job yang sama tidak diulang antar file.
+        $factory = app(GoogleClientFactory::class);
+        $tokenSvc = app(GoogleTokenService::class);
+        $clients = []; // google_account_id => Drive
+
+        $safeName = preg_replace('/[\\\\\/:*?"<>|]/', '_', $folder->name) ?: 'folder';
+        $zipName = $safeName.'.zip';
+
+        return response()->stream(function () use ($files, $subfolders, $factory, $tokenSvc, &$clients, $safeName) {
+            $zip = new ZipArchive();
+            $zip->open('php://output', ZipArchive::CREATE | ZipArchive::OVERWRITE);
+
+            // Subfolder → direktori kosong di zip (placeholder struktur).
+            foreach ($subfolders as $sub) {
+                $entry = $safeName.'/'.preg_replace('/[\\\\\/:*?"<>|]/', '_', $sub->name).'/';
+                $zip->addEmptyDir($entry);
+            }
+
+            // Kumpulkan tmp file yang harus di-unlink setelah zip->close()
+            // (ZipArchive::addFile() baca sekarang, boleh hapus setelahnya).
+            $tmpFiles = [];
+            try {
+                foreach ($files as $file) {
+                    $account = $file->googleAccount;
+                    if (! $account) {
+                        continue; // skip orphan
+                    }
+
+                    try {
+                        if (! isset($clients[$account->id])) {
+                            $client = $factory->makeFor($account);
+                            $tokenSvc->ensureFreshToken($account);
+                            $client->setAccessToken($account->access_token);
+                            $clients[$account->id] = new Drive($client);
+                        }
+                        $drive = $clients[$account->id];
+
+                        $response = $drive->files->get($file->gdrive_file_id, ['alt' => 'media']);
+                        $body = $response->getBody();
+
+                        $entryBase = $safeName.'/'.basename($file->original_name);
+                        $entryName = $this->uniqueEntryName($zip, $entryBase);
+
+                        // Stream ke tmp file → addFile. Buffer di memory tidak
+                        // layak untuk file besar (1 GB × N).
+                        $tmp = tempnam(sys_get_temp_dir(), 'enz_');
+                        $tmpFiles[] = $tmp;
+                        $fh = fopen($tmp, 'wb');
+                        while (! $body->eof()) {
+                            fwrite($fh, $body->read(8192));
+                        }
+                        fclose($fh);
+                        $zip->addFile($tmp, $entryName);
+                    } catch (Throwable $e) {
+                        // Skip file yang gagal — jangan putus seluruh zip.
+                        continue;
+                    }
+                }
+                $zip->close();
+            } finally {
+                foreach ($tmpFiles as $tmp) {
+                    @unlink($tmp);
+                }
+            }
+        }, 200, [
+            'Content-Type' => 'application/zip',
+            'Content-Disposition' => 'attachment; filename="'.addslashes($zipName).'"',
+            // Tidak set Content-Length — zip size tidak diketahui sampai stream selesai.
+            'Cache-Control' => 'no-store',
+        ]);
+    }
+
+    /**
+     * Kalau $name sudah ada di zip, suffix " (n)" sampai unik.
+     */
+    private function uniqueEntryName(ZipArchive $zip, string $name): string
+    {
+        if ($zip->locateName($name) === false) {
+            return $name;
+        }
+        $info = pathinfo($name);
+        $base = $info['dirname'] === '.' ? '' : $info['dirname'].'/';
+        $stem = $info['filename'];
+        $ext = isset($info['extension']) ? '.'.$info['extension'] : '';
+        $i = 1;
+        while ($zip->locateName($base.$stem." ($i)".$ext) !== false) {
+            $i++;
+        }
+        return $base.$stem." ($i)".$ext;
     }
 
     /**

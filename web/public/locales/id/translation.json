@@ -336,13 +336,15 @@
     "itemsSize": "{{count}} items • {{size}}",
     "emptyTitle": "Tambah folder",
     "emptyAction": "Buat sekarang",
+    "downloadFolder": "Download folder (zip)",
     "errors": {
       "loadFailed": "Gagal memuat.",
       "createFailed": "Gagal membuat folder.",
       "renameFailed": "Gagal rename.",
       "starFailed": "Gagal update star.",
       "deleteFailed": "Gagal hapus.",
-      "moveFailed": "Gagal pindah."
+      "moveFailed": "Gagal pindah.",
+      "empty": "Folder kosong, tidak ada yang bisa di-download."
     }
   },
   "settings": {

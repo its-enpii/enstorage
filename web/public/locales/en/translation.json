@@ -336,13 +336,15 @@
     "itemsSize": "{{count}} items • {{size}}",
     "emptyTitle": "Add folder",
     "emptyAction": "Create now",
+    "downloadFolder": "Download folder (zip)",
     "errors": {
       "loadFailed": "Failed to load.",
       "createFailed": "Failed to create folder.",
       "renameFailed": "Failed to rename.",
       "starFailed": "Failed to update star.",
       "deleteFailed": "Failed to delete.",
-      "moveFailed": "Failed to move."
+      "moveFailed": "Failed to move.",
+      "empty": "Folder is empty, nothing to download."
     }
   },
   "settings": {
