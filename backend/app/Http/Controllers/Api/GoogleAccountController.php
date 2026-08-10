@@ -589,6 +589,40 @@ HTML;
         ], __('Akun berhasil disinkronkan.'));
     }
 
+    public function scan(Request $request, ?string $id = null): JsonResponse
+    {
+        $userId = $request->user()->id;
+        $query = GoogleAccount::where('user_id', $userId)->where('is_active', true);
+        if ($id) {
+            $query->where('id', $id);
+        }
+        $accounts = $query->get();
+
+        if ($accounts->isEmpty()) {
+            return $this->fail(__('Tidak ada akun Google aktif yang terhubung.'), 404);
+        }
+
+        $folderService = app(\App\Services\Google\GoogleDriveFolderService::class);
+        $totalStats = [
+            'folders_created' => 0,
+            'files_created' => 0,
+            'files_updated' => 0,
+        ];
+
+        foreach ($accounts as $account) {
+            try {
+                $stats = $folderService->scanGoogleDrive($account);
+                $totalStats['folders_created'] += $stats['folders_created'];
+                $totalStats['files_created'] += $stats['files_created'];
+                $totalStats['files_updated'] += $stats['files_updated'];
+            } catch (Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Scan Google Drive failed for account '.$account->id.': '.$e->getMessage());
+            }
+        }
+
+        return $this->ok($totalStats, __('Scan dan pemetaan 1:1 Google Drive selesai.'));
+    }
+
     private function findOwned(Request $request, string $id): ?GoogleAccount
     {
         return GoogleAccount::where('user_id', $request->user()->id)

@@ -16,7 +16,6 @@ import {
   CloudIcon,
   LinkOffIcon,
   RefreshIcon,
-  IconSymbol,
 } from '@/lib/icons';
 
 const accountsStore = createViewStore<GoogleAccount[]>(async () => {
@@ -24,7 +23,7 @@ const accountsStore = createViewStore<GoogleAccount[]>(async () => {
 });
 
 function bytes(n: number | null | undefined): string {
-  if (n === null || n === undefined) return '—';
+  if (n === null || n === undefined) return '�';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let v = n;
   let i = 0;
@@ -55,6 +54,7 @@ function AccountsContent() {
   const { data, loading, error, setData, revalidate } = accountsStore.useStore();
   const accounts = data ?? [];
   const [busy, setBusy] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
 
   // Handle return from Google OAuth callback (?connected=1 | ?error=msg)
   useEffect(() => {
@@ -88,6 +88,26 @@ function AccountsContent() {
       window.location.href = data.authorization_url;
     } catch (e) {
       await alert(e instanceof ApiError ? e.message : t('files.errors.oauthStartFailed'));
+    }
+  }
+
+  async function scanDrive(id?: string) {
+    setScanning(true);
+    try {
+      const url = id ? `/google-accounts/${id}/scan` : '/google-accounts/scan';
+      const stats = await apiRequest<{ folders_created: number; files_created: number; files_updated: number }>(
+        url,
+        { method: 'POST' },
+      );
+      await alert(
+        `Pemetaan 1:1 selesai!\n� Folder Baru: ${stats.folders_created}\n� File Baru: ${stats.files_created}\n� File Diperbarui: ${stats.files_updated}`,
+        { title: 'Scan Google Drive Selesai' },
+      );
+      void revalidate();
+    } catch (e) {
+      await alert(e instanceof ApiError ? e.message : 'Scan Google Drive gagal.');
+    } finally {
+      setScanning(false);
     }
   }
 
@@ -136,9 +156,26 @@ function AccountsContent() {
             {t('accounts.subtitle')}
           </p>
         </div>
-        <Button onClick={connect} leftIcon={<AddIcon />} size="lg">
-          {t('accounts.connect')}
-        </Button>
+        <div className="flex items-center gap-3">
+          {accounts.length > 0 && (
+            <Button
+              variant="secondary"
+              onClick={() => scanDrive()}
+              disabled={scanning}
+              size="lg"
+            >
+              {scanning ? (
+                <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin mr-2" />
+              ) : (
+                <RefreshIcon />
+              )}
+              {scanning ? 'Scanning...' : 'Scan Google Drive (1:1)'}
+            </Button>
+          )}
+          <Button onClick={connect} leftIcon={<AddIcon />} size="lg">
+            {t('accounts.connect')}
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -173,6 +210,13 @@ function AccountsContent() {
                 className="bg-surface p-inner-padding rounded-card shadow-inner-glow flex items-start gap-5 group hover-lift relative"
               >
                 <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 flex items-center gap-1">
+                  <IconButton
+                    onClick={() => scanDrive(acc.id)}
+                    disabled={scanning || busy === acc.id}
+                    title="Scan Google Drive 1:1"
+                  >
+                    <RefreshIcon />
+                  </IconButton>
                   <IconButton
                     onClick={() => syncQuota(acc.id)}
                     disabled={busy === acc.id}

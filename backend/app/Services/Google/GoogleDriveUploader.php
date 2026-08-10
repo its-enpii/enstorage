@@ -3,6 +3,7 @@
 namespace App\Services\Google;
 
 use App\Models\File as FileModel;
+use App\Models\Folder;
 use App\Models\GoogleAccount;
 use Google\Client as GoogleClient;
 use Google\Service\Drive;
@@ -16,6 +17,7 @@ class GoogleDriveUploader
     public function __construct(
         private readonly GoogleClientFactory $factory,
         private readonly GoogleTokenService $tokens,
+        private readonly GoogleDriveFolderService $folderService,
     ) {}
 
     /**
@@ -37,13 +39,23 @@ class GoogleDriveUploader
         $client->setDefer(true); // penting: agar nextChunk() bisa loop
         $drive = new Drive($client);
 
-        // 2. Pastikan folder root ada
-        $rootFolderId = app(QuotaManager::class)->ensureRootFolder($account);
+        // 2. Tentukan target parent folder di Google Drive (1:1 folder sync)
+        $parentFolderId = null;
+        if ($file->folder_id) {
+            $folder = Folder::find($file->folder_id);
+            if ($folder) {
+                $parentFolderId = $this->folderService->ensureFolderOnDrive($account, $folder);
+            }
+        }
+
+        if (! $parentFolderId) {
+            $parentFolderId = app(QuotaManager::class)->ensureRootFolder($account);
+        }
 
         // 3. Siapkan metadata file
         $metadata = new DriveFile([
             'name' => $file->original_name,
-            'parents' => [$rootFolderId],
+            'parents' => [$parentFolderId],
         ]);
 
         // 4. Buat request PSR-7 resumable (data di-pass via opsi 'data')
@@ -60,7 +72,7 @@ class GoogleDriveUploader
                 $client,
                 $request,
                 $file->mime_type,
-                $data,      // string â€” MediaFileUpload::nextChunk() pakai substr()
+                $data,      // string — MediaFileUpload::nextChunk() pakai substr()
                 true,       // resumable
             );
             $uploader->setFileSize($size);
@@ -82,7 +94,7 @@ class GoogleDriveUploader
             throw new \RuntimeException('Upload gagal: response tidak valid dari Google Drive.');
         }
 
-        // 7. Set permission "Anyone with link can view" â€” non-fatal
+        // 7. Set permission "Anyone with link can view" — non-fatal
         $shareableLink = $uploaded->getWebViewLink();
         try {
             $permission = new Permission([
@@ -116,7 +128,7 @@ class GoogleDriveUploader
         try {
             $drive->files->delete($gdriveFileId);
         } catch (\Throwable $e) {
-            // File mungkin sudah tidak ada â€” log & lanjut
+            // File mungkin sudah tidak ada — log & lanjut
             Log::warning('GDrive delete failed', [
                 'gdrive_file_id' => $gdriveFileId,
                 'error' => $e->getMessage(),

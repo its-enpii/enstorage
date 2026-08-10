@@ -163,6 +163,16 @@ class FolderController extends Controller
             request: $request,
         );
 
+        // Sync/ensure folder on active Google Drive account if available (non-fatal)
+        try {
+            $activeAccount = \App\Models\GoogleAccount::where('user_id', $userId)->where('is_active', true)->first();
+            if ($activeAccount) {
+                app(\App\Services\Google\GoogleDriveFolderService::class)->ensureFolderOnDrive($activeAccount, $folder);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Sync new folder to GDrive failed: '.$e->getMessage());
+        }
+
         // Realtime broadcast — subscribers viewing the parent see the new folder.
         \App\Events\FolderCreatedBroadcast::dispatch($folder);
 

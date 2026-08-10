@@ -90,6 +90,8 @@ Route::middleware('auth.apikey')->group(function () {
         Route::patch('{id}', [GoogleAccountController::class, 'update']);
         Route::delete('{id}', [GoogleAccountController::class, 'destroy']);
         Route::post('{id}/sync-quota', [GoogleAccountController::class, 'syncQuota']);
+        Route::post('scan', [GoogleAccountController::class, 'scan']);
+        Route::post('{id}/scan', [GoogleAccountController::class, 'scan']);
     });
 
     // Storage summary
@@ -158,6 +160,8 @@ Route::middleware(['throttle.apikey', 'log.apikey'])->group(function () {
         Route::patch('folders/{id}', [FolderController::class, 'update']);
         Route::put('folders/{id}/move', [FolderController::class, 'move']);
         Route::post('google-accounts/{id}/sync-quota', [GoogleAccountController::class, 'syncQuota']);
+        Route::post('google-accounts/scan', [GoogleAccountController::class, 'scan']);
+        Route::post('google-accounts/{id}/scan', [GoogleAccountController::class, 'scan']);
     });
 
     Route::middleware('check.scope:delete')->group(function () {

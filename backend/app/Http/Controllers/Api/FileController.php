@@ -503,6 +503,26 @@ class FileController extends Controller
             request: $request,
         );
 
+        // Sync GDrive file move (1:1 folder hierarchy)
+        try {
+            if ($file->google_account_id && $file->googleAccount && $file->googleAccount->is_active) {
+                $folderService = app(\App\Services\Google\GoogleDriveFolderService::class);
+                $newGDriveParentId = null;
+                if ($newFolderId) {
+                    $targetFolder = Folder::find($newFolderId);
+                    if ($targetFolder) {
+                        $newGDriveParentId = $folderService->ensureFolderOnDrive($file->googleAccount, $targetFolder);
+                    }
+                }
+                if (! $newGDriveParentId) {
+                    $newGDriveParentId = app(\App\Services\Google\QuotaManager::class)->ensureRootFolder($file->googleAccount);
+                }
+                $folderService->moveFileOnDrive($file->googleAccount, $file, $newGDriveParentId);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('GDrive move file sync failed: '.$e->getMessage());
+        }
+
         // Broadcast event ke webhook subscriber.
         // Payload berisi field minimal + nama sebelum/sesudah rename agar
         // client bisa memutuskan apakah perlu sinkronisasi list.
