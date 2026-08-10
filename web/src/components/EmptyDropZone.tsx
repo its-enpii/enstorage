@@ -22,6 +22,7 @@ export function EmptyDropZone({
       onDragLeave={() => setOver(false)}
       onDrop={(e) => {
         e.preventDefault();
+        e.stopPropagation();
         setOver(false);
         if (e.dataTransfer.files?.length) onDrop(e.dataTransfer.files);
       }}

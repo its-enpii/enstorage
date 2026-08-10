@@ -450,47 +450,58 @@ function FilesContent() {
   // `pollStatus` and the completion observer below. Declared before
   // `pollStatus` so the closure has access.
   const watchedFileIdsRef = useRef<Set<string>>(new Set());
+  const onDoneCallbacksRef = useRef<Map<string, () => void>>(new Map());
+
+  function finishJob(fileId: string, name: string, status: 'done' | 'failed', error?: string) {
+    const handle = pollRefs.current.get(fileId);
+    if (handle) {
+      clearInterval(handle);
+      pollRefs.current.delete(fileId);
+    }
+    watchedFileIdsRef.current.delete(fileId);
+
+    setJobs((js) =>
+      js.map((j) => {
+        if (j.name === name || (j.fileId && j.fileId === fileId)) {
+          return {
+            ...j,
+            status,
+            loaded: status === 'done' ? j.total : j.loaded,
+            ...(error ? { error } : {}),
+          };
+        }
+        return j;
+      }),
+    );
+
+    const onDone = onDoneCallbacksRef.current.get(fileId);
+    if (onDone) {
+      onDoneCallbacksRef.current.delete(fileId);
+      onDone();
+    }
+
+    if (status === 'done') {
+      setTimeout(() => {
+        setJobs((js) => js.filter((j) => !(j.fileId === fileId || j.name === name)));
+      }, 3000);
+    }
+  }
 
   function pollStatus(name: string, fileId: string, onDone: () => void) {
-    // WS-driven path: FileUploadedBroadcast / FileUploadFailedBroadcast
-    // update the row via FilesStoreProvider's upsertFile in
-    // real-timeProvider.tsx. The completion observer below reacts to
-    // `files` array changes and clears the job UI. Polling remains as a
-    // fallback when `connectionState !== 'connected'`.
+    onDoneCallbacksRef.current.set(fileId, onDone);
+    watchedFileIdsRef.current.add(fileId);
+
     const existing = pollRefs.current.get(fileId);
     if (existing) clearInterval(existing);
 
-    if (wsState === 'connected') {
-      // Track in watched set so observer picks up the row's status
-      // transition once FileUploadedBroadcast fires.
-      watchedFileIdsRef.current.add(fileId);
-      // onDone() is invoked by the observer below — no polling.
-      return;
-    }
-
+    // Active polling runs as fallback alongside WebSocket broadcast.
     const id = setInterval(async () => {
       try {
         const s = await apiRequest<{ status: FileItem['upload_status'] }>(
           `/files/${fileId}/status`,
         );
         if (s.status === 'done' || s.status === 'failed') {
-          setJobs((js) =>
-            js.map((j) =>
-              j.name === name
-                ? { ...j, status: s.status, loaded: j.total }
-                : j,
-            ),
-          );
-          const handle = pollRefs.current.get(fileId);
-          if (handle) clearInterval(handle);
-          pollRefs.current.delete(fileId);
-          onDone();
-
-          if (s.status === 'done') {
-            setTimeout(() => {
-              setJobs((js) => js.filter((j) => !(j.name === name && j.status === 'done')));
-            }, 3000);
-          }
+          finishJob(fileId, name, s.status);
         }
       } catch {
         // ignore polling errors
@@ -499,38 +510,19 @@ function FilesContent() {
     pollRefs.current.set(fileId, id);
   }
 
-  // WS-driven completion observer: when `files` updates with a row
+  // WS + Store completion observer: when `files` updates with a row
   // matching one of our pending jobs that has moved off `pending`/
-  // `uploading`, clear the job UI just like the polling path did.
+  // `uploading`, clear the job UI and mark task complete.
   useEffect(() => {
     if (watchedFileIdsRef.current.size === 0) return;
     for (const f of files) {
       if (!watchedFileIdsRef.current.has(f.id)) continue;
-      if (f.upload_status === 'done') {
-        setJobs((js) =>
-          js.map((j) =>
-            j.name === f.name
-              ? { ...j, status: 'done', loaded: j.total }
-              : j,
-          ),
-        );
-        watchedFileIdsRef.current.delete(f.id);
-        setTimeout(() => {
-          setJobs((js) => js.filter((j) => !(j.name === f.name && j.status === 'done')));
-        }, 3000);
-      } else if (f.upload_status === 'failed') {
-        setJobs((js) =>
-          js.map((j) =>
-            j.name === f.name
-              ? { ...j, status: 'failed', error: 'Upload failed' }
-              : j,
-          ),
-        );
-        watchedFileIdsRef.current.delete(f.id);
+      if (f.upload_status === 'done' || f.upload_status === 'failed') {
+        finishJob(f.id, f.name, f.upload_status, f.upload_status === 'failed' ? 'Upload failed' : undefined);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [files.length, files.map((f) => f.id).join('|')]);
+  }, [files.length, files.map((f) => `${f.id}:${f.upload_status}`).join('|')]);
 
   function dismissJob(name: string) {
     setJobs((js) => js.filter((j) => j.name !== name));
