@@ -341,7 +341,7 @@ class FileController extends Controller
                 }
             }, 200, [
                 'Content-Type' => $file->mime_type,
-                'Content-Disposition' => $disposition . '; filename="' . str_replace(['"', "\r", "\n"], '', $file->name ?: $file->original_name) . '"; filename*=UTF-8''' . rawurlencode($file->name ?: $file->original_name),
+                'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
                 'Content-Length' => (string) $file->size,
             ]);
         } catch (Throwable $e) {
@@ -895,7 +895,7 @@ class FileController extends Controller
                 }
             }, 200, [
                 'Content-Type' => $file->mime_type,
-                'Content-Disposition' => $disposition . '; filename="' . str_replace(['"', "\r", "\n"], '', $file->name ?: $file->original_name) . '"; filename*=UTF-8''' . rawurlencode($file->name ?: $file->original_name),
+                'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
                 'Content-Length' => (string) $file->size,
             ]);
         } catch (Throwable $e) {
@@ -979,4 +979,12 @@ class FileController extends Controller
             ->where('user_id', $request->user()->id)
             ->first();
     }
+    private function makeContentDisposition(string $disposition, FileModel $file): string
+    {
+        $name = $file->name ?: $file->original_name;
+        $safe = str_replace(['"', "\r", "\n"], '', $name);
+        $encoded = rawurlencode($name);
+        return $disposition . '; filename="' . $safe . '"; filename*=UTF-8\'\'' . $encoded;
+    }
+
 }
