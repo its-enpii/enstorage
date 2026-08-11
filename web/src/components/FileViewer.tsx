@@ -255,6 +255,32 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStartX.current || !touchEndX.current) return;
+    const distance = touchStartX.current - touchEndX.current;
+    const isLeftSwipe = distance > 40;
+    const isRightSwipe = distance < -40;
+
+    if (isLeftSwipe && activeSlide < slides.length - 1) {
+      setActiveSlide((s) => s + 1);
+    } else if (isRightSwipe && activeSlide > 0) {
+      setActiveSlide((s) => s - 1);
+    }
+
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
 
   useEffect(() => {
     let active = true;
@@ -338,7 +364,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
     return (
       <div
         ref={containerRef}
-        className="w-screen h-screen bg-black flex items-center justify-center overflow-hidden relative"
+        className="w-screen h-screen bg-black flex items-center justify-center overflow-hidden relative" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
         onClick={(e) => e.stopPropagation()}
       >
         {current.images && current.images.length > 0 ? (
@@ -387,7 +413,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
       onClick={(e) => e.stopPropagation()}
     >
       {/* Main Slide Canvas Container */}
-      <div className="flex-1 relative flex items-center justify-center p-4 sm:p-8 md:p-12 overflow-hidden bg-surface-container-dark/40 min-h-0">
+      <div className="flex-1 relative flex items-center justify-center p-4 sm:p-8 md:p-12 overflow-hidden bg-surface-container-dark/40 min-h-0" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
         {/* Mode Presentasi Button */}
         <button
           type="button"
