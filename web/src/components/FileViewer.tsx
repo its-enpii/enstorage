@@ -327,28 +327,30 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
   const current = slides[activeSlide];
 
   return (
-    <div className="flex-1 w-full h-full flex overflow-hidden bg-background" onClick={(e) => e.stopPropagation()}>
-      {/* Main Active Slide Viewport - Pure Visual Canvas */}
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-8 overflow-hidden bg-surface-container-dark/40">
-        <div className="w-full h-full max-w-5xl max-h-[82vh] aspect-[16/9] bg-white rounded-2xl p-6 sm:p-10 shadow-2xl border border-outline-variant/20 flex flex-col items-center justify-center select-none overflow-hidden">
+    <div className="flex-1 w-full h-full flex flex-col md:flex-row overflow-hidden bg-background" onClick={(e) => e.stopPropagation()}>
+      {/* Main Active Slide Viewport */}
+      <div className="flex-1 relative flex items-center justify-center p-2 sm:p-6 md:p-8 overflow-hidden bg-surface-container-dark/40 min-h-0">
+        <div
+          className="w-full h-full max-w-5xl max-h-[82vh] aspect-[16/9] bg-white rounded-xl sm:rounded-2xl p-4 sm:p-8 md:p-10 shadow-2xl border border-outline-variant/20 flex flex-col items-center justify-center select-none overflow-hidden"
+        >
           {current.images && current.images.length > 0 ? (
             <div className="w-full h-full flex items-center justify-center overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={current.images[0]}
                 alt={`Slide ${activeSlide + 1}`}
-                className="max-w-full max-h-full object-contain rounded-xl shadow-md"
+                className="max-w-full max-h-full object-contain rounded-lg sm:rounded-xl shadow-md"
               />
             </div>
           ) : (
-            <div className="w-full h-full flex flex-col justify-center items-center max-w-3xl mx-auto p-4 overflow-hidden text-center">
-              <h1 className="text-2xl sm:text-4xl font-display font-extrabold text-gray-900 leading-tight mb-4">
+            <div className="w-full h-full flex flex-col justify-center items-center max-w-3xl mx-auto p-2 sm:p-4 overflow-hidden text-center">
+              <h1 className="text-xl sm:text-3xl md:text-4xl font-display font-extrabold text-gray-900 leading-tight mb-2 sm:mb-4">
                 {current.title}
               </h1>
               {current.texts.length > 0 && (
-                <div className="flex flex-col gap-2 max-w-xl overflow-hidden">
+                <div className="flex flex-col gap-1.5 sm:gap-2 max-w-xl overflow-hidden">
                   {current.texts.map((p, idx) => (
-                    <p key={idx} className="text-gray-700 text-base sm:text-lg leading-snug font-medium break-words">
+                    <p key={idx} className="text-gray-700 text-xs sm:text-base md:text-lg leading-snug font-medium break-words">
                       {p}
                     </p>
                   ))}
@@ -357,22 +359,44 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
             </div>
           )}
         </div>
+
+        {/* Mobile Quick Slide Navigation Controls */}
+        {slides.length > 1 && (
+          <div className="absolute inset-x-2 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none md:hidden">
+            <button
+              type="button"
+              onClick={() => setActiveSlide((s) => Math.max(0, s - 1))}
+              disabled={activeSlide === 0}
+              className="w-8 h-8 rounded-full bg-surface-container-highest/80 backdrop-blur text-on-surface flex items-center justify-center disabled:opacity-30 shadow-md pointer-events-auto"
+            >
+              <ChevronLeft className="!text-sm" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSlide((s) => Math.min(slides.length - 1, s + 1))}
+              disabled={activeSlide === slides.length - 1}
+              className="w-8 h-8 rounded-full bg-surface-container-highest/80 backdrop-blur text-on-surface flex items-center justify-center disabled:opacity-30 shadow-md pointer-events-auto"
+            >
+              <ChevronRight className="!text-sm" />
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Vertical Slide Thumbnail Sidebar (Right Area) */}
+      {/* Slide Thumbnail Sidebar / Bottom Horizontal Strip */}
       {slides.length > 1 && (
-        <div className="w-64 sm:w-72 h-full border-l border-outline-variant/15 bg-surface-container-dark/80 backdrop-blur-md flex flex-col shrink-0">
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+        <div className="w-full md:w-64 sm:md:w-72 h-20 sm:h-24 md:h-full border-t md:border-t-0 md:border-l border-outline-variant/15 bg-surface-container-dark/80 backdrop-blur-md flex flex-row md:flex-col shrink-0 overflow-hidden">
+          <div className="flex-1 overflow-x-auto md:overflow-y-auto p-2 sm:p-4 flex flex-row md:flex-col gap-2 sm:gap-3 items-center md:items-stretch">
             {slides.map((s, idx) => {
               const isActive = activeSlide === idx;
               return (
                 <div
                   key={idx}
                   onClick={() => setActiveSlide(idx)}
-                  className="flex items-center gap-3 cursor-pointer group"
+                  className="flex items-center gap-1.5 sm:gap-3 cursor-pointer group shrink-0 h-full md:h-auto"
                 >
                   <span
-                    className={`text-xs font-bold font-mono min-w-[16px] text-right transition-colors ${
+                    className={`text-[10px] sm:text-xs font-bold font-mono min-w-[14px] text-center md:text-right transition-colors ${
                       isActive ? 'text-primary' : 'text-outline group-hover:text-on-surface'
                     }`}
                   >
@@ -380,7 +404,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
                   </span>
 
                   <div
-                    className={`flex-1 aspect-[16/9] bg-white rounded-xl p-1.5 shadow border-2 transition-all flex flex-col justify-center overflow-hidden relative ${
+                    className={`h-full md:h-auto aspect-[16/9] w-24 sm:w-28 md:w-full bg-white rounded-lg p-1 sm:p-1.5 shadow border-2 transition-all flex flex-col justify-center overflow-hidden relative ${
                       isActive
                         ? 'border-primary ring-2 ring-primary/30 scale-[1.02]'
                         : 'border-outline-variant/20 hover:border-outline-variant/60'
@@ -390,8 +414,8 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
                       /* eslint-disable-next-line @next/next/no-img-element */
                       <img src={s.images[0]} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-contain rounded" />
                     ) : (
-                      <div className="flex flex-col justify-center items-center text-center p-1">
-                        <p className="text-[10px] font-bold text-gray-900 line-clamp-2 leading-tight">
+                      <div className="flex flex-col justify-center items-center text-center p-0.5">
+                        <p className="text-[8px] sm:text-[10px] font-bold text-gray-900 line-clamp-2 leading-tight">
                           {s.title}
                         </p>
                       </div>
@@ -638,7 +662,7 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
       onClick={onClose}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 shrink-0 border-b border-outline-variant/10">
+      <div className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 shrink-0 border-b border-outline-variant/10">
         <div className="flex items-center gap-3 min-w-0">
           <p className="text-on-surface font-display text-base truncate">{file.name}</p>
           <span className="text-outline text-sm shrink-0">{bytes(file.size)}</span>
