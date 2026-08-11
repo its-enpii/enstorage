@@ -76,16 +76,13 @@ function mimeCategory(file: FileItem): MimeCategory {
 }
 
 function ImageViewer({ file }: { file: FileItem }) {
-  const [zoom, setZoom] = useState(1);
   return (
-    <div className="flex-1 flex items-center justify-center overflow-auto p-4" onClick={(e) => e.stopPropagation()}>
+    <div className="flex-1 flex items-center justify-center overflow-hidden p-4" onClick={(e) => e.stopPropagation()}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={fileUrl(file)}
         alt={file.name}
-        className="max-w-full max-h-full object-contain rounded-lg cursor-zoom-in select-none"
-        style={{ transform: `scale(${zoom})`, transition: 'transform 0.2s' }}
-        onClick={() => setZoom((z) => (z >= 3 ? 1 : z + 0.5))}
+        className="max-w-full max-h-full object-contain rounded-lg select-none"
         draggable={false}
       />
     </div>
@@ -254,7 +251,7 @@ async function parsePptxWithJSZip(buffer: ArrayBuffer): Promise<SlideData[]> {
 function PptxSlidePresenter({ file }: { file: FileItem }) {
   const [slides, setSlides] = useState<SlideData[]>([]);
   const [activeSlide, setActiveSlide] = useState(0);
-  const [zoom, setZoom] = useState(1);
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -331,139 +328,81 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
 
   return (
     <div className="flex-1 w-full h-full flex overflow-hidden bg-background" onClick={(e) => e.stopPropagation()}>
-      {/* Main Active Slide Viewport (Left Area) */}
-      <div className="flex-1 relative flex flex-col items-center justify-center p-6 sm:p-10 overflow-auto bg-surface-container-dark/40">
-        {/* Slide Canvas Wrapper with Zoom transform */}
-        <div
-          className="w-full max-w-5xl aspect-[16/9] bg-white rounded-2xl p-8 sm:p-14 shadow-2xl border border-outline-variant/20 flex flex-col justify-between select-none transition-transform duration-200"
-          style={{ transform: `scale(${zoom})` }}
-        >
-          {/* Main Slide Title & Header */}
-          <div>
-            <span className="text-xs uppercase tracking-widest font-bold text-primary mb-2 block">
-              SLIDE {activeSlide + 1} OF {slides.length}
-            </span>
-            <h1 className="text-3xl sm:text-4xl font-display font-extrabold text-gray-900 leading-tight break-words">
-              {current.title}
-            </h1>
-          </div>
-
-          {/* Main Slide Images & Paragraphs */}
-          <div className="flex-1 my-6 flex flex-col gap-4 overflow-y-auto max-h-[55vh]">
-            {/* Slide Images */}
-            {current.images && current.images.length > 0 && (
-              <div className="flex items-center justify-center gap-6 mb-4 flex-wrap">
-                {current.images.map((imgUrl, i) => (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img key={i} src={imgUrl} alt={`Slide ${activeSlide + 1} Image ${i + 1}`} className="max-h-[380px] rounded-xl object-contain shadow-lg border border-gray-200" />
-                ))}
-              </div>
-            )}
-
-            {/* Slide Bullet Items */}
-            {current.texts.length > 0 ? (
-              current.texts.map((p, idx) => (
-                <div key={idx} className="flex items-start gap-3.5 text-gray-800 text-lg sm:text-xl leading-relaxed">
-                  <span className="w-2.5 h-2.5 rounded-full bg-primary mt-2.5 shrink-0" />
-                  <p className="break-words font-medium">{p}</p>
+      {/* Main Active Slide Viewport - Pure Visual Canvas */}
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-8 overflow-hidden bg-surface-container-dark/40">
+        <div className="w-full h-full max-w-5xl max-h-[82vh] aspect-[16/9] bg-white rounded-2xl p-6 sm:p-10 shadow-2xl border border-outline-variant/20 flex flex-col items-center justify-center select-none overflow-hidden">
+          {current.images && current.images.length > 0 ? (
+            <div className="w-full h-full flex items-center justify-center overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={current.images[0]}
+                alt={`Slide ${activeSlide + 1}`}
+                className="max-w-full max-h-full object-contain rounded-xl shadow-md"
+              />
+            </div>
+          ) : (
+            <div className="w-full h-full flex flex-col justify-center items-center max-w-3xl mx-auto p-4 overflow-hidden text-center">
+              <h1 className="text-2xl sm:text-4xl font-display font-extrabold text-gray-900 leading-tight mb-4">
+                {current.title}
+              </h1>
+              {current.texts.length > 0 && (
+                <div className="flex flex-col gap-2 max-w-xl overflow-hidden">
+                  {current.texts.map((p, idx) => (
+                    <p key={idx} className="text-gray-700 text-base sm:text-lg leading-snug font-medium break-words">
+                      {p}
+                    </p>
+                  ))}
                 </div>
-              ))
-            ) : (
-              current.images.length === 0 && <p className="text-gray-400 italic text-sm">Slide Presentasi</p>
-            )}
-          </div>
-
-          {/* Slide Branding Footer */}
-          <div className="pt-4 border-t border-gray-200 flex items-center justify-between text-xs text-gray-400 font-mono">
-            <span>{file.name}</span>
-            <span>EnStorage Presentation Deck</span>
-          </div>
-        </div>
-
-        {/* Floating Zoom Controls (+ / -) at Bottom Left */}
-        <div className="absolute bottom-6 left-6 flex items-center gap-1 bg-surface-container/90 backdrop-blur-md rounded-2xl p-1.5 shadow-xl border border-outline-variant/20 z-10">
-          <button
-            type="button"
-            onClick={() => setZoom((z) => Math.min(2, z + 0.2))}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-on-surface hover:bg-surface-container-highest transition-colors"
-            title="Zoom In"
-          >
-            <Add className="!text-lg" />
-          </button>
-          <span className="text-xs font-mono text-outline px-2 min-w-[40px] text-center font-bold">
-            {Math.round(zoom * 100)}%
-          </span>
-          <button
-            type="button"
-            onClick={() => setZoom((z) => Math.max(0.6, z - 0.2))}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-on-surface hover:bg-surface-container-highest transition-colors"
-            title="Zoom Out"
-          >
-            <Remove className="!text-lg" />
-          </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Vertical Slide Thumbnail Sidebar (Right Area) */}
-      <div className="w-72 sm:w-80 h-full border-l border-outline-variant/15 bg-surface-container-dark/80 backdrop-blur-md flex flex-col shrink-0">
-        <div className="p-4 border-b border-outline-variant/15 flex items-center justify-between">
-          <span className="text-xs uppercase tracking-wider font-bold text-outline">
-            Slides ({slides.length})
-          </span>
-          <span className="text-xs text-outline font-mono">
-            {activeSlide + 1} / {slides.length}
-          </span>
-        </div>
-
-        {/* Vertical Thumbnail Cards List */}
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-          {slides.map((s, idx) => {
-            const isActive = activeSlide === idx;
-            return (
-              <div
-                key={idx}
-                onClick={() => setActiveSlide(idx)}
-                className="flex items-start gap-3 cursor-pointer group"
-              >
-                {/* Slide Number */}
-                <span
-                  className={`text-xs font-bold font-mono min-w-[20px] text-right mt-2 transition-colors ${
-                    isActive ? 'text-primary' : 'text-outline group-hover:text-on-surface'
-                  }`}
-                >
-                  {idx + 1}
-                </span>
-
-                {/* Thumbnail Card View */}
+      {slides.length > 1 && (
+        <div className="w-64 sm:w-72 h-full border-l border-outline-variant/15 bg-surface-container-dark/80 backdrop-blur-md flex flex-col shrink-0">
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+            {slides.map((s, idx) => {
+              const isActive = activeSlide === idx;
+              return (
                 <div
-                  className={`flex-1 aspect-[16/9] bg-white rounded-xl p-3 shadow-md border-2 transition-all flex flex-col justify-between overflow-hidden relative ${
-                    isActive
-                      ? 'border-primary ring-4 ring-primary/20 scale-[1.02]'
-                      : 'border-outline-variant/20 hover:border-outline-variant/60 hover:shadow-lg'
-                  }`}
+                  key={idx}
+                  onClick={() => setActiveSlide(idx)}
+                  className="flex items-center gap-3 cursor-pointer group"
                 >
-                  {/* Thumbnail Image or Title */}
-                  {s.images && s.images.length > 0 ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img src={s.images[0]} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-contain rounded" />
-                  ) : (
-                    <div className="flex-1 flex flex-col justify-center">
-                      <p className="text-[10px] font-bold text-gray-900 line-clamp-2 leading-tight">
-                        {s.title}
-                      </p>
-                      {s.texts.length > 0 && (
-                        <p className="text-[8px] text-gray-500 line-clamp-2 mt-1 leading-tight">
-                          {s.texts[0]}
+                  <span
+                    className={`text-xs font-bold font-mono min-w-[16px] text-right transition-colors ${
+                      isActive ? 'text-primary' : 'text-outline group-hover:text-on-surface'
+                    }`}
+                  >
+                    {idx + 1}
+                  </span>
+
+                  <div
+                    className={`flex-1 aspect-[16/9] bg-white rounded-xl p-1.5 shadow border-2 transition-all flex flex-col justify-center overflow-hidden relative ${
+                      isActive
+                        ? 'border-primary ring-2 ring-primary/30 scale-[1.02]'
+                        : 'border-outline-variant/20 hover:border-outline-variant/60'
+                    }`}
+                  >
+                    {s.images && s.images.length > 0 ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img src={s.images[0]} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-contain rounded" />
+                    ) : (
+                      <div className="flex flex-col justify-center items-center text-center p-1">
+                        <p className="text-[10px] font-bold text-gray-900 line-clamp-2 leading-tight">
+                          {s.title}
                         </p>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
