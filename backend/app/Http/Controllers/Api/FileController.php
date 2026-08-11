@@ -341,7 +341,7 @@ class FileController extends Controller
                 }
             }, 200, [
                 'Content-Type' => $file->mime_type,
-                'Content-Disposition' => $disposition.'; filename="'.addslashes($file->original_name).'"',
+                'Content-Disposition' => $disposition . '; filename="' . str_replace(['"', "\r", "\n"], '', $file->name ?: $file->original_name) . '"; filename*=UTF-8''' . rawurlencode($file->name ?: $file->original_name),
                 'Content-Length' => (string) $file->size,
             ]);
         } catch (Throwable $e) {
@@ -895,7 +895,7 @@ class FileController extends Controller
                 }
             }, 200, [
                 'Content-Type' => $file->mime_type,
-                'Content-Disposition' => $disposition.'; filename="'.addslashes($file->original_name).'"',
+                'Content-Disposition' => $disposition . '; filename="' . str_replace(['"', "\r", "\n"], '', $file->name ?: $file->original_name) . '"; filename*=UTF-8''' . rawurlencode($file->name ?: $file->original_name),
                 'Content-Length' => (string) $file->size,
             ]);
         } catch (Throwable $e) {
