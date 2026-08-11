@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Close, ChevronLeft, ChevronRight, Download, ContentCopy, Check, Slideshow, Fullscreen } from '@mui/icons-material';
+import { Close, ChevronLeft, ChevronRight, Download, ContentCopy, Check, Slideshow } from '@mui/icons-material';
 import JSZip from 'jszip';
 import { marked } from 'marked';
 import type { FileItem } from '@/lib/api';
@@ -169,8 +169,9 @@ type SlideData = {
 async function parsePptxWithJSZip(buffer: ArrayBuffer): Promise<SlideData[]> {
   const zip = await JSZip.loadAsync(buffer);
   const slides: SlideData[] = [];
+  const parser = new DOMParser();
 
-  // Extract images from ppt/media/
+  // Extract all media blobs from ppt/media/
   const mediaMap = new Map<string, string>();
   const mediaFiles = Object.keys(zip.files).filter((path) => path.startsWith('ppt/media/'));
 
@@ -193,23 +194,51 @@ async function parsePptxWithJSZip(buffer: ArrayBuffer): Promise<SlideData[]> {
       return numA - numB;
     });
 
-  const parser = new DOMParser();
-
   for (let i = 0; i < slideFiles.length; i++) {
     const slidePath = slideFiles[i];
     const xmlText = await zip.files[slidePath].async('text');
     const xmlDoc = parser.parseFromString(xmlText, 'application/xml');
 
+    // 1. Read slide relationships from ppt/slides/_rels/slideN.xml.rels
+    const slideName = slidePath.split('/').pop(); // slide1.xml
+    const relsPath = `ppt/slides/_rels/${slideName}.rels`;
+    const relsMap = new Map<string, string>();
+
+    if (zip.files[relsPath]) {
+      const relsText = await zip.files[relsPath].async('text');
+      const relsDoc = parser.parseFromString(relsText, 'application/xml');
+      const relNodes = Array.from(relsDoc.getElementsByTagName('Relationship'));
+      for (const rel of relNodes) {
+        const rId = rel.getAttribute('Id');
+        const target = rel.getAttribute('Target');
+        if (rId && target) {
+          const mediaFileName = target.split('/').pop() || target;
+          relsMap.set(rId, mediaFileName);
+        }
+      }
+    }
+
+    // 2. Extract text paragraphs
     const textNodes = Array.from(xmlDoc.getElementsByTagName('a:t'));
     const allTexts = textNodes.map((n) => n.textContent?.trim() ?? '').filter((t) => t.length > 0);
 
     const title = allTexts.length > 0 ? allTexts[0] : `Slide ${i + 1}`;
     const bodyTexts = allTexts.length > 1 ? allTexts.slice(1) : [];
 
+    // 3. Extract exact slide images referenced in this slide XML via r:embed / blip
     const slideImages: string[] = [];
-    mediaMap.forEach((imgUrl) => {
-      if (slideImages.length < 2) slideImages.push(imgUrl);
-    });
+    const blipNodes = Array.from(xmlDoc.getElementsByTagName('a:blip'));
+
+    for (const blip of blipNodes) {
+      const embedId = blip.getAttribute('r:embed') || blip.getAttribute('embed');
+      if (embedId && relsMap.has(embedId)) {
+        const mediaFileName = relsMap.get(embedId)!;
+        const blobUrl = mediaMap.get(mediaFileName);
+        if (blobUrl && !slideImages.includes(blobUrl)) {
+          slideImages.push(blobUrl);
+        }
+      }
+    }
 
     slides.push({
       id: i + 1,
@@ -299,8 +328,18 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
           </h1>
         </div>
 
-        {/* Slide Paragraphs */}
+        {/* Slide Paragraphs & Specific Slide Images */}
         <div className="flex-1 my-4 flex flex-col gap-3 overflow-y-auto max-h-[50vh]">
+          {/* Specific Slide Images */}
+          {current.images && current.images.length > 0 && (
+            <div className="flex items-center justify-center gap-4 mb-4 flex-wrap">
+              {current.images.map((imgUrl, i) => (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img key={i} src={imgUrl} alt={`Slide ${activeSlide + 1} Image ${i + 1}`} className="max-h-64 rounded-2xl object-contain shadow-lg border border-outline-variant/20" />
+              ))}
+            </div>
+          )}
+
           {current.texts.length > 0 ? (
             current.texts.map((p, idx) => (
               <div key={idx} className="flex items-start gap-3 text-on-surface/90 text-base leading-relaxed">
@@ -309,17 +348,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
               </div>
             ))
           ) : (
-            <p className="text-outline italic text-sm">Slide Presentasi</p>
-          )}
-
-          {/* Embedded Slide Images */}
-          {current.images && current.images.length > 0 && (
-            <div className="flex items-center gap-4 mt-4 flex-wrap">
-              {current.images.map((imgUrl, i) => (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img key={i} src={imgUrl} alt={`Slide Image ${i + 1}`} className="max-h-48 rounded-xl object-contain shadow-md border border-outline-variant/20" />
-              ))}
-            </div>
+            current.images.length === 0 && <p className="text-outline italic text-sm">Slide Presentasi</p>
           )}
         </div>
 
@@ -370,6 +399,73 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
       </div>
     </div>
   );
+}
+
+function renderSimpleMarkdown(md: string) {
+  const lines = md.split('\n');
+  const elements: ReactNode[] = [];
+  let inCodeBlock = false;
+  let codeBuffer: string[] = [];
+
+  lines.forEach((line, idx) => {
+    if (line.startsWith('```')) {
+      if (inCodeBlock) {
+        elements.push(
+          <pre key={idx} className="my-3 p-3 bg-surface-container-highest rounded-lg font-mono text-xs overflow-x-auto text-on-surface">
+            <code>{codeBuffer.join('\n')}</code>
+          </pre>
+        );
+        codeBuffer = [];
+        inCodeBlock = false;
+      } else {
+        inCodeBlock = true;
+      }
+      return;
+    }
+
+    if (inCodeBlock) {
+      codeBuffer.push(line);
+      return;
+    }
+
+    if (line.startsWith('# ')) {
+      elements.push(<h1 key={idx} className="text-2xl font-bold text-on-surface mt-4 mb-2">{line.replace('# ', '')}</h1>);
+    } else if (line.startsWith('## ')) {
+      elements.push(<h2 key={idx} className="text-xl font-bold text-on-surface mt-4 mb-2">{line.replace('## ', '')}</h2>);
+    } else if (line.startsWith('### ')) {
+      elements.push(<h3 key={idx} className="text-lg font-semibold text-on-surface mt-3 mb-1">{line.replace('### ', '')}</h3>);
+    } else if (line.startsWith('> ')) {
+      elements.push(
+        <blockquote key={idx} className="border-l-4 border-primary pl-3 my-2 italic text-outline">
+          {line.replace('> ', '')}
+        </blockquote>
+      );
+    } else if (line.startsWith('- ') || line.startsWith('* ')) {
+      elements.push(
+        <li key={idx} className="ml-5 list-disc text-on-surface text-sm my-0.5">
+          {line.substring(2)}
+        </li>
+      );
+    } else if (/^\d+\.\s/.test(line)) {
+      elements.push(
+        <li key={idx} className="ml-5 list-decimal text-on-surface text-sm my-0.5">
+          {line.replace(/^\d+\.\s/, '')}
+        </li>
+      );
+    } else if (line.trim() === '---' || line.trim() === '***') {
+      elements.push(<hr key={idx} className="my-4 border-outline-variant/30" />);
+    } else if (line.trim() === '') {
+      elements.push(<div key={idx} className="h-2" />);
+    } else {
+      elements.push(
+        <p key={idx} className="text-sm text-on-surface leading-relaxed my-1">
+          {line}
+        </p>
+      );
+    }
+  });
+
+  return elements;
 }
 
 function MarkdownViewer({ file }: { file: FileItem }) {
