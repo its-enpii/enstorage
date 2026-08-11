@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Close, ChevronLeft, ChevronRight, Download, ContentCopy, Check } from '@mui/icons-material';
+import { Close, ChevronLeft, ChevronRight, Download, ContentCopy, Check, Slideshow, OpenInNew } from '@mui/icons-material';
 import type { FileItem } from '@/lib/api';
 import { getToken } from '@/lib/api';
 import { bytes } from '@/lib/format';
@@ -111,33 +111,92 @@ function AudioViewer({ file }: { file: FileItem }) {
 }
 
 function PdfViewer({ file }: { file: FileItem }) {
-  const url = fileUrl(file);
-  const gdriveUrl = file.gdrive_file_id ? `https://drive.google.com/file/d/${file.gdrive_file_id}/preview` : null;
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const token = getToken();
+    const url = `${process.env.NEXT_PUBLIC_API_BASE}/files/${file.id}/download?inline=1${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+
+    fetch(url)
+      .then((res) => res.blob())
+      .then((blob) => {
+        if (active) {
+          const objectUrl = URL.createObjectURL(blob);
+          setBlobUrl(objectUrl);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [file.id]);
+
+  if (loading) {
+    return <div className="flex-1 flex items-center justify-center text-outline">Memuat dokumen PDF...</div>;
+  }
 
   return (
-    <div className="flex-1 w-full h-full flex flex-col bg-surface-container-dark p-2" onClick={(e) => e.stopPropagation()}>
-      <iframe
-        src={gdriveUrl || url}
-        className="w-full h-full border-0 rounded-lg bg-white"
-        title={file.name}
-      />
+    <div className="flex-1 w-full h-full p-4 flex items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      {blobUrl ? (
+        <object data={blobUrl} type="application/pdf" className="w-full h-full rounded-xl shadow-2xl bg-white">
+          <iframe src={blobUrl} className="w-full h-full border-0 rounded-xl" title={file.name} />
+        </object>
+      ) : (
+        <div className="text-center">
+          <p className="text-outline mb-2">Gagal memuat preview PDF.</p>
+          <a href={fileUrl(file)} className="px-4 py-2 bg-primary text-on-primary rounded-full text-sm inline-flex items-center gap-2">
+            <Download className="!text-sm" /> Download PDF
+          </a>
+        </div>
+      )}
     </div>
   );
 }
 
-function OfficeViewer({ file }: { file: FileItem }) {
-  const gdriveUrl = file.gdrive_file_id ? `https://drive.google.com/file/d/${file.gdrive_file_id}/preview` : null;
-  const docsViewerUrl = `https://docs.google.com/gview?url=${encodeURIComponent(fileUrl(file))}&embedded=true`;
-  const iframeSrc = gdriveUrl || docsViewerUrl;
+function PresentationOfficeViewer({ file }: { file: FileItem }) {
+  const isPpt = file.name.toLowerCase().endsWith('.pptx') || file.name.toLowerCase().endsWith('.ppt');
+  const gdriveEmbed = file.gdrive_file_id
+    ? `https://drive.google.com/file/d/${file.gdrive_file_id}/preview`
+    : `https://docs.google.com/gview?url=${encodeURIComponent(fileUrl(file))}&embedded=true`;
 
   return (
-    <div className="flex-1 w-full h-full flex flex-col p-2 bg-black/40" onClick={(e) => e.stopPropagation()}>
-      <iframe
-        src={iframeSrc}
-        className="w-full h-full border-0 rounded-lg bg-white shadow-2xl"
-        title={file.name}
-        allow="autoplay"
-      />
+    <div className="flex-1 w-full h-full flex flex-col p-4 max-w-6xl mx-auto" onClick={(e) => e.stopPropagation()}>
+      {/* Seamless Presentation Container */}
+      <div className="flex-1 relative w-full h-full rounded-2xl overflow-hidden bg-black/60 shadow-2xl border border-outline-variant/20 flex flex-col">
+        <div className="flex items-center justify-between px-4 py-2 bg-surface-container/80 backdrop-blur-md border-b border-outline-variant/10 text-xs">
+          <div className="flex items-center gap-2 text-on-surface font-medium">
+            <Slideshow className="text-primary !text-base" />
+            <span>{isPpt ? 'Presentasi PPTX Slide Viewer' : 'Dokumen Office Viewer'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {file.shareable_link && (
+              <a
+                href={file.shareable_link}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-primary hover:underline text-xs"
+              >
+                <OpenInNew className="!text-xs" /> Buka di Google Docs
+              </a>
+            )}
+          </div>
+        </div>
+        <div className="flex-1 w-full h-full bg-white relative overflow-hidden">
+          <iframe
+            src={gdriveEmbed}
+            className="w-full h-full border-0 rounded-b-2xl"
+            title={file.name}
+            allow="autoplay"
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -310,20 +369,6 @@ function CodeTextViewer({ file }: { file: FileItem }) {
 }
 
 function OtherViewer({ file }: { file: FileItem }) {
-  const gdriveUrl = file.gdrive_file_id ? `https://drive.google.com/file/d/${file.gdrive_file_id}/preview` : null;
-
-  if (gdriveUrl) {
-    return (
-      <div className="flex-1 w-full h-full p-2" onClick={(e) => e.stopPropagation()}>
-        <iframe
-          src={gdriveUrl}
-          className="w-full h-full border-0 rounded-lg bg-white shadow-2xl"
-          title={file.name}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-4 p-4" onClick={(e) => e.stopPropagation()}>
       <div className="w-24 h-24 rounded-full bg-surface-container flex items-center justify-center">
@@ -337,7 +382,7 @@ function OtherViewer({ file }: { file: FileItem }) {
         href={`${fileUrl(file).replace('?inline=1', '').replace('&inline=1', '')}`}
         className="mt-2 flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-full hover:bg-primary/90 transition-colors text-sm"
       >
-        <Download className="!text-base" /> Download
+        <Download className="!text-base" /> Download File
       </a>
     </div>
   );
@@ -369,7 +414,7 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
     case 'video':    viewer = <VideoViewer file={file} />; break;
     case 'audio':    viewer = <AudioViewer file={file} />; break;
     case 'pdf':      viewer = <PdfViewer file={file} />; break;
-    case 'office':   viewer = <OfficeViewer file={file} />; break;
+    case 'office':   viewer = <PresentationOfficeViewer file={file} />; break;
     case 'markdown': viewer = <MarkdownViewer file={file} />; break;
     case 'code':
     case 'text':     viewer = <CodeTextViewer file={file} />; break;
