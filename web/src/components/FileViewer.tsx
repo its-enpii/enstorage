@@ -348,17 +348,21 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
     <div
       ref={containerRef}
       className={`flex-1 w-full h-full flex ${
-        isFullscreen ? 'bg-black p-4 items-center justify-center flex-col relative' : 'flex-col md:flex-row bg-background'
+        isFullscreen ? 'bg-black p-0 items-center justify-center relative' : 'flex-col md:flex-row bg-background'
       } overflow-hidden`}
       onClick={(e) => e.stopPropagation()}
     >
       {/* Main Active Slide Viewport */}
-      <div className="flex-1 relative flex items-center justify-center p-2 sm:p-6 md:p-8 overflow-hidden bg-surface-container-dark/40 w-full min-h-0">
+      <div className={`flex-1 relative flex items-center justify-center overflow-hidden w-full h-full ${
+        isFullscreen ? 'p-0 bg-black' : 'p-2 sm:p-6 md:p-8 bg-surface-container-dark/40 min-h-0'
+      }`}>
         {/* Toggle Presentation Mode Button */}
         <button
           type="button"
           onClick={toggleFullscreen}
-          className="absolute top-4 right-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-container-highest/80 backdrop-blur text-on-surface hover:bg-surface-container-highest transition-colors text-xs font-semibold shadow-md"
+          className={`absolute top-4 right-4 z-30 flex items-center gap-2 px-3 py-1.5 rounded-xl ${
+            isFullscreen ? 'bg-black/60 text-white hover:bg-black/90 opacity-40 hover:opacity-100 transition-opacity' : 'bg-surface-container-highest/80 text-on-surface hover:bg-surface-container-highest'
+          } backdrop-blur transition-colors text-xs font-semibold shadow-md`}
           title={isFullscreen ? 'Keluar Layar Penuh' : 'Mode Presentasi Layar Penuh'}
         >
           {isFullscreen ? <FullscreenExit className="!text-lg" /> : <Fullscreen className="!text-lg" />}
@@ -367,27 +371,33 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
 
         <div
           className={`w-full h-full ${
-            isFullscreen ? 'max-w-[95vw] max-h-[90vh]' : 'max-w-5xl max-h-[82vh]'
-          } aspect-[16/9] bg-white rounded-xl sm:rounded-2xl p-4 sm:p-8 md:p-10 shadow-2xl border border-outline-variant/20 flex flex-col items-center justify-center select-none overflow-hidden`}
+            isFullscreen
+              ? 'max-w-full max-h-full rounded-none border-0 p-0 shadow-none bg-black flex items-center justify-center'
+              : 'max-w-5xl max-h-[82vh] aspect-[16/9] bg-white rounded-xl sm:rounded-2xl p-4 sm:p-8 md:p-10 shadow-2xl border border-outline-variant/20 flex flex-col items-center justify-center'
+          } select-none overflow-hidden`}
         >
           {current.images && current.images.length > 0 ? (
-            <div className="w-full h-full flex items-center justify-center overflow-hidden">
+            <div className="w-full h-full flex items-center justify-center overflow-hidden bg-black">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={current.images[0]}
                 alt={`Slide ${activeSlide + 1}`}
-                className="max-w-full max-h-full object-contain rounded-lg sm:rounded-xl shadow-md"
+                className={`max-w-full max-h-full object-contain ${
+                  isFullscreen ? 'rounded-none shadow-none w-full h-full' : 'rounded-lg sm:rounded-xl shadow-md'
+                }`}
               />
             </div>
           ) : (
-            <div className="w-full h-full flex flex-col justify-center items-center max-w-3xl mx-auto p-2 sm:p-4 overflow-hidden text-center">
-              <h1 className="text-xl sm:text-3xl md:text-4xl font-display font-extrabold text-gray-900 leading-tight mb-2 sm:mb-4">
+            <div className={`w-full h-full flex flex-col justify-center items-center ${
+              isFullscreen ? 'bg-white text-black p-8 sm:p-16 max-w-full' : 'max-w-3xl p-2 sm:p-4'
+            } mx-auto overflow-hidden text-center`}>
+              <h1 className="text-xl sm:text-3xl md:text-5xl font-display font-extrabold text-gray-900 leading-tight mb-2 sm:mb-6">
                 {current.title}
               </h1>
               {current.texts.length > 0 && (
-                <div className="flex flex-col gap-1.5 sm:gap-2 max-w-xl overflow-hidden">
+                <div className="flex flex-col gap-2 sm:gap-4 max-w-3xl overflow-hidden">
                   {current.texts.map((p, idx) => (
-                    <p key={idx} className="text-gray-700 text-xs sm:text-base md:text-lg leading-snug font-medium break-words">
+                    <p key={idx} className="text-gray-700 text-sm sm:text-xl md:text-2xl leading-snug font-medium break-words">
                       {p}
                     </p>
                   ))}
@@ -399,23 +409,25 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
 
         {/* Presentation Controls Overlay (Fullscreen or Mobile) */}
         {(isFullscreen || slides.length > 1) && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-surface-container-dark/90 backdrop-blur border border-outline-variant/20 shadow-xl">
+          <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3 py-1.5 rounded-2xl ${
+            isFullscreen ? 'bg-black/70 opacity-30 hover:opacity-100 transition-opacity duration-300' : 'bg-surface-container-dark/90'
+          } backdrop-blur border border-outline-variant/20 shadow-xl`}>
             <button
               type="button"
               onClick={() => setActiveSlide((s) => Math.max(0, s - 1))}
               disabled={activeSlide === 0}
-              className="w-8 h-8 rounded-xl flex items-center justify-center text-on-surface hover:bg-surface-container-highest disabled:opacity-30 transition-colors"
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-white hover:bg-white/20 disabled:opacity-30 transition-colors"
             >
               <ChevronLeft className="!text-lg" />
             </button>
-            <span className="text-xs font-mono font-bold text-on-surface px-2">
+            <span className="text-xs font-mono font-bold text-white px-2">
               {activeSlide + 1} / {slides.length}
             </span>
             <button
               type="button"
               onClick={() => setActiveSlide((s) => Math.min(slides.length - 1, s + 1))}
               disabled={activeSlide === slides.length - 1}
-              className="w-8 h-8 rounded-xl flex items-center justify-center text-on-surface hover:bg-surface-container-highest disabled:opacity-30 transition-colors"
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-white hover:bg-white/20 disabled:opacity-30 transition-colors"
             >
               <ChevronRight className="!text-lg" />
             </button>

@@ -722,20 +722,22 @@ class __PptxPresentationViewerState
             itemBuilder: (context, index) {
               return Center(
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.all(_isFullscreen ? 0 : 16),
                   child: AspectRatio(
                     aspectRatio: 16 / 9,
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black54,
-                            blurRadius: 12,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
+                        borderRadius: BorderRadius.circular(_isFullscreen ? 0 : 16),
+                        boxShadow: _isFullscreen
+                            ? null
+                            : const [
+                                BoxShadow(
+                                  color: Colors.black54,
+                                  blurRadius: 12,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
                       ),
                       padding: const EdgeInsets.all(24),
                       child: Column(
