@@ -1144,10 +1144,12 @@ function FilesContent() {
                 icon={f.is_starred ? <FolderSpecialIcon /> : folderIcon()}
                 iconVariant={f.is_starred ? 'gold' : undefined}
                 title={
-                  <span className="flex items-center gap-1.5">
-                    {f.name}
+                  <div className="flex items-center gap-1.5 min-w-0 max-w-full overflow-hidden">
+                    <span className="truncate block min-w-0 flex-1 overflow-hidden" title={f.name}>
+                      {f.name}
+                    </span>
                     {f.is_starred && <StarIcon className="text-secondary shrink-0" />}
-                  </span>
+                  </div>
                 }
                 subtitle={size > 0 ? t('folders.itemsSize', { count: items, size: bytes(size) }) : t('folders.items', { count: items })}
                 onClick={() => navigateToFolder(f.id)}
@@ -1199,10 +1201,12 @@ function FilesContent() {
               selected={selected.has(f.id)}
               onClick={selectMode ? () => toggleSelect(f.id) : () => setViewerFile(f)}
               title={
-                <span className="flex items-center gap-1.5">
-                  {f.name}
+                <div className="flex items-center gap-1.5 min-w-0 max-w-full overflow-hidden">
+                  <span className="truncate block min-w-0 flex-1 overflow-hidden" title={f.name}>
+                    {f.name}
+                  </span>
                   {f.is_starred && <StarIcon className="text-secondary shrink-0" />}
-                </span>
+                </div>
               }
               subtitle={
                 <span className="flex items-center gap-1">
