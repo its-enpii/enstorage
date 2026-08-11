@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Close, ChevronLeft, ChevronRight, Download, ContentCopy, Check, Slideshow, OpenInNew } from '@mui/icons-material';
+import { Close, ChevronLeft, ChevronRight, Download, ContentCopy, Check, Slideshow } from '@mui/icons-material';
 import type { FileItem } from '@/lib/api';
 import { getToken } from '@/lib/api';
 import { bytes } from '@/lib/format';
@@ -116,10 +116,7 @@ function PdfViewer({ file }: { file: FileItem }) {
 
   useEffect(() => {
     let active = true;
-    const token = getToken();
-    const url = `${process.env.NEXT_PUBLIC_API_BASE}/files/${file.id}/download?inline=1${token ? `&token=${encodeURIComponent(token)}` : ''}`;
-
-    fetch(url)
+    fetch(fileUrl(file))
       .then((res) => res.blob())
       .then((blob) => {
         if (active) {
@@ -161,40 +158,59 @@ function PdfViewer({ file }: { file: FileItem }) {
 }
 
 function PresentationOfficeViewer({ file }: { file: FileItem }) {
-  const isPpt = file.name.toLowerCase().endsWith('.pptx') || file.name.toLowerCase().endsWith('.ppt');
-  const gdriveEmbed = file.gdrive_file_id
-    ? `https://drive.google.com/file/d/${file.gdrive_file_id}/preview`
-    : `https://docs.google.com/gview?url=${encodeURIComponent(fileUrl(file))}&embedded=true`;
+  const [loading, setLoading] = useState(true);
+  const [textPreview, setTextPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch(fileUrl(file))
+      .then((r) => r.text())
+      .then((txt) => {
+        if (active) {
+          // Extraksi ringkasan teks dari file jika dapat dibaca
+          const cleanText = txt.replace(/[\x00-\x09\x0B-\x1F\x7F-\x9F]/g, ' ').replace(/\s+/g, ' ').trim();
+          if (cleanText.length > 20) {
+            setTextPreview(cleanText.slice(0, 1000));
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [file.id]);
 
   return (
-    <div className="flex-1 w-full h-full flex flex-col p-4 max-w-6xl mx-auto" onClick={(e) => e.stopPropagation()}>
-      {/* Seamless Presentation Container */}
-      <div className="flex-1 relative w-full h-full rounded-2xl overflow-hidden bg-black/60 shadow-2xl border border-outline-variant/20 flex flex-col">
-        <div className="flex items-center justify-between px-4 py-2 bg-surface-container/80 backdrop-blur-md border-b border-outline-variant/10 text-xs">
-          <div className="flex items-center gap-2 text-on-surface font-medium">
-            <Slideshow className="text-primary !text-base" />
-            <span>{isPpt ? 'Presentasi PPTX Slide Viewer' : 'Dokumen Office Viewer'}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {file.shareable_link && (
-              <a
-                href={file.shareable_link}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1 text-primary hover:underline text-xs"
-              >
-                <OpenInNew className="!text-xs" /> Buka di Google Docs
-              </a>
-            )}
-          </div>
+    <div className="flex-1 w-full h-full flex flex-col items-center justify-center p-6 max-w-4xl mx-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full bg-surface-container/60 border border-outline-variant/20 rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-6 text-center">
+        <div className="w-20 h-20 rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container">
+          <Slideshow className="!text-5xl" />
         </div>
-        <div className="flex-1 w-full h-full bg-white relative overflow-hidden">
-          <iframe
-            src={gdriveEmbed}
-            className="w-full h-full border-0 rounded-b-2xl"
-            title={file.name}
-            allow="autoplay"
-          />
+        <div>
+          <h2 className="text-xl font-display font-semibold text-on-surface mb-1">{file.name}</h2>
+          <p className="text-sm text-outline font-mono">{bytes(file.size)} � {file.mime_type}</p>
+        </div>
+
+        {loading ? (
+          <p className="text-xs text-outline">Memuat pratinjau dokumen...</p>
+        ) : textPreview ? (
+          <div className="w-full text-left bg-surface-container-dark p-4 rounded-xl border border-outline-variant/10 max-h-48 overflow-auto">
+            <p className="text-xs text-outline font-mono mb-2">Teks Ringkasan Dokumen:</p>
+            <p className="text-xs text-on-surface leading-relaxed break-words">{textPreview}</p>
+          </div>
+        ) : null}
+
+        <div className="flex items-center gap-3">
+          <a
+            href={fileUrl(file)}
+            className="flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary rounded-full hover:bg-primary/90 transition-colors text-sm font-medium shadow-md"
+          >
+            <Download className="!text-base" /> Download Dokumen
+          </a>
         </div>
       </div>
     </div>
