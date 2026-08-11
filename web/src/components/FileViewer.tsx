@@ -344,7 +344,7 @@ function CodeTextViewer({ file }: { file: FileItem }) {
   return (
     <div className="flex-1 flex flex-col overflow-hidden max-w-5xl w-full mx-auto p-4" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-outline font-mono">{lines.length} lines • {bytes(file.size)}</span>
+        <span className="text-xs text-outline font-mono">{lines.length} lines ï¿½ {bytes(file.size)}</span>
         <button
           type="button"
           onClick={copyToClipboard}
@@ -376,7 +376,7 @@ function OtherViewer({ file }: { file: FileItem }) {
       </div>
       <div className="text-center">
         <p className="text-on-surface font-display text-lg mb-1">{file.name}</p>
-        <p className="text-outline text-sm">{bytes(file.size)} • {file.mime_type}</p>
+        <p className="text-outline text-sm">{bytes(file.size)} ï¿½ {file.mime_type}</p>
       </div>
       <a
         href={`${fileUrl(file).replace('?inline=1', '').replace('&inline=1', '')}`}

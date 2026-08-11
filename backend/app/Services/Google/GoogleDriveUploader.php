@@ -72,7 +72,7 @@ class GoogleDriveUploader
                 $client,
                 $request,
                 $file->mime_type,
-                $data,      // string — MediaFileUpload::nextChunk() pakai substr()
+                $data,      // string ï¿½ MediaFileUpload::nextChunk() pakai substr()
                 true,       // resumable
             );
             $uploader->setFileSize($size);
@@ -94,7 +94,7 @@ class GoogleDriveUploader
             throw new \RuntimeException('Upload gagal: response tidak valid dari Google Drive.');
         }
 
-        // 7. Set permission "Anyone with link can view" — non-fatal
+        // 7. Set permission "Anyone with link can view" ï¿½ non-fatal
         $shareableLink = $uploaded->getWebViewLink();
         try {
             $permission = new Permission([
@@ -128,7 +128,7 @@ class GoogleDriveUploader
         try {
             $drive->files->delete($gdriveFileId);
         } catch (\Throwable $e) {
-            // File mungkin sudah tidak ada — log & lanjut
+            // File mungkin sudah tidak ada ï¿½ log & lanjut
             Log::warning('GDrive delete failed', [
                 'gdrive_file_id' => $gdriveFileId,
                 'error' => $e->getMessage(),
