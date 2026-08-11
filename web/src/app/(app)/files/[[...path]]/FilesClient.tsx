@@ -336,6 +336,8 @@ function FilesContent() {
   }
 
   async function uploadFiles(fileList: FileList) {
+    dragCounter.current = 0;
+    setDragOver(false);
     const filesArr = Array.from(fileList);
     if (filesArr.length > 10) {
       await alert(t('files.errors.maxFiles'), { title: t('common.error') });
@@ -501,7 +503,7 @@ function FilesContent() {
           `/files/${fileId}/status`,
         );
         if (s.status === 'done' || s.status === 'failed') {
-          finishJob(fileId, name, s.status);
+          finishJob(fileId, name, s.status, s.status === 'failed' ? t('files.errors.uploadFailed') : undefined);
         }
       } catch {
         // ignore polling errors
