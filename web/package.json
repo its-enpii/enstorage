@@ -18,13 +18,16 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "i18next": "^26.3.1",
+    "jszip": "^3.10.1",
     "laravel-echo": "^2.3.7",
+    "marked": "^18.0.9",
     "next": "^15.5.19",
     "pusher-js": "^8.5.0",
     "react": "^19.0.0",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.0.0",
     "react-i18next": "^17.0.8",
+    "react-markdown": "^10.1.0",
     "tailwindcss": "^4.3.1"
   },
   "devDependencies": {

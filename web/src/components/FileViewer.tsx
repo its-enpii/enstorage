@@ -3,6 +3,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Close, ChevronLeft, ChevronRight, Download, ContentCopy, Check, Slideshow, Fullscreen } from '@mui/icons-material';
+import JSZip from 'jszip';
+import { marked } from 'marked';
 import type { FileItem } from '@/lib/api';
 import { getToken } from '@/lib/api';
 import { bytes } from '@/lib/format';
@@ -143,7 +145,7 @@ function PdfViewer({ file }: { file: FileItem }) {
     <div className="flex-1 w-full h-full p-4 flex items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
       {blobUrl ? (
         <object data={blobUrl} type="application/pdf" className="w-full h-full rounded-xl shadow-2xl bg-white">
-          <iframe src={blobUrl} className="w-full h-full border-0 rounded-xl" title={file.name} />
+          <embed src={blobUrl} type="application/pdf" className="w-full h-full border-0 rounded-xl" />
         </object>
       ) : (
         <div className="text-center">
@@ -157,71 +159,34 @@ function PdfViewer({ file }: { file: FileItem }) {
   );
 }
 
-/**
- * Pure Client-Side ZIP Unpacker & PPTX Slide Parser using native Web APIs.
- */
-type PptxSlide = {
+type SlideData = {
+  id: number;
   title: string;
-  paragraphs: string[];
+  texts: string[];
   images: string[];
 };
 
-async function parsePptxSlides(buffer: ArrayBuffer): Promise<PptxSlide[]> {
-  const view = new DataView(buffer);
-  let offset = 0;
-  const entries: Map<string, Uint8Array> = new Map();
+async function parsePptxWithJSZip(buffer: ArrayBuffer): Promise<SlideData[]> {
+  const zip = await JSZip.loadAsync(buffer);
+  const slides: SlideData[] = [];
 
-  // Parse ZIP central directory / local headers
-  while (offset < buffer.byteLength - 4) {
-    const sig = view.getUint32(offset, true);
-    if (sig !== 0x04034b50) break; // Local file header signature
+  // Extract images from ppt/media/
+  const mediaMap = new Map<string, string>();
+  const mediaFiles = Object.keys(zip.files).filter((path) => path.startsWith('ppt/media/'));
 
-    const method = view.getUint16(offset + 8, true);
-    const compSize = view.getUint32(offset + 18, true);
-    const nameLen = view.getUint16(offset + 26, true);
-    const extraLen = view.getUint16(offset + 28, true);
-
-    const nameBytes = new Uint8Array(buffer, offset + 30, nameLen);
-    const fileName = new TextDecoder().decode(nameBytes);
-
-    const dataStart = offset + 30 + nameLen + extraLen;
-    const compData = new Uint8Array(buffer, dataStart, compSize);
-
-    if (method === 0) {
-      entries.set(fileName, compData);
-    } else if (method === 8 && typeof DecompressionStream !== 'undefined') {
-      try {
-        const ds = new DecompressionStream('deflate-raw');
-        const writer = ds.writable.getWriter();
-        void writer.write(compData);
-        void writer.close();
-        const resBuf = await new Response(ds.readable).arrayBuffer();
-        entries.set(fileName, new Uint8Array(resBuf));
-      } catch {
-        // skip unparseable compressed entry
-      }
-    }
-
-    offset = dataStart + compSize;
+  for (const mediaPath of mediaFiles) {
+    const file = zip.files[mediaPath];
+    if (!file || file.dir) continue;
+    const blob = await file.async('blob');
+    const url = URL.createObjectURL(blob);
+    const filename = mediaPath.split('/').pop() || mediaPath;
+    mediaMap.set(filename, url);
+    mediaMap.set(mediaPath, url);
   }
 
-  // Find images in ppt/media
-  const mediaMap: Map<string, string> = new Map();
-  entries.forEach((data, path) => {
-    if (path.startsWith('ppt/media/')) {
-      const ext = path.split('.').pop()?.toLowerCase();
-      let mime = 'image/png';
-      if (ext === 'jpg' || ext === 'jpeg') mime = 'image/jpeg';
-      else if (ext === 'gif') mime = 'image/gif';
-      else if (ext === 'svg') mime = 'image/svg+xml';
-      const blob = new Blob([data.buffer as ArrayBuffer], { type: mime });
-      mediaMap.set(path, URL.createObjectURL(blob));
-    }
-  });
-
-  // Extract slide XMLs: ppt/slides/slide1.xml, slide2.xml, ...
-  const slidePaths = Array.from(entries.keys())
-    .filter((p) => /^ppt\/slides\/slide\d+\.xml$/i.test(p))
+  // Find slide XML files: ppt/slides/slide1.xml, slide2.xml, ...
+  const slideFiles = Object.keys(zip.files)
+    .filter((path) => /^ppt\/slides\/slide\d+\.xml$/i.test(path))
     .sort((a, b) => {
       const numA = parseInt(a.match(/\d+/)?.[0] ?? '0', 10);
       const numB = parseInt(b.match(/\d+/)?.[0] ?? '0', 10);
@@ -229,30 +194,28 @@ async function parsePptxSlides(buffer: ArrayBuffer): Promise<PptxSlide[]> {
     });
 
   const parser = new DOMParser();
-  const slides: PptxSlide[] = [];
 
-  for (const sp of slidePaths) {
-    const xmlBytes = entries.get(sp);
-    if (!xmlBytes) continue;
-    const xmlStr = new TextDecoder('utf-8').decode(xmlBytes);
-    const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+  for (let i = 0; i < slideFiles.length; i++) {
+    const slidePath = slideFiles[i];
+    const xmlText = await zip.files[slidePath].async('text');
+    const xmlDoc = parser.parseFromString(xmlText, 'application/xml');
 
     const textNodes = Array.from(xmlDoc.getElementsByTagName('a:t'));
-    const texts = textNodes.map((n) => n.textContent?.trim() ?? '').filter(Boolean);
+    const allTexts = textNodes.map((n) => n.textContent?.trim() ?? '').filter((t) => t.length > 0);
 
-    const title = texts[0] ?? `Slide ${slides.length + 1}`;
-    const paragraphs = texts.length > 1 ? texts.slice(1) : [];
+    const title = allTexts.length > 0 ? allTexts[0] : `Slide ${i + 1}`;
+    const bodyTexts = allTexts.length > 1 ? allTexts.slice(1) : [];
 
-    // Check images in slide
     const slideImages: string[] = [];
-    mediaMap.forEach((blobUrl) => {
-      slideImages.push(blobUrl);
+    mediaMap.forEach((imgUrl) => {
+      if (slideImages.length < 2) slideImages.push(imgUrl);
     });
 
     slides.push({
+      id: i + 1,
       title,
-      paragraphs,
-      images: slideImages.slice(0, 2), // Limit 2 images per slide
+      texts: bodyTexts,
+      images: slideImages,
     });
   }
 
@@ -260,7 +223,7 @@ async function parsePptxSlides(buffer: ArrayBuffer): Promise<PptxSlide[]> {
 }
 
 function PptxSlidePresenter({ file }: { file: FileItem }) {
-  const [slides, setSlides] = useState<PptxSlide[]>([]);
+  const [slides, setSlides] = useState<SlideData[]>([]);
   const [activeSlide, setActiveSlide] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -270,17 +233,17 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
     fetch(fileUrl(file))
       .then((r) => r.arrayBuffer())
       .then(async (buf) => {
-        const parsed = await parsePptxSlides(buf);
+        const parsed = await parsePptxWithJSZip(buf);
         if (active) {
           if (parsed.length > 0) {
             setSlides(parsed);
           } else {
-            setError('Dokumen tidak memiliki slide.');
+            setError('Dokumen PPTX tidak memiliki slide.');
           }
         }
       })
-      .catch(() => {
-        if (active) setError('Gagal memuat presentasi PPTX.');
+      .catch((e) => {
+        if (active) setError(e instanceof Error ? e.message : 'Gagal memuat presentasi PPTX.');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -295,7 +258,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 text-outline">
         <span className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm">Memuat slide presentasi PPTX...</p>
+        <p className="text-sm font-medium">Membaca & Merender Slide Presentasi PPTX ({bytes(file.size)})...</p>
       </div>
     );
   }
@@ -324,24 +287,24 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
 
   return (
     <div className="flex-1 w-full h-full flex flex-col p-4 max-w-5xl mx-auto overflow-hidden" onClick={(e) => e.stopPropagation()}>
-      {/* Slide Canvas Area */}
+      {/* Slide Canvas Card */}
       <div className="flex-1 bg-surface-container-lowest border border-outline-variant/20 rounded-3xl p-8 sm:p-12 shadow-2xl flex flex-col justify-between relative overflow-auto select-none">
         {/* Slide Title */}
-        <div className="mb-6">
-          <span className="text-xs uppercase tracking-wider font-semibold text-primary/80 mb-2 block">
-            Slide {activeSlide + 1} of {slides.length}
+        <div className="mb-6 border-b border-outline-variant/10 pb-4">
+          <span className="text-xs uppercase tracking-wider font-semibold text-primary mb-2 block">
+            Slide {activeSlide + 1} / {slides.length}
           </span>
           <h1 className="text-2xl sm:text-3xl font-display font-bold text-on-surface leading-tight break-words">
             {current.title}
           </h1>
         </div>
 
-        {/* Slide Content Paragraphs */}
+        {/* Slide Paragraphs */}
         <div className="flex-1 my-4 flex flex-col gap-3 overflow-y-auto max-h-[50vh]">
-          {current.paragraphs.length > 0 ? (
-            current.paragraphs.map((p, idx) => (
+          {current.texts.length > 0 ? (
+            current.texts.map((p, idx) => (
               <div key={idx} className="flex items-start gap-3 text-on-surface/90 text-base leading-relaxed">
-                <span className="w-2 h-2 rounded-full bg-primary mt-2 shrink-0" />
+                <span className="w-2 h-2 rounded-full bg-primary mt-2.5 shrink-0" />
                 <p className="break-words">{p}</p>
               </div>
             ))
@@ -349,12 +312,12 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
             <p className="text-outline italic text-sm">Slide Presentasi</p>
           )}
 
-          {/* Render embedded slide images if any */}
+          {/* Embedded Slide Images */}
           {current.images && current.images.length > 0 && (
             <div className="flex items-center gap-4 mt-4 flex-wrap">
               {current.images.map((imgUrl, i) => (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img key={i} src={imgUrl} alt={`Slide ${activeSlide + 1} Image ${i + 1}`} className="max-h-40 rounded-xl object-contain shadow-md" />
+                <img key={i} src={imgUrl} alt={`Slide Image ${i + 1}`} className="max-h-48 rounded-xl object-contain shadow-md border border-outline-variant/20" />
               ))}
             </div>
           )}
@@ -367,25 +330,25 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
         </div>
       </div>
 
-      {/* Slide Controls & Thumbnails */}
+      {/* Slide Navigation Bar */}
       <div className="flex items-center justify-between mt-4 px-2">
         <button
           type="button"
           disabled={activeSlide === 0}
           onClick={() => setActiveSlide((s) => Math.max(0, s - 1))}
-          className="flex items-center gap-1 px-4 py-2 rounded-full bg-surface-container hover:bg-surface-container-highest disabled:opacity-30 text-on-surface transition-colors text-sm font-medium"
+          className="flex items-center gap-1 px-4 py-2 rounded-full bg-surface-container hover:bg-surface-container-highest disabled:opacity-30 text-on-surface transition-colors text-sm font-medium shadow-sm"
         >
           <ChevronLeft className="!text-lg" /> Previous
         </button>
 
-        {/* Thumbnail Selector Pills */}
+        {/* Slide Thumbnails */}
         <div className="flex items-center gap-1.5 overflow-x-auto max-w-[50vw] px-2 py-1">
           {slides.map((_, i) => (
             <button
               key={i}
               type="button"
               onClick={() => setActiveSlide(i)}
-              className={`w-7 h-7 rounded-lg text-xs font-semibold flex items-center justify-center transition-all ${
+              className={`w-8 h-8 rounded-xl text-xs font-semibold flex items-center justify-center transition-all ${
                 activeSlide === i
                   ? 'bg-primary text-on-primary shadow-md scale-110'
                   : 'bg-surface-container text-outline hover:text-on-surface'
@@ -400,80 +363,13 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
           type="button"
           disabled={activeSlide === slides.length - 1}
           onClick={() => setActiveSlide((s) => Math.min(slides.length - 1, s + 1))}
-          className="flex items-center gap-1 px-4 py-2 rounded-full bg-surface-container hover:bg-surface-container-highest disabled:opacity-30 text-on-surface transition-colors text-sm font-medium"
+          className="flex items-center gap-1 px-4 py-2 rounded-full bg-surface-container hover:bg-surface-container-highest disabled:opacity-30 text-on-surface transition-colors text-sm font-medium shadow-sm"
         >
           Next <ChevronRight className="!text-lg" />
         </button>
       </div>
     </div>
   );
-}
-
-function renderSimpleMarkdown(md: string) {
-  const lines = md.split('\n');
-  const elements: ReactNode[] = [];
-  let inCodeBlock = false;
-  let codeBuffer: string[] = [];
-
-  lines.forEach((line, idx) => {
-    if (line.startsWith('```')) {
-      if (inCodeBlock) {
-        elements.push(
-          <pre key={idx} className="my-3 p-3 bg-surface-container-highest rounded-lg font-mono text-xs overflow-x-auto text-on-surface">
-            <code>{codeBuffer.join('\n')}</code>
-          </pre>
-        );
-        codeBuffer = [];
-        inCodeBlock = false;
-      } else {
-        inCodeBlock = true;
-      }
-      return;
-    }
-
-    if (inCodeBlock) {
-      codeBuffer.push(line);
-      return;
-    }
-
-    if (line.startsWith('# ')) {
-      elements.push(<h1 key={idx} className="text-2xl font-bold text-on-surface mt-4 mb-2">{line.replace('# ', '')}</h1>);
-    } else if (line.startsWith('## ')) {
-      elements.push(<h2 key={idx} className="text-xl font-bold text-on-surface mt-4 mb-2">{line.replace('## ', '')}</h2>);
-    } else if (line.startsWith('### ')) {
-      elements.push(<h3 key={idx} className="text-lg font-semibold text-on-surface mt-3 mb-1">{line.replace('### ', '')}</h3>);
-    } else if (line.startsWith('> ')) {
-      elements.push(
-        <blockquote key={idx} className="border-l-4 border-primary pl-3 my-2 italic text-outline">
-          {line.replace('> ', '')}
-        </blockquote>
-      );
-    } else if (line.startsWith('- ') || line.startsWith('* ')) {
-      elements.push(
-        <li key={idx} className="ml-5 list-disc text-on-surface text-sm my-0.5">
-          {line.substring(2)}
-        </li>
-      );
-    } else if (/^\d+\.\s/.test(line)) {
-      elements.push(
-        <li key={idx} className="ml-5 list-decimal text-on-surface text-sm my-0.5">
-          {line.replace(/^\d+\.\s/, '')}
-        </li>
-      );
-    } else if (line.trim() === '---' || line.trim() === '***') {
-      elements.push(<hr key={idx} className="my-4 border-outline-variant/30" />);
-    } else if (line.trim() === '') {
-      elements.push(<div key={idx} className="h-2" />);
-    } else {
-      elements.push(
-        <p key={idx} className="text-sm text-on-surface leading-relaxed my-1">
-          {line}
-        </p>
-      );
-    }
-  });
-
-  return elements;
 }
 
 function MarkdownViewer({ file }: { file: FileItem }) {
@@ -490,6 +386,8 @@ function MarkdownViewer({ file }: { file: FileItem }) {
   }, [file.id]);
 
   if (loading) return <div className="flex-1 flex items-center justify-center text-outline">Loading markdown...</div>;
+
+  const htmlContent = marked.parse(content) as string;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden max-w-4xl w-full mx-auto p-4" onClick={(e) => e.stopPropagation()}>
@@ -517,7 +415,10 @@ function MarkdownViewer({ file }: { file: FileItem }) {
       </div>
       <div className="flex-1 overflow-auto bg-surface-container/30 border border-outline-variant/20 rounded-2xl p-6 shadow-inner">
         {tab === 'preview' ? (
-          <div>{renderSimpleMarkdown(content)}</div>
+          <div
+            className="prose dark:prose-invert max-w-none text-on-surface leading-relaxed text-sm"
+            dangerouslySetInnerHTML={{ __html: htmlContent }}
+          />
         ) : (
           <pre className="text-sm text-on-surface font-mono whitespace-pre-wrap break-words">{content}</pre>
         )}
