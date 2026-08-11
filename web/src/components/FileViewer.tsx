@@ -333,16 +333,16 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
 
   const current = slides[activeSlide];
 
-  /* Fullscreen Presentation Mode: 100% edge-to-edge, white bg, zero chrome */
+  /* ?? Fullscreen Presentation Mode: 100% edge-to-edge ?? */
   if (isFullscreen) {
     return (
       <div
         ref={containerRef}
-        className="w-screen h-screen bg-white flex items-center justify-center overflow-hidden relative"
+        className="w-screen h-screen bg-black flex items-center justify-center overflow-hidden relative"
         onClick={(e) => e.stopPropagation()}
       >
         {current.images && current.images.length > 0 ? (
-          // eslint-disable-next-line @next/next/no-img-element
+          /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={current.images[0]}
             alt={`Slide ${activeSlide + 1}`}
@@ -350,8 +350,8 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
             draggable={false}
           />
         ) : (
-          <div className="w-full h-full flex flex-col justify-center items-center p-8 sm:p-16 text-center">
-            <h1 className="text-3xl sm:text-5xl md:text-6xl font-display font-extrabold text-gray-900 leading-tight mb-4 sm:mb-8">
+          <div className="w-full h-full flex flex-col justify-center items-center p-8 sm:p-16 text-center bg-white text-gray-900">
+            <h1 className="text-3xl sm:text-5xl md:text-6xl font-display font-extrabold leading-tight mb-4 sm:mb-8">
               {current.title}
             </h1>
             {current.texts.length > 0 && (
@@ -366,71 +366,64 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
           </div>
         )}
 
-        {/* Exit button - invisible until hovered */}
+        {/* Exit button - subtle on hover */}
         <button
           type="button"
           onClick={toggleFullscreen}
-          className="absolute top-3 right-3 z-30 p-2 rounded-full bg-black/30 text-white opacity-0 hover:opacity-100 transition-opacity duration-300"
+          className="absolute top-4 right-4 z-30 p-2.5 rounded-full bg-black/50 text-white opacity-0 hover:opacity-100 transition-opacity duration-300 backdrop-blur"
           title="Keluar Fullscreen (Esc)"
         >
           <FullscreenExit className="!text-xl" />
         </button>
-
-        {/* Minimal slide counter - very subtle */}
-        <span className="absolute bottom-3 right-3 z-30 text-[11px] font-mono font-bold text-black/15 select-none pointer-events-none">
-          {activeSlide + 1} / {slides.length}
-        </span>
       </div>
     );
   }
 
-  /* Normal Preview Mode */
+  /* ?? Normal Preview Mode: Clean Visual Slide Canvas ?? */
   return (
     <div
       ref={containerRef}
       className="flex-1 w-full h-full flex flex-col md:flex-row overflow-hidden bg-background"
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Main Slide Canvas */}
-      <div className="flex-1 relative flex items-center justify-center p-2 sm:p-6 md:p-8 overflow-hidden bg-surface-container-dark/40 min-h-0">
-        {/* Fullscreen Button */}
+      {/* Main Slide Canvas Container */}
+      <div className="flex-1 relative flex items-center justify-center p-4 sm:p-8 md:p-12 overflow-hidden bg-surface-container-dark/40 min-h-0">
+        {/* Mode Presentasi Button */}
         <button
           type="button"
           onClick={toggleFullscreen}
-          className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-container-highest/80 backdrop-blur text-on-surface hover:bg-surface-container-highest transition-colors text-xs font-semibold shadow-md"
+          className="absolute top-4 right-4 z-20 flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-surface-container-highest/80 backdrop-blur text-on-surface hover:bg-surface-container-highest transition-colors text-xs font-semibold shadow-md border border-outline-variant/20"
           title="Mode Presentasi Layar Penuh"
         >
           <Fullscreen className="!text-lg" />
-          <span className="hidden sm:inline">Presentasi</span>
+          <span>Mode Presentasi</span>
         </button>
 
-        <div className="w-full h-full max-w-5xl max-h-[82vh] aspect-[16/9] bg-white rounded-xl sm:rounded-2xl p-4 sm:p-8 md:p-10 shadow-2xl border border-outline-variant/20 flex flex-col items-center justify-center select-none overflow-hidden">
-          {current.images && current.images.length > 0 ? (
-            <div className="w-full h-full flex items-center justify-center overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={current.images[0]}
-                alt={`Slide ${activeSlide + 1}`}
-                className="max-w-full max-h-full object-contain rounded-lg sm:rounded-xl shadow-md"
-              />
-            </div>
-          ) : (
-            <div className="w-full h-full flex flex-col justify-center items-center max-w-3xl mx-auto p-2 sm:p-4 overflow-hidden text-center">
-              <h1 className="text-xl sm:text-3xl md:text-4xl font-display font-extrabold text-gray-900 leading-tight mb-2 sm:mb-4">
-                {current.title}
-              </h1>
-              {current.texts.length > 0 && (
-                <div className="flex flex-col gap-1.5 sm:gap-2 max-w-xl overflow-hidden">
-                  {current.texts.map((p, idx) => (
-                    <p key={idx} className="text-gray-700 text-xs sm:text-base md:text-lg leading-snug font-medium break-words">
-                      {p}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        {/* Pure Direct Slide Visual Canvas (No outer white box frame, no inner black padding bars) */}
+        {current.images && current.images.length > 0 ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={current.images[0]}
+            alt={`Slide ${activeSlide + 1}`}
+            className="max-w-full max-h-[82vh] object-contain rounded-xl sm:rounded-2xl shadow-2xl select-none"
+            draggable={false}
+          />
+        ) : (
+          <div className="w-full max-w-4xl aspect-[16/9] bg-white rounded-xl sm:rounded-2xl p-6 sm:p-10 shadow-2xl border border-outline-variant/20 flex flex-col justify-center items-center text-center overflow-hidden">
+            <h1 className="text-xl sm:text-3xl md:text-4xl font-display font-extrabold text-gray-900 leading-tight mb-2 sm:mb-4">
+              {current.title}
+            </h1>
+            {current.texts.length > 0 && (
+              <div className="flex flex-col gap-1.5 sm:gap-2 max-w-xl overflow-hidden">
+                {current.texts.map((p, idx) => (
+                  <p key={idx} className="text-gray-700 text-xs sm:text-base md:text-lg leading-snug font-medium break-words">
+                    {p}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Thumbnail Sidebar */}
@@ -479,7 +472,6 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
     </div>
   );
 }
-
 function renderSimpleMarkdown(md: string) {
   const lines = md.split('\n');
   const elements: ReactNode[] = [];
@@ -747,7 +739,7 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
       {viewer}
 
       {/* Navigation */}
-      {hasNav && (
+      {hasNav && category !== 'office' && (
         <>
           {currentIndex > 0 && (
             <button
