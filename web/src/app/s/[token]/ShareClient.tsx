@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { usePageTitle } from '@/lib/usePageTitle';
+import { FileViewer } from '@/components/FileViewer';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080/api/v1';
 
@@ -56,6 +57,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
   const params = useParams();
   const token = params.token as string;
   const [state, setState] = useState<ListingState>({ status: 'loading' });
+  const [previewFile, setPreviewFile] = useState<any | null>(null);
   // Default while fetching: "Shared" — gets refined as soon as listing arrives.
   usePageTitle(
     mode === 'viewer'
@@ -254,16 +256,44 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
             </h2>
             <ul className="divide-y divide-outline/10 rounded-2xl bg-surface-container overflow-hidden">
               {files.map((f) => (
-                <li key={f.id} className="flex items-center gap-3 px-4 py-3">
-                  <span className="material-symbols-outlined !text-xl text-on-surface-variant">description</span>
-                  <span className="flex-1 text-sm text-on-surface truncate">{f.name}</span>
-                  <span className="text-xs text-outline tabular-nums">
+                <li
+                  key={f.id}
+                  onClick={() =>
+                    setPreviewFile({
+                      id: f.id,
+                      name: f.name,
+                      original_name: f.name,
+                      mime_type: f.mime_type,
+                      size: f.size,
+                    })
+                  }
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-surface-container-highest/50 cursor-pointer transition-colors group"
+                >
+                  <span className="material-symbols-outlined !text-xl text-primary">description</span>
+                  <span className="flex-1 text-sm font-medium text-on-surface truncate group-hover:text-primary transition-colors">
+                    {f.name}
+                  </span>
+                  <span className="text-xs text-outline tabular-nums mr-2">
                     {formatBytes(f.size)}
                   </span>
+                  <button
+                    type="button"
+                    className="p-1 rounded-full text-outline group-hover:text-primary group-hover:bg-primary-container/20 transition-colors"
+                    title="Preview File"
+                  >
+                    <span className="material-symbols-outlined !text-xl">visibility</span>
+                  </button>
                 </li>
               ))}
             </ul>
           </section>
+        )}
+
+        {previewFile && (
+          <FileViewer
+            file={previewFile}
+            onClose={() => setPreviewFile(null)}
+          />
         )}
 
         {subfolders.length === 0 && files.length === 0 && (
