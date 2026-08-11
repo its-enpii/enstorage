@@ -6,7 +6,8 @@ import { useTranslation } from 'react-i18next';
 import { apiRequest, type StorageSummary, type Webhook } from '@/lib/api';
 import clsx from 'clsx';
 import { AppShell } from '@/components/AppShell';
-import { CardIconBox } from '@/components/Card';
+import { Card, CardIconBox } from '@/components/Card';
+import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
 import { Input } from '@/components/Input';
 import { useTheme } from '@/components/ThemeProvider';
@@ -85,7 +86,7 @@ function SettingsContent() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-card-gap">
         {/* Storage */}
-        <section className="lg:col-span-2 bg-surface p-inner-padding rounded-card shadow-inner-glow flex flex-col gap-6">
+        <Card className="lg:col-span-2 flex flex-col gap-6">
           <div className="flex items-start gap-4">
             <CardIconBox variant="primary"><Storage className="!text-4xl" /></CardIconBox>
             <div className="flex-1 min-w-0">
@@ -196,10 +197,10 @@ function SettingsContent() {
               </span>
             </a>
           )}
-        </section>
+        </Card>
 
         {/* Notifikasi */}
-        <section className="bg-surface p-inner-padding rounded-card shadow-inner-glow flex flex-col gap-4">
+        <Card className="flex flex-col gap-4">
           <h2 className="font-body text-body-lg font-semibold text-on-surface">{t('settings.notif')}</h2>
           <Toggle
             label={t('settings.notifUpload')}
@@ -219,10 +220,10 @@ function SettingsContent() {
             checked={notif.security}
             onChange={(v) => setNotif((n) => ({ ...n, security: v }))}
           />
-        </section>
+        </Card>
 
         {/* Tampilan & Bahasa */}
-        <section className="bg-surface p-inner-padding rounded-card shadow-inner-glow flex flex-col gap-6">
+        <Card className="flex flex-col gap-6">
           <h2 className="font-body text-body-lg font-semibold text-on-surface">{t('settings.appearance')}</h2>
 
           <div>
@@ -278,7 +279,7 @@ function SettingsContent() {
               </button>
             </div>
           </div>
-        </section>
+        </Card>
 
         <WebhooksSection webhooks={webhooks} onChange={loadWebhooks} />
       </div>

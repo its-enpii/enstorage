@@ -6,7 +6,8 @@ import { Add, ContentCopy, Check, Webhook as WebhookIcon, Delete } from '@mui/ic
 import { apiRequest, type Webhook, WEBHOOK_EVENTS } from '@/lib/api';
 import clsx from 'clsx';
 import { Dialog } from '@/components/Dialog';
-import { Button } from '@/components/Button';
+import { Button, IconButton } from '@/components/Button';
+import { Card } from '@/components/Card';
 import { Input, Field } from '@/components/Input';
 import { usePrompt } from '@/components/usePrompt';
 
@@ -43,7 +44,7 @@ export function WebhooksSection({ webhooks, onChange }: Props) {
   }
 
   return (
-    <section className="lg:col-span-2 bg-surface p-inner-padding rounded-card shadow-inner-glow flex flex-col gap-4">
+    <Card className="lg:col-span-2 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-body text-body-lg font-semibold text-on-surface">{t('webhooks.title')}</h2>
@@ -74,7 +75,7 @@ export function WebhooksSection({ webhooks, onChange }: Props) {
       )}
 
       {adding && <CreateWebhookDialog onClose={() => setAdding(false)} onCreated={onChange} />}
-    </section>
+    </Card>
   );
 }
 

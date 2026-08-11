@@ -14,7 +14,8 @@ import {
 import clsx from 'clsx';
 import { apiRequest, ApiError, type ApiKey } from '@/lib/api';
 import { AppShell } from '@/components/AppShell';
-import { Button } from '@/components/Button';
+import { Button, IconButton } from '@/components/Button';
+import { Dialog } from '@/components/Dialog';
 import { Loading } from '@/components/Loading';
 import { usePrompt } from '@/components/usePrompt';
 import { Field, Input } from '@/components/Input';

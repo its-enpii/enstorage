@@ -9,6 +9,8 @@ import type { FileItem } from '@/lib/api';
 import { getToken } from '@/lib/api';
 import { bytes } from '@/lib/format';
 import { DropdownMenu, type MenuItem } from '@/components/DropdownMenu';
+import { Tabs } from '@/components/Tabs';
+import { Button, IconButton } from '@/components/Button';
 
 type Props = {
   file: FileItem;
@@ -585,26 +587,14 @@ function MarkdownViewer({ file }: { file: FileItem }) {
   return (
     <div className="flex-1 flex flex-col overflow-hidden max-w-4xl w-full mx-auto p-4" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between mb-3 bg-surface-container/60 p-2 rounded-xl border border-outline-variant/20">
-        <div className="flex gap-1 bg-surface p-1 rounded-lg">
-          <button
-            type="button"
-            onClick={() => setTab('preview')}
-            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-              tab === 'preview' ? 'bg-primary text-on-primary' : 'text-outline hover:text-on-surface'
-            }`}
-          >
-            Preview
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('code')}
-            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-              tab === 'code' ? 'bg-primary text-on-primary' : 'text-outline hover:text-on-surface'
-            }`}
-          >
-            Raw Markdown
-          </button>
-        </div>
+        <Tabs
+          tabs={[
+            { value: 'preview', label: 'Preview' },
+            { value: 'code', label: 'Raw Markdown' },
+          ]}
+          value={tab}
+          onChange={(v: string) => setTab(v as 'preview' | 'code')}
+        />
       </div>
       <div className="flex-1 overflow-auto bg-surface-container/30 border border-outline-variant/20 rounded-2xl p-6 shadow-inner">
         {tab === 'preview' ? (

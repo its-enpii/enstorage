@@ -11,9 +11,9 @@ import {
   Visibility,
 } from '@mui/icons-material';
 import { Dialog } from '@/components/Dialog';
-import { Button } from '@/components/Button';
+import { Button, IconButton } from '@/components/Button';
 import { DateTimePicker } from '@/components/DateTimePicker';
-import { Input, Select } from '@/components/Input';
+import { Input, Select, Field } from '@/components/Input';
 import {
   apiRequest,
   type FileItem,
@@ -275,24 +275,20 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
       {hasShare && (
         <div className="bg-surface-container rounded-xl px-4 py-3 flex items-center gap-2 mb-4">
           <p className="flex-1 text-sm text-on-surface truncate font-mono">{shareUrl}</p>
-          <button
+          <IconButton
             onClick={() => copyLink(false)}
-            className="shrink-0 text-primary hover:text-on-surface transition-colors"
             title={t('share.copy')}
+            aria-label={t('share.copy')}
           >
-            {copied ? <Check className="!text-base" /> : <ContentCopy className="!text-base" />}
-          </button>
+            {copied ? <Check /> : <ContentCopy />}
+          </IconButton>
         </div>
       )}
 
       {/* Form untuk create share link dengan expiry + max_views */}
       <div className="space-y-3 pt-2 border-t border-outline/10">
         <div className="pt-3 space-y-3">
-          <div>
-            <label className="flex items-center gap-2 text-sm text-on-surface mb-1">
-              <EventIcon className="!text-base text-on-surface-variant" />
-              {t('share.expiryLabel')}
-            </label>
+          <Field label={t('share.expiryLabel')}>
             <PresetSelect
               value={expiryPreset}
               onChange={setExpiryPreset}
@@ -310,12 +306,8 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
                 />
               </div>
             )}
-          </div>
-          <div>
-            <label className="flex items-center gap-2 text-sm text-on-surface mb-1">
-              <Visibility className="!text-base text-on-surface-variant" />
-              {t('share.maxViewsLabel')}
-            </label>
+          </Field>
+          <Field label={t('share.maxViewsLabel')}>
             <Input
               type="number"
               min={1}
@@ -325,7 +317,7 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
               onChange={(e) => setMaxViews(e.target.value)}
               disabled={loading}
             />
-          </div>
+          </Field>
           <Button onClick={createShareLink} disabled={loading} className="w-full">
             {t('share.createWithOptions')}
           </Button>
@@ -347,24 +339,14 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
               <li key={link.id} className="px-4 py-3 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <p className="flex-1 text-xs font-mono text-on-surface truncate">{link.url}</p>
-                  <button
+                  <IconButton
                     onClick={() => copyShareLink(link.url, link.id)}
-                    className="shrink-0 text-primary hover:text-on-surface transition-colors"
                     title={t('share.copy')}
+                    aria-label={t('share.copy')}
                   >
-                    {copiedLinkId === link.id ? (
-                      <Check className="!text-base" />
-                    ) : (
-                      <ContentCopy className="!text-base" />
-                    )}
-                  </button>
-                  <button
-                    onClick={() => revokeShareLink(link.id)}
-                    disabled={loading}
-                    className="shrink-0 text-error hover:opacity-80 transition-opacity text-xs font-medium disabled:opacity-50"
-                  >
-                    {t('share.linkRevoke')}
-                  </button>
+                    {copiedLinkId === link.id ? <Check /> : <ContentCopy />}
+                  </IconButton>
+                  <Button variant="danger-soft" size="sm" onClick={() => revokeShareLink(link.id)} disabled={loading}>{t('share.linkRevoke')}</Button>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-on-surface-variant">
                   <span>

@@ -170,40 +170,36 @@ export function MoveDialog({
       </p>
 
       <div className="max-h-72 overflow-y-auto rounded-2xl border border-outline-variant/30 bg-surface-container-low">
-        <button
+        <Button
           type="button"
+          variant={pickedFolderId === null ? 'primary' : 'ghost'}
+          size="sm"
+          fullWidth
+          className="justify-start text-left font-normal"
           onClick={() => setPickedFolderId(null)}
-          className={
-            'w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors ' +
-            (pickedFolderId === null
-              ? 'bg-primary/15 text-primary font-medium'
-              : 'hover:bg-surface-container-high')
-          }
+          leftIcon={<span className="material-symbols-outlined !text-base">home</span>}
         >
-          <span className="material-symbols-outlined !text-base">home</span>
           <span className="truncate">{t('files.move.root')}</span>
-        </button>
+        </Button>
         {sortedFolders.length === 0 ? (
           <div className="px-4 py-3 text-sm text-outline">
             {t('files.move.noFolders')}
           </div>
         ) : (
           sortedFolders.map((f) => (
-            <button
+            <Button
               key={f.id}
               type="button"
+              variant={pickedFolderId === f.id ? 'primary' : 'ghost'}
+              size="sm"
+              fullWidth
+              className="justify-start text-left font-normal"
               onClick={() => setPickedFolderId(f.id)}
               data-testid={`move-folder-${f.id}`}
-              className={
-                'w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors ' +
-                (pickedFolderId === f.id
-                  ? 'bg-primary/15 text-primary font-medium'
-                  : 'hover:bg-surface-container-high')
-              }
+              leftIcon={<span className="material-symbols-outlined !text-base">folder</span>}
             >
-              <span className="material-symbols-outlined !text-base">folder</span>
               <span className="truncate">{f.name}</span>
-            </button>
+            </Button>
           ))
         )}
       </div>

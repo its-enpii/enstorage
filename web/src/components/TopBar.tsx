@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { DarkMode, LightMode, Menu, Search as SearchIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import { IconButton } from '@/components/Button';
 import { useTheme } from '@/components/ThemeProvider';
 import { SearchInput } from '@/components/SearchInput';
 import { CommandPalette } from '@/components/CommandPalette';
