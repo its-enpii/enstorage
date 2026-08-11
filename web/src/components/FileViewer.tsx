@@ -199,8 +199,8 @@ async function parsePptxWithJSZip(buffer: ArrayBuffer): Promise<SlideData[]> {
     const xmlText = await zip.files[slidePath].async('text');
     const xmlDoc = parser.parseFromString(xmlText, 'application/xml');
 
-    // 1. Read slide relationships from ppt/slides/_rels/slideN.xml.rels
-    const slideName = slidePath.split('/').pop(); // slide1.xml
+    // Read slide relationships from ppt/slides/_rels/slideN.xml.rels
+    const slideName = slidePath.split('/').pop();
     const relsPath = `ppt/slides/_rels/${slideName}.rels`;
     const relsMap = new Map<string, string>();
 
@@ -218,14 +218,14 @@ async function parsePptxWithJSZip(buffer: ArrayBuffer): Promise<SlideData[]> {
       }
     }
 
-    // 2. Extract text paragraphs
+    // Extract text paragraphs
     const textNodes = Array.from(xmlDoc.getElementsByTagName('a:t'));
     const allTexts = textNodes.map((n) => n.textContent?.trim() ?? '').filter((t) => t.length > 0);
 
     const title = allTexts.length > 0 ? allTexts[0] : `Slide ${i + 1}`;
     const bodyTexts = allTexts.length > 1 ? allTexts.slice(1) : [];
 
-    // 3. Extract exact slide images referenced in this slide XML via r:embed / blip
+    // Extract exact slide images referenced in this slide XML
     const slideImages: string[] = [];
     const blipNodes = Array.from(xmlDoc.getElementsByTagName('a:blip'));
 
@@ -283,11 +283,25 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
     };
   }, [file.id]);
 
+  // Keyboard Navigation for Slides (ArrowUp/Down/Left/Right)
+  useEffect(() => {
+    if (slides.length === 0) return;
+    const onSlideKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        setActiveSlide((s) => Math.max(0, s - 1));
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+        setActiveSlide((s) => Math.min(slides.length - 1, s + 1));
+      }
+    };
+    window.addEventListener('keydown', onSlideKey);
+    return () => window.removeEventListener('keydown', onSlideKey);
+  }, [slides.length]);
+
   if (loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 text-outline">
-        <span className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm font-medium">Membaca & Merender Slide Presentasi PPTX ({bytes(file.size)})...</p>
+        <span className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <p className="text-base font-medium">Membaca Slide Presentasi PPTX ({bytes(file.size)})...</p>
       </div>
     );
   }
@@ -315,86 +329,89 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
   const current = slides[activeSlide];
 
   return (
-    <div className="flex-1 w-full h-full flex flex-col p-4 max-w-5xl mx-auto overflow-hidden" onClick={(e) => e.stopPropagation()}>
-      {/* Slide Canvas Card */}
-      <div className="flex-1 bg-surface-container-lowest border border-outline-variant/20 rounded-3xl p-8 sm:p-12 shadow-2xl flex flex-col justify-between relative overflow-auto select-none">
-        {/* Slide Title */}
-        <div className="mb-6 border-b border-outline-variant/10 pb-4">
-          <span className="text-xs uppercase tracking-wider font-semibold text-primary mb-2 block">
-            Slide {activeSlide + 1} / {slides.length}
-          </span>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold text-on-surface leading-tight break-words">
-            {current.title}
-          </h1>
+    <div className="flex-1 w-full h-full flex flex-col p-4 sm:p-6 max-w-7xl mx-auto overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      {/* Expanded Widescreen Slide Canvas Area */}
+      <div className="flex-1 bg-surface-container-lowest border border-outline-variant/20 rounded-3xl p-8 sm:p-14 shadow-2xl flex flex-col justify-between relative overflow-auto select-none min-h-[60vh]">
+        {/* Slide Header & Counter */}
+        <div className="mb-6 border-b border-outline-variant/15 pb-4 flex items-center justify-between">
+          <div>
+            <span className="text-xs sm:text-sm uppercase tracking-widest font-bold text-primary mb-1 block">
+              SLIDE {activeSlide + 1} / {slides.length}
+            </span>
+            <h1 className="text-3xl sm:text-4xl font-display font-extrabold text-on-surface leading-snug break-words">
+              {current.title}
+            </h1>
+          </div>
+          <select
+            value={activeSlide}
+            onChange={(e) => setActiveSlide(Number(e.target.value))}
+            className="bg-surface-container text-on-surface text-sm px-4 py-2 rounded-xl border border-outline-variant/20 cursor-pointer font-medium hover:bg-surface-container-highest transition-colors"
+          >
+            {slides.map((s, idx) => (
+              <option key={idx} value={idx}>
+                Slide {idx + 1}: {s.title.slice(0, 30)}{s.title.length > 30 ? '...' : ''}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {/* Slide Paragraphs & Specific Slide Images */}
-        <div className="flex-1 my-4 flex flex-col gap-3 overflow-y-auto max-h-[50vh]">
-          {/* Specific Slide Images */}
+        {/* Slide Main Visual Content & Text */}
+        <div className="flex-1 my-4 flex flex-col gap-5 overflow-y-auto">
+          {/* Slide Images */}
           {current.images && current.images.length > 0 && (
-            <div className="flex items-center justify-center gap-4 mb-4 flex-wrap">
+            <div className="flex items-center justify-center gap-6 mb-4 flex-wrap">
               {current.images.map((imgUrl, i) => (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img key={i} src={imgUrl} alt={`Slide ${activeSlide + 1} Image ${i + 1}`} className="max-h-64 rounded-2xl object-contain shadow-lg border border-outline-variant/20" />
+                <img key={i} src={imgUrl} alt={`Slide ${activeSlide + 1} Image ${i + 1}`} className="max-h-[420px] rounded-2xl object-contain shadow-xl border border-outline-variant/20 bg-white/5 p-2" />
               ))}
             </div>
           )}
 
+          {/* Slide Text Bullet Items */}
           {current.texts.length > 0 ? (
             current.texts.map((p, idx) => (
-              <div key={idx} className="flex items-start gap-3 text-on-surface/90 text-base leading-relaxed">
-                <span className="w-2 h-2 rounded-full bg-primary mt-2.5 shrink-0" />
-                <p className="break-words">{p}</p>
+              <div key={idx} className="flex items-start gap-4 text-on-surface text-lg sm:text-xl leading-relaxed">
+                <span className="w-2.5 h-2.5 rounded-full bg-primary mt-3 shrink-0 shadow-sm" />
+                <p className="break-words font-medium">{p}</p>
               </div>
             ))
           ) : (
-            current.images.length === 0 && <p className="text-outline italic text-sm">Slide Presentasi</p>
+            current.images.length === 0 && <p className="text-outline italic text-base">Slide Presentasi</p>
           )}
         </div>
 
         {/* Slide Footer */}
-        <div className="pt-4 border-t border-outline-variant/10 flex items-center justify-between text-xs text-outline font-mono">
+        <div className="pt-4 border-t border-outline-variant/15 flex items-center justify-between text-xs sm:text-sm text-outline font-mono">
           <span>{file.name}</span>
-          <span>EnStorage Presentation Viewer</span>
+          <span>EnStorage Presentation Deck</span>
         </div>
       </div>
 
-      {/* Slide Navigation Bar */}
-      <div className="flex items-center justify-between mt-4 px-2">
+      {/* Prominent Floating Controls & Stepper Pagination */}
+      <div className="flex items-center justify-between mt-5 px-4 bg-surface-container/70 backdrop-blur-md py-3 rounded-2xl border border-outline-variant/20 shadow-xl">
         <button
           type="button"
           disabled={activeSlide === 0}
           onClick={() => setActiveSlide((s) => Math.max(0, s - 1))}
-          className="flex items-center gap-1 px-4 py-2 rounded-full bg-surface-container hover:bg-surface-container-highest disabled:opacity-30 text-on-surface transition-colors text-sm font-medium shadow-sm"
+          className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-on-primary hover:bg-primary/90 disabled:opacity-30 disabled:hover:bg-primary transition-all text-sm font-bold shadow-md"
         >
-          <ChevronLeft className="!text-lg" /> Previous
+          <ChevronLeft className="!text-xl" /> Previous Slide
         </button>
 
-        {/* Slide Thumbnails */}
-        <div className="flex items-center gap-1.5 overflow-x-auto max-w-[50vw] px-2 py-1">
-          {slides.map((_, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => setActiveSlide(i)}
-              className={`w-8 h-8 rounded-xl text-xs font-semibold flex items-center justify-center transition-all ${
-                activeSlide === i
-                  ? 'bg-primary text-on-primary shadow-md scale-110'
-                  : 'bg-surface-container text-outline hover:text-on-surface'
-              }`}
-            >
-              {i + 1}
-            </button>
-          ))}
+        {/* Slide Quick Stepper Indicator */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-on-surface">
+            Slide <span className="text-primary font-bold text-base">{activeSlide + 1}</span> of {slides.length}
+          </span>
         </div>
 
         <button
           type="button"
           disabled={activeSlide === slides.length - 1}
           onClick={() => setActiveSlide((s) => Math.min(slides.length - 1, s + 1))}
-          className="flex items-center gap-1 px-4 py-2 rounded-full bg-surface-container hover:bg-surface-container-highest disabled:opacity-30 text-on-surface transition-colors text-sm font-medium shadow-sm"
+          className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-on-primary hover:bg-primary/90 disabled:opacity-30 disabled:hover:bg-primary transition-all text-sm font-bold shadow-md"
         >
-          Next <ChevronRight className="!text-lg" />
+          Next Slide <ChevronRight className="!text-xl" />
         </button>
       </div>
     </div>
