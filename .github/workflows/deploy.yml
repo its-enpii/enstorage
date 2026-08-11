@@ -94,9 +94,8 @@ jobs:
             # now (no dev/prod split), so `-p` is unnecessary.
             COMPOSE="docker compose -f docker-compose.yml"
 
-            # `up -d --build` rebuilds and recreates any service whose
-            # build context or compose config changed.
-            $COMPOSE up -d --build
+            $COMPOSE build app web
+            $COMPOSE up -d --no-deps app web
 
             # Stale bootstrap/cache from dev providers (e.g.
             # Laravel\Pail) can survive bind-mounts. Wipe and let

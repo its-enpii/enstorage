@@ -5,7 +5,7 @@ namespace App\Services\Google;
 use App\Models\File as FileModel;
 use App\Models\Folder;
 use App\Models\GoogleAccount;
-use App\Services\FolderPathService;
+use App\Services\Folder\FolderPathService;
 use Google\Client as GoogleClient;
 use Google\Service\Drive;
 use Google\Service\Drive\DriveFile;
