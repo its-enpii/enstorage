@@ -263,34 +263,23 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
       .then(async (buf) => {
         const parsed = await parsePptxWithJSZip(buf);
         if (active) {
-          if (parsed.length > 0) {
-            setSlides(parsed);
-          } else {
-            setError('Dokumen PPTX tidak memiliki slide.');
-          }
+          if (parsed.length > 0) setSlides(parsed);
+          else setError('Dokumen PPTX tidak memiliki slide.');
         }
       })
       .catch((e) => {
         if (active) setError(e instanceof Error ? e.message : 'Gagal memuat presentasi PPTX.');
       })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [file.id]);
 
   useEffect(() => {
-    const onFsChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
-  // Keyboard Navigation for Slides (ArrowUp/Down/Left/Right/Space)
   useEffect(() => {
     if (slides.length === 0) return;
     const onSlideKey = (e: KeyboardEvent) => {
@@ -307,9 +296,9 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
     if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+      containerRef.current.requestFullscreen().catch(() => {});
     } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+      document.exitFullscreen().catch(() => {});
     }
   };
 
@@ -330,7 +319,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
         </div>
         <div className="text-center max-w-md">
           <p className="text-on-surface font-semibold text-lg mb-1">{file.name}</p>
-          <p className="text-outline text-xs mb-4">{bytes(file.size)} ? {file.mime_type}</p>
+          <p className="text-outline text-xs mb-4">{bytes(file.size)}</p>
           <a
             href={fileUrl(file).replace('?inline=1', '').replace('&inline=1', '')}
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary rounded-full text-sm font-medium shadow-md"
@@ -344,60 +333,96 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
 
   const current = slides[activeSlide];
 
-  return (
-    <div
-      ref={containerRef}
-      className={`flex-1 w-full h-full flex ${
-        isFullscreen ? 'bg-black p-0 items-center justify-center relative' : 'flex-col md:flex-row bg-background'
-      } overflow-hidden`}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {/* Main Active Slide Viewport */}
-      <div className={`flex-1 relative flex items-center justify-center overflow-hidden w-full h-full ${
-        isFullscreen ? 'p-0 bg-black' : 'p-2 sm:p-6 md:p-8 bg-surface-container-dark/40 min-h-0'
-      }`}>
-        {/* Toggle Presentation Mode Button */}
+  /* Fullscreen Presentation Mode: 100% edge-to-edge, white bg, zero chrome */
+  if (isFullscreen) {
+    return (
+      <div
+        ref={containerRef}
+        className="w-screen h-screen bg-white flex items-center justify-center overflow-hidden relative"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {current.images && current.images.length > 0 ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={current.images[0]}
+            alt={`Slide ${activeSlide + 1}`}
+            className="w-full h-full object-contain"
+            draggable={false}
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col justify-center items-center p-8 sm:p-16 text-center">
+            <h1 className="text-3xl sm:text-5xl md:text-6xl font-display font-extrabold text-gray-900 leading-tight mb-4 sm:mb-8">
+              {current.title}
+            </h1>
+            {current.texts.length > 0 && (
+              <div className="flex flex-col gap-3 sm:gap-5 max-w-4xl">
+                {current.texts.map((p, idx) => (
+                  <p key={idx} className="text-gray-700 text-lg sm:text-2xl md:text-3xl leading-snug font-medium">
+                    {p}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Exit button - invisible until hovered */}
         <button
           type="button"
           onClick={toggleFullscreen}
-          className={`absolute top-4 right-4 z-30 flex items-center gap-2 px-3 py-1.5 rounded-xl ${
-            isFullscreen ? 'bg-black/60 text-white hover:bg-black/90 opacity-40 hover:opacity-100 transition-opacity' : 'bg-surface-container-highest/80 text-on-surface hover:bg-surface-container-highest'
-          } backdrop-blur transition-colors text-xs font-semibold shadow-md`}
-          title={isFullscreen ? 'Keluar Layar Penuh' : 'Mode Presentasi Layar Penuh'}
+          className="absolute top-3 right-3 z-30 p-2 rounded-full bg-black/30 text-white opacity-0 hover:opacity-100 transition-opacity duration-300"
+          title="Keluar Fullscreen (Esc)"
         >
-          {isFullscreen ? <FullscreenExit className="!text-lg" /> : <Fullscreen className="!text-lg" />}
-          <span className="hidden sm:inline">{isFullscreen ? 'Keluar Fullscreen' : 'Mode Presentasi'}</span>
+          <FullscreenExit className="!text-xl" />
         </button>
 
-        <div
-          className={`w-full h-full ${
-            isFullscreen
-              ? 'max-w-full max-h-full rounded-none border-0 p-0 shadow-none bg-black flex items-center justify-center'
-              : 'max-w-5xl max-h-[82vh] aspect-[16/9] bg-white rounded-xl sm:rounded-2xl p-4 sm:p-8 md:p-10 shadow-2xl border border-outline-variant/20 flex flex-col items-center justify-center'
-          } select-none overflow-hidden`}
+        {/* Minimal slide counter - very subtle */}
+        <span className="absolute bottom-3 right-3 z-30 text-[11px] font-mono font-bold text-black/15 select-none pointer-events-none">
+          {activeSlide + 1} / {slides.length}
+        </span>
+      </div>
+    );
+  }
+
+  /* Normal Preview Mode */
+  return (
+    <div
+      ref={containerRef}
+      className="flex-1 w-full h-full flex flex-col md:flex-row overflow-hidden bg-background"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Main Slide Canvas */}
+      <div className="flex-1 relative flex items-center justify-center p-2 sm:p-6 md:p-8 overflow-hidden bg-surface-container-dark/40 min-h-0">
+        {/* Fullscreen Button */}
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-container-highest/80 backdrop-blur text-on-surface hover:bg-surface-container-highest transition-colors text-xs font-semibold shadow-md"
+          title="Mode Presentasi Layar Penuh"
         >
+          <Fullscreen className="!text-lg" />
+          <span className="hidden sm:inline">Presentasi</span>
+        </button>
+
+        <div className="w-full h-full max-w-5xl max-h-[82vh] aspect-[16/9] bg-white rounded-xl sm:rounded-2xl p-4 sm:p-8 md:p-10 shadow-2xl border border-outline-variant/20 flex flex-col items-center justify-center select-none overflow-hidden">
           {current.images && current.images.length > 0 ? (
-            <div className="w-full h-full flex items-center justify-center overflow-hidden bg-black">
+            <div className="w-full h-full flex items-center justify-center overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={current.images[0]}
                 alt={`Slide ${activeSlide + 1}`}
-                className={`max-w-full max-h-full object-contain ${
-                  isFullscreen ? 'rounded-none shadow-none w-full h-full' : 'rounded-lg sm:rounded-xl shadow-md'
-                }`}
+                className="max-w-full max-h-full object-contain rounded-lg sm:rounded-xl shadow-md"
               />
             </div>
           ) : (
-            <div className={`w-full h-full flex flex-col justify-center items-center ${
-              isFullscreen ? 'bg-white text-black p-8 sm:p-16 max-w-full' : 'max-w-3xl p-2 sm:p-4'
-            } mx-auto overflow-hidden text-center`}>
-              <h1 className="text-xl sm:text-3xl md:text-5xl font-display font-extrabold text-gray-900 leading-tight mb-2 sm:mb-6">
+            <div className="w-full h-full flex flex-col justify-center items-center max-w-3xl mx-auto p-2 sm:p-4 overflow-hidden text-center">
+              <h1 className="text-xl sm:text-3xl md:text-4xl font-display font-extrabold text-gray-900 leading-tight mb-2 sm:mb-4">
                 {current.title}
               </h1>
               {current.texts.length > 0 && (
-                <div className="flex flex-col gap-2 sm:gap-4 max-w-3xl overflow-hidden">
+                <div className="flex flex-col gap-1.5 sm:gap-2 max-w-xl overflow-hidden">
                   {current.texts.map((p, idx) => (
-                    <p key={idx} className="text-gray-700 text-sm sm:text-xl md:text-2xl leading-snug font-medium break-words">
+                    <p key={idx} className="text-gray-700 text-xs sm:text-base md:text-lg leading-snug font-medium break-words">
                       {p}
                     </p>
                   ))}
@@ -406,46 +431,19 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
             </div>
           )}
         </div>
-
-        {/* Presentation Controls Overlay (Fullscreen or Mobile) */}
-        {(isFullscreen || slides.length > 1) && (
-          <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3 py-1.5 rounded-2xl ${
-            isFullscreen ? 'bg-black/70 opacity-30 hover:opacity-100 transition-opacity duration-300' : 'bg-surface-container-dark/90'
-          } backdrop-blur border border-outline-variant/20 shadow-xl`}>
-            <button
-              type="button"
-              onClick={() => setActiveSlide((s) => Math.max(0, s - 1))}
-              disabled={activeSlide === 0}
-              className="w-8 h-8 rounded-xl flex items-center justify-center text-white hover:bg-white/20 disabled:opacity-30 transition-colors"
-            >
-              <ChevronLeft className="!text-lg" />
-            </button>
-            <span className="text-xs font-mono font-bold text-white px-2">
-              {activeSlide + 1} / {slides.length}
-            </span>
-            <button
-              type="button"
-              onClick={() => setActiveSlide((s) => Math.min(slides.length - 1, s + 1))}
-              disabled={activeSlide === slides.length - 1}
-              className="w-8 h-8 rounded-xl flex items-center justify-center text-white hover:bg-white/20 disabled:opacity-30 transition-colors"
-            >
-              <ChevronRight className="!text-lg" />
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* Slide Thumbnail Sidebar (Hidden in Fullscreen Mode) */}
-      {!isFullscreen && slides.length > 1 && (
-        <div className="w-full md:w-64 sm:md:w-72 h-20 sm:h-24 md:h-full border-t md:border-t-0 md:border-l border-outline-variant/15 bg-surface-container-dark/80 backdrop-blur-md flex flex-row md:flex-col shrink-0 overflow-hidden">
-          <div className="flex-1 overflow-x-auto md:overflow-y-auto p-2 sm:p-4 flex flex-row md:flex-col gap-2 sm:gap-3 items-center md:items-stretch">
+      {/* Thumbnail Sidebar */}
+      {slides.length > 1 && (
+        <div className="w-full md:w-64 lg:w-72 h-20 sm:h-24 md:h-full border-t md:border-t-0 md:border-l border-outline-variant/15 bg-surface-container-dark/80 backdrop-blur-md flex flex-row md:flex-col shrink-0 overflow-hidden">
+          <div className="flex-1 overflow-x-auto md:overflow-y-auto p-2 sm:p-3 flex flex-row md:flex-col gap-2 sm:gap-3 items-center md:items-stretch">
             {slides.map((s, idx) => {
               const isActive = activeSlide === idx;
               return (
                 <div
                   key={idx}
                   onClick={() => setActiveSlide(idx)}
-                  className="flex items-center gap-1.5 sm:gap-3 cursor-pointer group shrink-0 h-full md:h-auto"
+                  className="flex items-center gap-1.5 sm:gap-2 cursor-pointer group shrink-0 h-full md:h-auto"
                 >
                   <span
                     className={`text-[10px] sm:text-xs font-bold font-mono min-w-[14px] text-center md:text-right transition-colors ${
@@ -454,9 +452,8 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
                   >
                     {idx + 1}
                   </span>
-
                   <div
-                    className={`h-full md:h-auto aspect-[16/9] w-24 sm:w-28 md:w-full bg-white rounded-lg p-1 sm:p-1.5 shadow border-2 transition-all flex flex-col justify-center overflow-hidden relative ${
+                    className={`h-full md:h-auto aspect-[16/9] w-24 sm:w-28 md:w-full bg-white rounded-lg p-1 sm:p-1.5 shadow border-2 transition-all flex flex-col justify-center overflow-hidden ${
                       isActive
                         ? 'border-primary ring-2 ring-primary/30 scale-[1.02]'
                         : 'border-outline-variant/20 hover:border-outline-variant/60'
