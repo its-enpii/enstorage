@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Close, ChevronLeft, ChevronRight, Download, ContentCopy, Check, Slideshow, Add, Remove } from '@mui/icons-material';
+import { Close, ChevronLeft, ChevronRight, Download, ContentCopy, Check, Slideshow, Add, Remove, Fullscreen, FullscreenExit } from '@mui/icons-material';
 import JSZip from 'jszip';
 import { marked } from 'marked';
 import type { FileItem } from '@/lib/api';
@@ -251,9 +251,10 @@ async function parsePptxWithJSZip(buffer: ArrayBuffer): Promise<SlideData[]> {
 function PptxSlidePresenter({ file }: { file: FileItem }) {
   const [slides, setSlides] = useState<SlideData[]>([]);
   const [activeSlide, setActiveSlide] = useState(0);
-  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -281,7 +282,15 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
     };
   }, [file.id]);
 
-  // Keyboard Navigation for Slides (ArrowUp/Down/Left/Right)
+  useEffect(() => {
+    const onFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  // Keyboard Navigation for Slides (ArrowUp/Down/Left/Right/Space)
   useEffect(() => {
     if (slides.length === 0) return;
     const onSlideKey = (e: KeyboardEvent) => {
@@ -294,6 +303,15 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
     window.addEventListener('keydown', onSlideKey);
     return () => window.removeEventListener('keydown', onSlideKey);
   }, [slides.length]);
+
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  };
 
   if (loading) {
     return (
@@ -312,7 +330,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
         </div>
         <div className="text-center max-w-md">
           <p className="text-on-surface font-semibold text-lg mb-1">{file.name}</p>
-          <p className="text-outline text-xs mb-4">{bytes(file.size)} � {file.mime_type}</p>
+          <p className="text-outline text-xs mb-4">{bytes(file.size)} ? {file.mime_type}</p>
           <a
             href={fileUrl(file).replace('?inline=1', '').replace('&inline=1', '')}
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary rounded-full text-sm font-medium shadow-md"
@@ -327,11 +345,30 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
   const current = slides[activeSlide];
 
   return (
-    <div className="flex-1 w-full h-full flex flex-col md:flex-row overflow-hidden bg-background" onClick={(e) => e.stopPropagation()}>
+    <div
+      ref={containerRef}
+      className={`flex-1 w-full h-full flex ${
+        isFullscreen ? 'bg-black p-4 items-center justify-center flex-col relative' : 'flex-col md:flex-row bg-background'
+      } overflow-hidden`}
+      onClick={(e) => e.stopPropagation()}
+    >
       {/* Main Active Slide Viewport */}
-      <div className="flex-1 relative flex items-center justify-center p-2 sm:p-6 md:p-8 overflow-hidden bg-surface-container-dark/40 min-h-0">
+      <div className="flex-1 relative flex items-center justify-center p-2 sm:p-6 md:p-8 overflow-hidden bg-surface-container-dark/40 w-full min-h-0">
+        {/* Toggle Presentation Mode Button */}
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="absolute top-4 right-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-container-highest/80 backdrop-blur text-on-surface hover:bg-surface-container-highest transition-colors text-xs font-semibold shadow-md"
+          title={isFullscreen ? 'Keluar Layar Penuh' : 'Mode Presentasi Layar Penuh'}
+        >
+          {isFullscreen ? <FullscreenExit className="!text-lg" /> : <Fullscreen className="!text-lg" />}
+          <span className="hidden sm:inline">{isFullscreen ? 'Keluar Fullscreen' : 'Mode Presentasi'}</span>
+        </button>
+
         <div
-          className="w-full h-full max-w-5xl max-h-[82vh] aspect-[16/9] bg-white rounded-xl sm:rounded-2xl p-4 sm:p-8 md:p-10 shadow-2xl border border-outline-variant/20 flex flex-col items-center justify-center select-none overflow-hidden"
+          className={`w-full h-full ${
+            isFullscreen ? 'max-w-[95vw] max-h-[90vh]' : 'max-w-5xl max-h-[82vh]'
+          } aspect-[16/9] bg-white rounded-xl sm:rounded-2xl p-4 sm:p-8 md:p-10 shadow-2xl border border-outline-variant/20 flex flex-col items-center justify-center select-none overflow-hidden`}
         >
           {current.images && current.images.length > 0 ? (
             <div className="w-full h-full flex items-center justify-center overflow-hidden">
@@ -360,31 +397,34 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
           )}
         </div>
 
-        {/* Mobile Quick Slide Navigation Controls */}
-        {slides.length > 1 && (
-          <div className="absolute inset-x-2 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none md:hidden">
+        {/* Presentation Controls Overlay (Fullscreen or Mobile) */}
+        {(isFullscreen || slides.length > 1) && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-surface-container-dark/90 backdrop-blur border border-outline-variant/20 shadow-xl">
             <button
               type="button"
               onClick={() => setActiveSlide((s) => Math.max(0, s - 1))}
               disabled={activeSlide === 0}
-              className="w-8 h-8 rounded-full bg-surface-container-highest/80 backdrop-blur text-on-surface flex items-center justify-center disabled:opacity-30 shadow-md pointer-events-auto"
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-on-surface hover:bg-surface-container-highest disabled:opacity-30 transition-colors"
             >
-              <ChevronLeft className="!text-sm" />
+              <ChevronLeft className="!text-lg" />
             </button>
+            <span className="text-xs font-mono font-bold text-on-surface px-2">
+              {activeSlide + 1} / {slides.length}
+            </span>
             <button
               type="button"
               onClick={() => setActiveSlide((s) => Math.min(slides.length - 1, s + 1))}
               disabled={activeSlide === slides.length - 1}
-              className="w-8 h-8 rounded-full bg-surface-container-highest/80 backdrop-blur text-on-surface flex items-center justify-center disabled:opacity-30 shadow-md pointer-events-auto"
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-on-surface hover:bg-surface-container-highest disabled:opacity-30 transition-colors"
             >
-              <ChevronRight className="!text-sm" />
+              <ChevronRight className="!text-lg" />
             </button>
           </div>
         )}
       </div>
 
-      {/* Slide Thumbnail Sidebar / Bottom Horizontal Strip */}
-      {slides.length > 1 && (
+      {/* Slide Thumbnail Sidebar (Hidden in Fullscreen Mode) */}
+      {!isFullscreen && slides.length > 1 && (
         <div className="w-full md:w-64 sm:md:w-72 h-20 sm:h-24 md:h-full border-t md:border-t-0 md:border-l border-outline-variant/15 bg-surface-container-dark/80 backdrop-blur-md flex flex-row md:flex-col shrink-0 overflow-hidden">
           <div className="flex-1 overflow-x-auto md:overflow-y-auto p-2 sm:p-4 flex flex-row md:flex-col gap-2 sm:gap-3 items-center md:items-stretch">
             {slides.map((s, idx) => {

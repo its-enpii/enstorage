@@ -662,3 +662,183 @@ class _PlayPauseOverlayState extends State<_PlayPauseOverlay> {
     );
   }
 }
+
+
+class _PptxPresentationViewer extends ConsumerStatefulWidget {
+  const _PptxPresentationViewer({
+    required this.fileId,
+    required this.filename,
+    required this.repo,
+  });
+
+  final String fileId;
+  final String filename;
+  final FilesRepository repo;
+
+  @override
+  ConsumerState<_PptxPresentationViewer> createState() =>
+      __PptxPresentationViewerState();
+}
+
+class __PptxPresentationViewerState
+    extends ConsumerState<_PptxPresentationViewer> {
+  final PageController _pageCtrl = PageController();
+  int _currentPage = 0;
+  bool _isFullscreen = false;
+  final int _totalMockSlides = 5;
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    if (_isFullscreen) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
+    super.dispose();
+  }
+
+  void _toggleFullscreen() {
+    setState(() {
+      _isFullscreen = !_isFullscreen;
+      if (_isFullscreen) {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      } else {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      color: Colors.black,
+      child: Stack(
+        children: [
+          // Slide PageView
+          PageView.builder(
+            controller: _pageCtrl,
+            itemCount: _totalMockSlides,
+            onPageChanged: (idx) => setState(() => _currentPage = idx),
+            itemBuilder: (context, index) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Colors.black54,
+                            blurRadius: 12,
+                            offset: Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.slideshow,
+                            size: 48,
+                            color: scheme.primary,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            widget.filename,
+                            textAlign: TextAlign.center,
+                            style: AppTypography.bodyLg.copyWith(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Slide ${index + 1} of $_totalMockSlides',
+                            style: AppTypography.bodySm.copyWith(
+                              color: Colors.black54,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+
+          // Floating Controls Overlay (Fullscreen Toggle & Page Nav)
+          Positioned(
+            bottom: 24,
+            left: 24,
+            right: 24,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xCC1E1E24),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left, color: Colors.white),
+                        onPressed: _currentPage > 0
+                            ? () => _pageCtrl.previousPage(
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeOut,
+                                )
+                            : null,
+                      ),
+                      Text(
+                        '${_currentPage + 1} / $_totalMockSlides',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right, color: Colors.white),
+                        onPressed: _currentPage < _totalMockSlides - 1
+                            ? () => _pageCtrl.nextPage(
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeOut,
+                                )
+                            : null,
+                      ),
+                      const SizedBox(width: 8),
+                      Container(height: 16, width: 1, color: Colors.white24),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: Icon(
+                          _isFullscreen
+                              ? Icons.fullscreen_exit
+                              : Icons.fullscreen,
+                          color: Colors.white,
+                        ),
+                        onPressed: _toggleFullscreen,
+                        tooltip: 'Mode Presentasi',
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
