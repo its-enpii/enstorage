@@ -53,7 +53,7 @@ export function CardIconBox({
 
 export function CardTitle({ children }: { children: ReactNode }) {
   return (
-    <h3 className="font-body text-body-lg font-semibold text-on-surface mb-1 truncate block max-w-full">
+    <h3 className="font-body text-body-lg font-semibold text-on-surface mb-1 truncate block min-w-0 w-full">
       {children}
     </h3>
   );
