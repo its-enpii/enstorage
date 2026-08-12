@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, type ReactNode } from 'react';
 
@@ -9,8 +9,16 @@ type Props = {
   description?: string;
   icon?: ReactNode;
   variant?: 'default' | 'danger';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   children?: ReactNode;
   actions?: ReactNode;
+};
+
+const SIZE_CLASSES: Record<'sm' | 'md' | 'lg' | 'xl', string> = {
+  sm: 'max-w-sm',
+  md: 'max-w-md',
+  lg: 'max-w-lg',
+  xl: 'max-w-xl',
 };
 
 export function Dialog({
@@ -20,6 +28,7 @@ export function Dialog({
   description,
   icon,
   variant = 'default',
+  size = 'md',
   children,
   actions,
 }: Props) {
@@ -39,6 +48,7 @@ export function Dialog({
   if (!open) return null;
 
   const accentRing = variant === 'danger' ? 'shadow-[0_0_0_2px_#93000a,0_0_20px_rgba(255,180,171,0.3)]' : '';
+  const widthClass = SIZE_CLASSES[size] || SIZE_CLASSES.md;
 
   return (
     <div
@@ -47,7 +57,7 @@ export function Dialog({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`w-full max-w-sm max-h-[90vh] flex flex-col bg-surface rounded-card shadow-ambient p-inner-padding overflow-hidden ${accentRing}`}
+        className={`w-full ${widthClass} max-h-[90vh] flex flex-col bg-surface rounded-card shadow-ambient p-inner-padding overflow-hidden ${accentRing}`}
       >
         <div className="flex items-start gap-4 shrink-0">
           {icon && (
