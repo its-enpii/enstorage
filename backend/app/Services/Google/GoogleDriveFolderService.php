@@ -90,10 +90,8 @@ class GoogleDriveFolderService
         ?string $oldParentGDriveId,
         string $newParentGDriveId
     ): void {
-        if (! $folder->gdrive_folder_id) {
-            $this->ensureFolderOnDrive($account, $folder);
-            return;
-        }
+        $gdriveFolderId = $this->ensureFolderOnDrive($account, $folder);
+        if (! $gdriveFolderId) return;
 
         $this->tokens->ensureFreshToken($account);
         $client = $this->factory->makeFor($account);
@@ -101,15 +99,18 @@ class GoogleDriveFolderService
         $drive = new Drive($client);
 
         try {
+            $gfile = $drive->files->get($gdriveFolderId, ['fields' => 'parents']);
+            $oldParents = implode(',', $gfile->getParents() ?? []);
+
             $optParams = ['addParents' => $newParentGDriveId];
-            if ($oldParentGDriveId) {
-                $optParams['removeParents'] = $oldParentGDriveId;
+            if ($oldParents && $oldParents !== $newParentGDriveId) {
+                $optParams['removeParents'] = $oldParents;
             }
-            $drive->files->update($folder->gdrive_folder_id, new DriveFile(), $optParams);
+            $drive->files->update($gdriveFolderId, new DriveFile(), $optParams);
         } catch (\Throwable $e) {
             Log::warning('GDrive moveFolderOnDrive failed: '.$e->getMessage(), [
                 'folder_id' => $folder->id,
-                'gdrive_folder_id' => $folder->gdrive_folder_id,
+                'gdrive_folder_id' => $gdriveFolderId,
             ]);
         }
     }
