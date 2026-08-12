@@ -88,7 +88,9 @@ jobs:
             # hostnames `app`, `web`, `nginx`, `reverb` over it.
             docker network inspect web-network >/dev/null 2>&1 || docker network create web-network
 
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
 
             # Explicit compose file. There is only one stack on the VPS
             # now (no dev/prod split), so `-p` is unnecessary.
