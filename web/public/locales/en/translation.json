@@ -426,6 +426,11 @@
     "linkPermanent": "Permanent"
   },
   "preview": {
+    "loadingPdf": "Loading PDF document...",
+    "loadingPptx": "Loading presentation slides ({{size}})...",
+    "emptyPptx": "PPTX document contains no slides.",
+    "errorPptx": "Failed to load PPTX presentation.",
+    "downloadFile": "Download File",
     "close": "Close preview",
     "menu": "File menu"
   },

@@ -215,6 +215,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
 
   // Folder listing — only landing mode reaches here (viewer bouncs in fetchListing).
   const { folder, subfolders, files } = state.listing;
+
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-2xl mx-auto bg-surface rounded-card shadow-ambient p-6 sm:p-8">
@@ -263,8 +264,20 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
                       id: f.id,
                       name: f.name,
                       original_name: f.name,
+                      is_starred: false,
                       mime_type: f.mime_type,
                       size: f.size,
+                      folder_id: folder.id,
+                      google_account_id: null,
+                      gdrive_file_id: '',
+                      shareable_link: null,
+                      upload_status: 'done',
+                      uploaded_at: null,
+                      has_thumbnail: f.has_thumbnail,
+                      created_at: '',
+                      updated_at: '',
+                      stream_url: `${API_BASE}/s/${token}?file_id=${f.id}`,
+                      download_url: `${API_BASE}/s/${token}?file_id=${f.id}&download=1`,
                     })
                   }
                   className="flex items-center gap-3 px-4 py-3 hover:bg-surface-container-highest/50 cursor-pointer transition-colors group"
@@ -341,16 +354,60 @@ function FilePreview({
   streamUrl: string;
   downloadUrl: string;
   viewerUrl: string;
-  mode: ShareClientMode;
+  mode: string;
   t: PreviewTranslator;
 }) {
-  const mime = listing.mime_type;
+  const mime = listing.mime_type.toLowerCase();
+  const name = (listing.original_name || listing.name).toLowerCase();
   const isImage = mime.startsWith('image/');
   const isVideo = mime.startsWith('video/');
   const isAudio = mime.startsWith('audio/');
-  const isPdf = mime === 'application/pdf';
-  const isText = mime.startsWith('text/') || mime.includes('json') || mime.includes('xml');
-  const previewable = isPreviewable(mime);
+  const isPdf = mime === 'application/pdf' || name.endsWith('.pdf');
+  const isOffice = name.endsWith('.pptx') || name.endsWith('.ppt') || name.endsWith('.docx') || name.endsWith('.xlsx') || mime.includes('presentationml') || mime.includes('wordprocessingml') || mime.includes('spreadsheetml');
+  const isMarkdown = name.endsWith('.md') || name.endsWith('.markdown') || mime === 'text/markdown';
+  const isText = (mime.startsWith('text/') || mime === 'application/json' || mime === 'application/xml') && !isOffice && !isMarkdown;
+  const previewable = isImage || isVideo || isAudio || isPdf || isOffice || isMarkdown || isText;
+  const [showFullViewer, setShowFullViewer] = useState(mode === 'viewer');
+
+  const fileObj = {
+    id: listing.id || 'shared',
+    name: listing.original_name || listing.name,
+    original_name: listing.original_name || listing.name,
+    is_starred: false,
+    mime_type: listing.mime_type,
+    size: listing.size,
+    folder_id: null,
+    google_account_id: null,
+    gdrive_file_id: '',
+    shareable_link: null,
+    upload_status: 'done' as const,
+    uploaded_at: listing.updated_at,
+    has_thumbnail: false,
+    created_at: listing.updated_at || '',
+    updated_at: listing.updated_at || '',
+    stream_url: streamUrl,
+    download_url: downloadUrl,
+  };
+
+  if (showFullViewer) {
+    return (
+      <FileViewer
+        file={fileObj}
+        onClose={() => {
+          if (mode === 'viewer') {
+            const segs = window.location.pathname.split('/').filter(Boolean);
+            if (segs.length >= 2) {
+              window.location.href = `/s/${segs[1]}`;
+            } else {
+              window.location.href = `/s/${listing.id}`;
+            }
+          } else {
+            setShowFullViewer(false);
+          }
+        }}
+      />
+    );
+  }
 
   // Viewer mode: zero chrome — only the media itself, dark background, no filename,
   // no download, no footer. ESC → bounce back to landing.
@@ -366,6 +423,24 @@ function FilePreview({
         originalName={listing.original_name || listing.name}
         textFetchUrl={streamUrl}
         fallbackUrl={`/s/${(typeof window !== 'undefined' ? window.location.pathname.split('/').filter(Boolean)[1] : '') || ''}`}
+      />
+    );
+  }
+
+  if (showFullViewer) {
+    return (
+      <FileViewer
+        file={fileObj}
+        onClose={() => {
+          if (mode === 'viewer') {
+            const segs = window.location.pathname.split('/').filter(Boolean);
+            if (segs.length >= 2) {
+              window.location.href = `/s/${segs[1]}`;
+            }
+          } else {
+            setShowFullViewer(false);
+          }
+        }}
       />
     );
   }
@@ -435,13 +510,14 @@ function FilePreview({
           <p className="text-xs text-outline shrink-0">{t('share.sharedVia')}</p>
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {previewable && (
-              <a
-                href={viewerUrl}
+              <button
+                type="button"
+                onClick={() => setShowFullViewer(true)}
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-surface-container text-on-surface rounded-full hover:bg-surface-container/80 transition-colors font-medium text-sm"
               >
                 <span className="material-symbols-outlined !text-lg">visibility</span>
                 {t('share.viewInline')}
-              </a>
+              </button>
             )}
             <a
               href={downloadUrl}

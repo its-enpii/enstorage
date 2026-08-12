@@ -21,6 +21,7 @@ type Props = {
 };
 
 function fileUrl(file: FileItem): string {
+  if (file.stream_url) return file.stream_url;
   const token = getToken();
   const base = `${process.env.NEXT_PUBLIC_API_BASE}/files/${file.id}/download`;
   const params = new URLSearchParams({ inline: '1' });
@@ -137,7 +138,8 @@ function PdfViewer({ file }: { file: FileItem }) {
   }, [file.id]);
 
   if (loading) {
-    return <div className="flex-1 flex items-center justify-center text-outline">Memuat dokumen PDF...</div>;
+    const { t } = useTranslation();
+  return <div className="flex-1 flex items-center justify-center text-outline">{t('preview.loadingPdf')}</div>;
   }
 
   return (
@@ -251,6 +253,7 @@ async function parsePptxWithJSZip(buffer: ArrayBuffer): Promise<SlideData[]> {
 }
 
 function PptxSlidePresenter({ file }: { file: FileItem }) {
+  const { t } = useTranslation();
   const [slides, setSlides] = useState<SlideData[]>([]);
   const [activeSlide, setActiveSlide] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -292,7 +295,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
         const parsed = await parsePptxWithJSZip(buf);
         if (active) {
           if (parsed.length > 0) setSlides(parsed);
-          else setError('Dokumen PPTX tidak memiliki slide.');
+          else setError(t('preview.emptyPptx'));
         }
       })
       .catch((e) => {
@@ -334,7 +337,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 text-outline">
         <span className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-        <p className="text-base font-medium">Memuat Slide Presentasi ({bytes(file.size)})...</p>
+        <p className="text-base font-medium">{t('preview.loadingPptx', { size: bytes(file.size) })}</p>
       </div>
     );
   }
@@ -661,6 +664,7 @@ function CodeTextViewer({ file }: { file: FileItem }) {
 }
 
 function OtherViewer({ file }: { file: FileItem }) {
+  const { t } = useTranslation();
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-4 p-4" onClick={(e) => e.stopPropagation()}>
       <div className="w-24 h-24 rounded-full bg-surface-container flex items-center justify-center">
@@ -674,7 +678,7 @@ function OtherViewer({ file }: { file: FileItem }) {
         href={`${fileUrl(file).replace('?inline=1', '').replace('&inline=1', '')}`}
         className="mt-2 flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-full hover:bg-primary/90 transition-colors text-sm"
       >
-        <Download className="!text-base" /> Download File
+        <Download className="!text-base" /> {t('preview.downloadFile')}
       </a>
     </div>
   );

@@ -800,7 +800,7 @@ class FileController extends Controller
                 return $this->resolveFileResponse($request, $subject);
             }
             if ($subject instanceof Folder) {
-                return $this->respondSharedFolder($subject);
+                return $this->respondSharedFolder($request, $subject);
             }
         }
 
@@ -813,7 +813,7 @@ class FileController extends Controller
         // 3) Legacy fallback: folder token → JSON read-only listing.
         $folder = Folder::where('share_token', $token)->first();
         if ($folder) {
-            return $this->respondSharedFolder($folder);
+            return $this->respondSharedFolder($request, $folder);
         }
 
         return $this->fail(
@@ -906,8 +906,40 @@ class FileController extends Controller
     /**
      * Return a read-only JSON listing of a shared folder.
      */
-    private function respondSharedFolder(Folder $folder): JsonResponse
+    private function isFolderDescendant(string $folderId, string $rootFolderId): bool
     {
+        if ($folderId === $rootFolderId) {
+            return true;
+        }
+
+        $currentId = $folderId;
+        $visited = [];
+
+        while ($currentId) {
+            if ($currentId === $rootFolderId) {
+                return true;
+            }
+            if (in_array($currentId, $visited, true)) {
+                break;
+            }
+            $visited[] = $currentId;
+            $folder = Folder::select('id', 'parent_id')->find($currentId);
+            $currentId = $folder?->parent_id;
+        }
+
+        return false;
+    }
+
+    private function respondSharedFolder(Request $request, Folder $folder): StreamedResponse|JsonResponse
+    {
+        if ($request->has('file_id')) {
+            $fileId = (string) $request->query('file_id');
+            $file = FileModel::where('id', $fileId)->where('upload_status', 'done')->first();
+            if ($file && $file->folder_id && $this->isFolderDescendant($file->folder_id, $folder->id)) {
+                return $this->resolveFileResponse($request, $file);
+            }
+            return $this->fail(__('File tidak ditemukan pada folder share ini.'), 404);
+        }
         $subfolders = Folder::where('parent_id', $folder->id)
             ->orderBy('name')
             ->get();

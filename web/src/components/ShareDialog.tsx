@@ -100,7 +100,7 @@ function PresetSelect({
       aria-label={ariaLabel}
     >
       {options.map((o) => (
-        <option key={o.id} value={o.id}>
+        <option key={o.id} value={o.id} className="bg-surface text-on-surface py-2">
           {t(o.labelKey)}
         </option>
       ))}

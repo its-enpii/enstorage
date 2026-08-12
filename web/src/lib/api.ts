@@ -111,6 +111,8 @@ export type FileItem = {
   has_thumbnail: boolean;
   created_at: string;
   updated_at: string;
+  stream_url?: string;
+  download_url?: string;
 };
 
 export type PaginatedMeta = {

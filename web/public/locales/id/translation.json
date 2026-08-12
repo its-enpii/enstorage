@@ -426,6 +426,11 @@
     "linkPermanent": "Permanen"
   },
   "preview": {
+    "loadingPdf": "Memuat dokumen PDF...",
+    "loadingPptx": "Memuat slide presentasi ({{size}})...",
+    "emptyPptx": "Dokumen PPTX tidak memiliki slide.",
+    "errorPptx": "Gagal memuat presentasi PPTX.",
+    "downloadFile": "Download File",
     "close": "Tutup preview",
     "menu": "Menu file"
   },
