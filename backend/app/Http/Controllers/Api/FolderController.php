@@ -298,6 +298,23 @@ class FolderController extends Controller
             $this->paths->refreshSubtree($folder);
         });
 
+        // GDrive folder move sync
+        try {
+            $accounts = \App\Models\GoogleAccount::where('user_id', $request->user()->id)->where('is_active', true)->get();
+            $targetParent = $newParentId ? Folder::find($newParentId) : null;
+            $gdriveFolderService = app(\App\Services\Google\GoogleDriveFolderService::class);
+            $quota = app(\App\Services\Google\QuotaManager::class);
+
+            foreach ($accounts as $acc) {
+                $newParentGDriveId = $targetParent
+                    ? $gdriveFolderService->ensureFolderOnDrive($acc, $targetParent)
+                    : $quota->ensureRootFolder($acc);
+                $gdriveFolderService->moveFolderOnDrive($acc, $folder, null, $newParentGDriveId);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('GDrive move folder sync failed: '.$e->getMessage());
+        }
+
         $this->activityLog->log(
             ActivityLog::ACTION_FOLDER_MOVE ?? 'FOLDER_MOVE',
             userId: $request->user()->id,
