@@ -147,7 +147,8 @@ function SettingsContent() {
                     {t('settings.perAkun')}
                   </p>
                   {summary.breakdown.map((b) => {
-                    if (!b.quota) {
+                    const q = b.quota;
+                    if (!q) {
                       return (
                         <a
                           key={b.account_id}
@@ -164,7 +165,7 @@ function SettingsContent() {
                         </a>
                       );
                     }
-                    const p = pct(b.quota.used, b.quota.total);
+                    const p = pct(q.used, q.total);
                     return (
                       <a
                         key={b.account_id}
@@ -184,7 +185,7 @@ function SettingsContent() {
                               />
                             </div>
                             <span className="text-metadata text-outline shrink-0">
-                              {bytes(b.quota.used)} / {bytes(b.quota.total)}
+                              {bytes(q.used)} / {bytes(q.total)}
                             </span>
                             <span className={clsx(
                               'text-metadata font-semibold shrink-0',
