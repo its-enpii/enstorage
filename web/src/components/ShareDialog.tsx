@@ -13,7 +13,8 @@ import {
 import { Dialog } from '@/components/Dialog';
 import { Button, IconButton } from '@/components/Button';
 import { DateTimePicker } from '@/components/DateTimePicker';
-import { Input, Select, Field } from '@/components/Input';
+import { Input, Field } from '@/components/Input';
+import { SmartSelect, type SelectOption } from '@/components/Select';
 import {
   apiRequest,
   type FileItem,
@@ -92,19 +93,19 @@ function PresetSelect({
   ariaLabel: string;
 }) {
   const { t } = useTranslation();
+  const selectOptions: SelectOption<ExpiryPresetId>[] = options.map((o) => ({
+    value: o.id,
+    label: t(o.labelKey),
+  }));
+
   return (
-    <Select
+    <SmartSelect<ExpiryPresetId>
       value={value}
-      onChange={(e) => onChange(e.target.value as ExpiryPresetId)}
+      onChange={onChange}
+      options={selectOptions}
       disabled={disabled}
       aria-label={ariaLabel}
-    >
-      {options.map((o) => (
-        <option key={o.id} value={o.id} className="bg-surface text-on-surface py-2">
-          {t(o.labelKey)}
-        </option>
-      ))}
-    </Select>
+    />
   );
 }
 
