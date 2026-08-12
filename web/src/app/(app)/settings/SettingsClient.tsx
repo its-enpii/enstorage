@@ -125,7 +125,7 @@ function SettingsContent() {
                     {t('settings.storageUsed', { used: bytes(summary.used), total: bytes(summary.total) })}
                   </span>
                   <span className={clsx('font-semibold', pct(summary.used, summary.total) > 90 ? 'text-error' : 'text-primary')}>
-                    {t('settings.storageFree', { free: bytes(summary.total - summary.free) })}
+                    {t('settings.storageFree', { free: bytes(summary.free) })}
                   </span>
                 </div>
                 <div className="w-full bg-surface-container h-3 rounded-full overflow-hidden">
@@ -147,6 +147,23 @@ function SettingsContent() {
                     {t('settings.perAkun')}
                   </p>
                   {summary.breakdown.map((b) => {
+                    if (!b.quota) {
+                      return (
+                        <a
+                          key={b.account_id}
+                          href="/google-accounts"
+                          className="flex items-start gap-4 p-4 rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors"
+                        >
+                          <div className="w-10 h-10 rounded-xl bg-error-container flex items-center justify-center text-error shrink-0">
+                            <CloudOff className="!text-xl" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-on-surface font-medium truncate">{b.email}</p>
+                            <p className="text-metadata text-error truncate">{b.error || 'Gagal memuat kuota'}</p>
+                          </div>
+                        </a>
+                      );
+                    }
                     const p = pct(b.quota.used, b.quota.total);
                     return (
                       <a

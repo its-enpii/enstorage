@@ -158,13 +158,14 @@ export type StorageSummary = {
     account_id: string;
     label: string;
     email: string;
-    quota: {
+    quota?: {
       total: number;
       used: number;
       free: number;
       trashed: number;
       synced_at: string | null;
     };
+    error?: string;
   }>;
 };
 
