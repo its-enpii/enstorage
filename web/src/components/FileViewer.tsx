@@ -340,8 +340,8 @@ function MarkdownViewer({ file }: { file: FileItem }) {
   const htmlContent = marked.parse(content, { gfm: true, breaks: true }) as string;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden max-w-5xl w-full mx-auto p-4" onClick={(e) => e.stopPropagation()}>
-      <div className="flex items-center justify-between mb-3 bg-surface-container/60 p-2 rounded-xl border border-outline-variant/20">
+    <div className="flex-1 flex flex-col overflow-hidden min-h-0 h-full max-w-5xl w-full mx-auto p-4" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center justify-between mb-3 bg-surface-container/60 p-2 rounded-xl border border-outline-variant/20 shrink-0">
         <Tabs
           tabs={[
             { value: 'preview', label: 'Preview' },
@@ -351,7 +351,7 @@ function MarkdownViewer({ file }: { file: FileItem }) {
           onChange={(v: string) => setTab(v as 'preview' | 'code')}
         />
       </div>
-      <div className="flex-1 overflow-auto bg-surface-container/30 border border-outline-variant/20 rounded-2xl p-6 sm:p-8 shadow-inner">
+      <div className="flex-1 min-h-0 overflow-auto bg-surface-container/30 border border-outline-variant/20 rounded-2xl p-6 sm:p-8 shadow-inner">
         {tab === 'preview' ? (
           <div
             className="prose markdown-body max-w-none text-on-surface leading-relaxed text-sm"
@@ -541,4 +541,7 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
     </div>
   );
 }
+
+
+
 
