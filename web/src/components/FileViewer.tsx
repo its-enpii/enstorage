@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -39,55 +39,61 @@ function mimeCategory(file: FileItem): MimeCategory {
   if (mime.startsWith('video/')) return 'video';
   if (mime.startsWith('audio/')) return 'audio';
   if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
-
+  if (
+    name.endsWith('.pptx') ||
+    name.endsWith('.ppt') ||
+    name.endsWith('.docx') ||
+    name.endsWith('.xlsx') ||
+    mime.includes('presentationml') ||
+    mime.includes('wordprocessingml') ||
+    mime.includes('spreadsheetml')
+  ) return 'office';
   if (
     name.endsWith('.md') ||
     name.endsWith('.markdown') ||
     mime === 'text/markdown' ||
     mime === 'text/x-markdown'
-  ) {
-    return 'markdown';
-  }
-
-  const officeExts = ['.pptx', '.ppt', '.docx', '.doc', '.xlsx', '.xls'];
-  const officeMimes = [
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    'application/vnd.ms-powerpoint',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-excel',
-  ];
-  if (officeExts.some((ext) => name.endsWith(ext)) || officeMimes.includes(mime)) {
-    return 'office';
-  }
-
-  const codeExts = [
-    '.js', '.ts', '.tsx', '.jsx', '.json', '.html', '.css', '.scss',
-    '.py', '.java', '.c', '.cpp', '.h', '.cs', '.go', '.rs', '.php',
-    '.rb', '.sh', '.sql', '.yaml', '.yml', '.xml', '.env', '.gitignore',
-  ];
-  if (codeExts.some((ext) => name.endsWith(ext))) {
-    return 'code';
-  }
-
-  if (mime.startsWith('text/') || ['application/json', 'application/xml', 'application/javascript'].includes(mime)) {
-    return 'text';
-  }
+  ) return 'markdown';
+  if (
+    mime.startsWith('text/') ||
+    mime === 'application/json' ||
+    mime === 'application/xml' ||
+    mime.includes('javascript') ||
+    mime.includes('typescript')
+  ) return 'code';
 
   return 'other';
 }
 
 function ImageViewer({ file }: { file: FileItem }) {
+  const [scale, setScale] = useState(1);
+
+  const zoomIn = () => setScale((s) => Math.min(s + 0.25, 3));
+  const zoomOut = () => setScale((s) => Math.max(s - 0.25, 0.5));
+  const resetZoom = () => setScale(1);
+
   return (
-    <div className="flex-1 flex items-center justify-center overflow-hidden p-4" onClick={(e) => e.stopPropagation()}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={fileUrl(file)}
-        alt={file.name}
-        className="max-w-full max-h-full object-contain rounded-lg select-none"
-        draggable={false}
-      />
+    <div className="relative flex-1 flex flex-col items-center justify-center p-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="flex-1 flex items-center justify-center overflow-auto w-full h-full">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={fileUrl(file)}
+          alt={file.name}
+          style={{ transform: `scale(${scale})` }}
+          className="max-w-full max-h-full object-contain rounded-lg select-none transition-transform duration-150 ease-out"
+        />
+      </div>
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-surface-container/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-outline-variant/20 shadow-lg">
+        <IconButton onClick={zoomOut} title="Zoom out" aria-label="Zoom out" className="!w-8 !h-8">
+          <Remove className="!text-sm" />
+        </IconButton>
+        <button onClick={resetZoom} className="px-2 text-xs font-mono text-on-surface hover:text-primary transition-colors">
+          {Math.round(scale * 100)}%
+        </button>
+        <IconButton onClick={zoomIn} title="Zoom in" aria-label="Zoom in" className="!w-8 !h-8">
+          <Add className="!text-sm" />
+        </IconButton>
+      </div>
     </div>
   );
 }
@@ -103,226 +109,94 @@ function VideoViewer({ file }: { file: FileItem }) {
 function AudioViewer({ file }: { file: FileItem }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-6 p-4" onClick={(e) => e.stopPropagation()}>
-      <div className="w-24 h-24 rounded-full bg-primary-container flex items-center justify-center">
-        <span className="material-symbols-outlined !text-5xl fill text-on-primary-container">music_note</span>
+      <div className="w-32 h-32 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container shadow-ambient">
+        <span className="material-symbols-outlined !text-6xl">graphic_eq</span>
       </div>
-      <p className="text-on-surface font-display text-lg">{file.name}</p>
       <audio controls autoPlay className="w-full max-w-md" src={fileUrl(file)} />
     </div>
   );
 }
 
 function PdfViewer({ file }: { file: FileItem }) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    fetch(fileUrl(file))
-      .then((res) => res.blob())
-      .then((blob) => {
-        if (active) {
-          const objectUrl = URL.createObjectURL(blob);
-          setBlobUrl(objectUrl);
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
-    };
-  }, [file.id]);
-
-  if (loading) {
-    const { t } = useTranslation();
-  return <div className="flex-1 flex items-center justify-center text-outline">{t('preview.loadingPdf')}</div>;
-  }
-
   return (
-    <div className="flex-1 w-full h-full p-4 flex items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
-      {blobUrl ? (
-        <object data={blobUrl} type="application/pdf" className="w-full h-full rounded-xl shadow-2xl bg-white">
-          <embed src={blobUrl} type="application/pdf" className="w-full h-full border-0 rounded-xl" />
-        </object>
-      ) : (
-        <div className="text-center">
-          <p className="text-outline mb-2">Gagal memuat preview PDF.</p>
-          <a href={fileUrl(file)} className="px-4 py-2 bg-primary text-on-primary rounded-full text-sm inline-flex items-center gap-2">
-            <Download className="!text-sm" /> Download PDF
-          </a>
-        </div>
-      )}
+    <div className="flex-1 flex flex-col w-full h-full p-2 sm:p-4" onClick={(e) => e.stopPropagation()}>
+      <iframe
+        src={fileUrl(file)}
+        className="w-full h-full rounded-xl border border-outline-variant/20 bg-surface"
+        title={file.name}
+      />
     </div>
   );
 }
 
-type SlideData = {
-  id: number;
-  title: string;
-  texts: string[];
-  images: string[];
-};
-
-async function parsePptxWithJSZip(buffer: ArrayBuffer): Promise<SlideData[]> {
-  const zip = await JSZip.loadAsync(buffer);
-  const slides: SlideData[] = [];
-  const parser = new DOMParser();
-
-  // Extract all media blobs from ppt/media/
-  const mediaMap = new Map<string, string>();
-  const mediaFiles = Object.keys(zip.files).filter((path) => path.startsWith('ppt/media/'));
-
-  for (const mediaPath of mediaFiles) {
-    const file = zip.files[mediaPath];
-    if (!file || file.dir) continue;
-    const blob = await file.async('blob');
-    const url = URL.createObjectURL(blob);
-    const filename = mediaPath.split('/').pop() || mediaPath;
-    mediaMap.set(filename, url);
-    mediaMap.set(mediaPath, url);
-  }
-
-  // Find slide XML files: ppt/slides/slide1.xml, slide2.xml, ...
-  const slideFiles = Object.keys(zip.files)
-    .filter((path) => /^ppt\/slides\/slide\d+\.xml$/i.test(path))
-    .sort((a, b) => {
-      const numA = parseInt(a.match(/\d+/)?.[0] ?? '0', 10);
-      const numB = parseInt(b.match(/\d+/)?.[0] ?? '0', 10);
-      return numA - numB;
-    });
-
-  for (let i = 0; i < slideFiles.length; i++) {
-    const slidePath = slideFiles[i];
-    const xmlText = await zip.files[slidePath].async('text');
-    const xmlDoc = parser.parseFromString(xmlText, 'application/xml');
-
-    // Read slide relationships from ppt/slides/_rels/slideN.xml.rels
-    const slideName = slidePath.split('/').pop();
-    const relsPath = `ppt/slides/_rels/${slideName}.rels`;
-    const relsMap = new Map<string, string>();
-
-    if (zip.files[relsPath]) {
-      const relsText = await zip.files[relsPath].async('text');
-      const relsDoc = parser.parseFromString(relsText, 'application/xml');
-      const relNodes = Array.from(relsDoc.getElementsByTagName('Relationship'));
-      for (const rel of relNodes) {
-        const rId = rel.getAttribute('Id');
-        const target = rel.getAttribute('Target');
-        if (rId && target) {
-          const mediaFileName = target.split('/').pop() || target;
-          relsMap.set(rId, mediaFileName);
-        }
-      }
-    }
-
-    // Extract text paragraphs
-    const textNodes = Array.from(xmlDoc.getElementsByTagName('a:t'));
-    const allTexts = textNodes.map((n) => n.textContent?.trim() ?? '').filter((t) => t.length > 0);
-
-    const title = allTexts.length > 0 ? allTexts[0] : `Slide ${i + 1}`;
-    const bodyTexts = allTexts.length > 1 ? allTexts.slice(1) : [];
-
-    // Extract exact slide images referenced in this slide XML
-    const slideImages: string[] = [];
-    const blipNodes = Array.from(xmlDoc.getElementsByTagName('a:blip'));
-
-    for (const blip of blipNodes) {
-      const embedId = blip.getAttribute('r:embed') || blip.getAttribute('embed');
-      if (embedId && relsMap.has(embedId)) {
-        const mediaFileName = relsMap.get(embedId)!;
-        const blobUrl = mediaMap.get(mediaFileName);
-        if (blobUrl && !slideImages.includes(blobUrl)) {
-          slideImages.push(blobUrl);
-        }
-      }
-    }
-
-    slides.push({
-      id: i + 1,
-      title,
-      texts: bodyTexts,
-      images: slideImages,
-    });
-  }
-
-  return slides;
-}
-
 function PptxSlidePresenter({ file }: { file: FileItem }) {
   const { t } = useTranslation();
-  const [slides, setSlides] = useState<SlideData[]>([]);
-  const [activeSlide, setActiveSlide] = useState(0);
+  const [slides, setSlides] = useState<string[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const touchStartX = useRef<number | null>(null);
-  const touchEndX = useRef<number | null>(null);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.targetTouches[0].clientX;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    touchEndX.current = e.targetTouches[0].clientX;
-  };
-
-  const handleTouchEnd = () => {
-    if (!touchStartX.current || !touchEndX.current) return;
-    const distance = touchStartX.current - touchEndX.current;
-    const isLeftSwipe = distance > 40;
-    const isRightSwipe = distance < -40;
-
-    if (isLeftSwipe && activeSlide < slides.length - 1) {
-      setActiveSlide((s) => s + 1);
-    } else if (isRightSwipe && activeSlide > 0) {
-      setActiveSlide((s) => s - 1);
-    }
-
-    touchStartX.current = null;
-    touchEndX.current = null;
-  };
 
   useEffect(() => {
     let active = true;
-    fetch(fileUrl(file))
-      .then((r) => r.arrayBuffer())
-      .then(async (buf) => {
-        const parsed = await parsePptxWithJSZip(buf);
-        if (active) {
-          if (parsed.length > 0) setSlides(parsed);
-          else setError(t('preview.emptyPptx'));
+    async function loadPresentation() {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch(fileUrl(file));
+        if (!res.ok) throw new Error('Gagal mengunduh file presentasi.');
+        const buffer = await res.arrayBuffer();
+
+        const zip = await JSZip.loadAsync(buffer);
+        const slideFiles = Object.keys(zip.files)
+          .filter((path) => /^ppt\/slides\/slide\d+\.xml$/i.test(path))
+          .sort((a, b) => {
+            const numA = parseInt(a.match(/\d+/)?[0] || '0', 10);
+            const numB = parseInt(b.match(/\d+/)?[0] || '0', 10);
+            return numA - numB;
+          });
+
+        if (slideFiles.length === 0) {
+          throw new Error('Tidak ada slide yang ditemukan dalam file ini.');
         }
-      })
-      .catch((e) => {
-        if (active) setError(e instanceof Error ? e.message : 'Gagal memuat presentasi PPTX.');
-      })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+
+        const extractedTexts: string[] = [];
+        for (const path of slideFiles) {
+          const xmlText = await zip.files[path].async('string');
+          const matches = xmlText.match(/<a:t[^>]*>(.*?)<\/a:t>/gi) || [];
+          const textContent = matches
+            .map((m) => m.replace(/<[^>]+>/g, ''))
+            .filter((t) => t.trim().length > 0)
+            .join(' ');
+          extractedTexts.push(textContent || `[Slide ${extractedTexts.length + 1}]`);
+        }
+
+        if (active) {
+          setSlides(extractedTexts);
+          setCurrentIndex(0);
+        }
+      } catch (err: unknown) {
+        if (active) {
+          setError(err instanceof Error ? err.message : 'Gagal membaca presentasi.');
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    loadPresentation();
+    return () => {
+      active = false;
+    };
   }, [file.id]);
 
   useEffect(() => {
-    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
-
-  useEffect(() => {
-    if (slides.length === 0) return;
-    const onSlideKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-        setActiveSlide((s) => Math.max(0, s - 1));
-      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
-        setActiveSlide((s) => Math.min(slides.length - 1, s + 1));
-      }
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
     };
-    window.addEventListener('keydown', onSlideKey);
-    return () => window.removeEventListener('keydown', onSlideKey);
-  }, [slides.length]);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
@@ -333,241 +207,119 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
     }
   };
 
+  const nextSlide = () => {
+    if (currentIndex < slides.length - 1) setCurrentIndex((i) => i + 1);
+  };
+  const prevSlide = () => {
+    if (currentIndex > 0) setCurrentIndex((i) => i - 1);
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (slides.length === 0) return;
+      if (e.key === 'ArrowRight' || e.key === 'Space') {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        prevSlide();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [currentIndex, slides.length]);
+
   if (loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 text-outline">
-        <span className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-        <p className="text-base font-medium">{t('preview.loadingPptx', { size: bytes(file.size) })}</p>
+        <span className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm font-display">Memproses slide presentasi...</p>
       </div>
     );
   }
 
   if (error || slides.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="w-20 h-20 rounded-2xl bg-surface-container flex items-center justify-center text-primary">
-          <Slideshow className="!text-5xl" />
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 p-4" onClick={(e) => e.stopPropagation()}>
+        <div className="w-20 h-20 rounded-full bg-error-container/30 flex items-center justify-center text-error">
+          <Slideshow className="!text-4xl" />
         </div>
         <div className="text-center max-w-md">
-          <p className="text-on-surface font-semibold text-lg mb-1">{file.name}</p>
-          <p className="text-outline text-xs mb-4">{bytes(file.size)}</p>
+          <p className="text-on-surface font-display text-base mb-1">{file.name}</p>
+          <p className="text-outline text-xs mb-4">{error || 'Gagal mengekstrak slide.'}</p>
           <a
-            href={fileUrl(file).replace('?inline=1', '').replace('&inline=1', '')}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary rounded-full text-sm font-medium shadow-md"
+            href={`${fileUrl(file).replace('?inline=1', '').replace('&inline=1', '')}`}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-full hover:bg-primary/90 transition-colors text-xs font-semibold"
           >
-            <Download className="!text-base" /> Download PPTX
+            <Download className="!text-sm" /> Download PPTX
           </a>
         </div>
       </div>
     );
   }
 
-  const current = slides[activeSlide];
-
-  /* ?? Fullscreen Presentation Mode: 100% edge-to-edge ?? */
-  if (isFullscreen) {
-    return (
-      <div
-        ref={containerRef}
-        className="w-screen h-screen bg-black flex items-center justify-center overflow-hidden relative" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {current.images && current.images.length > 0 ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={current.images[0]}
-            alt={`Slide ${activeSlide + 1}`}
-            className="w-full h-full object-contain"
-            draggable={false}
-          />
-        ) : (
-          <div className="w-full h-full flex flex-col justify-center items-center p-8 sm:p-16 text-center bg-white text-gray-900">
-            <h1 className="text-3xl sm:text-5xl md:text-6xl font-display font-extrabold leading-tight mb-4 sm:mb-8">
-              {current.title}
-            </h1>
-            {current.texts.length > 0 && (
-              <div className="flex flex-col gap-3 sm:gap-5 max-w-4xl">
-                {current.texts.map((p, idx) => (
-                  <p key={idx} className="text-gray-700 text-lg sm:text-2xl md:text-3xl leading-snug font-medium">
-                    {p}
-                  </p>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Exit button - subtle on hover */}
-        <button
-          type="button"
-          onClick={toggleFullscreen}
-          className="absolute top-4 right-4 z-30 p-2.5 rounded-full bg-black/50 text-white opacity-0 hover:opacity-100 transition-opacity duration-300 backdrop-blur"
-          title="Keluar Fullscreen (Esc)"
-        >
-          <FullscreenExit className="!text-xl" />
-        </button>
-      </div>
-    );
-  }
-
-  /* ?? Normal Preview Mode: Clean Visual Slide Canvas ?? */
   return (
     <div
       ref={containerRef}
-      className="flex-1 w-full h-full flex flex-col md:flex-row overflow-hidden bg-background"
+      className="flex-1 flex flex-col items-center justify-between p-3 sm:p-6 w-full max-w-5xl mx-auto overflow-hidden"
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Main Slide Canvas Container */}
-      <div className="flex-1 relative flex items-center justify-center p-4 sm:p-8 md:p-12 overflow-hidden bg-surface-container-dark/40 min-h-0" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-        {/* Mode Presentasi Button */}
-        <button
-          type="button"
-          onClick={toggleFullscreen}
-          className="absolute top-4 right-4 z-20 flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-surface-container-highest/80 backdrop-blur text-on-surface hover:bg-surface-container-highest transition-colors text-xs font-semibold shadow-md border border-outline-variant/20"
-          title="Mode Presentasi Layar Penuh"
-        >
-          <Fullscreen className="!text-lg" />
-          <span>Mode Presentasi</span>
-        </button>
+      <div className="w-full flex items-center justify-between px-2 py-1 text-xs text-outline font-mono">
+        <div className="flex items-center gap-2">
+          <Slideshow className="!text-sm text-primary" />
+          <span className="truncate max-w-[200px] sm:max-w-xs">{file.name}</span>
+        </div>
+        <span>
+          Slide {currentIndex + 1} / {slides.length}
+        </span>
+      </div>
 
-        {/* Pure Direct Slide Visual Canvas (No outer white box frame, no inner black padding bars) */}
-        {current.images && current.images.length > 0 ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={current.images[0]}
-            alt={`Slide ${activeSlide + 1}`}
-            className="max-w-full max-h-[82vh] object-contain rounded-xl sm:rounded-2xl shadow-2xl select-none"
-            draggable={false}
-          />
-        ) : (
-          <div className="w-full max-w-4xl aspect-[16/9] bg-white rounded-xl sm:rounded-2xl p-6 sm:p-10 shadow-2xl border border-outline-variant/20 flex flex-col justify-center items-center text-center overflow-hidden">
-            <h1 className="text-xl sm:text-3xl md:text-4xl font-display font-extrabold text-gray-900 leading-tight mb-2 sm:mb-4">
-              {current.title}
-            </h1>
-            {current.texts.length > 0 && (
-              <div className="flex flex-col gap-1.5 sm:gap-2 max-w-xl overflow-hidden">
-                {current.texts.map((p, idx) => (
-                  <p key={idx} className="text-gray-700 text-xs sm:text-base md:text-lg leading-snug font-medium break-words">
-                    {p}
-                  </p>
-                ))}
-              </div>
-            )}
+      <div className="relative w-full flex-1 flex items-center justify-center my-2">
+        <div className="w-full max-w-4xl aspect-[16/9] bg-surface rounded-xl sm:rounded-2xl p-6 sm:p-10 shadow-2xl border border-outline-variant/20 flex flex-col justify-center items-center text-center overflow-hidden">
+          <div className="flex flex-col gap-3 sm:gap-5 max-w-4xl">
+            <h2 className="text-lg sm:text-2xl font-display font-bold text-on-surface leading-tight tracking-tight">
+              {slides[currentIndex]}
+            </h2>
           </div>
+        </div>
+
+        {currentIndex > 0 && (
+          <button
+            onClick={prevSlide}
+            className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-surface-container/80 backdrop-blur-md border border-outline-variant/30 text-on-surface hover:bg-primary-container hover:text-on-primary-container transition-all flex items-center justify-center shadow-lg"
+            title="Slide sebelumnya (Panah Kiri)"
+          >
+            <ChevronLeft className="!text-xl" />
+          </button>
+        )}
+        {currentIndex < slides.length - 1 && (
+          <button
+            onClick={nextSlide}
+            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-surface-container/80 backdrop-blur-md border border-outline-variant/30 text-on-surface hover:bg-primary-container hover:text-on-primary-container transition-all flex items-center justify-center shadow-lg"
+            title="Slide selanjutnya (Panah Kanan / Spasi)"
+          >
+            <ChevronRight className="!text-xl" />
+          </button>
         )}
       </div>
 
-      {/* Thumbnail Sidebar */}
-      {slides.length > 1 && (
-        <div className="w-full md:w-64 lg:w-72 h-20 sm:h-24 md:h-full border-t md:border-t-0 md:border-l border-outline-variant/15 bg-surface-container-dark/80 backdrop-blur-md flex flex-row md:flex-col shrink-0 overflow-hidden">
-          <div className="flex-1 overflow-x-auto md:overflow-y-auto p-2 sm:p-3 flex flex-row md:flex-col gap-2 sm:gap-3 items-center md:items-stretch">
-            {slides.map((s, idx) => {
-              const isActive = activeSlide === idx;
-              return (
-                <div
-                  key={idx}
-                  onClick={() => setActiveSlide(idx)}
-                  className="flex items-center gap-1.5 sm:gap-2 cursor-pointer group shrink-0 h-full md:h-auto"
-                >
-                  <span
-                    className={`text-[10px] sm:text-xs font-bold font-mono min-w-[14px] text-center md:text-right transition-colors ${
-                      isActive ? 'text-primary' : 'text-outline group-hover:text-on-surface'
-                    }`}
-                  >
-                    {idx + 1}
-                  </span>
-                  <div
-                    className={`h-full md:h-auto aspect-[16/9] w-24 sm:w-28 md:w-full bg-white rounded-lg p-1 sm:p-1.5 shadow border-2 transition-all flex flex-col justify-center overflow-hidden ${
-                      isActive
-                        ? 'border-primary ring-2 ring-primary/30 scale-[1.02]'
-                        : 'border-outline-variant/20 hover:border-outline-variant/60'
-                    }`}
-                  >
-                    {s.images && s.images.length > 0 ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img src={s.images[0]} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-contain rounded" />
-                    ) : (
-                      <div className="flex flex-col justify-center items-center text-center p-0.5">
-                        <p className="text-[8px] sm:text-[10px] font-bold text-gray-900 line-clamp-2 leading-tight">
-                          {s.title}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      <div className="flex items-center gap-3 bg-surface-container/80 backdrop-blur-md px-4 py-2 rounded-full border border-outline-variant/20 shadow-lg">
+        <IconButton onClick={prevSlide} disabled={currentIndex === 0} title="Sebelumnya" aria-label="Sebelumnya">
+          <ChevronLeft className="!text-sm" />
+        </IconButton>
+        <span className="text-xs font-mono text-on-surface min-w-[70px] text-center">
+          {currentIndex + 1} of {slides.length}
+        </span>
+        <IconButton onClick={nextSlide} disabled={currentIndex === slides.length - 1} title="Selanjutnya" aria-label="Selanjutnya">
+          <ChevronRight className="!text-sm" />
+        </IconButton>
+        <div className="w-px h-4 bg-outline-variant/30 mx-1" />
+        <IconButton onClick={toggleFullscreen} title={isFullscreen ? 'Keluar Fullscreen' : 'Fullscreen'} aria-label="Fullscreen">
+          {isFullscreen ? <FullscreenExit className="!text-sm" /> : <Fullscreen className="!text-sm" />}
+        </IconButton>
+      </div>
     </div>
   );
-}
-function renderSimpleMarkdown(md: string) {
-  const lines = md.split('\n');
-  const elements: ReactNode[] = [];
-  let inCodeBlock = false;
-  let codeBuffer: string[] = [];
-
-  lines.forEach((line, idx) => {
-    if (line.startsWith('```')) {
-      if (inCodeBlock) {
-        elements.push(
-          <pre key={idx} className="my-3 p-3 bg-surface-container-highest rounded-lg font-mono text-xs overflow-x-auto text-on-surface">
-            <code>{codeBuffer.join('\n')}</code>
-          </pre>
-        );
-        codeBuffer = [];
-        inCodeBlock = false;
-      } else {
-        inCodeBlock = true;
-      }
-      return;
-    }
-
-    if (inCodeBlock) {
-      codeBuffer.push(line);
-      return;
-    }
-
-    if (line.startsWith('# ')) {
-      elements.push(<h1 key={idx} className="text-2xl font-bold text-on-surface mt-4 mb-2">{line.replace('# ', '')}</h1>);
-    } else if (line.startsWith('## ')) {
-      elements.push(<h2 key={idx} className="text-xl font-bold text-on-surface mt-4 mb-2">{line.replace('## ', '')}</h2>);
-    } else if (line.startsWith('### ')) {
-      elements.push(<h3 key={idx} className="text-lg font-semibold text-on-surface mt-3 mb-1">{line.replace('### ', '')}</h3>);
-    } else if (line.startsWith('> ')) {
-      elements.push(
-        <blockquote key={idx} className="border-l-4 border-primary pl-3 my-2 italic text-outline">
-          {line.replace('> ', '')}
-        </blockquote>
-      );
-    } else if (line.startsWith('- ') || line.startsWith('* ')) {
-      elements.push(
-        <li key={idx} className="ml-5 list-disc text-on-surface text-sm my-0.5">
-          {line.substring(2)}
-        </li>
-      );
-    } else if (/^\d+\.\s/.test(line)) {
-      elements.push(
-        <li key={idx} className="ml-5 list-decimal text-on-surface text-sm my-0.5">
-          {line.replace(/^\d+\.\s/, '')}
-        </li>
-      );
-    } else if (line.trim() === '---' || line.trim() === '***') {
-      elements.push(<hr key={idx} className="my-4 border-outline-variant/30" />);
-    } else if (line.trim() === '') {
-      elements.push(<div key={idx} className="h-2" />);
-    } else {
-      elements.push(
-        <p key={idx} className="text-sm text-on-surface leading-relaxed my-1">
-          {line}
-        </p>
-      );
-    }
-  });
-
-  return elements;
 }
 
 function MarkdownViewer({ file }: { file: FileItem }) {
@@ -585,10 +337,10 @@ function MarkdownViewer({ file }: { file: FileItem }) {
 
   if (loading) return <div className="flex-1 flex items-center justify-center text-outline">Loading markdown...</div>;
 
-  const htmlContent = marked.parse(content) as string;
+  const htmlContent = marked.parse(content, { gfm: true, breaks: true }) as string;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden max-w-4xl w-full mx-auto p-4" onClick={(e) => e.stopPropagation()}>
+    <div className="flex-1 flex flex-col overflow-hidden max-w-5xl w-full mx-auto p-4" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between mb-3 bg-surface-container/60 p-2 rounded-xl border border-outline-variant/20">
         <Tabs
           tabs={[
@@ -599,10 +351,10 @@ function MarkdownViewer({ file }: { file: FileItem }) {
           onChange={(v: string) => setTab(v as 'preview' | 'code')}
         />
       </div>
-      <div className="flex-1 overflow-auto bg-surface-container/30 border border-outline-variant/20 rounded-2xl p-6 shadow-inner">
+      <div className="flex-1 overflow-auto bg-surface-container/30 border border-outline-variant/20 rounded-2xl p-6 sm:p-8 shadow-inner">
         {tab === 'preview' ? (
           <div
-            className="prose dark:prose-invert max-w-none text-on-surface leading-relaxed text-sm"
+            className="prose markdown-body max-w-none text-on-surface leading-relaxed text-sm"
             dangerouslySetInnerHTML={{ __html: htmlContent }}
           />
         ) : (
@@ -639,9 +391,8 @@ function CodeTextViewer({ file }: { file: FileItem }) {
   return (
     <div className="flex-1 flex flex-col overflow-hidden max-w-5xl w-full mx-auto p-4" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-outline font-mono">{lines.length} lines � {bytes(file.size)}</span>
+        <span className="text-xs text-outline font-mono">{lines.length} lines</span>
         <button
-          type="button"
           onClick={copyToClipboard}
           className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-highest text-on-surface transition-colors border border-outline-variant/20"
         >
@@ -672,7 +423,7 @@ function OtherViewer({ file }: { file: FileItem }) {
       </div>
       <div className="text-center">
         <p className="text-on-surface font-display text-lg mb-1">{file.name}</p>
-        <p className="text-outline text-sm">{bytes(file.size)} � {file.mime_type}</p>
+        <p className="text-outline text-sm">{bytes(file.size)} • {file.mime_type}</p>
       </div>
       <a
         href={`${fileUrl(file).replace('?inline=1', '').replace('&inline=1', '')}`}
@@ -750,41 +501,43 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
             title={t('preview.close')}
             aria-label={t('preview.close')}
           >
-            <Close />
+            <Close className="!text-xl" />
           </button>
         </div>
       </div>
 
-      {/* Content */}
-      {viewer}
+      {/* Main Viewer Body */}
+      <div className="flex-1 flex items-center justify-center min-h-0 relative">
+        {hasNav && currentIndex > 0 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate?.(files![currentIndex - 1]);
+            }}
+            className="absolute left-2 sm:left-4 z-10 w-11 h-11 rounded-full bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 text-on-surface hover:bg-surface-container-highest transition-colors flex items-center justify-center shadow-lg"
+            title={t('preview.prev')}
+            aria-label={t('preview.prev')}
+          >
+            <ChevronLeft />
+          </button>
+        )}
 
-      {/* Navigation */}
-      {hasNav && category !== 'office' && (
-        <>
-          {currentIndex > 0 && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onNavigate?.(files![currentIndex - 1]);
-              }}
-              className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-surface-container-highest/80 flex items-center justify-center text-on-surface hover:bg-surface-container-highest transition-colors shadow-lg"
-            >
-              <ChevronLeft />
-            </button>
-          )}
-          {currentIndex < files!.length - 1 && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onNavigate?.(files![currentIndex + 1]);
-              }}
-              className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-surface-container-highest/80 flex items-center justify-center text-on-surface hover:bg-surface-container-highest transition-colors shadow-lg"
-            >
-              <ChevronRight />
-            </button>
-          )}
-        </>
-      )}
+        {viewer}
+
+        {hasNav && currentIndex < files!.length - 1 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate?.(files![currentIndex + 1]);
+            }}
+            className="absolute right-2 sm:right-4 z-10 w-11 h-11 rounded-full bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 text-on-surface hover:bg-surface-container-highest transition-colors flex items-center justify-center shadow-lg"
+            title={t('preview.next')}
+            aria-label={t('preview.next')}
+          >
+            <ChevronRight />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -311,3 +311,218 @@ body {
   background: var(--color-surface-container-high);
   color: var(--color-on-surface);
 }
+
+/* === RICH MARKDOWN TYPOGRAPHY (prose & markdown-body) === */
+.prose, .markdown-body {
+  color: var(--color-on-surface);
+  font-family: var(--font-body);
+  line-height: 1.7;
+}
+
+.prose h1, .markdown-body h1 {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-on-surface);
+  margin-top: 1.75rem;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-outline-variant);
+  letter-spacing: -0.015em;
+}
+
+.prose h2, .markdown-body h2 {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--color-on-surface);
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid rgba(146, 143, 157, 0.15);
+}
+
+.prose h3, .markdown-body h3 {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose h4, .markdown-body h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose p, .markdown-body p {
+  margin-top: 0.6rem;
+  margin-bottom: 0.6rem;
+  line-height: 1.7;
+}
+
+.prose a, .markdown-body a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-decoration-color: rgba(198, 192, 255, 0.4);
+  text-underline-offset: 3px;
+  font-weight: 500;
+  transition: text-decoration-color 0.2s;
+}
+.prose a:hover, .markdown-body a:hover {
+  text-decoration-color: var(--color-primary);
+}
+
+/* Code & Pre */
+.prose code:not(pre code), .markdown-body code:not(pre code) {
+  background: var(--color-surface-container-highest);
+  color: var(--color-primary-fixed-dim);
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.375rem;
+  font-family: monospace;
+  font-size: 0.85em;
+  border: 1px solid rgba(146, 143, 157, 0.2);
+}
+
+.prose pre, .markdown-body pre {
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+  padding: 1rem 1.25rem;
+  border-radius: 0.75rem;
+  overflow-x: auto;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid rgba(146, 143, 157, 0.2);
+  font-family: monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.prose pre code, .markdown-body pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border: none;
+  font-size: inherit;
+}
+
+/* Blockquotes */
+.prose blockquote, .markdown-body blockquote {
+  border-left: 4px solid var(--color-primary);
+  background: var(--color-surface-container);
+  border-radius: 0 0.75rem 0.75rem 0;
+  padding: 0.75rem 1.25rem;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  color: var(--color-on-surface-variant);
+  font-style: italic;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.prose blockquote p, .markdown-body blockquote p {
+  margin: 0.25rem 0;
+}
+
+/* Tables */
+.prose table, .markdown-body table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin-top: 1.25rem;
+  margin-bottom: 1.25rem;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid var(--color-outline-variant);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.prose th, .markdown-body th {
+  background: var(--color-surface-container-high);
+  color: var(--color-on-surface);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 2px solid var(--color-outline-variant);
+}
+
+.prose td, .markdown-body td {
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  border-bottom: 1px solid rgba(146, 143, 157, 0.15);
+  color: var(--color-on-surface);
+  vertical-align: top;
+}
+
+.prose tr:last-child td, .markdown-body tr:last-child td {
+  border-bottom: none;
+}
+
+.prose tbody tr:nth-child(even), .markdown-body tbody tr:nth-child(even) {
+  background: var(--color-surface-container-low);
+}
+
+.prose tbody tr:hover, .markdown-body tbody tr:hover {
+  background: var(--color-surface-container);
+}
+
+/* Lists */
+.prose ul, .markdown-body ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.prose ol, .markdown-body ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.prose li, .markdown-body li {
+  margin-top: 0.35rem;
+  margin-bottom: 0.35rem;
+  padding-left: 0.25rem;
+}
+
+.prose ul ul, .markdown-body ul ul {
+  list-style-type: circle;
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.prose ul ul ul, .markdown-body ul ul ul {
+  list-style-type: square;
+}
+
+/* Horizontal Rule */
+.prose hr, .markdown-body hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--color-outline-variant), transparent);
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+}
+
+/* Task List Checkbox */
+.prose input[type="checkbox"], .markdown-body input[type="checkbox"] {
+  accent-color: var(--color-primary);
+  margin-right: 0.5rem;
+  transform: scale(1.1);
+}
+
+/* Strong / Bold */
+.prose strong, .markdown-body strong {
+  color: var(--color-on-surface);
+  font-weight: 700;
+}
