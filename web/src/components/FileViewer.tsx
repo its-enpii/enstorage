@@ -152,8 +152,8 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
         const slideFiles = Object.keys(zip.files)
           .filter((path) => /^ppt\/slides\/slide\d+\.xml$/i.test(path))
           .sort((a, b) => {
-            const numA = parseInt(a.match(/\d+/)?[0] || '0', 10);
-            const numB = parseInt(b.match(/\d+/)?[0] || '0', 10);
+            const numA = parseInt(a.match(/\d+/)?.[0] || '0', 10);
+            const numB = parseInt(b.match(/\d+/)?.[0] || '0', 10);
             return numA - numB;
           });
 
@@ -541,3 +541,4 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
     </div>
   );
 }
+
