@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -129,74 +129,168 @@ function PdfViewer({ file }: { file: FileItem }) {
   );
 }
 
+type SlideData = {
+  id: number;
+  title: string;
+  texts: string[];
+  images: string[];
+};
+
+async function parsePptxWithJSZip(buffer: ArrayBuffer): Promise<SlideData[]> {
+  const zip = await JSZip.loadAsync(buffer);
+  const slides: SlideData[] = [];
+  const parser = new DOMParser();
+
+  // Extract all media blobs from ppt/media/
+  const mediaMap = new Map<string, string>();
+  const mediaFiles = Object.keys(zip.files).filter((path) => path.startsWith('ppt/media/'));
+
+  for (const mediaPath of mediaFiles) {
+    const file = zip.files[mediaPath];
+    if (!file || file.dir) continue;
+    const blob = await file.async('blob');
+    const url = URL.createObjectURL(blob);
+    const filename = mediaPath.split('/').pop() || mediaPath;
+    mediaMap.set(filename, url);
+    mediaMap.set(mediaPath, url);
+  }
+
+  // Find slide XML files: ppt/slides/slide1.xml, slide2.xml, ...
+  const slideFiles = Object.keys(zip.files)
+    .filter((path) => /^ppt\/slides\/slide\d+\.xml$/i.test(path))
+    .sort((a, b) => {
+      const numA = parseInt(a.match(/\d+/)?.[0] ?? '0', 10);
+      const numB = parseInt(b.match(/\d+/)?.[0] ?? '0', 10);
+      return numA - numB;
+    });
+
+  for (let i = 0; i < slideFiles.length; i++) {
+    const slidePath = slideFiles[i];
+    const xmlText = await zip.files[slidePath].async('text');
+    const xmlDoc = parser.parseFromString(xmlText, 'application/xml');
+
+    // Read slide relationships from ppt/slides/_rels/slideN.xml.rels
+    const slideName = slidePath.split('/').pop();
+    const relsPath = `ppt/slides/_rels/${slideName}.rels`;
+    const relsMap = new Map<string, string>();
+
+    if (zip.files[relsPath]) {
+      const relsText = await zip.files[relsPath].async('text');
+      const relsDoc = parser.parseFromString(relsText, 'application/xml');
+      const relNodes = Array.from(relsDoc.getElementsByTagName('Relationship'));
+      for (const rel of relNodes) {
+        const rId = rel.getAttribute('Id');
+        const target = rel.getAttribute('Target');
+        if (rId && target) {
+          const mediaFileName = target.split('/').pop() || target;
+          relsMap.set(rId, mediaFileName);
+        }
+      }
+    }
+
+    // Extract text paragraphs
+    const textNodes = Array.from(xmlDoc.getElementsByTagName('a:t'));
+    const allTexts = textNodes.map((n) => n.textContent?.trim() ?? '').filter((t) => t.length > 0);
+
+    const title = allTexts.length > 0 ? allTexts[0] : `Slide ${i + 1}`;
+    const bodyTexts = allTexts.length > 1 ? allTexts.slice(1) : [];
+
+    // Extract exact slide images referenced in this slide XML
+    const slideImages: string[] = [];
+    const blipNodes = Array.from(xmlDoc.getElementsByTagName('a:blip'));
+
+    for (const blip of blipNodes) {
+      const embedId = blip.getAttribute('r:embed') || blip.getAttribute('embed');
+      if (embedId && relsMap.has(embedId)) {
+        const mediaFileName = relsMap.get(embedId)!;
+        const blobUrl = mediaMap.get(mediaFileName);
+        if (blobUrl && !slideImages.includes(blobUrl)) {
+          slideImages.push(blobUrl);
+        }
+      }
+    }
+
+    slides.push({
+      id: i + 1,
+      title,
+      texts: bodyTexts,
+      images: slideImages,
+    });
+  }
+
+  return slides;
+}
+
 function PptxSlidePresenter({ file }: { file: FileItem }) {
-  const { t } = useTranslation();
-  const [slides, setSlides] = useState<string[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [slides, setSlides] = useState<SlideData[]>([]);
+  const [activeSlide, setActiveSlide] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStartX.current || !touchEndX.current) return;
+    const distance = touchStartX.current - touchEndX.current;
+    const isLeftSwipe = distance > 40;
+    const isRightSwipe = distance < -40;
+
+    if (isLeftSwipe && activeSlide < slides.length - 1) {
+      setActiveSlide((s) => s + 1);
+    } else if (isRightSwipe && activeSlide > 0) {
+      setActiveSlide((s) => s - 1);
+    }
+
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
 
   useEffect(() => {
     let active = true;
-    async function loadPresentation() {
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await fetch(fileUrl(file));
-        if (!res.ok) throw new Error('Gagal mengunduh file presentasi.');
-        const buffer = await res.arrayBuffer();
-
-        const zip = await JSZip.loadAsync(buffer);
-        const slideFiles = Object.keys(zip.files)
-          .filter((path) => /^ppt\/slides\/slide\d+\.xml$/i.test(path))
-          .sort((a, b) => {
-            const numA = parseInt(a.match(/\d+/)?.[0] || '0', 10);
-            const numB = parseInt(b.match(/\d+/)?.[0] || '0', 10);
-            return numA - numB;
-          });
-
-        if (slideFiles.length === 0) {
-          throw new Error('Tidak ada slide yang ditemukan dalam file ini.');
-        }
-
-        const extractedTexts: string[] = [];
-        for (const path of slideFiles) {
-          const xmlText = await zip.files[path].async('string');
-          const matches = xmlText.match(/<a:t[^>]*>(.*?)<\/a:t>/gi) || [];
-          const textContent = matches
-            .map((m) => m.replace(/<[^>]+>/g, ''))
-            .filter((t) => t.trim().length > 0)
-            .join(' ');
-          extractedTexts.push(textContent || `[Slide ${extractedTexts.length + 1}]`);
-        }
-
+    fetch(fileUrl(file))
+      .then((r) => r.arrayBuffer())
+      .then(async (buf) => {
+        const parsed = await parsePptxWithJSZip(buf);
         if (active) {
-          setSlides(extractedTexts);
-          setCurrentIndex(0);
+          if (parsed.length > 0) setSlides(parsed);
+          else setError('Dokumen PPTX tidak memiliki slide.');
         }
-      } catch (err: unknown) {
-        if (active) {
-          setError(err instanceof Error ? err.message : 'Gagal membaca presentasi.');
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    loadPresentation();
-    return () => {
-      active = false;
-    };
+      })
+      .catch((e) => {
+        if (active) setError(e instanceof Error ? e.message : 'Gagal memuat presentasi PPTX.');
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [file.id]);
 
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
+
+  useEffect(() => {
+    if (slides.length === 0) return;
+    const onSlideKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        setActiveSlide((s) => Math.max(0, s - 1));
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+        setActiveSlide((s) => Math.min(slides.length - 1, s + 1));
+      }
+    };
+    window.addEventListener('keydown', onSlideKey);
+    return () => window.removeEventListener('keydown', onSlideKey);
+  }, [slides.length]);
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
@@ -207,121 +301,176 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
     }
   };
 
-  const nextSlide = () => {
-    if (currentIndex < slides.length - 1) setCurrentIndex((i) => i + 1);
-  };
-  const prevSlide = () => {
-    if (currentIndex > 0) setCurrentIndex((i) => i - 1);
-  };
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (slides.length === 0) return;
-      if (e.key === 'ArrowRight' || e.key === 'Space') {
-        e.preventDefault();
-        nextSlide();
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        prevSlide();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [currentIndex, slides.length]);
-
   if (loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 text-outline">
-        <span className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm font-display">Memproses slide presentasi...</p>
+        <span className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <p className="text-base font-medium">Memuat Slide Presentasi ({bytes(file.size)})...</p>
       </div>
     );
   }
 
   if (error || slides.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 p-4" onClick={(e) => e.stopPropagation()}>
-        <div className="w-20 h-20 rounded-full bg-error-container/30 flex items-center justify-center text-error">
-          <Slideshow className="!text-4xl" />
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="w-20 h-20 rounded-2xl bg-surface-container flex items-center justify-center text-primary">
+          <Slideshow className="!text-5xl" />
         </div>
         <div className="text-center max-w-md">
-          <p className="text-on-surface font-display text-base mb-1">{file.name}</p>
-          <p className="text-outline text-xs mb-4">{error || 'Gagal mengekstrak slide.'}</p>
+          <p className="text-on-surface font-semibold text-lg mb-1">{file.name}</p>
+          <p className="text-outline text-xs mb-4">{bytes(file.size)}</p>
           <a
-            href={`${fileUrl(file).replace('?inline=1', '').replace('&inline=1', '')}`}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-full hover:bg-primary/90 transition-colors text-xs font-semibold"
+            href={fileUrl(file).replace('?inline=1', '').replace('&inline=1', '')}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary rounded-full text-sm font-medium shadow-md"
           >
-            <Download className="!text-sm" /> Download PPTX
+            <Download className="!text-base" /> Download PPTX
           </a>
         </div>
       </div>
     );
   }
 
+  const current = slides[activeSlide];
+
+  /* ?? Fullscreen Presentation Mode: 100% edge-to-edge ?? */
+  if (isFullscreen) {
+    return (
+      <div
+        ref={containerRef}
+        className="w-screen h-screen bg-black flex items-center justify-center overflow-hidden relative" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {current.images && current.images.length > 0 ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={current.images[0]}
+            alt={`Slide ${activeSlide + 1}`}
+            className="w-full h-full object-contain"
+            draggable={false}
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col justify-center items-center p-8 sm:p-16 text-center bg-white text-gray-900">
+            <h1 className="text-3xl sm:text-5xl md:text-6xl font-display font-extrabold leading-tight mb-4 sm:mb-8">
+              {current.title}
+            </h1>
+            {current.texts.length > 0 && (
+              <div className="flex flex-col gap-3 sm:gap-5 max-w-4xl">
+                {current.texts.map((p, idx) => (
+                  <p key={idx} className="text-gray-700 text-lg sm:text-2xl md:text-3xl leading-snug font-medium">
+                    {p}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Exit button - subtle on hover */}
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="absolute top-4 right-4 z-30 p-2.5 rounded-full bg-black/50 text-white opacity-0 hover:opacity-100 transition-opacity duration-300 backdrop-blur"
+          title="Keluar Fullscreen (Esc)"
+        >
+          <FullscreenExit className="!text-xl" />
+        </button>
+      </div>
+    );
+  }
+
+  /* ?? Normal Preview Mode: Clean Visual Slide Canvas ?? */
   return (
     <div
       ref={containerRef}
-      className="flex-1 flex flex-col items-center justify-between p-3 sm:p-6 w-full max-w-5xl mx-auto overflow-hidden"
+      className="flex-1 w-full h-full flex flex-col md:flex-row overflow-hidden bg-background"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="w-full flex items-center justify-between px-2 py-1 text-xs text-outline font-mono">
-        <div className="flex items-center gap-2">
-          <Slideshow className="!text-sm text-primary" />
-          <span className="truncate max-w-[200px] sm:max-w-xs">{file.name}</span>
-        </div>
-        <span>
-          Slide {currentIndex + 1} / {slides.length}
-        </span>
+      {/* Main Slide Canvas Container */}
+      <div className="flex-1 relative flex items-center justify-center p-4 sm:p-8 md:p-12 overflow-hidden bg-surface-container-dark/40 min-h-0" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+        {/* Mode Presentasi Button */}
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="absolute top-4 right-4 z-20 flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-surface-container-highest/80 backdrop-blur text-on-surface hover:bg-surface-container-highest transition-colors text-xs font-semibold shadow-md border border-outline-variant/20"
+          title="Mode Presentasi Layar Penuh"
+        >
+          <Fullscreen className="!text-lg" />
+          <span>Mode Presentasi</span>
+        </button>
+
+        {/* Pure Direct Slide Visual Canvas (No outer white box frame, no inner black padding bars) */}
+        {current.images && current.images.length > 0 ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={current.images[0]}
+            alt={`Slide ${activeSlide + 1}`}
+            className="max-w-full max-h-[82vh] object-contain rounded-xl sm:rounded-2xl shadow-2xl select-none"
+            draggable={false}
+          />
+        ) : (
+          <div className="w-full max-w-4xl aspect-[16/9] bg-white rounded-xl sm:rounded-2xl p-6 sm:p-10 shadow-2xl border border-outline-variant/20 flex flex-col justify-center items-center text-center overflow-hidden">
+            <h1 className="text-xl sm:text-3xl md:text-4xl font-display font-extrabold text-gray-900 leading-tight mb-2 sm:mb-4">
+              {current.title}
+            </h1>
+            {current.texts.length > 0 && (
+              <div className="flex flex-col gap-1.5 sm:gap-2 max-w-xl overflow-hidden">
+                {current.texts.map((p, idx) => (
+                  <p key={idx} className="text-gray-700 text-xs sm:text-base md:text-lg leading-snug font-medium break-words">
+                    {p}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="relative w-full flex-1 flex items-center justify-center my-2">
-        <div className="w-full max-w-4xl aspect-[16/9] bg-surface rounded-xl sm:rounded-2xl p-6 sm:p-10 shadow-2xl border border-outline-variant/20 flex flex-col justify-center items-center text-center overflow-hidden">
-          <div className="flex flex-col gap-3 sm:gap-5 max-w-4xl">
-            <h2 className="text-lg sm:text-2xl font-display font-bold text-on-surface leading-tight tracking-tight">
-              {slides[currentIndex]}
-            </h2>
+      {/* Thumbnail Sidebar */}
+      {slides.length > 1 && (
+        <div className="w-full md:w-64 lg:w-72 h-20 sm:h-24 md:h-full border-t md:border-t-0 md:border-l border-outline-variant/15 bg-surface-container-dark/80 backdrop-blur-md flex flex-row md:flex-col shrink-0 overflow-hidden">
+          <div className="flex-1 overflow-x-auto md:overflow-y-auto p-2 sm:p-3 flex flex-row md:flex-col gap-2 sm:gap-3 items-center md:items-stretch">
+            {slides.map((s, idx) => {
+              const isActive = activeSlide === idx;
+              return (
+                <div
+                  key={idx}
+                  onClick={() => setActiveSlide(idx)}
+                  className="flex items-center gap-1.5 sm:gap-2 cursor-pointer group shrink-0 h-full md:h-auto"
+                >
+                  <span
+                    className={`text-[10px] sm:text-xs font-bold font-mono min-w-[14px] text-center md:text-right transition-colors ${
+                      isActive ? 'text-primary' : 'text-outline group-hover:text-on-surface'
+                    }`}
+                  >
+                    {idx + 1}
+                  </span>
+                  <div
+                    className={`h-full md:h-auto aspect-[16/9] w-24 sm:w-28 md:w-full bg-white rounded-lg p-1 sm:p-1.5 shadow border-2 transition-all flex flex-col justify-center overflow-hidden ${
+                      isActive
+                        ? 'border-primary ring-2 ring-primary/30 scale-[1.02]'
+                        : 'border-outline-variant/20 hover:border-outline-variant/60'
+                    }`}
+                  >
+                    {s.images && s.images.length > 0 ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img src={s.images[0]} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-contain rounded" />
+                    ) : (
+                      <div className="flex flex-col justify-center items-center text-center p-0.5">
+                        <p className="text-[8px] sm:text-[10px] font-bold text-gray-900 line-clamp-2 leading-tight">
+                          {s.title}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-
-        {currentIndex > 0 && (
-          <button
-            onClick={prevSlide}
-            className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-surface-container/80 backdrop-blur-md border border-outline-variant/30 text-on-surface hover:bg-primary-container hover:text-on-primary-container transition-all flex items-center justify-center shadow-lg"
-            title="Slide sebelumnya (Panah Kiri)"
-          >
-            <ChevronLeft className="!text-xl" />
-          </button>
-        )}
-        {currentIndex < slides.length - 1 && (
-          <button
-            onClick={nextSlide}
-            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-surface-container/80 backdrop-blur-md border border-outline-variant/30 text-on-surface hover:bg-primary-container hover:text-on-primary-container transition-all flex items-center justify-center shadow-lg"
-            title="Slide selanjutnya (Panah Kanan / Spasi)"
-          >
-            <ChevronRight className="!text-xl" />
-          </button>
-        )}
-      </div>
-
-      <div className="flex items-center gap-3 bg-surface-container/80 backdrop-blur-md px-4 py-2 rounded-full border border-outline-variant/20 shadow-lg">
-        <IconButton onClick={prevSlide} disabled={currentIndex === 0} title="Sebelumnya" aria-label="Sebelumnya">
-          <ChevronLeft className="!text-sm" />
-        </IconButton>
-        <span className="text-xs font-mono text-on-surface min-w-[70px] text-center">
-          {currentIndex + 1} of {slides.length}
-        </span>
-        <IconButton onClick={nextSlide} disabled={currentIndex === slides.length - 1} title="Selanjutnya" aria-label="Selanjutnya">
-          <ChevronRight className="!text-sm" />
-        </IconButton>
-        <div className="w-px h-4 bg-outline-variant/30 mx-1" />
-        <IconButton onClick={toggleFullscreen} title={isFullscreen ? 'Keluar Fullscreen' : 'Fullscreen'} aria-label="Fullscreen">
-          {isFullscreen ? <FullscreenExit className="!text-sm" /> : <Fullscreen className="!text-sm" />}
-        </IconButton>
-      </div>
+      )}
     </div>
   );
 }
-
 function MarkdownViewer({ file }: { file: FileItem }) {
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -423,7 +572,7 @@ function OtherViewer({ file }: { file: FileItem }) {
       </div>
       <div className="text-center">
         <p className="text-on-surface font-display text-lg mb-1">{file.name}</p>
-        <p className="text-outline text-sm">{bytes(file.size)} • {file.mime_type}</p>
+        <p className="text-outline text-sm">{bytes(file.size)} Ã¢â‚¬Â¢ {file.mime_type}</p>
       </div>
       <a
         href={`${fileUrl(file).replace('?inline=1', '').replace('&inline=1', '')}`}
@@ -444,8 +593,8 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
-      if (hasNav && e.key === 'ArrowLeft' && currentIndex > 0) onNavigate?.(files![currentIndex - 1]);
-      if (hasNav && e.key === 'ArrowRight' && currentIndex < files!.length - 1) onNavigate?.(files![currentIndex + 1]);
+      if (hasNav && category !== 'office' && e.key === 'ArrowLeft' && currentIndex > 0) onNavigate?.(files![currentIndex - 1]);
+      if (hasNav && category !== 'office' && e.key === 'ArrowRight' && currentIndex < files!.length - 1) onNavigate?.(files![currentIndex + 1]);
     };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
@@ -508,7 +657,7 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
 
       {/* Main Viewer Body */}
       <div className="flex-1 flex items-center justify-center min-h-0 relative">
-        {hasNav && currentIndex > 0 && (
+        {hasNav && currentIndex > 0 && category !== 'office' && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -524,7 +673,7 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
 
         {viewer}
 
-        {hasNav && currentIndex < files!.length - 1 && (
+        {hasNav && currentIndex < files!.length - 1 && category !== 'office' && (
           <button
             onClick={(e) => {
               e.stopPropagation();
