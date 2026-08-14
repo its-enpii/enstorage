@@ -946,6 +946,97 @@ curl -X POST http://localhost:8080/api/v1/files/upload \
 
 ---
 
+#### `POST /files/upload/init` — Scope: `write`
+
+Inisialisasi chunked upload untuk file besar (> 1 GB, hingga puluhan GB). Membuat record file pending dan temporary directory chunk.
+
+**Body (JSON):**
+
+| Field | Type | Required | Default | Keterangan |
+|-------|------|----------|---------|------------|
+| `file_name` | string | ya | — | Nama file beserta extension (mis. `backup.sql.gz`) |
+| `mime_type` | string | tidak | `application/octet-stream` | MIME type file |
+| `total_size` | integer | ya | — | Ukuran total file dalam bytes |
+| `total_chunks` | integer | ya | — | Jumlah total chunk (1 - 1000) |
+| `folder_id` | uuid | tidak | `null` | Folder tujuan milik user |
+| `shareable` | boolean | tidak | `true` | Generate share link publik saat complete |
+| `share_expires_at` | ISO 8601 | tidak | `null` | Expiry share link |
+| `share_max_views` | integer | tidak | `null` | Max views share link |
+| `client_key` | string | tidak | ULID | Correlation key unik |
+
+**Response 201:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "file_id": "019ffde0-116b-7b82-a387-8de09ae0c19a",
+    "upload_url_template": "/api/v1/files/upload/019ffde0-116b-7b82-a387-8de09ae0c19a/chunk/{chunk_index}",
+    "total_chunks": 64,
+    "total_size": 3221225472,
+    "client_key": "01j9zq8k5x3n2p7r4b6y8w0v5c"
+  },
+  "message": "Chunked upload diinisialisasi."
+}
+```
+
+---
+
+#### `POST /files/upload/{fileId}/chunk/{chunkIndex}` — Scope: `write`
+
+Upload satu part/chunk file. Mendukung raw binary (`application/octet-stream`) atau multipart form (`chunk` field).
+
+**Headers:**
+- `Content-Type: application/octet-stream` (body berisi raw chunk bytes)
+
+**URL Params:**
+- `fileId`: UUID file dari response `init`
+- `chunkIndex`: Index chunk berbasis 0 (`0` sampai `total_chunks - 1`)
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "file_id": "019ffde0-116b-7b82-a387-8de09ae0c19a",
+    "chunk_index": 0,
+    "received_chunks": 1,
+    "total_chunks": 64
+  },
+  "message": "Chunk 0 berhasil diterima."
+}
+```
+
+---
+
+#### `POST /files/upload/{fileId}/complete` — Scope: `write`
+
+Finalisasi upload setelah semua chunk terkirim. Menggabungkan file secara sequential, memverifikasi integritas, membuat share link, dan mendispatch upload job ke Google Drive.
+
+**Response 202:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "file_id": "019ffde0-116b-7b82-a387-8de09ae0c19a",
+    "name": "backup.sql.gz",
+    "size": 3221225472,
+    "mime_type": "application/gzip",
+    "upload_status": "pending",
+    "share_url": "https://app.enstorage.id/s/abc123..."
+  },
+  "message": "Chunked upload selesai dan sedang diproses."
+}
+```
+
+**Errors:**
+- `400`: File bukan chunked upload atau status tidak valid
+- `409`: Chunk belum lengkap (`received_chunks < total_chunks`)
+
+---
+
 #### `PATCH /files/{id}` — Scope: `write`
 
 Rename (kolom `name` saja, **tidak** rename di Google Drive) dan/atau set star.
