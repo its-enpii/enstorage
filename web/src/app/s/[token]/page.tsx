@@ -1,5 +1,5 @@
-import type { Metadata } from 'next';
-import { pageTitle } from '@/lib/serverMetadata';
+﻿import type { Metadata } from 'next';
+import { generateSharedMetadata } from '@/lib/shareMetadata';
 import ShareClient from './ShareClient';
 
 type Params = { token: string };
@@ -7,11 +7,8 @@ type Params = { token: string };
 export async function generateMetadata(
   { params }: { params: Promise<Params> },
 ): Promise<Metadata> {
-  // Token doesn't reveal share contents server-side. Use a generic loading
-  // label and let the client usePageTitle refine to "<folder/file name> · EnStorage"
-  // once the listing fetch lands.
-  await params;
-  return pageTitle('common.loadingLabel');
+  const { token } = await params;
+  return generateSharedMetadata(token, 'landing');
 }
 
 export default function Page() {
