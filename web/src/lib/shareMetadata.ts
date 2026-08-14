@@ -2,6 +2,7 @@
 import { bytes } from './format';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080/api/v1';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://enstorage.enpiistudio.com';
 
 type SharedInfo =
   | {
@@ -43,11 +44,25 @@ export async function generateSharedMetadata(
   mode: 'landing' | 'viewer' = 'landing',
 ): Promise<Metadata> {
   const info = await fetchSharedInfo(token);
+  const defaultOgImage = `${APP_URL}/og-image.png`;
 
   if (!info) {
     return {
       title: 'Shared File · EnStorage',
       description: 'Bagikan dan unduh file dengan aman menggunakan EnStorage.',
+      openGraph: {
+        title: 'Shared File · EnStorage',
+        description: 'Bagikan dan unduh file dengan aman menggunakan EnStorage.',
+        type: 'website',
+        siteName: 'EnStorage',
+        images: [{ url: defaultOgImage, alt: 'EnStorage' }],
+      },
+      twitter: {
+        card: 'summary',
+        title: 'Shared File · EnStorage',
+        description: 'Bagikan dan unduh file dengan aman menggunakan EnStorage.',
+        images: [defaultOgImage],
+      },
       robots: { index: false, follow: false },
     };
   }
@@ -66,11 +81,13 @@ export async function generateSharedMetadata(
         description,
         type: 'website',
         siteName: 'EnStorage',
+        images: [{ url: defaultOgImage, alt: name }],
       },
       twitter: {
         card: 'summary',
         title,
         description,
+        images: [defaultOgImage],
       },
     };
   }
@@ -94,7 +111,12 @@ export async function generateSharedMetadata(
           alt: name,
         },
       ]
-    : undefined;
+    : [
+        {
+          url: defaultOgImage,
+          alt: 'EnStorage',
+        },
+      ];
 
   return {
     title,
@@ -110,7 +132,7 @@ export async function generateSharedMetadata(
       card: isImage ? 'summary_large_image' : 'summary',
       title,
       description,
-      images: isImage ? [`${API_BASE}/s/${token}`] : undefined,
+      images: isImage ? [`${API_BASE}/s/${token}`] : [defaultOgImage],
     },
   };
 }
