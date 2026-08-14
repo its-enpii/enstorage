@@ -239,6 +239,272 @@ class FileUploadController extends Controller
     }
 
     /**
+     * POST /files/upload/init
+     * Inisialisasi chunked upload untuk file besar (>1GB).
+     * Return 201 + file_id dan upload_url_template.
+     */
+    public function initChunked(Request $request): JsonResponse
+    {
+        $userId = $request->user()->id;
+
+        $fileName = $request->input('file_name');
+        if (! $fileName || ! is_string($fileName) || trim($fileName) === '') {
+            throw ValidationException::withMessages(['file_name' => __('file_name wajib diisi.')]);
+        }
+        $fileName = trim($fileName);
+        if (strlen($fileName) > 255) {
+            throw ValidationException::withMessages(['file_name' => __('file_name maksimal 255 karakter.')]);
+        }
+
+        $mimeType = $request->input('mime_type', 'application/octet-stream');
+        if (! is_string($mimeType) || trim($mimeType) === '') {
+            $mimeType = 'application/octet-stream';
+        }
+
+        $totalSize = $request->input('total_size');
+        if (! is_numeric($totalSize) || (int) $totalSize <= 0) {
+            throw ValidationException::withMessages(['total_size' => __('total_size harus lebih dari 0.')]);
+        }
+        $totalSize = (int) $totalSize;
+
+        $totalChunks = $request->input('total_chunks');
+        if (! is_numeric($totalChunks) || (int) $totalChunks < 1 || (int) $totalChunks > 1000) {
+            throw ValidationException::withMessages(['total_chunks' => __('total_chunks harus antara 1 dan 1000.')]);
+        }
+        $totalChunks = (int) $totalChunks;
+
+        $folderId = $request->input('folder_id');
+        if ($folderId) {
+            $folderExists = Folder::where('id', $folderId)->where('user_id', $userId)->exists();
+            if (! $folderExists) {
+                throw ValidationException::withMessages(['folder_id' => __('Folder tidak ditemukan.')]);
+            }
+        }
+
+        $rawKey = $request->input('client_key');
+        $rawKeyProvided = $rawKey !== null && $rawKey !== '';
+        $origin = $rawKeyProvided ? 'client' : 'server';
+        $userKeys = $this->normalizeClientKeys($rawKey, 1);
+        $clientKey = $userKeys[0];
+        if (! preg_match('/^[A-Za-z0-9._:-]{1,128}$/', $clientKey)) {
+            throw ValidationException::withMessages(['client_key' => __('client_key hanya boleh berisi huruf, angka, ".", "_", "-", ":" (maks 128 karakter).')]);
+        }
+        if (FileModel::where('user_id', $userId)->where('client_key', $clientKey)->exists()) {
+            $existing = FileModel::where('user_id', $userId)
+                ->where('client_key', $clientKey)
+                ->first(['id', 'client_key']);
+            return $this->fail(
+                __('Satu atau lebih client_key sudah dipakai. Gunakan key lain atau kosongkan untuk auto-generate.'),
+                409,
+                [
+                    'error' => 'duplicate_client_key',
+                    'collisions' => [[
+                        'client_key' => $existing->client_key,
+                        'existing_file_id' => $existing->id,
+                    ]],
+                ],
+            );
+        }
+
+        $file = FileModel::create([
+            'user_id' => $userId,
+            'folder_id' => $folderId,
+            'google_account_id' => null,
+            'name' => $fileName,
+            'original_name' => $fileName,
+            'mime_type' => $mimeType,
+            'size' => 0,
+            'gdrive_file_id' => 'pending-'.Str::uuid(),
+            'upload_status' => FileModel::STATUS_PENDING,
+            'client_key' => $clientKey,
+            'client_key_origin' => $origin,
+            'is_chunked' => true,
+            'total_chunks' => $totalChunks,
+            'total_size' => $totalSize,
+            'received_chunks' => 0,
+        ]);
+
+        $file->gdrive_file_id = $file->id;
+        $file->save();
+
+        $chunksDir = storage_path('app/temp/chunks/'.$file->id);
+        if (! is_dir($chunksDir)) {
+            mkdir($chunksDir, 0775, true);
+        }
+
+        return $this->created([
+            'file_id' => $file->id,
+            'upload_url_template' => '/api/v1/files/upload/'.$file->id.'/chunk/{chunk_index}',
+        ], __('Chunked upload berhasil diinisialisasi.'));
+    }
+
+    /**
+     * POST /files/upload/{fileId}/chunk/{chunkIndex}
+     * Upload satu chunk dari chunked upload.
+     * Return 200 + progress info.
+     */
+    public function uploadChunk(Request $request, string $fileId, int $chunkIndex): JsonResponse
+    {
+        $userId = $request->user()->id;
+
+        $file = FileModel::where('id', $fileId)->where('user_id', $userId)->first();
+        if (! $file) {
+            return $this->fail(__('File tidak ditemukan.'), 404);
+        }
+        if (! $file->is_chunked) {
+            return $this->fail(__('File ini bukan chunked upload.'), 422);
+        }
+        if ($file->upload_status !== FileModel::STATUS_PENDING) {
+            return $this->fail(__('Upload sudah selesai atau gagal.'), 422);
+        }
+        if ($chunkIndex < 0 || $chunkIndex >= $file->total_chunks) {
+            return $this->fail(__('chunk_index harus antara 0 dan :max.', ['max' => $file->total_chunks - 1]), 422);
+        }
+
+        $chunkPath = storage_path('app/temp/chunks/'.$fileId.'/'.$chunkIndex);
+        if (file_exists($chunkPath)) {
+            return $this->fail(__('Chunk :index sudah diterima.', ['index' => $chunkIndex]), 409);
+        }
+
+        if ($request->hasFile('chunk')) {
+            $uploadedChunk = $request->file('chunk');
+            if (! $uploadedChunk->isValid()) {
+                throw ValidationException::withMessages(['chunk' => __('Chunk upload tidak valid.')]);
+            }
+            $uploadedChunk->move(storage_path('app/temp/chunks/'.$fileId), (string) $chunkIndex);
+        } else {
+            $chunkContent = $request->getContent();
+            if ($chunkContent === '' || $chunkContent === false) {
+                throw ValidationException::withMessages(['chunk' => __('Tidak ada data chunk yang diterima.')]);
+            }
+            $chunksDir = storage_path('app/temp/chunks/'.$fileId);
+            if (! is_dir($chunksDir)) {
+                mkdir($chunksDir, 0775, true);
+            }
+            file_put_contents($chunkPath, $chunkContent);
+        }
+
+        $file->increment('received_chunks');
+        $file->refresh();
+
+        return $this->ok([
+            'file_id' => $file->id,
+            'chunk_index' => $chunkIndex,
+            'received_chunks' => $file->received_chunks,
+            'total_chunks' => $file->total_chunks,
+        ], __('Chunk berhasil diupload.'));
+    }
+
+    /**
+     * POST /files/upload/{fileId}/complete
+     * Finalisasi chunked upload: reassemble chunks dan dispatch job.
+     * Return 202 + file data.
+     */
+    public function completeChunked(Request $request, string $fileId): JsonResponse
+    {
+        $userId = $request->user()->id;
+
+        $file = FileModel::where('id', $fileId)->where('user_id', $userId)->first();
+        if (! $file) {
+            return $this->fail(__('File tidak ditemukan.'), 404);
+        }
+        if (! $file->is_chunked) {
+            return $this->fail(__('File ini bukan chunked upload.'), 422);
+        }
+
+        if ($file->received_chunks !== $file->total_chunks) {
+            return $this->fail(
+                __('Belum semua chunk diterima (:received/:total).', [
+                    'received' => $file->received_chunks,
+                    'total' => $file->total_chunks,
+                ]),
+                409,
+            );
+        }
+
+        $chunksDir = storage_path('app/temp/chunks/'.$fileId);
+        $tempDir = storage_path('app/temp');
+        $assembledPath = $tempDir.'/'.$fileId;
+
+        if (! is_dir($tempDir)) {
+            mkdir($tempDir, 0775, true);
+        }
+
+        $out = fopen($assembledPath, 'wb');
+        if (! $out) {
+            return $this->fail(__('Gagal membuat file reassembly.'), 500);
+        }
+
+        for ($i = 0; $i < $file->total_chunks; $i++) {
+            $chunkPath = $chunksDir.'/'.$i;
+            if (! file_exists($chunkPath)) {
+                fclose($out);
+                @unlink($assembledPath);
+                return $this->fail(__('Chunk :index tidak ditemukan.', ['index' => $i]), 500);
+            }
+            $in = fopen($chunkPath, 'rb');
+            if ($in) {
+                while (! feof($in)) {
+                    fwrite($out, fread($in, 8192));
+                }
+                fclose($in);
+            }
+        }
+        fclose($out);
+
+        // Hapus direktori chunks
+        for ($i = 0; $i < $file->total_chunks; $i++) {
+            @unlink($chunksDir.'/'.$i);
+        }
+        @rmdir($chunksDir);
+
+        $actualSize = filesize($assembledPath);
+        $file->size = $actualSize;
+        $file->save();
+
+        // Share link (sama seperti upload biasa)
+        $shareable = $request->boolean('shareable', true);
+        $shareBaseUrl = rtrim(config('app.frontend_url', config('app.url')), '/');
+        $shareExpiresAt = $request->input('share_expires_at');
+        $shareMaxViews = $request->input('share_max_views');
+
+        if ($shareable) {
+            $this->validateShareOptions($shareExpiresAt, $shareMaxViews);
+        }
+
+        $shareToken = null;
+        if ($shareable) {
+            $shareToken = bin2hex(random_bytes(16));
+            $file->share_token = $shareToken;
+            $file->save();
+
+            ShareLink::create([
+                'user_id' => $userId,
+                'shareable_type' => FileModel::class,
+                'shareable_id' => $file->id,
+                'token' => $shareToken,
+                'expires_at' => $shareExpiresAt,
+                'max_views' => $shareMaxViews,
+            ]);
+        }
+
+        UploadFileJob::dispatch($file->id);
+
+        return $this->accepted([
+            'file_id' => $file->id,
+            'client_key' => $file->client_key,
+            'name' => $file->name,
+            'size' => $file->size,
+            'status' => $file->upload_status,
+            'shareable' => (bool) $file->share_token,
+            'share_token' => $file->share_token,
+            'share_url' => $file->share_token ? $shareBaseUrl.'/s/'.$file->share_token : null,
+            'share_expires_at' => $shareExpiresAt,
+            'share_max_views' => $shareMaxViews !== null ? (int) $shareMaxViews : null,
+        ], __('File berhasil diassemble dan siap diupload.'));
+    }
+
+    /**
      * POST /files/upload-from-url
      * URL upload: url (string), name (optional), folder_id (optional), client_key (optional), shareable (optional), etc.
      * Return 202 + array file_id.

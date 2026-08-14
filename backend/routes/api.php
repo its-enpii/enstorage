@@ -100,6 +100,9 @@ Route::middleware('auth.apikey')->group(function () {
     // Files
     Route::post('files/upload', [FileUploadController::class, 'upload']);
     Route::post('files/upload-from-url', [FileUploadController::class, 'uploadFromUrl']);
+    Route::post('files/upload/init', [FileUploadController::class, 'initChunked']);
+    Route::post('files/upload/{fileId}/chunk/{chunkIndex}', [FileUploadController::class, 'uploadChunk']);
+    Route::post('files/upload/{fileId}/complete', [FileUploadController::class, 'completeChunked']);
     Route::get('files', [FileController::class, 'index']);
     Route::get('files/by-hashes', [FileController::class, 'byHashes']);
     Route::post('files/by-metadata', [FileController::class, 'byMetadata']);
@@ -154,6 +157,9 @@ Route::middleware(['throttle.apikey', 'log.apikey'])->group(function () {
     Route::middleware('check.scope:write')->group(function () {
         Route::post('files/upload', [FileUploadController::class, 'upload']);
         Route::post('files/upload-from-url', [FileUploadController::class, 'uploadFromUrl']);
+        Route::post('files/upload/init', [FileUploadController::class, 'initChunked']);
+        Route::post('files/upload/{fileId}/chunk/{chunkIndex}', [FileUploadController::class, 'uploadChunk']);
+        Route::post('files/upload/{fileId}/complete', [FileUploadController::class, 'completeChunked']);
         Route::patch('files/{id}', [FileController::class, 'update']);
         Route::put('files/{id}/move', [FileController::class, 'move']);
         Route::post('folders', [FolderController::class, 'store']);
@@ -204,6 +210,9 @@ Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(funct
         Route::post('google-accounts/{id}/sync-quota', [GoogleAccountController::class, 'syncQuota']);
         Route::post('files/upload', [FileUploadController::class, 'upload']);
         Route::post('files/upload-from-url', [FileUploadController::class, 'uploadFromUrl']);
+        Route::post('files/upload/init', [FileUploadController::class, 'initChunked']);
+        Route::post('files/upload/{fileId}/chunk/{chunkIndex}', [FileUploadController::class, 'uploadChunk']);
+        Route::post('files/upload/{fileId}/complete', [FileUploadController::class, 'completeChunked']);
         Route::patch('files/{id}', [FileController::class, 'update']);
         Route::put('files/{id}/move', [FileController::class, 'move']);
         Route::post('folders', [FolderController::class, 'store']);

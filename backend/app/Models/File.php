@@ -28,6 +28,10 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'original_size',
     'upload_status',
     'uploaded_at',
+    'is_chunked',
+    'total_chunks',
+    'received_chunks',
+    'total_size',
 ])]
 class File extends Model
 {
@@ -49,6 +53,10 @@ class File extends Model
             'original_size' => 'integer',
             'uploaded_at' => 'datetime',
             'is_starred' => 'boolean',
+            'is_chunked' => 'boolean',
+            'total_chunks' => 'integer',
+            'received_chunks' => 'integer',
+            'total_size' => 'integer',
         ];
     }
 
