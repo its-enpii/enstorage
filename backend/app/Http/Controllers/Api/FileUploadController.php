@@ -361,9 +361,20 @@ class FileUploadController extends Controller
             return $this->fail(__('chunk_index harus antara 0 dan :max.', ['max' => $file->total_chunks - 1]), 422);
         }
 
-        $chunkPath = storage_path('app/temp/chunks/'.$fileId.'/'.$chunkIndex);
+        $chunksDir = storage_path('app/temp/chunks/'.$fileId);
+        if (! is_dir($chunksDir)) {
+            mkdir($chunksDir, 0775, true);
+        }
+
+        $chunkPath = $chunksDir.'/'.$chunkIndex;
         if (file_exists($chunkPath)) {
-            return $this->fail(__('Chunk :index sudah diterima.', ['index' => $chunkIndex]), 409);
+            // Idempotent retry: chunk sudah ada, kembalikan progress sukses
+            return $this->ok([
+                'file_id' => $file->id,
+                'chunk_index' => $chunkIndex,
+                'received_chunks' => $file->received_chunks,
+                'total_chunks' => $file->total_chunks,
+            ], __('Chunk sudah diterima sebelumnya.'));
         }
 
         if ($request->hasFile('chunk')) {
@@ -371,15 +382,11 @@ class FileUploadController extends Controller
             if (! $uploadedChunk->isValid()) {
                 throw ValidationException::withMessages(['chunk' => __('Chunk upload tidak valid.')]);
             }
-            $uploadedChunk->move(storage_path('app/temp/chunks/'.$fileId), (string) $chunkIndex);
+            $uploadedChunk->move($chunksDir, (string) $chunkIndex);
         } else {
             $chunkContent = $request->getContent();
             if ($chunkContent === '' || $chunkContent === false) {
                 throw ValidationException::withMessages(['chunk' => __('Tidak ada data chunk yang diterima.')]);
-            }
-            $chunksDir = storage_path('app/temp/chunks/'.$fileId);
-            if (! is_dir($chunksDir)) {
-                mkdir($chunksDir, 0775, true);
             }
             file_put_contents($chunkPath, $chunkContent);
         }
@@ -422,6 +429,7 @@ class FileUploadController extends Controller
             );
         }
 
+        @set_time_limit(600);
         $chunksDir = storage_path('app/temp/chunks/'.$fileId);
         $tempDir = storage_path('app/temp');
         $assembledPath = $tempDir.'/'.$fileId;
@@ -444,9 +452,7 @@ class FileUploadController extends Controller
             }
             $in = fopen($chunkPath, 'rb');
             if ($in) {
-                while (! feof($in)) {
-                    fwrite($out, fread($in, 8192));
-                }
+                stream_copy_to_stream($in, $out);
                 fclose($in);
             }
         }
