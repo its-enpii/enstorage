@@ -152,14 +152,28 @@
     "renameCancel": "Batal",
     "confirmDelete": {
       "title": "Hapus Folder?",
-      "body": "File di dalam folder ini akan kembali ke root.",
-      "confirm": "Hapus"
+      "prompt": "Apakah Anda yakin ingin menghapus folder \"{{name}}\"?",
+      "body": "Pilih apakah Anda ingin menghapus folder beserta seluruh filenya atau hanya foldernya saja.",
+      "withFiles": "Hapus beserta seluruh file dan subfolder di dalamnya",
+      "withFilesDesc": "Semua file di dalam folder ini akan dihapus permanen dari Google Drive dan database.",
+      "onlyFolderDesc": "File di dalam folder ini akan dipindahkan ke folder root (File Saya).",
+      "confirm": "Hapus Folder"
     },
     "moveToRoot": "Pindah ke root",
     "items": "{{count}} items",
     "itemsSize": "{{count}} items • {{size}}",
     "emptyTitle": "Tambah folder",
-    "emptyAction": "Buat sekarang"
+    "emptyAction": "Buat sekarang",
+    "downloadFolder": "Download folder (zip)",
+    "errors": {
+      "loadFailed": "Gagal memuat.",
+      "createFailed": "Gagal membuat folder.",
+      "renameFailed": "Gagal rename.",
+      "starFailed": "Gagal update star.",
+      "deleteFailed": "Gagal hapus.",
+      "moveFailed": "Gagal pindah.",
+      "empty": "Folder kosong, tidak ada yang bisa di-download."
+    }
   },
   "profile": {
     "title": "Profil",
@@ -316,36 +330,6 @@
     "statusFailed": "Gagal",
     "statusUploading": "Mengupload…",
     "statusPending": "Menunggu"
-  },
-  "folders": {
-    "title": "Folder",
-    "newFolder": "Buat Folder",
-    "newFolderDesc": "Masukkan nama folder baru.",
-    "newFolderPlaceholder": "Nama folder",
-    "renameTitle": "Rename Folder",
-    "renameDesc": "Masukkan nama baru.",
-    "renameSave": "Simpan",
-    "renameCancel": "Batal",
-    "confirmDelete": {
-      "title": "Hapus Folder?",
-      "body": "File di dalam folder ini akan kembali ke root.",
-      "confirm": "Hapus"
-    },
-    "moveToRoot": "Pindah ke root",
-    "items": "{{count}} items",
-    "itemsSize": "{{count}} items • {{size}}",
-    "emptyTitle": "Tambah folder",
-    "emptyAction": "Buat sekarang",
-    "downloadFolder": "Download folder (zip)",
-    "errors": {
-      "loadFailed": "Gagal memuat.",
-      "createFailed": "Gagal membuat folder.",
-      "renameFailed": "Gagal rename.",
-      "starFailed": "Gagal update star.",
-      "deleteFailed": "Gagal hapus.",
-      "moveFailed": "Gagal pindah.",
-      "empty": "Folder kosong, tidak ada yang bisa di-download."
-    }
   },
   "settings": {
     "title": "Pengaturan",

@@ -28,6 +28,7 @@ import { FileViewer } from '@/components/FileViewer';
 import { ItemCard } from '@/components/ItemCard';
 import { ShareDialog } from '@/components/ShareDialog';
 import { MoveDialog, type MovedFileResult } from '@/components/MoveDialog';
+import { DeleteFolderDialog } from '@/components/DeleteFolderDialog';
 import { FilesStoreProvider, useFilesStore } from '@/lib/filesStore';;
 import { FilesStoreBinder, useRealtime } from '@/lib/realtime/realtimeProvider';
 import { UploadToolbar } from '@/components/UploadToolbar';
@@ -170,6 +171,7 @@ function FilesContent() {
   const [viewerFile, setViewerFile] = useState<FileItem | null>(null);
   const [shareFile, setShareFile] = useState<FileItem | null>(null);
   const [shareFolder, setShareFolder] = useState<Folder | null>(null);
+  const [deleteFolderTarget, setDeleteFolderTarget] = useState<FolderType | null>(null);
   const [moveFiles, setMoveFiles] = useState<FileItem[] | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [folderCrumbs, setFolderCrumbs] = useState<{ id: string; name: string }[]>([]);
@@ -897,6 +899,71 @@ function FilesContent() {
     cacheInvalidatePrefix(uid, 'folders:parent:');
   }
 
+
+  async function renameFolderHandler(folder: FolderType) {
+    const name = await prompt(t('folders.renameDesc'), { title: t('folders.renameTitle'), defaultValue: folder.name });
+    if (!name?.trim() || name.trim() === folder.name) return;
+    try {
+      await apiRequest<FolderType>(`/folders/${folder.id}`, {
+        method: 'PATCH',
+        body: { name: name.trim() },
+      });
+      renameFolder(folder.id, name.trim());
+      invalidateFoldersPageCache();
+    } catch (e) {
+      await alert(e instanceof ApiError ? e.message : t('folders.errors.renameFailed'));
+    }
+  }
+
+  async function handleDeleteFolder(deleteFiles: boolean) {
+    if (!deleteFolderTarget) return;
+    const target = deleteFolderTarget;
+    removeFolder(target.id);
+    invalidateFoldersPageCache();
+    try {
+      await apiRequest<null>(`/folders/${target.id}${deleteFiles ? '?delete_files=1' : ''}`, {
+        method: 'DELETE',
+      });
+      if (!deleteFiles && !folderId) {
+        void revalidate();
+      }
+    } catch (e) {
+      void revalidate();
+      await alert(e instanceof ApiError ? e.message : t('folders.errors.deleteFailed'));
+    }
+  }
+
+  function buildFolderMenuItems(f: FolderType): MenuItem[] {
+    return [
+      {
+        label: f.is_starred ? t('files.actions.unstar') : t('files.actions.star'),
+        icon: <span className="material-symbols-outlined !text-base fill">{f.is_starred ? 'star' : 'star_border'}</span>,
+        onClick: () => toggleStarFolder(f.id, f.is_starred),
+      },
+      {
+        label: t('files.actions.rename'),
+        icon: <span className="material-symbols-outlined !text-base">edit</span>,
+        onClick: () => renameFolderHandler(f),
+      },
+      {
+        label: t('folders.downloadFolder') || t('files.actions.download'),
+        icon: <span className="material-symbols-outlined !text-base">download</span>,
+        onClick: () => downloadFolder(f.id),
+      },
+      {
+        label: t('files.actions.share'),
+        icon: <span className="material-symbols-outlined !text-base">link</span>,
+        onClick: () => setShareFolder(f),
+      },
+      {
+        label: t('files.actions.delete'),
+        icon: <span className="material-symbols-outlined !text-base">delete</span>,
+        onClick: () => setDeleteFolderTarget(f),
+        variant: 'danger' as const,
+      },
+    ];
+  }
+
   function buildFileMenuItems(f: FileItem, opts: { includePreview?: boolean } = {}): MenuItem[] {
     const items: MenuItem[] = [
       {
@@ -1155,33 +1222,15 @@ function FilesContent() {
                 onClick={() => navigateToFolder(f.id)}
                 right={
                   <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1">
-                    <IconButton
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShareFolder(f);
-                      }}
-                      title={t('files.actions.share')}
-                    >
-                      {f.share_token ? (
-                        <LinkIcon className="!text-base text-primary" />
-                      ) : (
-                        <LinkIcon className="!text-base" />
-                      )}
-                    </IconButton>
-                    <IconButton
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleStarFolder(f.id, f.is_starred);
-                      }}
-                      title={f.is_starred ? t('files.actions.unstarred') : t('files.actions.starred')}
-                      active={f.is_starred}
-                    >
-                      {f.is_starred ? (
-                        <StarIcon />
-                      ) : (
-                        <StarBorderIcon />
-                      )}
-                    </IconButton>
+                    <DropdownMenu
+                      align="right"
+                      trigger={
+                        <IconButton title={t('files.actions.menu')}>
+                          <span className="material-symbols-outlined !text-base">more_vert</span>
+                        </IconButton>
+                      }
+                      items={buildFolderMenuItems(f)}
+                    />
                   </div>
                 }
               />
@@ -1344,6 +1393,14 @@ function FilesContent() {
               setShareFile(updated.item);
             }
           }}
+        />
+      )}
+      {deleteFolderTarget && (
+        <DeleteFolderDialog
+          folder={deleteFolderTarget}
+          open={Boolean(deleteFolderTarget)}
+          onClose={() => setDeleteFolderTarget(null)}
+          onConfirm={handleDeleteFolder}
         />
       )}
       {shareFolder && (

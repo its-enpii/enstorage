@@ -10,6 +10,7 @@ import { Input } from '@/components/Input';
 import { ItemCard } from '@/components/ItemCard';
 import { UploadToolbar } from '@/components/UploadToolbar';
 import { Loading } from '@/components/Loading';
+import { DeleteFolderDialog } from '@/components/DeleteFolderDialog';
 import { usePrompt } from '@/components/usePrompt';
 import { useAuth } from '@/components/AuthProvider';
 import {
@@ -111,6 +112,7 @@ function FoldersContent() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [deleteFolderTarget, setDeleteFolderTarget] = useState<FolderType | null>(null);
   const [currentId, setCurrentId] = useState<string | null>(seed?.current?.id ?? null);
   const [folderPage, setFolderPage] = useState(0);
   const [folderLastPage, setFolderLastPage] = useState(1);
@@ -489,7 +491,7 @@ function FoldersContent() {
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          deleteFolder(f.id);
+                          setDeleteFolderTarget(f);
                         }}
                       >
                         <DeleteIcon /> {t('common.delete')}

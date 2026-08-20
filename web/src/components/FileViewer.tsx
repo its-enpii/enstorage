@@ -538,7 +538,7 @@ function CodeTextViewer({ file }: { file: FileItem }) {
   const lines = content.split('\n');
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden max-w-5xl w-full mx-auto p-4" onClick={(e) => e.stopPropagation()}>
+    <div className="flex-1 flex flex-col overflow-hidden min-h-0 h-full max-w-5xl w-full mx-auto p-4" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-outline font-mono">{lines.length} lines</span>
         <button
@@ -549,7 +549,7 @@ function CodeTextViewer({ file }: { file: FileItem }) {
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      <div className="flex-1 overflow-auto bg-surface-container-dark border border-outline-variant/20 rounded-2xl p-4 font-mono text-sm shadow-xl flex">
+      <div className="flex-1 min-h-0 overflow-auto bg-surface-container-dark border border-outline-variant/20 rounded-2xl p-4 font-mono text-sm shadow-xl flex">
         <div className="select-none text-right pr-4 text-outline/40 border-r border-outline-variant/20 mr-4 font-mono text-xs leading-relaxed">
           {lines.map((_, i) => (
             <div key={i}>{i + 1}</div>

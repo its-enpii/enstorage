@@ -152,14 +152,28 @@
     "renameCancel": "Cancel",
     "confirmDelete": {
       "title": "Delete Folder?",
-      "body": "Files in this folder will be moved to root.",
-      "confirm": "Delete"
+      "prompt": "Are you sure you want to delete the folder \"{{name}}\"?",
+      "body": "Choose whether you want to delete the folder along with its files or the folder only.",
+      "withFiles": "Delete along with all files and subfolders inside",
+      "withFilesDesc": "All files in this folder will be permanently deleted from Google Drive and database.",
+      "onlyFolderDesc": "Files in this folder will be moved to the root folder (My Files).",
+      "confirm": "Delete Folder"
     },
     "moveToRoot": "Move to root",
     "items": "{{count}} items",
     "itemsSize": "{{count}} items • {{size}}",
     "emptyTitle": "Add folder",
-    "emptyAction": "Create now"
+    "emptyAction": "Create now",
+    "downloadFolder": "Download folder (zip)",
+    "errors": {
+      "loadFailed": "Failed to load.",
+      "createFailed": "Failed to create folder.",
+      "renameFailed": "Failed to rename.",
+      "starFailed": "Failed to update star.",
+      "deleteFailed": "Failed to delete.",
+      "moveFailed": "Failed to move.",
+      "empty": "Folder is empty, nothing to download."
+    }
   },
   "profile": {
     "title": "Profile",
@@ -316,36 +330,6 @@
     "statusFailed": "Failed",
     "statusUploading": "Uploading…",
     "statusPending": "Pending"
-  },
-  "folders": {
-    "title": "Folders",
-    "newFolder": "Create Folder",
-    "newFolderDesc": "Enter a folder name.",
-    "newFolderPlaceholder": "Folder name",
-    "renameTitle": "Rename Folder",
-    "renameDesc": "Enter a new name.",
-    "renameSave": "Save",
-    "renameCancel": "Cancel",
-    "confirmDelete": {
-      "title": "Delete Folder?",
-      "body": "Files in this folder will be moved to root.",
-      "confirm": "Delete"
-    },
-    "moveToRoot": "Move to root",
-    "items": "{{count}} items",
-    "itemsSize": "{{count}} items • {{size}}",
-    "emptyTitle": "Add folder",
-    "emptyAction": "Create now",
-    "downloadFolder": "Download folder (zip)",
-    "errors": {
-      "loadFailed": "Failed to load.",
-      "createFailed": "Failed to create folder.",
-      "renameFailed": "Failed to rename.",
-      "starFailed": "Failed to update star.",
-      "deleteFailed": "Failed to delete.",
-      "moveFailed": "Failed to move.",
-      "empty": "Folder is empty, nothing to download."
-    }
   },
   "settings": {
     "title": "Settings",

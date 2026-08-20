@@ -11,12 +11,14 @@ use App\Models\File;
 use App\Services\ActivityLogService;
 use App\Services\Folder\FolderPathService;
 use App\Services\Google\GoogleClientFactory;
+use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
 use App\Services\WebhookService;
 use Google\Service\Drive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
@@ -28,6 +30,7 @@ class FolderController extends Controller
         private readonly FolderPathService $paths,
         private readonly ActivityLogService $activityLog,
         private readonly WebhookService $webhooks,
+        private readonly GoogleDriveUploader $uploader,
     ) {}
 
     /**
@@ -110,77 +113,78 @@ class FolderController extends Controller
     }
 
     /**
-     * POST /folders — buat folder baru.
-     * Body: { name, parent_id? }
+     * POST /folders — buat folder baru (root atau subfolder).
      */
     public function store(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'parent_id' => ['nullable', 'uuid', 'exists:folders,id'],
-        ]);
-
         $userId = $request->user()->id;
 
-        // Validasi parent harus milik user
-        if (! empty($data['parent_id'])) {
-            $parentOwned = Folder::where('id', $data['parent_id'])->where('user_id', $userId)->exists();
-            if (! $parentOwned) {
+        $data = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                'regex:/^[^\\\\\\/:*?"<>|]+$/',
+            ],
+            'parent_id' => ['nullable', 'string', 'uuid'],
+        ], [
+            'name.regex' => __('Nama folder tidak boleh mengandung karakter khusus (\\ / : * ? " < > |).'),
+        ]);
+
+        $parentId = $data['parent_id'] ?? null;
+        if ($parentId) {
+            $parent = Folder::where('id', $parentId)
+                ->where('user_id', $userId)
+                ->first();
+            if (! $parent) {
                 return $this->fail(__('Parent folder tidak ditemukan.'), 404);
             }
         }
 
-        // Cek nama unik per (user, parent)
+        // Cek duplikasi nama di parent yang sama
         $exists = Folder::where('user_id', $userId)
-            ->where('parent_id', $data['parent_id'] ?? null)
+            ->where('parent_id', $parentId)
             ->where('name', $data['name'])
             ->exists();
+
         if ($exists) {
-            return $this->fail(__('Folder dengan nama ini sudah ada di lokasi yang sama.'), 409);
+            throw ValidationException::withMessages([
+                'name' => [__('Folder dengan nama ini sudah ada di lokasi ini.')],
+            ]);
         }
 
-        try {
-            $folder = DB::transaction(function () use ($userId, $data) {
-                $folder = Folder::create([
-                    'user_id' => $userId,
-                    'parent_id' => $data['parent_id'] ?? null,
-                    'name' => $data['name'],
-                    'path' => '/', // temporary, di-update setelah punya parent_id
-                ]);
-                $folder->path = app(FolderPathService::class)->computePath($folder);
-                $folder->save();
-                return $folder;
-            });
-        } catch (Throwable $e) {
-            return $this->fail(__('Gagal membuat folder: :message', ['message' => $e->getMessage()]), 500);
-        }
+        $folder = new Folder();
+        $folder->user_id = $userId;
+        $folder->parent_id = $parentId;
+        $folder->name = $data['name'];
+        $folder->path = $this->paths->computePath($folder);
+        $folder->save();
 
         $this->activityLog->log(
             ActivityLog::ACTION_FOLDER_CREATE ?? 'FOLDER_CREATE',
             userId: $userId,
             subject: $folder,
-            metadata: ['name' => $folder->name, 'parent_id' => $folder->parent_id],
+            metadata: ['name' => $folder->name, 'parent_id' => $parentId],
             request: $request,
         );
 
-        // Sync/ensure folder on active Google Drive account if available (non-fatal)
-        try {
-            $activeAccount = \App\Models\GoogleAccount::where('user_id', $userId)->where('is_active', true)->first();
-            if ($activeAccount) {
-                app(\App\Services\Google\GoogleDriveFolderService::class)->ensureFolderOnDrive($activeAccount, $folder);
-            }
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Sync new folder to GDrive failed: '.$e->getMessage());
-        }
+        // Webhook event dispatch
+        $this->webhooks->dispatch($userId, 'folder.created', [
+            'folder_id' => $folder->id,
+            'name' => $folder->name,
+            'parent_id' => $folder->parent_id,
+            'path' => $folder->path,
+        ]);
 
-        // Realtime broadcast — subscribers viewing the parent see the new folder.
+        // Realtime broadcast — subscriber di parent folder (atau root)
+        // langsung melihat folder baru tanpa polling.
         \App\Events\FolderCreatedBroadcast::dispatch($folder);
 
         return $this->created(new FolderResource($folder), __('Folder berhasil dibuat.'));
     }
 
     /**
-     * PATCH /folders/{id} — rename folder, atau set is_starred.
+     * PATCH /folders/{id} — rename folder atau update status starred.
      */
     public function update(Request $request, string $id): JsonResponse
     {
@@ -190,66 +194,88 @@ class FolderController extends Controller
         }
 
         $data = $request->validate([
-            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'name' => [
+                'sometimes',
+                'string',
+                'max:255',
+                'regex:/^[^\\\\\\/:*?"<>|]+$/',
+            ],
             'is_starred' => ['sometimes', 'boolean'],
+        ], [
+            'name.regex' => __('Nama folder tidak boleh mengandung karakter khusus (\\ / : * ? " < > |).'),
         ]);
 
-        if (empty($data)) {
-            return $this->fail(__('Tidak ada field yang diubah.'), 422);
-        }
+        $previousName = $folder->name;
+        $nameChanged = isset($data['name']) && $data['name'] !== $previousName;
 
-        // Rename: cek duplikat nama
-        if (isset($data['name']) && $data['name'] !== $folder->name) {
+        if ($nameChanged) {
+            // Cek duplikasi di parent yang sama
             $exists = Folder::where('user_id', $folder->user_id)
                 ->where('parent_id', $folder->parent_id)
                 ->where('name', $data['name'])
                 ->where('id', '!=', $folder->id)
                 ->exists();
+
             if ($exists) {
-                return $this->fail(__('Folder dengan nama ini sudah ada.'), 409);
+                throw ValidationException::withMessages([
+                    'name' => [__('Folder dengan nama ini sudah ada di lokasi ini.')],
+                ]);
             }
+
+            $folder->name = $data['name'];
+            $folder->path = $this->paths->computePath($folder);
         }
 
-        $starChanged = array_key_exists('is_starred', $data) && (bool) $data['is_starred'] !== (bool) $folder->is_starred;
-        // Capture pre-update name so we can decide whether to fire the
-        // rename broadcast and pass it as `previous_name`.
-        $previousName = $folder->getOriginal('name');
+        if (array_key_exists('is_starred', $data)) {
+            $folder->is_starred = (bool) $data['is_starred'];
+        }
 
-        DB::transaction(function () use ($folder, $data) {
-            if (array_key_exists('name', $data)) $folder->name = $data['name'];
-            if (array_key_exists('is_starred', $data)) $folder->is_starred = (bool) $data['is_starred'];
-            $folder->save();
-            if (array_key_exists('name', $data)) $this->paths->refreshSubtree($folder);
-        });
+        $folder->save();
 
-        if (isset($data['name']) && $data['name'] !== $previousName) {
+        // Cascade path update ke children jika nama berubah
+        if ($nameChanged) {
+            $this->paths->cascadePathUpdate($folder);
+
+            // Sync rename folder di semua akun Google Drive yang memiliki folder ini
+            try {
+                $accounts = \App\Models\GoogleAccount::where('user_id', $request->user()->id)->get();
+                $tokenSvc = app(\App\Services\Google\GoogleTokenService::class);
+                $clientFactory = app(\App\Services\Google\GoogleClientFactory::class);
+                $gdriveFolderService = app(\App\Services\Google\GoogleDriveFolderService::class);
+
+                foreach ($accounts as $acc) {
+                    $gdriveFolderId = $gdriveFolderService->ensureFolderOnDrive($acc, $folder);
+                    if ($gdriveFolderId) {
+                        $tokenSvc->ensureFreshToken($acc);
+                        $client = $clientFactory->makeFor($acc);
+                        $client->setAccessToken($acc->access_token);
+                        $drive = new \Google\Service\Drive($client);
+
+                        $patchFile = new \Google\Service\Drive\DriveFile(['name' => $folder->name]);
+                        $drive->files->update($gdriveFolderId, $patchFile);
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('GDrive rename folder sync failed: '.$e->getMessage());
+            }
+
             $this->activityLog->log(
                 ActivityLog::ACTION_FOLDER_RENAME ?? 'FOLDER_RENAME',
                 userId: $request->user()->id,
                 subject: $folder,
-                metadata: ['name' => $folder->name],
+                metadata: ['old_name' => $previousName, 'new_name' => $folder->name],
                 request: $request,
             );
 
-            // Realtime broadcast — only on actual rename.
+            // Realtime broadcast — rename
             \App\Events\FolderRenamedBroadcast::dispatch($folder, $previousName);
         }
-        if ($starChanged) {
-            $this->activityLog->log(
-                ActivityLog::ACTION_FOLDER_STAR,
-                userId: $request->user()->id,
-                subject: $folder,
-                metadata: ['is_starred' => (bool) $folder->is_starred],
-                request: $request,
-            );
-        }
 
-        return $this->ok(new FolderResource($folder->fresh()), __('Folder berhasil diperbarui.'));
+        return $this->ok(new FolderResource($folder), __('Folder berhasil diperbarui.'));
     }
 
     /**
-     * PUT /folders/{id}/move — pindah ke parent lain.
-     * Body: { parent_id: null|uuid }
+     * PUT /folders/{id}/move — pindahkan folder ke parent baru (atau ke root).
      */
     public function move(Request $request, string $id): JsonResponse
     {
@@ -259,10 +285,16 @@ class FolderController extends Controller
         }
 
         $data = $request->validate([
-            'parent_id' => ['nullable', 'uuid'],
+            'parent_id' => ['nullable', 'string', 'uuid'],
         ]);
 
         $newParentId = $data['parent_id'] ?? null;
+        $previousParentId = $folder->parent_id;
+
+        // Cegah no-op move
+        if ($newParentId === $folder->parent_id) {
+            return $this->ok(new FolderResource($folder), __('Folder tetap di lokasi yang sama.'));
+        }
 
         // Validasi: parent baru harus milik user
         if ($newParentId) {
@@ -285,24 +317,25 @@ class FolderController extends Controller
             ->where('name', $folder->name)
             ->where('id', '!=', $folder->id)
             ->exists();
+
         if ($exists) {
-            return $this->fail(__('Sudah ada folder dengan nama yang sama di lokasi tujuan.'), 409);
+            throw ValidationException::withMessages([
+                'parent_id' => [__('Sudah ada folder dengan nama ":name" di lokasi tujuan.', ['name' => $folder->name])],
+            ]);
         }
 
-        // Capture pre-move parent BEFORE transaction mutates $folder->parent_id.
-        $previousParentId = $folder->getOriginal('parent_id');
+        $folder->parent_id = $newParentId;
+        $folder->path = $this->paths->computePath($folder);
+        $folder->save();
 
-        DB::transaction(function () use ($folder, $newParentId) {
-            $folder->parent_id = $newParentId;
-            $folder->save();
-            $this->paths->refreshSubtree($folder);
-        });
+        // Update path semua descendant
+        $this->paths->cascadePathUpdate($folder);
 
-        // GDrive folder move sync
+        // Sync folder move di Google Drive
         try {
-            $accounts = \App\Models\GoogleAccount::where('user_id', $request->user()->id)->where('is_active', true)->get();
-            $targetParent = $newParentId ? Folder::find($newParentId) : null;
+            $accounts = \App\Models\GoogleAccount::where('user_id', $request->user()->id)->get();
             $gdriveFolderService = app(\App\Services\Google\GoogleDriveFolderService::class);
+            $targetParent = $newParentId ? Folder::find($newParentId) : null;
             $quota = app(\App\Services\Google\QuotaManager::class);
 
             foreach ($accounts as $acc) {
@@ -331,7 +364,31 @@ class FolderController extends Controller
     }
 
     /**
-     * DELETE /folders/{id} — hapus folder (cascade ke subfolders; file dipindah ke NULL = root).
+     * Dapatkan semua folder ID turunan (termasuk folder ini sendiri).
+     */
+    private function getDescendantFolderIds(string $folderId, string $userId): array
+    {
+        $ids = [$folderId];
+        $queue = [$folderId];
+
+        while (! empty($queue)) {
+            $currentId = array_shift($queue);
+            $childrenIds = Folder::where('user_id', $userId)
+                ->where('parent_id', $currentId)
+                ->pluck('id')
+                ->all();
+
+            if (! empty($childrenIds)) {
+                $ids = array_merge($ids, $childrenIds);
+                $queue = array_merge($queue, $childrenIds);
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * DELETE /folders/{id} — hapus folder (jika delete_files=true, hapus semua file & subfolders; jika false, file dipindah ke NULL = root).
      */
     public function destroy(Request $request, string $id): JsonResponse
     {
@@ -340,47 +397,101 @@ class FolderController extends Controller
             return $this->fail(__('Folder tidak ditemukan.'), 404);
         }
 
-        // Capture channel-routing fields BEFORE delete + capture every
-        // file that lives here so we can emit FileMovedBroadcast for
-        // each (cascade sets folder_id=null on remaining files).
         $userId = $folder->user_id;
         $parentId = $folder->parent_id;
         $folderId = $folder->id;
-        $filesInFolder = \App\Models\File::where('folder_id', $folder->id)->get();
+        $deleteFiles = $request->boolean('delete_files', false);
 
-        DB::transaction(function () use ($folder) {
-            // File di folder ini: set folder_id = NULL (file tetap ada, jadi root)
-            \App\Models\File::where('folder_id', $folder->id)
-                ->update(['folder_id' => null]);
+        if ($deleteFiles) {
+            $descendantFolderIds = $this->getDescendantFolderIds($folderId, $userId);
 
-            // Hapus folder (cascade subfolders via FK)
+            // Ambil semua file di dalam folder ini dan seluruh subfoldernya
+            $filesToDelete = File::where('user_id', $userId)
+                ->whereIn('folder_id', $descendantFolderIds)
+                ->with(['googleAccount', 'thumbnail'])
+                ->get();
+
+            foreach ($filesToDelete as $file) {
+                $clientKey = $file->client_key;
+                $fFolderId = $file->folder_id;
+                $fId = $file->id;
+                $fUserId = $file->user_id;
+                $fName = $file->name;
+                $fSize = $file->size;
+                $gdriveFileId = $file->gdrive_file_id;
+                $account = $file->googleAccount;
+
+                // Hapus thumbnail fisik
+                if ($file->thumbnail) {
+                    @unlink(storage_path('app/'.$file->thumbnail->path));
+                }
+
+                $file->delete();
+
+                // Hapus di GDrive (best-effort)
+                if ($account && $gdriveFileId && ! str_starts_with($gdriveFileId, 'pending-')) {
+                    try {
+                        $this->uploader->deleteFile($account, $gdriveFileId);
+                    } catch (Throwable $e) {
+                        Log::warning('GDrive delete gagal saat destroy file dalam folder', [
+                            'file_id' => $fId,
+                            'gdrive_file_id' => $gdriveFileId,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }
+
+                $this->activityLog->log(
+                    ActivityLog::ACTION_FILE_DELETE,
+                    userId: $fUserId,
+                    metadata: ['file_id' => $fId, 'name' => $fName],
+                );
+
+                $this->webhooks->dispatch($fUserId, 'file.deleted', [
+                    'file_id' => $fId,
+                    'name' => $fName,
+                    'size' => $fSize,
+                ]);
+
+                \App\Events\FileDeletedBroadcast::dispatch($fId, $clientKey, $fFolderId, $fUserId);
+            }
+
+            // Hapus folder utama (FK cascade akan menghapus subfolder-subfolder di DB)
             $folder->delete();
-        });
+        } else {
+            $filesInFolder = File::where('folder_id', $folder->id)->get();
+
+            DB::transaction(function () use ($folder) {
+                // File di folder ini: set folder_id = NULL (file tetap ada, jadi root)
+                File::where('folder_id', $folder->id)
+                    ->update(['folder_id' => null]);
+
+                // Hapus folder (cascade subfolders via FK)
+                $folder->delete();
+            });
+
+            // Per-file cascade: each file moved from (deleted folder) to null (root).
+            foreach ($filesInFolder as $file) {
+                \App\Events\FileMovedBroadcast::dispatch(
+                    $file,
+                    $folderId,        // previous_folder_id
+                    $file->name,      // previous_name (no rename happened)
+                    false,            // renamed
+                );
+            }
+        }
 
         $this->activityLog->log(
             ActivityLog::ACTION_FOLDER_DELETE ?? 'FOLDER_DELETE',
             userId: $request->user()->id,
-            metadata: ['folder_id' => $id, 'name' => $folder->name],
+            metadata: ['folder_id' => $id, 'name' => $folder->name, 'delete_files' => $deleteFiles],
             request: $request,
         );
 
         // Realtime broadcast — folder gone from parent view.
         \App\Events\FolderDeletedBroadcast::dispatch($folderId, $userId, $parentId);
 
-        // Per-file cascade: each file moved from (deleted folder) to null (root).
-        // Subscribers viewing the now-deleted folder should drop the row;
-        // subscribers at root will see the file via FileMovedBroadcast's
-        // channel gymnastics (folder_id=null on the destination channel).
-        foreach ($filesInFolder as $file) {
-            \App\Events\FileMovedBroadcast::dispatch(
-                $file,
-                $folderId,        // previous_folder_id
-                $file->name,      // previous_name (no rename happened)
-                false,            // renamed
-            );
-        }
-
-        return $this->ok(null, __('Folder berhasil dihapus.'));
+        return $this->ok(null, $deleteFiles ? __('Folder beserta seluruh isinya berhasil dihapus.') : __('Folder berhasil dihapus.'));
     }
 
     /**
@@ -388,7 +499,7 @@ class FolderController extends Controller
      *
      * Accept opsional `expires_at` & `max_views` di body. Selalu pivot
      * sebagai sumber kebenaran, mirror token ke legacy
-     * folders.share_token untuk backward-compat URL share.
+     * folders.share_token supaya URL share existing resolve via pivot.
      */
     public function share(Request $request, string $id): JsonResponse
     {
@@ -401,54 +512,86 @@ class FolderController extends Controller
         $maxViews = $request->input('max_views');
         $this->validateShareOptions($expiresAt, $maxViews);
 
-        if (! $folder->share_token) {
-            $folder->share_token = bin2hex(random_bytes(16));
-            $folder->save();
-        }
-
-        $existingPivot = ShareLink::where('token', $folder->share_token)->first();
-        if (! $existingPivot) {
-            ShareLink::create([
-                'user_id' => $request->user()->id,
-                'shareable_type' => Folder::class,
-                'shareable_id' => $folder->id,
-                'token' => $folder->share_token,
-                'expires_at' => $expiresAt,
-                'max_views' => $maxViews !== null && $maxViews !== '' ? (int) $maxViews : null,
-            ]);
-        }
-
-        $shareUrl = WebhookService::shareUrlFor($folder->share_token);
-
-        $this->webhooks->dispatch($request->user()->id, 'folder.shared', [
-            'folder_id' => $folder->id,
-            'name' => $folder->name,
-            'path' => $folder->path,
-            'share_token' => $folder->share_token,
-            'share_url' => $shareUrl,
-            'share_preview_url' => WebhookService::shareUrlFor($folder->share_token, true),
+        // Bikin record di share_links
+        $link = ShareLink::createFor($folder, $request->user()->id, [
             'expires_at' => $expiresAt,
-            'max_views' => $maxViews,
+            'max_views' => $maxViews ? (int) $maxViews : null,
         ]);
 
-        // Realtime broadcast — share state changed in-place.
-        \App\Events\FolderRenamedBroadcast::dispatch($folder, $folder->name);
+        // Mirror token ke legacy column
+        $folder->share_token = $link->token;
+        $folder->save();
+
+        $this->activityLog->log(
+            ActivityLog::ACTION_FOLDER_SHARE ?? 'FOLDER_SHARE',
+            userId: $request->user()->id,
+            subject: $folder,
+            metadata: ['folder_id' => $folder->id, 'share_link_id' => $link->id, 'expires_at' => $expiresAt, 'max_views' => $maxViews],
+            request: $request,
+        );
+
+        // Webhook event dispatch
+        $this->webhooks->dispatch($request->user()->id, 'folder.shared', [
+            'folder_id' => $folder->id,
+            'share_url' => url("/s/{$link->token}"),
+            'expires_at' => $expiresAt,
+        ]);
+
+        // Realtime broadcast
+        \App\Events\FolderSharedBroadcast::dispatch($folder, $link->token);
 
         return $this->ok([
-            'share_token' => $folder->share_token,
-            'share_url' => $shareUrl,
-            'expires_at' => $expiresAt,
-            'max_views' => $maxViews !== null && $maxViews !== '' ? (int) $maxViews : null,
-        ], __('Folder share berhasil dibuat.'));
+            'share_token' => $link->token,
+            'share_url' => url("/s/{$link->token}"),
+            'share_link_id' => $link->id,
+            'expires_at' => $link->expires_at?->toISOString(),
+            'max_views' => $link->max_views,
+        ], __('Share token berhasil dibuat.'));
     }
 
     /**
-     * GET /folders/{id}/download — stream semua file di folder ini sebagai ZIP.
+     * DELETE /folders/{id}/share — revoke share link legacy.
+     */
+    public function unshare(Request $request, string $id): JsonResponse
+    {
+        $folder = $this->findOwned($request, $id);
+        if (! $folder) {
+            return $this->fail(__('Folder tidak ditemukan.'), 404);
+        }
+
+        // Revoke semua active links untuk folder ini
+        ShareLink::where('subject_type', Folder::class)
+            ->where('subject_id', $folder->id)
+            ->whereNull('revoked_at')
+            ->update(['revoked_at' => now()]);
+
+        $folder->share_token = null;
+        $folder->save();
+
+        $this->activityLog->log(
+            ActivityLog::ACTION_FOLDER_UNSHARE ?? 'FOLDER_UNSHARE',
+            userId: $request->user()->id,
+            subject: $folder,
+            metadata: ['folder_id' => $folder->id],
+            request: $request,
+        );
+
+        // Webhook event dispatch
+        $this->webhooks->dispatch($request->user()->id, 'folder.unshared', [
+            'folder_id' => $folder->id,
+        ]);
+
+        // Realtime broadcast
+        \App\Events\FolderUnsharedBroadcast::dispatch($folder);
+
+        return $this->ok(null, __('Share link berhasil dicabut.'));
+    }
+
+    /**
+     * GET /folders/{id}/download — stream seluruh isi folder sebagai ZIP archive.
      *
-     * 1-level: file langsung di folder + subfolder kosong sebagai entry
-     * direktori di zip. Subfolder tidak di-recurse — kalau perlu nested,
-     * buka folder per-satu. (ponytail: ceiling = 1-level; upgrade ke
-     * rekursi + zip64 kalau user butuh.)
+     * Streaming on-the-fly via ZipArchive + output buffering (memory-efficient).
+     * File binary di-stream langsung dari Google Drive per akun.
      */
     public function download(Request $request, string $id): StreamedResponse|JsonResponse
     {
@@ -497,128 +640,83 @@ class FolderController extends Controller
             try {
                 foreach ($files as $file) {
                     $account = $file->googleAccount;
-                    if (! $account) {
-                        continue; // skip orphan
+                    if (! $account || ! $file->gdrive_file_id) continue;
+
+                    if (! isset($clients[$account->id])) {
+                        $tokenSvc->ensureFreshToken($account);
+                        $client = $factory->makeFor($account);
+                        $client->setAccessToken($account->access_token);
+                        $clients[$account->id] = new Drive($client);
                     }
 
-                    try {
-                        if (! isset($clients[$account->id])) {
-                            $client = $factory->makeFor($account);
-                            $tokenSvc->ensureFreshToken($account);
-                            $client->setAccessToken($account->access_token);
-                            $clients[$account->id] = new Drive($client);
-                        }
-                        $drive = $clients[$account->id];
+                    $drive = $clients[$account->id];
+                    $tmpPath = tempnam(sys_get_temp_dir(), 'ens_zip_');
+                    $tmpFiles[] = $tmpPath;
 
-                        $response = $drive->files->get($file->gdrive_file_id, ['alt' => 'media']);
-                        $body = $response->getBody();
+                    // Stream langsung ke temporary file
+                    $response = $drive->files->get($file->gdrive_file_id, [
+                        'alt' => 'media',
+                    ]);
+                    file_put_contents($tmpPath, $response->getBody()->getContents());
 
-                        $entryBase = $safeName.'/'.basename($file->original_name);
-                        $entryName = $this->uniqueEntryName($zip, $entryBase);
-
-                        // Stream ke tmp file → addFile. Buffer di memory tidak
-                        // layak untuk file besar (1 GB × N).
-                        $tmp = tempnam(sys_get_temp_dir(), 'enz_');
-                        $tmpFiles[] = $tmp;
-                        $fh = fopen($tmp, 'wb');
-                        while (! $body->eof()) {
-                            fwrite($fh, $body->read(8192));
-                        }
-                        fclose($fh);
-                        $zip->addFile($tmp, $entryName);
-                    } catch (Throwable $e) {
-                        // Skip file yang gagal — jangan putus seluruh zip.
-                        continue;
-                    }
+                    $entryName = $safeName.'/'.($file->original_name ?: $file->name);
+                    $zip->addFile($tmpPath, $entryName);
                 }
+
                 $zip->close();
             } finally {
                 foreach ($tmpFiles as $tmp) {
-                    @unlink($tmp);
+                    if (file_exists($tmp)) @unlink($tmp);
                 }
             }
         }, 200, [
             'Content-Type' => 'application/zip',
-            'Content-Disposition' => 'attachment; filename="'.addslashes($zipName).'"',
-            // Tidak set Content-Length — zip size tidak diketahui sampai stream selesai.
-            'Cache-Control' => 'no-store',
+            'Content-Disposition' => 'attachment; filename="'.$zipName.'"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
         ]);
     }
 
-    /**
-     * Kalau $name sudah ada di zip, suffix " (n)" sampai unik.
-     */
-    private function uniqueEntryName(ZipArchive $zip, string $name): string
+    // =========================================================================
+    // Helpers
+    // =========================================================================
+
+    private function validateShareOptions(?string $expiresAt, mixed $maxViews): void
     {
-        if ($zip->locateName($name) === false) {
-            return $name;
+        if ($expiresAt !== null) {
+            $parsed = strtotime($expiresAt);
+            if ($parsed === false || $parsed <= time()) {
+                throw ValidationException::withMessages([
+                    'expires_at' => [__('Tanggal kedaluwarsa harus berupa tanggal di masa depan.')],
+                ]);
+            }
         }
-        $info = pathinfo($name);
-        $base = $info['dirname'] === '.' ? '' : $info['dirname'].'/';
-        $stem = $info['filename'];
-        $ext = isset($info['extension']) ? '.'.$info['extension'] : '';
-        $i = 1;
-        while ($zip->locateName($base.$stem." ($i)".$ext) !== false) {
-            $i++;
+
+        if ($maxViews !== null) {
+            if (! is_numeric($maxViews) || (int) $maxViews < 1) {
+                throw ValidationException::withMessages([
+                    'max_views' => [__('Maksimal tampilan harus berupa angka positif (minimal 1).')],
+                ]);
+            }
         }
-        return $base.$stem." ($i)".$ext;
     }
 
     /**
-     * DELETE /folders/{id}/share — hapus share token + pivot rows.
+     * Bangun array breadcrumb dari root ke folder saat ini.
      */
-    public function unshare(Request $request, string $id): JsonResponse
+    private function breadcrumb(Folder $folder): array
     {
-        $folder = $this->findOwned($request, $id);
-        if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+        $crumbs = [];
+        $current = $folder;
+
+        while ($current) {
+            array_unshift($crumbs, [
+                'id' => $current->id,
+                'name' => $current->name,
+            ]);
+            $current = $current->parent_id ? Folder::find($current->parent_id) : null;
         }
 
-        $folder->share_token = null;
-        $folder->save();
-
-        // Hapus semua pivot rows untuk folder ini. Auto-expire
-        // (ExpireShareLinksJob) handle row yang expires_at-nya lewat.
-        ShareLink::where('user_id', $request->user()->id)
-            ->where('shareable_type', Folder::class)
-            ->where('shareable_id', $folder->id)
-            ->delete();
-
-        // Realtime broadcast — share state changed in-place.
-        \App\Events\FolderRenamedBroadcast::dispatch($folder, $folder->name);
-
-        return $this->ok(null, __('Link share dihapus.'));
-    }
-
-    /**
-     * Validasi share options — shared semantics dengan upload flow &
-     * FileController::share(). Null/kosong = unlimited; kalau diisi,
-     * expires_at harus di masa depan & max_views 1-10000.
-     */
-    private function validateShareOptions(mixed $expiresAt, mixed $maxViews): void
-    {
-        $errors = [];
-
-        if ($expiresAt !== null && $expiresAt !== '') {
-            try {
-                $parsed = new \DateTimeImmutable((string) $expiresAt);
-            } catch (\Throwable) {
-                $errors['expires_at'] = __('Format expires_at tidak valid.');
-            }
-            if (! isset($errors['expires_at']) && $parsed <= new \DateTimeImmutable()) {
-                $errors['expires_at'] = __('expires_at harus di masa depan.');
-            }
-        }
-
-        if ($maxViews !== null && $maxViews !== '') {
-            if (! is_numeric($maxViews) || (int) $maxViews < 1 || (int) $maxViews > 10000) {
-                $errors['max_views'] = __('max_views harus integer 1-10000.');
-            }
-        }
-
-        if (! empty($errors)) {
-            throw ValidationException::withMessages($errors);
-        }
+        return $crumbs;
     }
 
     private function findOwned(Request $request, string $id): ?Folder
@@ -640,26 +738,7 @@ class FolderController extends Controller
             }
             $current = Folder::find($current->parent_id);
         }
-        return false;
-    }
 
-    /**
-     * Bangun breadcrumb list dari root ke folder ini.
-     *
-     * @return array<int, array{id: string, name: string, path: string}>
-     */
-    private function breadcrumb(Folder $folder): array
-    {
-        $chain = [];
-        $current = $folder;
-        while ($current) {
-            array_unshift($chain, [
-                'id' => $current->id,
-                'name' => $current->name,
-                'path' => $current->path,
-            ]);
-            $current = $current->parent_id ? Folder::find($current->parent_id) : null;
-        }
-        return $chain;
+        return false;
     }
 }
