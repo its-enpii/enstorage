@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from '@/components/Dialog';
 import { Button } from '@/components/Button';
+import { Switch } from '@/components/Switch';
 import { DeleteIcon } from '@/lib/icons';
 import type { Folder } from '@/lib/api';
 
@@ -64,24 +65,18 @@ export function DeleteFolderDialog({ folder, open, onClose, onConfirm }: Props) 
           {t('folders.confirmDelete.prompt', { name: folder.name })}
         </p>
 
-        <label className="flex items-start gap-3 p-3 rounded-xl border border-outline-variant/30 bg-surface-container/50 hover:bg-surface-container cursor-pointer transition-colors">
-          <input
-            type="checkbox"
+        <div className="p-3.5 rounded-2xl border border-outline-variant/20 bg-surface-container/50 hover:bg-surface-container transition-colors">
+          <Switch
             checked={deleteFiles}
-            onChange={(e) => setDeleteFiles(e.target.checked)}
-            className="mt-0.5 w-4 h-4 rounded border-outline text-primary focus:ring-primary accent-primary"
-          />
-          <div className="flex-1 text-xs">
-            <span className="font-medium text-on-surface block">
-              {t('folders.confirmDelete.withFiles')}
-            </span>
-            <span className="text-outline mt-0.5 block">
-              {deleteFiles
+            onChange={setDeleteFiles}
+            label={t('folders.confirmDelete.withFiles')}
+            description={
+              deleteFiles
                 ? t('folders.confirmDelete.withFilesDesc')
-                : t('folders.confirmDelete.onlyFolderDesc')}
-            </span>
-          </div>
-        </label>
+                : t('folders.confirmDelete.onlyFolderDesc')
+            }
+          />
+        </div>
       </div>
     </Dialog>
   );

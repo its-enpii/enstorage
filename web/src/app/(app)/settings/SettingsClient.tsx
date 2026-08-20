@@ -10,6 +10,7 @@ import { Card, CardIconBox } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
 import { Input } from '@/components/Input';
+import { Toggle } from '@/components/Switch';
 import { useTheme } from '@/components/ThemeProvider';
 import { WebhooksSection } from '@/components/WebhooksSection';
 import { setLocale } from '@/lib/i18n';
@@ -343,40 +344,3 @@ function ThemeOption({
   );
 }
 
-function Toggle({
-  label,
-  description,
-  checked,
-  onChange,
-}: {
-  label: string;
-  description: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <label className="flex items-center justify-between gap-4 py-1.5 cursor-pointer">
-      <div className="min-w-0">
-        <p className="text-sm text-on-surface font-medium">{label}</p>
-        <p className="text-metadata text-outline">{description}</p>
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={clsx(
-          'relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors',
-          checked ? 'bg-primary' : 'bg-surface-container-high',
-        )}
-      >
-        <span
-          className={clsx(
-            'inline-block h-5 w-5 rounded-full bg-surface shadow transform transition-transform mt-0.5',
-            checked ? 'translate-x-5' : 'translate-x-0.5',
-          )}
-        />
-      </button>
-    </label>
-  );
-}
