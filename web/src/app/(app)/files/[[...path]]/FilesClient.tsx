@@ -1,5 +1,6 @@
-import { triggerBlobDownload } from '@/lib/download';
 'use client';
+
+import { triggerBlobDownload } from '@/lib/download';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
