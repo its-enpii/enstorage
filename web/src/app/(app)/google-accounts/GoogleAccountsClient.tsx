@@ -85,9 +85,12 @@ function AccountsContent() {
   async function connect() {
     try {
       const data = await apiRequest<{ authorization_url: string }>('/google-accounts/oauth/redirect');
+      if (!data?.authorization_url) {
+        throw new Error(t('files.errors.oauthStartFailed'));
+      }
       window.location.href = data.authorization_url;
     } catch (e) {
-      await alert(e instanceof ApiError ? e.message : t('files.errors.oauthStartFailed'));
+      await alert(e instanceof ApiError ? e.message : (e instanceof Error ? e.message : t('files.errors.oauthStartFailed')));
     }
   }
 
