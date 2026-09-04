@@ -35,6 +35,9 @@ class UploadFileJob implements ShouldQueue
         NotificationService $notifications,
         ThumbnailGenerator $thumbnails,
     ): void {
+        @ini_set('memory_limit', '1024M');
+        @set_time_limit(0);
+
         $file = FileModel::find($this->fileId);
         if (! $file) {
             Log::warning("UploadFileJob: file {$this->fileId} tidak ditemukan.");

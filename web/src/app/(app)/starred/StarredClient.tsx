@@ -1,3 +1,4 @@
+import { triggerBlobDownload } from '@/lib/download';
 'use client';
 
 import { useState } from 'react';
@@ -194,18 +195,16 @@ function StarredContent() {
   async function downloadFile(id: string) {
     const token = getToken();
     const url = `${process.env.NEXT_PUBLIC_API_BASE}/files/${id}/download`;
+    const targetFile = files.find((f) => f.id === id);
+    const fallbackName = targetFile?.name || targetFile?.original_name || 'download';
     try {
       const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error(t('files.errors.downloadFailed'));
       const blob = await res.blob();
-      const dl = document.createElement('a');
-      dl.href = URL.createObjectURL(blob);
-      dl.download = '';
-      document.body.appendChild(dl);
-      dl.click();
-      dl.remove();
+      const cd = res.headers.get('Content-Disposition');
+      triggerBlobDownload(blob, fallbackName, cd);
     } catch (e) {
       await alert(e instanceof Error ? e.message : t('files.errors.downloadFailed'));
     }

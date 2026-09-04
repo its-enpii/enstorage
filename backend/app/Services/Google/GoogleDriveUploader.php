@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\Log;
 
 class GoogleDriveUploader
 {
+    private const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
+
     public function __construct(
         private readonly GoogleClientFactory $factory,
         private readonly GoogleTokenService $tokens,
@@ -22,7 +24,7 @@ class GoogleDriveUploader
 
     /**
      * Upload file dari local path ke Google Drive akun tertentu.
-     * Pakai Resumable Upload API (server-side chunking, transparan dari client).
+     * Pakai Resumable Upload API dengan streaming chunk (hemat memori untuk file besar).
      *
      * @return array{gdrive_file_id: string, shareable_link: ?string}
      */
@@ -58,33 +60,46 @@ class GoogleDriveUploader
             'parents' => [$parentFolderId],
         ]);
 
-        // 4. Buat request PSR-7 resumable (data di-pass via opsi 'data')
         $size = (int) filesize($localPath);
-        $data = file_get_contents($localPath);
+        if ($size === 0) {
+            throw new \RuntimeException('File yang akan di-upload kosong (0 byte).');
+        }
+
+        $request = $drive->files->create($metadata, [
+            'fields' => 'id,name,webViewLink,webContentLink,mimeType,size',
+            'uploadType' => 'resumable',
+        ]);
+
+        // 4. Inisialisasi MediaFileUpload dengan streaming (data = false agar tidak buffer seluruh file ke RAM)
+        $uploader = new MediaFileUpload(
+            $client,
+            $request,
+            $file->mime_type,
+            false,      // streaming mode: data dibaca per-chunk via nextChunk($chunk)
+            true,       // resumable
+        );
+        $uploader->setFileSize($size);
+        $uploader->setChunkSize(self::CHUNK_SIZE);
+
+        $handle = fopen($localPath, 'rb');
+        if (! $handle) {
+            throw new \RuntimeException("Gagal membuka file lokal untuk streaming: {$localPath}");
+        }
+
+        $uploaded = false;
         try {
-            $request = $drive->files->create($metadata, [
-                'fields' => 'id,name,webViewLink,webContentLink,mimeType,size',
-                'uploadType' => 'resumable',
-            ]);
-
-            // 5. Inisialisasi MediaFileUpload dengan RequestInterface
-            $uploader = new MediaFileUpload(
-                $client,
-                $request,
-                $file->mime_type,
-                $data,      // string � MediaFileUpload::nextChunk() pakai substr()
-                true,       // resumable
-            );
-            $uploader->setFileSize($size);
-            $uploader->setChunkSize(5 * 1024 * 1024); // 5 MB per chunk
-
-            // 6. Loop nextChunk() sampai selesai
-            $uploaded = false;
-            do {
-                $uploaded = $uploader->nextChunk();
-            } while ($uploaded === false);
+            while (! $uploaded && ! feof($handle)) {
+                $chunk = fread($handle, self::CHUNK_SIZE);
+                if ($chunk === false) {
+                    throw new \RuntimeException("Gagal membaca chunk file dari {$localPath}");
+                }
+                $uploaded = $uploader->nextChunk($chunk);
+                unset($chunk);
+            }
         } finally {
-            unset($data);
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
         }
 
         if ($uploaded instanceof \Exception) {
@@ -94,7 +109,7 @@ class GoogleDriveUploader
             throw new \RuntimeException('Upload gagal: response tidak valid dari Google Drive.');
         }
 
-        // 7. Set permission "Anyone with link can view" � non-fatal
+        // 5. Set permission "Anyone with link can view" - non-fatal
         $shareableLink = $uploaded->getWebViewLink();
         try {
             $permission = new Permission([
@@ -128,7 +143,7 @@ class GoogleDriveUploader
         try {
             $drive->files->delete($gdriveFileId);
         } catch (\Throwable $e) {
-            // File mungkin sudah tidak ada � log & lanjut
+            // File mungkin sudah tidak ada - log & lanjut
             Log::warning('GDrive delete failed', [
                 'gdrive_file_id' => $gdriveFileId,
                 'error' => $e->getMessage(),

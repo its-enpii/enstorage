@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 /*
  * CORS (Cross-Origin Resource Sharing) configuration.
@@ -36,7 +36,7 @@ return [
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => [],
+    'exposed_headers' => ['Content-Disposition'],
 
     'max_age' => 0,
 

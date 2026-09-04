@@ -1,10 +1,11 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { usePageTitle } from '@/lib/usePageTitle';
 import { FileViewer } from '@/components/FileViewer';
+import type { FileItem } from '@/lib/api';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080/api/v1';
 
@@ -13,6 +14,11 @@ type SharedFolder = {
   name: string;
   path: string;
   parent_id: string | null;
+};
+
+type Breadcrumb = {
+  id: string;
+  name: string;
 };
 
 type SharedSubfolder = {
@@ -30,7 +36,9 @@ type SharedFileEntry = {
 
 type FolderListing = {
   kind: 'folder';
+  root_folder?: SharedFolder;
   folder: SharedFolder;
+  breadcrumbs?: Breadcrumb[];
   subfolders: SharedSubfolder[];
   files: SharedFileEntry[];
 };
@@ -56,9 +64,11 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
   const { t } = useTranslation();
   const params = useParams();
   const token = params.token as string;
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [state, setState] = useState<ListingState>({ status: 'loading' });
-  const [previewFile, setPreviewFile] = useState<any | null>(null);
-  // Default while fetching: "Shared" — gets refined as soon as listing arrives.
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
+
   usePageTitle(
     mode === 'viewer'
       ? t('common.loadingLabel')
@@ -80,14 +90,19 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
     let cancelled = false;
     async function fetchListing() {
       try {
-        const res = await fetch(infoUrl, { headers: { Accept: 'application/json' } });
+        if (state.status === 'ready') {
+          setIsNavigating(true);
+        }
+        const fetchUrl = currentFolderId
+          ? `${infoUrl}&folder_id=${encodeURIComponent(currentFolderId)}`
+          : infoUrl;
+        const res = await fetch(fetchUrl, { headers: { Accept: 'application/json' } });
         const ct = res.headers.get('content-type') ?? '';
 
         if (res.ok && ct.includes('application/json')) {
           const env = await res.json();
           if (cancelled) return;
           if (env?.success && env.data?.kind === 'folder') {
-            // Viewer mode doesn't support folders — bounce back to landing.
             if (mode === 'viewer') {
               window.location.replace(`/s/${token}`);
               return;
@@ -96,11 +111,16 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
               status: 'ready',
               listing: {
                 kind: 'folder',
+                root_folder: env.data.root_folder ?? env.data.folder,
                 folder: env.data.folder,
+                breadcrumbs: env.data.breadcrumbs ?? [
+                  { id: env.data.folder.id, name: env.data.folder.name },
+                ],
                 subfolders: env.data.subfolders ?? [],
                 files: env.data.files ?? [],
               },
             });
+            setIsNavigating(false);
             return;
           }
           if (env?.success && env.data?.kind === 'file') {
@@ -116,17 +136,17 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
                 updated_at: env.data.updated_at ?? null,
               },
             });
+            setIsNavigating(false);
             return;
           }
           setState({
             status: 'error',
             message: env?.message ?? t('share.sharedError'),
           });
+          setIsNavigating(false);
           return;
         }
 
-        // Non-JSON success → stream (legacy token atau fallback).
-        // Metadata kosong; tampilkan download-only page.
         if (res.ok) {
           setState({
             status: 'ready',
@@ -140,46 +160,50 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
               updated_at: null,
             },
           });
+          setIsNavigating(false);
           return;
         }
 
-        // 410 Gone dari pivot share_links — expired / over-quota / revoked.
-        // Backend sudah ada envelope.message yang informatif; pakai itu
-        // kalau ada, fallback ke translated key sharedExpired.
         if (res.status === 410) {
           let envMessage: string | undefined;
           try {
             const env = await res.json();
             envMessage = env?.message;
           } catch {
-            // ignore — pakai fallback
+            // ignore
           }
           setState({
             status: 'error',
             message: envMessage ?? t('share.sharedExpired'),
           });
+          setIsNavigating(false);
           return;
         }
 
         setState({ status: 'error', message: t('share.sharedError') });
+        setIsNavigating(false);
       } catch (e) {
         if (cancelled) return;
         setState({
           status: 'error',
           message: e instanceof Error ? e.message : t('share.sharedError'),
         });
+        setIsNavigating(false);
       }
     }
     fetchListing();
     return () => {
       cancelled = true;
     };
-  }, [token, viewUrl, t, infoUrl, mode]);
+  }, [token, infoUrl, currentFolderId, mode, t]);
 
   if (state.status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <div className="text-on-surface-variant">{t('share.sharedLoading')}</div>
+        <div className="flex items-center gap-3 text-on-surface-variant">
+          <span className="material-symbols-outlined animate-spin">progress_activity</span>
+          <span>{t('share.sharedLoading')}</span>
+        </div>
       </div>
     );
   }
@@ -213,26 +237,85 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
     );
   }
 
-  // Folder listing — only landing mode reaches here (viewer bouncs in fetchListing).
-  const { folder, subfolders, files } = state.listing;
+  const { root_folder, folder, breadcrumbs, subfolders, files } = state.listing;
+
+  const fileItems: FileItem[] = files.map((f) => ({
+    id: f.id,
+    name: f.name,
+    original_name: f.name,
+    is_starred: false,
+    mime_type: f.mime_type,
+    size: f.size,
+    folder_id: folder.id,
+    google_account_id: null,
+    gdrive_file_id: '',
+    shareable_link: null,
+    upload_status: 'done',
+    uploaded_at: null,
+    has_thumbnail: f.has_thumbnail,
+    created_at: '',
+    updated_at: '',
+    stream_url: `${API_BASE}/s/${token}?file_id=${f.id}`,
+    download_url: `${API_BASE}/s/${token}?file_id=${f.id}&download=1`,
+  }));
+
+  const rootId = root_folder?.id ?? folder.id;
+  const isInsideSubfolder = currentFolderId !== null && currentFolderId !== rootId;
 
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-2xl mx-auto bg-surface rounded-card shadow-ambient p-6 sm:p-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-12 h-12 rounded-2xl bg-primary-container flex items-center justify-center">
+        {/* Header Folder Info */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 rounded-2xl bg-primary-container flex items-center justify-center shrink-0">
             <span className="material-symbols-outlined !text-3xl fill text-on-primary-container">folder</span>
           </div>
-          <div>
-            <h1 className="font-display text-xl font-semibold text-on-surface">
+          <div className="min-w-0 flex-1">
+            <h1 className="font-display text-xl font-semibold text-on-surface truncate">
               {folder.name}
             </h1>
-            <p className="text-metadata text-outline">{t('share.sharedFolderDesc')}</p>
+            <p className="text-metadata text-outline truncate">{t('share.sharedFolderDesc')}</p>
           </div>
         </div>
 
+        {/* Breadcrumb Navigation */}
+        {breadcrumbs && breadcrumbs.length > 1 && (
+          <nav className="flex items-center gap-1.5 overflow-x-auto py-2 mb-4 text-sm text-outline border-b border-outline-variant/10">
+            {breadcrumbs.map((crumb, idx) => {
+              const isLast = idx === breadcrumbs.length - 1;
+              return (
+                <div key={crumb.id} className="flex items-center gap-1.5 shrink-0">
+                  {idx > 0 && (
+                    <span className="material-symbols-outlined !text-base text-outline/40">chevron_right</span>
+                  )}
+                  {isLast ? (
+                    <span className="font-semibold text-on-surface max-w-[200px] truncate">{crumb.name}</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentFolderId(crumb.id === rootId ? null : crumb.id)}
+                      className="hover:text-primary transition-colors max-w-[150px] truncate underline-offset-2 hover:underline"
+                    >
+                      {crumb.name}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </nav>
+        )}
+
+        {/* Navigation Indicator / Loading overlay */}
+        {isNavigating && (
+          <div className="flex items-center justify-center py-4 text-xs text-outline gap-2">
+            <span className="material-symbols-outlined animate-spin !text-sm">progress_activity</span>
+            <span>{t('share.sharedLoading')}</span>
+          </div>
+        )}
+
+        {/* Subfolders list */}
         {subfolders.length > 0 && (
-          <section className="mt-6">
+          <section className="mt-4">
             <h2 className="text-label-sm text-outline mb-2 uppercase tracking-wider">
               {t('share.sharedFolders')}
             </h2>
@@ -240,64 +323,76 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
               {subfolders.map((s) => (
                 <li
                   key={s.id}
-                  className="flex items-center gap-3 px-4 py-3"
+                  onClick={() => setCurrentFolderId(s.id)}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-surface-container-highest/50 cursor-pointer transition-colors group"
                 >
-                  <span className="material-symbols-outlined !text-xl text-on-surface-variant">folder</span>
-                  <span className="flex-1 text-sm text-on-surface truncate">{s.name}</span>
+                  <div className="w-9 h-9 rounded-xl bg-primary-container/40 group-hover:bg-primary-container/70 flex items-center justify-center transition-colors shrink-0">
+                    <span className="material-symbols-outlined !text-xl text-primary">folder</span>
+                  </div>
+                  <span className="flex-1 text-sm font-medium text-on-surface truncate group-hover:text-primary transition-colors">
+                    {s.name}
+                  </span>
+                  <span className="material-symbols-outlined !text-lg text-outline group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0">
+                    chevron_right
+                  </span>
                 </li>
               ))}
             </ul>
           </section>
         )}
 
+        {/* Files list */}
         {files.length > 0 && (
           <section className="mt-6">
             <h2 className="text-label-sm text-outline mb-2 uppercase tracking-wider">
               {t('share.sharedFiles')}
             </h2>
             <ul className="divide-y divide-outline/10 rounded-2xl bg-surface-container overflow-hidden">
-              {files.map((f) => (
-                <li
-                  key={f.id}
-                  onClick={() =>
-                    setPreviewFile({
-                      id: f.id,
-                      name: f.name,
-                      original_name: f.name,
-                      is_starred: false,
-                      mime_type: f.mime_type,
-                      size: f.size,
-                      folder_id: folder.id,
-                      google_account_id: null,
-                      gdrive_file_id: '',
-                      shareable_link: null,
-                      upload_status: 'done',
-                      uploaded_at: null,
-                      has_thumbnail: f.has_thumbnail,
-                      created_at: '',
-                      updated_at: '',
-                      stream_url: `${API_BASE}/s/${token}?file_id=${f.id}`,
-                      download_url: `${API_BASE}/s/${token}?file_id=${f.id}&download=1`,
-                    })
-                  }
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-surface-container-highest/50 cursor-pointer transition-colors group"
-                >
-                  <span className="material-symbols-outlined !text-xl text-primary">description</span>
-                  <span className="flex-1 text-sm font-medium text-on-surface truncate group-hover:text-primary transition-colors">
-                    {f.name}
-                  </span>
-                  <span className="text-xs text-outline tabular-nums mr-2">
-                    {formatBytes(f.size)}
-                  </span>
-                  <button
-                    type="button"
-                    className="p-1 rounded-full text-outline group-hover:text-primary group-hover:bg-primary-container/20 transition-colors"
-                    title="Preview File"
+              {files.map((f) => {
+                const item = fileItems.find((fi) => fi.id === f.id)!;
+                return (
+                  <li
+                    key={f.id}
+                    onClick={() => setPreviewFile(item)}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-surface-container-highest/50 cursor-pointer transition-colors group"
                   >
-                    <span className="material-symbols-outlined !text-xl">visibility</span>
-                  </button>
-                </li>
-              ))}
+                    {f.has_thumbnail ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={`${API_BASE}/s/${token}?file_id=${f.id}&thumbnail=1`}
+                        alt={f.name}
+                        className="w-9 h-9 object-cover rounded-lg border border-outline-variant/20 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined !text-xl text-on-surface-variant">description</span>
+                      </div>
+                    )}
+                    <span className="flex-1 text-sm font-medium text-on-surface truncate group-hover:text-primary transition-colors">
+                      {f.name}
+                    </span>
+                    <span className="text-xs text-outline tabular-nums mr-2 shrink-0">
+                      {formatBytes(f.size)}
+                    </span>
+                    <button
+                      type="button"
+                      className="p-1 rounded-full text-outline group-hover:text-primary group-hover:bg-primary-container/20 transition-colors shrink-0"
+                      title={t('files.actions.preview', 'Preview')}
+                    >
+                      <span className="material-symbols-outlined !text-xl">visibility</span>
+                    </button>
+                    <a
+                      href={`${API_BASE}/s/${token}?file_id=${f.id}&download=1`}
+                      onClick={(e) => e.stopPropagation()}
+                      download
+                      className="p-1 rounded-full text-outline hover:text-primary hover:bg-primary-container/20 transition-colors shrink-0"
+                      title={t('files.actions.download')}
+                    >
+                      <span className="material-symbols-outlined !text-xl">download</span>
+                    </a>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         )}
@@ -305,14 +400,27 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
         {previewFile && (
           <FileViewer
             file={previewFile}
+            files={fileItems}
             onClose={() => setPreviewFile(null)}
+            onNavigate={(next) => setPreviewFile(next)}
           />
         )}
 
         {subfolders.length === 0 && files.length === 0 && (
-          <p className="mt-6 text-center text-sm text-outline py-8">
-            {t('share.sharedEmpty')}
-          </p>
+          <div className="mt-6 text-center py-10 bg-surface-container/50 rounded-2xl border border-outline-variant/10">
+            <span className="material-symbols-outlined !text-4xl text-outline mb-2">folder_open</span>
+            <p className="text-sm text-outline">{t('share.sharedEmpty')}</p>
+            {isInsideSubfolder && (
+              <button
+                type="button"
+                onClick={() => setCurrentFolderId(null)}
+                className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+              >
+                <span className="material-symbols-outlined !text-sm">arrow_back</span>
+                <span>{root_folder?.name ?? t('share.folderTitle')}</span>
+              </button>
+            )}
+          </div>
         )}
 
         <p className="mt-6 text-xs text-outline text-center">{t('share.sharedVia')}</p>
@@ -354,63 +462,18 @@ function FilePreview({
   streamUrl: string;
   downloadUrl: string;
   viewerUrl: string;
-  mode: string;
+  mode: ShareClientMode;
   t: PreviewTranslator;
 }) {
-  const mime = listing.mime_type.toLowerCase();
-  const name = (listing.original_name || listing.name).toLowerCase();
-  const isImage = mime.startsWith('image/');
-  const isVideo = mime.startsWith('video/');
-  const isAudio = mime.startsWith('audio/');
-  const isPdf = mime === 'application/pdf' || name.endsWith('.pdf');
-  const isOffice = name.endsWith('.pptx') || name.endsWith('.ppt') || name.endsWith('.docx') || name.endsWith('.xlsx') || mime.includes('presentationml') || mime.includes('wordprocessingml') || mime.includes('spreadsheetml');
-  const isMarkdown = name.endsWith('.md') || name.endsWith('.markdown') || mime === 'text/markdown';
-  const isText = (mime.startsWith('text/') || mime === 'application/json' || mime === 'application/xml') && !isOffice && !isMarkdown;
-  const previewable = isImage || isVideo || isAudio || isPdf || isOffice || isMarkdown || isText;
-  const [showFullViewer, setShowFullViewer] = useState(mode === 'viewer');
+  const isImage = listing.mime_type.startsWith('image/');
+  const isVideo = listing.mime_type.startsWith('video/');
+  const isAudio = listing.mime_type.startsWith('audio/');
+  const isPdf = listing.mime_type === 'application/pdf';
+  const isText =
+    listing.mime_type.startsWith('text/') ||
+    listing.mime_type.includes('json') ||
+    listing.mime_type.includes('xml');
 
-  const fileObj = {
-    id: listing.id || 'shared',
-    name: listing.original_name || listing.name,
-    original_name: listing.original_name || listing.name,
-    is_starred: false,
-    mime_type: listing.mime_type,
-    size: listing.size,
-    folder_id: null,
-    google_account_id: null,
-    gdrive_file_id: '',
-    shareable_link: null,
-    upload_status: 'done' as const,
-    uploaded_at: listing.updated_at,
-    has_thumbnail: false,
-    created_at: listing.updated_at || '',
-    updated_at: listing.updated_at || '',
-    stream_url: streamUrl,
-    download_url: downloadUrl,
-  };
-
-  if (showFullViewer) {
-    return (
-      <FileViewer
-        file={fileObj}
-        onClose={() => {
-          if (mode === 'viewer') {
-            const segs = window.location.pathname.split('/').filter(Boolean);
-            if (segs.length >= 2) {
-              window.location.href = `/s/${segs[1]}`;
-            } else {
-              window.location.href = `/s/${listing.id}`;
-            }
-          } else {
-            setShowFullViewer(false);
-          }
-        }}
-      />
-    );
-  }
-
-  // Viewer mode: zero chrome — only the media itself, dark background, no filename,
-  // no download, no footer. ESC → bounce back to landing.
   if (mode === 'viewer') {
     return (
       <ViewerOnly
@@ -420,108 +483,97 @@ function FilePreview({
         isAudio={isAudio}
         isPdf={isPdf}
         isText={isText}
-        originalName={listing.original_name || listing.name}
+        originalName={listing.original_name}
         textFetchUrl={streamUrl}
-        fallbackUrl={`/s/${(typeof window !== 'undefined' ? window.location.pathname.split('/').filter(Boolean)[1] : '') || ''}`}
+        fallbackUrl={downloadUrl}
       />
     );
   }
 
-  if (showFullViewer) {
-    return (
-      <FileViewer
-        file={fileObj}
-        onClose={() => {
-          if (mode === 'viewer') {
-            const segs = window.location.pathname.split('/').filter(Boolean);
-            if (segs.length >= 2) {
-              window.location.href = `/s/${segs[1]}`;
-            }
-          } else {
-            setShowFullViewer(false);
-          }
-        }}
-      />
-    );
-  }
+  const canPreview = isPreviewable(listing.mime_type);
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-3xl mx-auto bg-surface rounded-card shadow-ambient p-6 sm:p-8">
-        <div className="flex items-start gap-3 mb-4">
-          <div className="w-12 h-12 shrink-0 rounded-2xl bg-primary-container flex items-center justify-center">
-            <span className="material-symbols-outlined !text-3xl fill text-on-primary-container">description</span>
+    <div className="min-h-screen bg-background p-4 flex items-center justify-center">
+      <div className="w-full max-w-md bg-surface rounded-card shadow-ambient p-6 sm:p-8">
+        <div className="flex flex-col items-center text-center">
+          <div className="w-16 h-16 rounded-2xl bg-primary-container flex items-center justify-center mb-4">
+            <span className="material-symbols-outlined !text-4xl fill text-on-primary-container">
+              {isImage
+                ? 'image'
+                : isVideo
+                  ? 'videocam'
+                  : isAudio
+                    ? 'audiotrack'
+                    : isPdf
+                      ? 'picture_as_pdf'
+                      : isText
+                        ? 'description'
+                        : 'draft'}
+            </span>
           </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="font-display text-xl font-semibold text-on-surface break-words">
-              {listing.original_name || listing.name}
-            </h1>
-            <p className="text-metadata text-outline">
-              {listing.size > 0 ? formatBytes(listing.size) : ''}
-              {listing.size > 0 && ' · '}
-              {mime}
-            </p>
-          </div>
-        </div>
 
-        {/* Inline preview by MIME */}
-        {isImage && (
-          <div className="rounded-2xl overflow-hidden bg-background border border-outline-variant/20 mb-4">
-            <img
-              src={streamUrl}
-              alt={listing.original_name}
-              className="w-full h-auto max-h-[70vh] object-contain mx-auto"
-            />
-          </div>
-        )}
-        {isVideo && (
-          <div className="rounded-2xl overflow-hidden bg-black mb-4">
-            <video
-              src={streamUrl}
-              controls
-              preload="metadata"
-              className="w-full max-h-[70vh]"
-            />
-          </div>
-        )}
-        {isAudio && (
-          <div className="rounded-2xl bg-surface-container p-4 mb-4">
-            <audio src={streamUrl} controls className="w-full" preload="metadata" />
-          </div>
-        )}
-        {isPdf && (
-          <div className="rounded-2xl overflow-hidden bg-background border border-outline-variant/20 mb-4">
-            <iframe
-              src={streamUrl}
-              title={listing.original_name}
-              className="w-full"
-              style={{ height: '70vh' }}
-            />
-          </div>
-        )}
-        {isText && <TextPreview streamUrl={streamUrl} />}
-        {!previewable && (
-          <p className="text-metadata text-outline text-center py-6">
-            {t('share.sharedDesc')}
-          </p>
-        )}
+          <h1 className="font-display text-lg font-semibold text-on-surface break-all max-w-full">
+            {listing.original_name}
+          </h1>
 
-        <div className="flex items-center justify-between mt-6 pt-4 border-t border-outline-variant/10 gap-3">
-          <p className="text-xs text-outline shrink-0">{t('share.sharedVia')}</p>
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            {previewable && (
-              <button
-                type="button"
-                onClick={() => setShowFullViewer(true)}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-surface-container text-on-surface rounded-full hover:bg-surface-container/80 transition-colors font-medium text-sm"
+          <div className="mt-1 flex items-center gap-2 text-metadata text-outline">
+            {listing.size > 0 && <span>{formatBytes(listing.size)}</span>}
+            {listing.size > 0 && listing.mime_type && <span>•</span>}
+            {listing.mime_type && <span className="truncate max-w-[200px]">{listing.mime_type}</span>}
+          </div>
+
+          {canPreview && (
+            <div className="w-full my-6">
+              {isImage && (
+                <div className="rounded-2xl overflow-hidden bg-surface-container border border-outline-variant/20 flex items-center justify-center max-h-80">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={streamUrl}
+                    alt={listing.original_name}
+                    className="max-h-80 w-auto object-contain"
+                  />
+                </div>
+              )}
+              {isVideo && (
+                <div className="rounded-2xl overflow-hidden bg-black max-h-80 flex items-center justify-center">
+                  <video src={streamUrl} controls className="max-h-80 w-full" />
+                </div>
+              )}
+              {isAudio && (
+                <div className="w-full p-4 rounded-2xl bg-surface-container border border-outline-variant/20">
+                  <audio src={streamUrl} controls className="w-full" />
+                </div>
+              )}
+              {isPdf && (
+                <div className="rounded-2xl overflow-hidden bg-surface-container border border-outline-variant/20 h-80">
+                  <iframe
+                    src={streamUrl}
+                    title={listing.original_name}
+                    className="w-full h-full"
+                  />
+                </div>
+              )}
+              {isText && <TextPreview streamUrl={streamUrl} />}
+            </div>
+          )}
+
+          {!canPreview && (
+            <p className="mt-4 text-metadata text-outline">{t('share.sharedDesc')}</p>
+          )}
+
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3 w-full">
+            {canPreview && (
+              <a
+                href={viewerUrl}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-surface-container text-on-surface hover:bg-surface-container-highest transition-colors font-medium text-sm"
               >
-                <span className="material-symbols-outlined !text-lg">visibility</span>
+                <span className="material-symbols-outlined !text-lg">fullscreen</span>
                 {t('share.viewInline')}
-              </button>
+              </a>
             )}
             <a
               href={downloadUrl}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary rounded-full hover:bg-primary/90 transition-colors font-medium text-sm"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full bg-primary text-on-primary hover:bg-primary/90 transition-colors font-medium text-sm"
             >
               <span className="material-symbols-outlined !text-lg">download</span>
               {t('files.actions.download')}
@@ -553,12 +605,10 @@ function ViewerOnly({
   textFetchUrl: string;
   fallbackUrl: string;
 }) {
-  // ESC handler — bounce to landing.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         const segs = window.location.pathname.split('/').filter(Boolean);
-        // Path is /s/<token>/view → landing is /s/<token>
         if (segs.length >= 2) {
           window.location.href = `/s/${segs[1]}`;
         }
@@ -568,9 +618,6 @@ function ViewerOnly({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Full-bleed dark canvas. Only the media element itself. No metadata,
-  // no filename visible in DOM (alt kept for a11y but title hidden),
-  // no download affordance, no footer, no "Shared via" branding.
   return (
     <div className="fixed inset-0 z-50 bg-black flex items-center justify-center select-none">
       <a
@@ -582,6 +629,7 @@ function ViewerOnly({
         <span className="material-symbols-outlined">arrow_back</span>
       </a>
       {isImage && (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={streamUrl}
           alt={originalName}
@@ -622,7 +670,6 @@ function TextPreview({ streamUrl }: { streamUrl: string }) {
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((text) => {
         if (!cancelled) {
-          // Cap preview at 64KB to avoid huge text files freezing browser.
           setContent(text.length > 65536 ? text.slice(0, 65536) + '\n…' : text);
         }
       })

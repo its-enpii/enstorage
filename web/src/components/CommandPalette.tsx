@@ -1,3 +1,4 @@
+import { triggerBlobDownload } from '@/lib/download';
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -125,18 +126,16 @@ export function CommandPalette({ open, onClose }: Props) {
   async function downloadOne(id: string) {
     const token = getToken();
     const url = `${process.env.NEXT_PUBLIC_API_BASE}/files/${id}/download`;
+    const targetFile = results.find((r) => r.kind === 'file' && r.data.id === id)?.data as FileItem | undefined;
+    const fallbackName = targetFile?.name || targetFile?.original_name || 'download';
     try {
       const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error(t('files.errors.downloadFailed'));
       const blob = await res.blob();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = '';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      const cd = res.headers.get('Content-Disposition');
+      triggerBlobDownload(blob, fallbackName, cd);
     } catch (e) {
       await alert(e instanceof Error ? e.message : t('files.errors.downloadFailed'));
     }

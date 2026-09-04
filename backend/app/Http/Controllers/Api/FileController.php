@@ -790,7 +790,7 @@ class FileController extends Controller
      *   - info=1 → return JSON metadata (no streaming) untuk FE preview
      *   - download=1 → Content-Disposition: attachment (default inline)
      */
-    public function viewByToken(Request $request, string $token): StreamedResponse|JsonResponse
+    public function viewByToken(Request $request, string $token): StreamedResponse|JsonResponse|BinaryFileResponse
     {
         // 1) New system: share_links pivot (polymorphic, with expiry/max_views).
         $link = ShareLink::resolveActive($token);
@@ -826,7 +826,7 @@ class FileController extends Controller
      * Dispatch by request: info=1 → JSON metadata; else → stream file.
      * Dipakai oleh viewByToken untuk token file (pivot + legacy).
      */
-    private function resolveFileResponse(Request $request, FileModel $file): StreamedResponse|JsonResponse
+    private function resolveFileResponse(Request $request, FileModel $file): StreamedResponse|JsonResponse|BinaryFileResponse
     {
         if ($request->boolean('info')) {
             return $this->ok([
@@ -838,6 +838,16 @@ class FileController extends Controller
                 'size' => $file->size,
                 'updated_at' => $file->updated_at?->toIso8601String(),
             ]);
+        }
+
+        if ($request->boolean('thumbnail') && $file->thumbnail) {
+            $path = storage_path('app/'.$file->thumbnail->path);
+            if (file_exists($path)) {
+                return response()->file($path, [
+                    'Content-Type' => 'image/webp',
+                    'Cache-Control' => 'public, max-age=86400',
+                ]);
+            }
         }
 
         return $this->streamSharedFile($request, $file);
@@ -930,7 +940,28 @@ class FileController extends Controller
         return false;
     }
 
-    private function respondSharedFolder(Request $request, Folder $folder): StreamedResponse|JsonResponse
+    private function getBreadcrumbs(Folder $currentFolder, Folder $rootFolder): array
+    {
+        $crumbs = [];
+        $curr = $currentFolder;
+
+        while ($curr) {
+            $crumbs[] = [
+                'id' => $curr->id,
+                'name' => $curr->name,
+            ];
+
+            if ($curr->id === $rootFolder->id) {
+                break;
+            }
+
+            $curr = $curr->parent_id ? Folder::find($curr->parent_id) : null;
+        }
+
+        return array_reverse($crumbs);
+    }
+
+    private function respondSharedFolder(Request $request, Folder $folder): StreamedResponse|JsonResponse|BinaryFileResponse
     {
         if ($request->has('file_id')) {
             $fileId = (string) $request->query('file_id');
@@ -940,11 +971,25 @@ class FileController extends Controller
             }
             return $this->fail(__('File tidak ditemukan pada folder share ini.'), 404);
         }
-        $subfolders = Folder::where('parent_id', $folder->id)
+
+        $targetFolder = $folder;
+        if ($request->filled('folder_id')) {
+            $requestedFolderId = (string) $request->query('folder_id');
+            if (! $this->isFolderDescendant($requestedFolderId, $folder->id)) {
+                return $this->fail(__('Folder tidak ditemukan pada folder share ini.'), 404);
+            }
+            $found = Folder::find($requestedFolderId);
+            if (! $found) {
+                return $this->fail(__('Folder tidak ditemukan.'), 404);
+            }
+            $targetFolder = $found;
+        }
+
+        $subfolders = Folder::where('parent_id', $targetFolder->id)
             ->orderBy('name')
             ->get();
 
-        $files = FileModel::where('folder_id', $folder->id)
+        $files = FileModel::where('folder_id', $targetFolder->id)
             ->where('upload_status', 'done')
             ->with('thumbnail:id,file_id')
             ->orderByDesc('created_at')
@@ -952,7 +997,9 @@ class FileController extends Controller
 
         return $this->ok([
             'kind' => 'folder',
-            'folder' => (new FolderResource($folder))->resolve(),
+            'root_folder' => (new FolderResource($folder))->resolve(),
+            'folder' => (new FolderResource($targetFolder))->resolve(),
+            'breadcrumbs' => $this->getBreadcrumbs($targetFolder, $folder),
             'subfolders' => FolderResource::collection($subfolders)->resolve(),
             'files' => $files->map(fn ($f) => [
                 'id' => $f->id,

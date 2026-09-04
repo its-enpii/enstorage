@@ -179,11 +179,15 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     final repo = ref.read(filesRepositoryProvider);
     final token = await ref.read(tokenStorageProvider).readToken();
     final api = ref.read(apiClientProvider);
+    final nameById = {
+      for (final f in ref.read(filesNotifierProvider).files) f.id: f.name,
+    };
     int success = 0;
     for (final id in selection.ids) {
       try {
         final dir = await getTemporaryDirectory();
-        final file = File('${dir.path}/$id');
+        final name = nameById[id] ?? id;
+        final file = File('${dir.path}/$name');
         final url = repo.downloadUrl(id, token: token, inline: false);
         await api.dio.download(url, file.path);
         success += 1;
