@@ -96,8 +96,8 @@ jobs:
             # now (no dev/prod split), so `-p` is unnecessary.
             COMPOSE="docker compose -f docker-compose.yml"
 
-            $COMPOSE build app web
-            $COMPOSE up -d --no-deps app web
+            $COMPOSE build app worker web
+            $COMPOSE up -d --no-deps app worker web
 
             # Stale bootstrap/cache from dev providers (e.g.
             # Laravel\Pail) can survive bind-mounts. Wipe and let
@@ -107,6 +107,7 @@ jobs:
             $COMPOSE exec -T app php artisan config:clear
             $COMPOSE exec -T app php artisan cache:clear
             $COMPOSE exec -T app php artisan migrate --force
+            $COMPOSE restart worker
 
             # Health gate: every prod container must be `Up`. Use
             # compose ps (not `docker ps`) so service names match what
