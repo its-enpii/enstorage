@@ -238,7 +238,8 @@ type RequestOptions = {
 };
 
 export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-  const url = new URL(API_BASE + path);
+  const baseOrigin = typeof window !== 'undefined' ? window.location.origin : (process.env.APP_URL || 'http://localhost:8080');
+  const url = new URL(API_BASE + path, baseOrigin);
   if (opts.query) {
     for (const [k, v] of Object.entries(opts.query)) {
       if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
@@ -304,7 +305,8 @@ export async function apiRequestEnvelope<T>(
   path: string,
   opts: RequestOptions = {},
 ): Promise<{ data: T; meta?: { pagination?: PaginatedMeta } }> {
-  const url = new URL(API_BASE + path);
+  const baseOrigin = typeof window !== 'undefined' ? window.location.origin : (process.env.APP_URL || 'http://localhost:8080');
+  const url = new URL(API_BASE + path, baseOrigin);
   if (opts.query) {
     for (const [k, v] of Object.entries(opts.query)) {
       if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));

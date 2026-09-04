@@ -190,7 +190,7 @@ services:
       # NEXT_PUBLIC_* are baked into the JS bundle at build time,
       # so they must be passed as build args (not just runtime env).
       args:
-        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-https://api-enstorage.enpiistudio.com/api/v1}
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-/api/v1}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
         NEXT_PUBLIC_REVERB_SCHEME: ${NEXT_PUBLIC_REVERB_SCHEME:-wss}
         NEXT_PUBLIC_REVERB_HOST: ${NEXT_PUBLIC_REVERB_HOST:-enstorage.enpiistudio.com}
@@ -200,7 +200,7 @@ services:
     container_name: enstorage-web
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-https://api-enstorage.enpiistudio.com/api/v1}
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-/api/v1}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
       NEXT_PUBLIC_REVERB_SCHEME: ${NEXT_PUBLIC_REVERB_SCHEME:-wss}
       NEXT_PUBLIC_REVERB_HOST: ${NEXT_PUBLIC_REVERB_HOST:-enstorage.enpiistudio.com}
