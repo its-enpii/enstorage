@@ -1,4 +1,4 @@
-﻿import type { Metadata } from 'next';
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { generateSharedMetadata } from '@/lib/shareMetadata';
 import ShareClient from './ShareClient';

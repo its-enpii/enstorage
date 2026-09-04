@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 /*
  * CORS (Cross-Origin Resource Sharing) configuration.

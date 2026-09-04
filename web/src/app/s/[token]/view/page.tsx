@@ -1,4 +1,4 @@
-﻿import type { Metadata } from 'next';
+import type { Metadata } from 'next';
 import { generateSharedMetadata } from '@/lib/shareMetadata';
 import ShareClient from '../ShareClient';
 

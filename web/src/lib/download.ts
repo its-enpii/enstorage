@@ -1,4 +1,4 @@
-﻿export function parseContentDispositionFilename(header: string | null | undefined): string | null {
+export function parseContentDispositionFilename(header: string | null | undefined): string | null {
   if (!header) return null;
 
   // Coba parse format RFC 5987 / UTF-8: filename*=UTF-8''filename.ext
