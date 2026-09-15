@@ -599,7 +599,8 @@
       "theme": "Switch to light/dark theme",
       "language": "Change language",
       "backToTop": "Back to top",
-      "mainNav": "Main navigation"
+      "mainNav": "Main navigation",
+      "docs": "Documentation"
     },
     "cta": {
       "signIn": "Sign in",
@@ -644,28 +645,23 @@
       "items": {
         "aggregation": {
           "title": "One place for every account",
-          "body": "Connect your Google Drive accounts and they all show up in one panel — quota, email address, and connection status in a single list.",
-          "bullets": "Combined quota refreshed automatically\nFolder and file structure stays as usual\nEvery account remains yours"
+          "body": "Connect your Google Drive accounts and they all show up in one panel — quota, email address, and connection status in a single list."
         },
         "routing": {
           "title": "Automatic smart routing",
-          "body": "Every new file goes straight to the account with the largest free space that can fit it. You never have to pick a destination.",
-          "bullets": "The roomiest account is chosen automatically\nFiles above 1 GB use chunked upload\nNo account fits? The upload is marked failed"
+          "body": "Every new file goes straight to the account with the largest free space that can fit it. You never have to pick a destination."
         },
         "viewer": {
           "title": "Open and play in place",
-          "body": "View documents and images, or play video, without downloading first. Everything runs through the EnStorage proxy, so your Drive links stay hidden from other people.",
-          "bullets": "Video and audio player in the browser\nPreview for PDF, markdown, and code\nImage thumbnails generated automatically"
+          "body": "View documents and images, or play video, without downloading first. Everything runs through the EnStorage proxy, so your Drive links stay hidden from other people."
         },
         "isolation": {
           "title": "Your data belongs to you alone",
-          "body": "Files, folders, and credentials are strictly separated between users. One person's Google account cannot be opened by another user on the same instance.",
-          "bullets": "Separation by user ID\nOwner and member roles\nActivity records for important actions"
+          "body": "Files, folders, and credentials are strictly separated between users. One person's Google account cannot be opened by another user on the same instance."
         },
         "api": {
           "title": "REST API and API keys",
-          "body": "Connect storage to your scripts, backend, or n8n workflows. Create an API key with separate scopes, then use it exactly like the examples in the Developer section below.",
-          "bullets": "read, write, delete, and full scopes\nEach key is shown only once\nEvery request is recorded in a log"
+          "body": "Connect storage to your scripts, backend, or n8n workflows. Create an API key with separate scopes, then use it exactly like the examples in the Developer section below."
         }
       }
     },
@@ -676,18 +672,15 @@
       "items": {
         "nonCustodial": {
           "title": "Files never land on our server",
-          "body": "Files are forwarded to the destination Google Drive account, then the temporary copy on the server is deleted. EnStorage stores metadata and tokens, not the contents of your files.",
-          "bullets": "The destination folder lives in your Drive\nDownloads and playback run through a proxy\nNo third-party storage in the middle"
+          "body": "Files are forwarded to the destination Google Drive account, then the temporary copy on the server is deleted. EnStorage stores metadata and tokens, not the contents of your files."
         },
         "token": {
           "title": "Encrypted OAuth tokens",
-          "body": "Access and refresh tokens are encrypted with Laravel Crypt (AES-256-CBC) using the APP_KEY in your instance. Without that APP_KEY, the database contents cannot be read.",
-          "bullets": "APP_KEY lives only in your .env\nGoogle passwords are never stored\nAPI keys are stored as bcrypt hashes"
+          "body": "Access and refresh tokens are encrypted with Laravel Crypt (AES-256-CBC) using the APP_KEY in your instance. Without that APP_KEY, the database contents cannot be read."
         },
         "limitedUse": {
           "title": "Google Limited Use compliant",
-          "body": "Your Google Drive data is never sold, never shared with advertisers, and never used to train AI models. You can revoke the permission at any time.",
-          "bullets": "No third-party analytics or trackers\nAccess limited to Drive and basic profile\nRevoke from the dashboard or from Google"
+          "body": "Your Google Drive data is never sold, never shared with advertisers, and never used to train AI models. You can revoke the permission at any time."
         }
       },
       "policyLink": "Read the Security & Google API Disclosure"
@@ -783,6 +776,329 @@
       "copyright": "Copyright {{year}} enpii studio. All rights reserved.",
       "selfHostedNote": "EnStorage runs on an instance you own."
     },
-    "pageTitle": "Never Leaves Your Drive."
+    "pageTitle": "Never Leaves Your Drive.",
+    "teaser": {
+      "eyebrow": "Documentation",
+      "title": "The full API reference lives on its own page",
+      "subtitle": "This is the short version: one base URL, one authorization header, and four steps to your first upload. The endpoint tables, status codes, and copyable cURL examples live in the documentation portal.",
+      "endpointLabel": "Documented endpoints",
+      "scopeLabel": "API key scopes",
+      "groupLabel": "Resource groups",
+      "cta": "Open API documentation",
+      "ctaHint": "Ready-to-copy examples",
+      "keyCta": "Create an API key",
+      "securityCta": "Read the security policy",
+      "snippetLabel": "Copyable cURL examples"
+    }
+  },
+  "docs": {
+    "pageTitle": "API Documentation",
+    "eyebrow": "Developer",
+    "title": "REST API documentation",
+    "subtitle": "One base URL, one authorization header. Every example on this page can be copied and run against your EnStorage instance as-is. A short summary of each endpoint lives in the tables near the bottom.",
+    "toc": "Documentation navigation",
+    "tocAria": "Documentation table of contents",
+    "consoleAria": "API command example",
+    "consolePrompt": "Run",
+    "collapse": "Hide",
+    "expand": "Show",
+    "ownerOnly": "Owner",
+    "groupCount": "{{count}} endpoints",
+    "searchPlaceholder": "Search endpoints or methods",
+    "searchAria": "Search endpoints",
+    "searchClear": "Clear search keyword",
+    "searchResults": "{{count}} matching endpoints",
+    "searchEmpty": "No endpoint matches that keyword.",
+    "searchReset": "Reset search",
+    "endpointColumns": {
+      "method": "Method",
+      "path": "Path",
+      "scope": "Scope",
+      "description": "Description"
+    },
+    "badge": {
+      "version": "v1",
+      "endpoints": "{{count}} endpoints",
+      "prefix": "{{prefix}} prefix"
+    },
+    "meta": {
+      "version": "Version",
+      "versionValue": "v1",
+      "endpoints": "Total endpoints",
+      "prefix": "Prefix"
+    },
+    "nav": {
+      "start": "Quick start",
+      "auth": "Authentication",
+      "scopes": "Scopes & limits",
+      "endpoints": "Endpoint table",
+      "envelope": "Response format",
+      "errors": "Error codes",
+      "rate-limit": "Rate limiting",
+      "openapi": "OpenAPI & links"
+    },
+    "start": {
+      "eyebrow": "Start here",
+      "title": "Four steps to your first upload",
+      "subtitle": "Prepare a key, send a file, read the pooled quota, then share the result. Every step hits the same endpoints the web dashboard uses."
+    },
+    "baseUrlTitle": "Base URL",
+    "baseUrl": {
+      "development": "Development",
+      "production": "Production"
+    },
+    "snippets": {
+      "prepare": {
+        "title": "Prepare an API key",
+        "body": "Create the key on the **API Key** page in the dashboard. The secret is shown only once, at creation time."
+      },
+      "upload": {
+        "title": "Upload a file",
+        "body": "Send one or several files at once. A `202 Accepted` response means the file entered the queue; the write to Google Drive happens asynchronously."
+      },
+      "summary": {
+        "title": "Read the pooled quota",
+        "body": "`GET /storage/summary` totals the quota of every active account and includes a per-account breakdown."
+      },
+      "search": {
+        "title": "Search files",
+        "body": "Search is `typo-tolerant` and can sweep an entire folder subtree with `recursive=1`."
+      },
+      "share": {
+        "title": "Share a file",
+        "body": "Create a public link with `expires_at` and `max_views`. The link can be revoked at any time."
+      }
+    },
+    "auth": {
+      "eyebrow": "Authorization",
+      "title": "Two access modes",
+      "subtitle": "The web dashboard uses Sanctum cookies, while machine integrations use an API key. Scopes only apply to API-key requests.",
+      "modes": {
+        "apiKey": "API key via Authorization",
+        "header": "API key via X-API-Key",
+        "sanctum": "Sanctum (dashboard & mobile)"
+      },
+      "apiKeyNote": "Paste the key into the `Authorization` header with a `Bearer` prefix. This is the default mode for scripts and backend services.",
+      "headerNote": "The dedicated `X-API-Key` header helps when the `Authorization` value is already taken by another system.",
+      "sanctumNote": "Web logins store the token in an `httpOnly` cookie. The cookie travels automatically, so there is no header to manage.",
+      "keyFormatTitle": "API key format",
+      "keyFormatBody": "Keys follow the `en_<8-char-prefix>_<40-char-secret>` pattern. The prefix exists for fast lookups; the secret is never stored in plaintext.",
+      "header": "Header",
+      "prefix": "Prefix",
+      "sanctumOnlyWarning": "`/api-keys/*` and `/webhooks/*` are reachable through Sanctum only, never through an API key."
+    },
+    "scopes": {
+      "eyebrow": "Access rights",
+      "title": "API key scopes",
+      "subtitle": "A single key can hold several scopes. Requests are rejected with `403` when the scope is missing.",
+      "tableAria": "API key scope table",
+      "columns": {
+        "scope": "Scope",
+        "allows": "Allows",
+        "example": "Example"
+      },
+      "short": {
+        "read": "read",
+        "write": "write",
+        "delete": "delete",
+        "sanctum": "sanctum",
+        "public": "public"
+      },
+      "allows": {
+        "read": "Every `GET` endpoint: files, folders, accounts, and quota summaries.",
+        "write": "Create and modify: non-destructive `POST`, `PUT`, `PATCH` requests.",
+        "delete": "Permanent removal through `DELETE`, including `files/bulk-delete`.",
+        "sanctum": "Reserved for login sessions (Sanctum cookies). Cannot be granted to an API key.",
+        "public": "No credentials at all, for example share links and sign-in pages."
+      },
+      "example": {
+        "read": "GET /files",
+        "write": "POST /files/upload",
+        "delete": "DELETE /files/{id}",
+        "sanctum": "POST /api-keys",
+        "public": "GET /s/{token}"
+      },
+      "hint": {
+        "read": "read",
+        "write": "modify",
+        "delete": "delete",
+        "sanctum": "login session",
+        "public": "no key"
+      }
+    },
+    "groups": {
+      "auth": "Authentication",
+      "googleAccounts": "Google accounts",
+      "storage": "Storage summary",
+      "folders": "Folders",
+      "files": "Files",
+      "shareLinks": "Share links",
+      "discovery": "Search & recent",
+      "apiKeys": "API keys",
+      "webhooks": "Webhooks",
+      "notifications": "Notifications"
+    },
+    "endpoints": {
+      "bulkDelete": "Delete many files in a single request.",
+      "byHashes": "Match many file hashes at once to detect duplicates.",
+      "byMetadata": "Search files using metadata conditions in the request body.",
+      "changePassword": "Change the password after confirming the current one.",
+      "createFileShareLink": "Create an additional share link with view limits.",
+      "createFolder": "Create a folder under a given parent.",
+      "createFolderShareLink": "Create an additional share link for a folder.",
+      "createKey": "Create a new key. The secret is returned once, in this response.",
+      "createWebhook": "Register a new webhook for one or more events.",
+      "deleteFile": "Delete a file from the index and from Drive.",
+      "deleteFolder": "Delete a folder, optionally removing its contents.",
+      "deleteWebhook": "Delete a webhook and its stored delivery history.",
+      "destroyAccount": "Disconnect an account; stored files are not deleted.",
+      "downloadFile": "Stream file bytes from Google Drive.",
+      "downloadFolder": "Package a folder into a ZIP and stream it as a download.",
+      "eyebrow": "Reference",
+      "fileStatus": "Upload processing status, for polling the final result.",
+      "googleAuth": "Exchange a native Google Sign-In code for a Sanctum token.",
+      "googleCallback": "Google OAuth callback; redirects back to the frontend.",
+      "googleRedirect": "Return the Google authorization URL for the web redirect.",
+      "listAccounts": "List the user's connected Google Drive accounts, optionally with live quota.",
+      "listFileShareLinks": "List every share link attached to a file.",
+      "listFiles": "List and filter files: folder, type, status, starred.",
+      "listFolderShareLinks": "List every share link attached to a folder.",
+      "listFolders": "List folders, filterable by parent or path.",
+      "listKeys": "List the user's API keys without exposing any secret.",
+      "listWebhooks": "List webhook endpoints and the events they follow.",
+      "locale": "Set the interface language preference (`id` or `en`).",
+      "login": "Sign in with email and password; returns a Sanctum token.",
+      "logout": "Revoke the Sanctum token currently in use.",
+      "me": "Current user profile plus asset counts.",
+      "moveFile": "Move a file to another folder, even across accounts.",
+      "moveFolder": "Move a folder to another parent.",
+      "notificationSettings": "Read which notification types the user allows.",
+      "oauthCallback": "Mobile WebView flow: exchange `code` + `state`.",
+      "oauthCallbackWeb": "Public HTTPS bridge that hands Google's redirect to the mobile app.",
+      "oauthExchange": "Exchange an OAuth code for a stored account connection.",
+      "oauthRedirect": "Google authorization URL for connecting a new account.",
+      "publicShare": "Public access to a file or folder listing through a token.",
+      "publicShareView": "Public preview page for a share token.",
+      "recent": "Mixed recent folders and files with cursor pagination.",
+      "register": "Create a new account, protected by an anti-spam throttle.",
+      "registerToken": "Store a device FCM token for push notifications.",
+      "removeToken": "Remove a device token when the user signs out.",
+      "revokeKey": "Revoke one API key by id.",
+      "revokeShareLink": "Revoke one pivot-backed share link.",
+      "scan": "Rescan an account's folder tree into the database.",
+      "searchFiles": "Fuzzy, typo-tolerant search with highlighted matches.",
+      "shareFile": "Create or update the file's share link.",
+      "shareFolder": "Enable a share link for a folder.",
+      "showAccount": "Details of one connected account.",
+      "showFile": "Complete metadata for one file.",
+      "showFolder": "Folder details with its immediate contents.",
+      "subtitle": "Mapped directly from `backend/routes/api.php`. Paths are shown without the `/api/v1` prefix.",
+      "summary": "Total, used, and free quota across every connected account.",
+      "syncQuota": "Pull the latest quota from Google for one account.",
+      "thumbnail": "Small image or video preview.",
+      "title": "Endpoint table",
+      "unshareFile": "Revoke the file's share link.",
+      "unshareFolder": "Revoke a folder's share link.",
+      "updateAccount": "Change an account's label or active flag.",
+      "updateFile": "Change a file's name or metadata.",
+      "updateFolder": "Rename a folder.",
+      "updateMe": "Update the account name and email.",
+      "updateNotificationSettings": "Update the user notification preferences.",
+      "updateWebhook": "Change a webhook URL, its events, or its active flag.",
+      "upload": "Upload one or many files to the account with the most free space.",
+      "uploadChunk": "Send one part of a file currently being uploaded.",
+      "uploadComplete": "Mark all parts received and finish the write.",
+      "uploadFromUrl": "Fetch a file from a source URL and store it in Drive.",
+      "uploadInit": "Start a chunked upload for a large file."
+    },
+    "envelope": {
+      "eyebrow": "Contract",
+      "title": "Response format",
+      "subtitle": "Every JSON response uses the same envelope so clients can parse it uniformly.",
+      "success": "Success",
+      "error": "Error",
+      "note": "Validation errors (`422`) automatically adopt this envelope, with the per-field map inside `data`."
+    },
+    "errors": {
+      "eyebrow": "Diagnostics",
+      "title": "Status codes",
+      "subtitle": "The codes below appear on responses wrapped in `success: false`.",
+      "meaning": {
+        "ok": "OK",
+        "created": "Created",
+        "accepted": "Accepted",
+        "unauthenticated": "Unauthenticated",
+        "forbidden": "Forbidden",
+        "notFound": "Not Found",
+        "conflict": "Conflict",
+        "validation": "Validation",
+        "rateLimited": "Too Many Requests",
+        "serverError": "Server Error",
+        "upstream": "Bad Gateway",
+        "unconfigured": "Service Unavailable"
+      },
+      "ok": "The request finished and the payload lives in `data`.",
+      "created": "A new resource was created, such as an account or folder.",
+      "accepted": "The request was queued; poll `files/{id}/status` for the final result.",
+      "unauthenticated": "The token is missing, expired, or invalid.",
+      "forbidden": "Insufficient scope, or the resource belongs to another user.",
+      "notFound": "The path, id, or token does not exist.",
+      "conflict": "State conflict, such as a duplicate name or an unfinished file.",
+      "validation": "The request body failed validation; field details are in `data`.",
+      "rateLimited": "Request limit exceeded; wait for the `Retry-After` header.",
+      "serverError": "Unexpected failure; check `backend/storage/logs/`.",
+      "upstream": "The Google API refused or returned an error.",
+      "unconfigured": "The instance is not configured yet, for example empty OAuth credentials."
+    },
+    "rateLimit": {
+      "title": "Request limits",
+      "subtitle": "Throttling is enforced per key on the server.",
+      "perKeyLabel": "Per key",
+      "perKey": "`60` requests / minute",
+      "burstLabel": "Short bursts",
+      "burst": "Handled by `throttle.apikey`",
+      "responseLabel": "When exceeded",
+      "response": "`429` + `Retry-After: 60`",
+      "eyebrow": "Resilience",
+      "pageTitle": "Rate limit policy",
+      "pageSubtitle": "Three throttle layers run at once; the strictest one decides the outcome.",
+      "columns": {
+        "mode": "Access mode",
+        "limit": "Limit"
+      },
+      "modes": {
+        "apiKey": "API key",
+        "sanctum": "Sanctum",
+        "auth": "`/auth/*` endpoints"
+      },
+      "limits": {
+        "apiKey": "`60` requests / minute per key (`throttle.apikey`).",
+        "sanctum": "Follows the default Laravel throttle for login sessions.",
+        "auth": "A separate throttle, for example `5` sign-in attempts per minute."
+      },
+      "retryNote": "When a limit is hit the server answers `429 Too Many Requests` with a `Retry-After` header in seconds."
+    },
+    "shareLinks": {
+      "title": "Share links",
+      "subtitle": "One file or folder can hold several active links at the same time.",
+      "public": "Unrestricted: anyone holding the link can open it, no login required.",
+      "expiry": "Expiry: set `expires_at` in ISO-8601 format.",
+      "views": "View cap: `max_views` stops the link once reached.",
+      "securityLink": "Data rules for share links"
+    },
+    "openapi": {
+      "eyebrow": "Ecosystem",
+      "title": "Spec & tooling",
+      "subtitle": "Need a machine-readable format? The OpenAPI specification is generated from controller annotations.",
+      "swaggerTitle": "Swagger UI",
+      "swaggerBody": "Browse and try endpoints straight from the browser.",
+      "specTitle": "Spec file",
+      "specBody": "Import into Postman or Insomnia as a request collection.",
+      "ctaHint": "Create an API key"
+    },
+    "cta": {
+      "createKey": "Create an API key",
+      "backHome": "Back to home"
+    }
   }
 }

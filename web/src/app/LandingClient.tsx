@@ -1,22 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
   AccountTree,
   ArrowForward,
-  CheckCircle,
   Cloud,
   Code,
-  CopyAll,
-  DarkMode,
-  Email,
   Layers,
-  LightMode,
   Lock,
-  Menu,
-  Close,
   PlayCircle,
   Route,
   Security,
@@ -26,41 +18,29 @@ import {
 } from '@mui/icons-material';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
-import { Button, IconButton } from '@/components/Button';
+import { Button } from '@/components/Button';
 import { Card, CardIconBox } from '@/components/Card';
-import { Chip } from '@/components/Chip';
-import { useAuth } from '@/components/AuthProvider';
-import { useTheme } from '@/components/ThemeProvider';
-import { getLocale, setLocale } from '@/lib/i18n';
+import { CodeBlock } from '@/components/CodeBlock';
+import { PublicShell } from '@/components/PublicShell';
+import { useGoogleSignIn } from '@/lib/useGoogleSignIn';
+import { DOCS_HREF, prefersReducedMotion, scrollToId } from '@/lib/site';
+import {
+  ENDPOINT_GROUPS,
+  SCOPE_ORDER,
+  SNIPPETS,
+  TOTAL_ENDPOINTS,
+} from '@/lib/apiCatalog';
 import { usePageTitle } from '@/lib/usePageTitle';
 
-/** Contact address published across the landing page and legal portal. */
-const CONTACT_EMAIL = 'enpiiofficial@gmail.com';
-
-/** The three anchors offered by the top navigation. */
+/** Landing anchors the shared header nav points at. */
 const SECTIONS = [
   { id: 'features', labelKey: 'landing.nav.features' },
   { id: 'security', labelKey: 'landing.nav.security' },
   { id: 'api', labelKey: 'landing.nav.api' },
 ] as const;
 
-const LEGAL_LINKS = [
-  { href: '/legal/privacy', labelKey: 'landing.footer.legalLinks.privacy' },
-  { href: '/legal/terms', labelKey: 'landing.footer.legalLinks.terms' },
-  { href: '/legal/security', labelKey: 'landing.footer.legalLinks.security' },
-] as const;
-
 /** Keeps anchor targets clear of the sticky header. */
 const SCROLL_MARGIN = 'scroll-mt-24';
-
-function scrollToId(id: string) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const reduce =
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-}
 
 function useScrollSpy() {
   const [active, setActive] = useState<string>('');
@@ -97,6 +77,41 @@ function useScrollSpy() {
   return active;
 }
 
+/**
+ * Honour inbound `/#section` links (footer and header navigate here from other
+ * public pages). The section may not be painted on the first frame after a
+ * cross-page navigation, so retry briefly before giving up.
+ */
+function useHashScroll() {
+  useEffect(() => {
+    let timer = 0;
+    let frame = 0;
+
+    function followHash() {
+      window.clearTimeout(timer);
+      frame = 0;
+      const hash = decodeURIComponent(window.location.hash.replace(/^#/, ''));
+      if (!hash) return;
+      function attempt() {
+        if (document.getElementById(hash)) {
+          scrollToId(hash);
+          return;
+        }
+        frame += 1;
+        if (frame < 30) timer = window.setTimeout(attempt, 50);
+      }
+      attempt();
+    }
+
+    followHash();
+    window.addEventListener('hashchange', followHash);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('hashchange', followHash);
+    };
+  }, []);
+}
+
 /** Fade-and-rise on first reveal; static content when reduced motion is on. */
 function Reveal({
   children,
@@ -112,10 +127,7 @@ function Reveal({
 
   useEffect(() => {
     if (!node) return;
-    if (
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) {
+    if (prefersReducedMotion()) {
       setShown(true);
       return;
     }
@@ -167,26 +179,6 @@ function SectionHeading({
         <p className="mt-3 text-body-lg text-on-surface-variant">{t(subtitleKey)}</p>
       )}
     </div>
-  );
-}
-
-function splitBullets(raw: unknown): string[] {
-  return typeof raw === 'string' ? raw.split('\n').filter(Boolean) : [];
-}
-
-function BulletList({ items, className }: { items: string[]; className?: string }) {
-  return (
-    <ul className={clsx('space-y-2 border-t border-outline-variant/20 pt-4', className)}>
-      {items.map((item) => (
-        <li
-          key={item}
-          className="flex items-start gap-2 text-metadata leading-relaxed text-on-surface-variant"
-        >
-          <CheckCircle className="!text-base shrink-0 text-primary" />
-          <span>{item}</span>
-        </li>
-      ))}
-    </ul>
   );
 }
 
@@ -336,7 +328,7 @@ function StoragePoolConsole() {
               </div>
               {selected && (
                 <p className="mt-2 flex items-center gap-1.5 text-metadata font-semibold text-primary">
-                  <CheckCircle className="!text-sm" />
+                  <Route className="!text-sm" />
                   {t('landing.hero.mock.selected')}
                 </p>
               )}
@@ -395,232 +387,11 @@ function StoragePoolConsole() {
   );
 }
 
-/* ================================== header ================================== */
-
-function HeaderActions({
-  onSignIn,
-  signingIn,
-  variant = 'desktop',
-}: {
-  onSignIn: () => void;
-  signingIn: boolean;
-  variant?: 'desktop' | 'stacked';
-}) {
-  const { t } = useTranslation();
-  const { user } = useAuth();
-  const { resolved, setTheme } = useTheme();
-  const router = useRouter();
-  const [locale, setLocaleState] = useState('id');
-
-  useEffect(() => {
-    setLocaleState(getLocale());
-  }, []);
-
-  function pickLocale(next: 'id' | 'en') {
-    setLocale(next);
-    setLocaleState(next);
-  }
-
-  function cycleTheme() {
-    setTheme(resolved === 'dark' ? 'light' : 'dark');
-  }
-
-  const stacked = variant === 'stacked';
-
-  return (
-    <div className={clsx('flex items-center gap-2', stacked && 'flex-col gap-3')}>
-      <div
-        className={clsx(
-          'flex items-center gap-1 rounded-full border border-outline-variant/20 bg-surface-container px-1 py-1',
-          stacked && 'w-full justify-center',
-        )}
-        role="group"
-        aria-label={t('landing.nav.language')}
-      >
-        {(['id', 'en'] as const).map((code) => (
-          <Button
-            key={code}
-            type="button"
-            size="sm"
-            variant={locale === code ? 'primary' : 'ghost'}
-            aria-pressed={locale === code}
-            onClick={() => pickLocale(code)}
-            className="!h-7 rounded-full px-2.5 text-metadata uppercase tracking-wider"
-          >
-            {code}
-          </Button>
-        ))}
-      </div>
-
-      <IconButton
-        onClick={cycleTheme}
-        aria-label={t('landing.nav.theme')}
-        title={t('landing.nav.theme')}
-        className="size-9 rounded-full border border-outline-variant/20 bg-surface-container"
-      >
-        {resolved === 'dark' ? (
-          <LightMode className="!text-lg" />
-        ) : (
-          <DarkMode className="!text-lg" />
-        )}
-      </IconButton>
-
-      {user ? (
-        <Button
-          variant="primary"
-          size="md"
-          onClick={() => router.push('/files')}
-          rightIcon={<ArrowForward className="!text-lg" />}
-          fullWidth={stacked}
-        >
-          {t('landing.cta.dashboard')}
-        </Button>
-      ) : (
-        <Button
-          variant="primary"
-          size="md"
-          onClick={onSignIn}
-          loading={signingIn}
-          fullWidth={stacked}
-        >
-          {signingIn ? t('landing.cta.signInLoading') : t('landing.cta.signIn')}
-        </Button>
-      )}
-    </div>
-  );
-}
-
-function Header({ onSignIn, signingIn }: { onSignIn: () => void; signingIn: boolean }) {
-  const { t } = useTranslation();
-  const active = useScrollSpy();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    function onScroll() {
-      setScrolled(window.scrollY > 8);
-    }
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
-  useEffect(() => {
-    document.body.style.overflow = menuOpen ? 'hidden' : '';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [menuOpen]);
-
-  const goSection = useCallback((id: string) => {
-    setMenuOpen(false);
-    scrollToId(id);
-  }, []);
-
-  return (
-    <header
-      className={clsx(
-        'sticky top-0 z-50 border-b transition-colors duration-300',
-        scrolled ? 'glass-toolbar border-outline-variant/20' : 'border-transparent bg-background',
-      )}
-    >
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-4 px-4 sm:px-6">
-        <Link
-          href="/"
-          className="flex shrink-0 items-center gap-2.5 no-underline"
-          aria-label="EnStorage"
-        >
-          <span className="flex size-9 items-center justify-center rounded-xl bg-primary-container text-on-primary-container">
-            <Cloud className="!text-2xl" />
-          </span>
-          <span className="font-display text-body-md font-bold text-on-surface">EnStorage</span>
-        </Link>
-
-        <nav
-          className="mx-auto hidden items-center gap-1 lg:flex"
-          aria-label={t('landing.nav.mainNav')}
-        >
-          {SECTIONS.map((section) => (
-            <Button
-              key={section.id}
-              type="button"
-              size="sm"
-              variant="ghost"
-              aria-current={active === section.id ? 'true' : undefined}
-              onClick={() => goSection(section.id)}
-              className={clsx(
-                '!h-9 !rounded-lg !px-3 !font-medium !text-on-surface-variant',
-                active === section.id && '!bg-surface-container !text-on-surface',
-              )}
-            >
-              {t(section.labelKey)}
-            </Button>
-          ))}
-        </nav>
-
-        <div className="ml-auto hidden lg:block">
-          <HeaderActions onSignIn={onSignIn} signingIn={signingIn} />
-        </div>
-
-        <IconButton
-          onClick={() => setMenuOpen((value) => !value)}
-          aria-label={menuOpen ? t('landing.nav.close') : t('landing.nav.menu')}
-          aria-expanded={menuOpen}
-          className="ml-auto size-9 rounded-lg border border-outline-variant/20 bg-surface-container lg:hidden"
-        >
-          {menuOpen ? <Close className="!text-lg" /> : <Menu className="!text-lg" />}
-        </IconButton>
-      </div>
-
-      {menuOpen && (
-        <div className="glass-toolbar max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-outline-variant/20 lg:hidden">
-          <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6">
-            <nav className="grid gap-1" aria-label={t('landing.nav.mainNav')}>
-              {SECTIONS.map((section) => (
-                <Button
-                  key={section.id}
-                  type="button"
-                  size="lg"
-                  variant={active === section.id ? 'primary' : 'ghost'}
-                  onClick={() => goSection(section.id)}
-                  className="justify-between !rounded-xl"
-                  rightIcon={<ArrowForward className="!text-lg opacity-70" />}
-                >
-                  {t(section.labelKey)}
-                </Button>
-              ))}
-            </nav>
-            <div className="mt-5">
-              <HeaderActions onSignIn={onSignIn} signingIn={signingIn} variant="stacked" />
-            </div>
-          </div>
-        </div>
-      )}
-    </header>
-  );
-}
-
 /* =================================== hero =================================== */
 
 function Hero() {
   const { t } = useTranslation();
-  const router = useRouter();
-  const { user, googleLogin } = useAuth();
-  const [signingIn, setSigningIn] = useState(false);
-
-  async function start() {
-    if (user) {
-      router.push('/files');
-      return;
-    }
-    setSigningIn(true);
-    try {
-      await googleLogin();
-    } catch {
-      setSigningIn(false);
-      router.push('/login');
-    }
-  }
+  const { user, signIn, signingIn } = useGoogleSignIn();
 
   return (
     <section className="border-b border-outline-variant/20">
@@ -637,7 +408,7 @@ function Hero() {
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Button
                 size="lg"
-                onClick={start}
+                onClick={signIn}
                 loading={signingIn}
                 rightIcon={!signingIn && <ArrowForward className="!text-lg" />}
                 className="sm:min-w-44"
@@ -704,10 +475,6 @@ function Features() {
                 <p className="mt-2 text-body-md leading-relaxed text-on-surface-variant">
                   {t(`landing.features.items.${key}.body`)}
                 </p>
-                <BulletList
-                  className="mt-auto pt-4 sm:grid sm:grid-cols-2 sm:gap-x-4 sm:space-y-0"
-                  items={splitBullets(t(`landing.features.items.${key}.bullets`))}
-                />
               </Card>
             </Reveal>
           ))}
@@ -749,7 +516,6 @@ function SecuritySection() {
                 <p className="mt-2 text-body-md leading-relaxed text-on-surface-variant">
                   {t(`landing.security.items.${key}.body`)}
                 </p>
-                <BulletList className="mt-auto" items={splitBullets(t(`landing.security.items.${key}.bullets`))} />
               </Card>
             </Reveal>
           ))}
@@ -773,213 +539,16 @@ function SecuritySection() {
 
 /* =============================== developer api ============================== */
 
-const API_TABS = ['upload', 'quota', 'share'] as const;
-const SCOPE_KEYS = ['read', 'write', 'delete', 'full'] as const;
-
-/** Straight from the backend route table — see docs/api.md. */
-const ENDPOINTS = [
-  { method: 'POST', path: '/api/v1/files/upload', scope: 'write', noteKey: 'upload' },
-  { method: 'POST', path: '/api/v1/files/upload/init', scope: 'write', noteKey: 'uploadInit' },
-  { method: 'GET', path: '/api/v1/files', scope: 'read', noteKey: 'listFiles' },
-  { method: 'GET', path: '/api/v1/files/{id}/download', scope: 'read', noteKey: 'download' },
-  { method: 'GET', path: '/api/v1/storage/summary', scope: 'read', noteKey: 'summary' },
-  { method: 'GET', path: '/api/v1/google-accounts', scope: 'read', noteKey: 'accounts' },
-  { method: 'PUT', path: '/api/v1/files/{id}/move', scope: 'write', noteKey: 'move' },
-  { method: 'DELETE', path: '/api/v1/files/{id}', scope: 'delete', noteKey: 'delete' },
-  { method: 'POST', path: '/api/v1/api-keys', scope: 'session', noteKey: 'apiKeys' },
-  { method: 'GET', path: '/api/v1/s/{token}', scope: 'public', noteKey: 'publicShare' },
+/** Lightweight teaser numbers: the full reference lives on the /docs portal. */
+const TEASER_STATS = [
+  { key: 'endpointLabel', value: TOTAL_ENDPOINTS },
+  { key: 'groupLabel', value: ENDPOINT_GROUPS.length },
+  { key: 'snippetLabel', value: SNIPPETS.length },
 ] as const;
-
-type TokenClass = 'comment' | 'string' | 'flag' | 'keyword' | 'number' | 'plain';
-
-const TOKEN_CLASS: Record<TokenClass, string> = {
-  comment: 'text-outline italic',
-  string: 'text-secondary',
-  flag: 'text-primary font-semibold',
-  keyword: 'text-primary font-semibold',
-  number: 'text-on-surface-variant tabular-nums',
-  plain: 'text-on-surface',
-};
-
-const TOKEN_PATTERN =
-  /(#[^\n]*|\/\/[^\n]*)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')|(-{1,2}[A-Za-z-]+)|\b(curl|Bearer|GET|POST|PUT|PATCH|DELETE|HTTP\/1\.1)\b|(\b\d+(?:\.\d+)?\b)/g;
-
-function tokenize(code: string): Array<{ text: string; kind: TokenClass }> {
-  const tokens: Array<{ text: string; kind: TokenClass }> = [];
-  let last = 0;
-  let match: RegExpExecArray | null;
-  TOKEN_PATTERN.lastIndex = 0;
-  while ((match = TOKEN_PATTERN.exec(code)) !== null) {
-    if (match.index > last) tokens.push({ text: code.slice(last, match.index), kind: 'plain' });
-    const kind: TokenClass = match[1]
-      ? 'comment'
-      : match[2]
-        ? 'string'
-        : match[3]
-          ? 'flag'
-          : match[4]
-            ? 'keyword'
-            : 'number';
-    tokens.push({ text: match[0], kind });
-    last = match.index + match[0].length;
-  }
-  if (last < code.length) tokens.push({ text: code.slice(last), kind: 'plain' });
-  return tokens;
-}
-
-function HighlightedCode({ code }: { code: string }) {
-  const tokens = useMemo(() => tokenize(code), [code]);
-  return (
-    <pre className="max-h-[420px] overflow-auto p-4 text-metadata leading-relaxed">
-      <code className="font-mono whitespace-pre">
-        {tokens.map((token, index) => (
-          <span key={`${index}-${token.text.slice(0, 12)}`} className={TOKEN_CLASS[token.kind]}>
-            {token.text}
-          </span>
-        ))}
-      </code>
-    </pre>
-  );
-}
-
-function ApiConsole() {
-  const { t } = useTranslation();
-  const [tab, setTab] = useState<string>(API_TABS[0]);
-  const [copied, setCopied] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const code = t(`landing.api.snippets.${tab}`);
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      setFailed(false);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-      setFailed(true);
-      window.setTimeout(() => setFailed(false), 2500);
-    }
-  }
-
-  return (
-    <div role="region" aria-label={t('landing.api.panelLabel')} className="shadow-ambient">
-      <Card className="overflow-hidden !bg-surface-container-lowest !p-0">
-        <div className="flex items-center gap-2 border-b border-outline-variant/20 bg-surface-container-high px-4 py-3">
-          <p className="min-w-0 flex-1 truncate font-mono text-metadata text-on-surface-variant">
-            {t('landing.api.prompt')} ./call-{tab}.sh
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={copy}
-            leftIcon={copied ? <CheckCircle className="!text-lg" /> : <CopyAll className="!text-lg" />}
-            className={clsx('!h-8 shrink-0 !text-on-surface-variant', copied && '!text-primary')}
-          >
-            {failed
-              ? t('landing.api.copyFailed')
-              : copied
-                ? t('landing.api.copied')
-                : t('landing.api.copy')}
-          </Button>
-        </div>
-
-        <div
-          className="flex flex-wrap gap-1 border-b border-outline-variant/20 px-3 py-2"
-          role="tablist"
-          aria-label={t('landing.api.eyebrow')}
-        >
-          {API_TABS.map((value) => (
-            <Button
-              key={value}
-              type="button"
-              size="sm"
-              role="tab"
-              aria-selected={tab === value}
-              variant={tab === value ? 'primary' : 'ghost'}
-              onClick={() => setTab(value)}
-              className="!h-8 rounded-full px-3.5"
-            >
-              {t(`landing.api.tabs.${value}`)}
-            </Button>
-          ))}
-        </div>
-
-        <p className="px-4 pt-3 text-metadata text-outline">{t(`landing.api.captions.${tab}`)}</p>
-        <HighlightedCode code={code} />
-      </Card>
-    </div>
-  );
-}
-
-const SCOPE_CHIP_VARIANTS = {
-  read: 'success',
-  write: 'primary',
-  delete: 'danger',
-  session: 'default',
-  public: 'default',
-} as const;
-
-function ScopeChip({ scope }: { scope: keyof typeof SCOPE_CHIP_VARIANTS }) {
-  return <Chip variant={SCOPE_CHIP_VARIANTS[scope]}>{scope}</Chip>;
-}
-
-function EndpointTable() {
-  const { t } = useTranslation();
-
-  return (
-    <Card className="!p-0">
-      <div className="flex items-center gap-3 border-b border-outline-variant/20 px-5 py-4">
-        <CardIconBox variant="muted" size="md">
-          <Terminal className="!text-2xl" />
-        </CardIconBox>
-        <div className="min-w-0">
-          <h3 className="font-display text-body-lg font-semibold text-on-surface">
-            {t('landing.api.endpointsTitle')}
-          </h3>
-          <p className="text-metadata text-outline">{t('landing.api.endpointNote')}</p>
-        </div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[560px] border-collapse text-left">
-          <thead>
-            <tr className="bg-surface-container/60">
-              {['method', 'path', 'scope', 'description'].map((col) => (
-                <th
-                  key={col}
-                  scope="col"
-                  className="px-5 py-2.5 text-metadata font-semibold uppercase tracking-wider text-outline"
-                >
-                  {t(`landing.api.table.${col}`)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {ENDPOINTS.map((row) => (
-              <tr key={`${row.method}${row.path}`} className="border-t border-outline-variant/20">
-                <td className="px-5 py-2.5 font-mono text-metadata font-semibold text-secondary">
-                  {row.method}
-                </td>
-                <td className="px-5 py-2.5 font-mono text-metadata text-on-surface">{row.path}</td>
-                <td className="px-5 py-2.5">
-                  <ScopeChip scope={row.scope} />
-                </td>
-                <td className="px-5 py-2.5 text-metadata text-on-surface-variant">
-                  {t(`landing.api.endpointNotes.${row.noteKey}`)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  );
-}
 
 function ApiSection() {
   const { t } = useTranslation();
+  const sample = SNIPPETS.find((snippet) => snippet.id === 'upload');
 
   return (
     <section id="api" className={clsx('border-b border-outline-variant/20 py-16 sm:py-20', SCROLL_MARGIN)}>
@@ -990,230 +559,80 @@ function ApiSection() {
           subtitleKey="landing.api.subtitle"
         />
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <Reveal>
-            <ApiConsole />
+            <Card hover className="flex h-full flex-col !p-6 sm:!p-7">
+              <div className="flex items-center gap-3">
+                <CardIconBox variant="primary" size="md">
+                  <Code className="!text-2xl" />
+                </CardIconBox>
+                <h3 className="font-display text-body-lg font-semibold text-on-surface">
+                  {t('landing.teaser.title')}
+                </h3>
+              </div>
+              <p className="mt-4 text-body-md leading-relaxed text-on-surface-variant">
+                {t('landing.teaser.subtitle')}
+              </p>
+
+              <dl className="mt-6 grid gap-3 sm:grid-cols-3">
+                {TEASER_STATS.map((stat) => (
+                  <div
+                    key={stat.key}
+                    className="rounded-xl bg-surface-container px-3 py-2.5 text-center"
+                  >
+                    <dd className="font-display text-headline-lg text-primary tabular-nums">
+                      {stat.value}
+                    </dd>
+                    <dt className="mt-1 text-metadata uppercase tracking-wider text-outline">
+                      {t(`landing.teaser.${stat.key}`)}
+                    </dt>
+                  </div>
+                ))}
+              </dl>
+
+              <div className="mt-6 flex flex-col gap-3 border-t border-outline-variant/20 pt-5 sm:flex-row sm:items-center">
+                <Link
+                  href={DOCS_HREF}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-container px-4 py-2.5 text-sm font-semibold text-on-primary-container no-underline transition-colors hover:bg-primary-container/80"
+                >
+                  <Terminal className="!text-lg" />
+                  {t('landing.teaser.cta')}
+                  <ArrowForward className="!text-lg" />
+                </Link>
+                <Link
+                  href="/api-keys"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-outline-variant/20 px-4 py-2.5 text-sm font-semibold text-on-surface no-underline transition-colors hover:bg-surface-container"
+                >
+                  <VpnKey className="!text-lg" />
+                  {t('landing.teaser.keyCta')}
+                </Link>
+              </div>
+
+              <p className="mt-4 text-metadata leading-relaxed text-outline">
+                <Shield className="!text-base mr-1.5 inline-block align-[-2px] text-primary" />
+                <Link
+                  href="/legal/security"
+                  className="text-on-surface-variant no-underline hover:text-primary hover:underline"
+                >
+                  {t('landing.teaser.securityCta')}
+                </Link>
+              </p>
+            </Card>
           </Reveal>
 
-          <div className="grid gap-4 content-start">
-            <Reveal delay={90}>
-              <Card>
-                <div className="flex items-center gap-3">
-                  <CardIconBox variant="muted" size="md">
-                    <Code className="!text-2xl" />
-                  </CardIconBox>
-                  <h3 className="font-display text-body-lg font-semibold text-on-surface">
-                    {t('landing.api.authTitle')}
-                  </h3>
-                </div>
-                <dl className="mt-5 space-y-3 text-metadata">
-                  {[
-                    { termKey: 'base', valueKey: 'baseValue' },
-                    { termKey: 'header', valueKey: 'headerValue' },
-                    { termKey: 'format', valueKey: 'formatValue' },
-                    { termKey: 'limit', valueKey: 'limitValue' },
-                    { termKey: 'envelope', valueKey: 'envelopeValue' },
-                  ].map((row) => (
-                    <div
-                      key={row.termKey}
-                      className="flex flex-wrap items-baseline justify-between gap-2 border-b border-outline-variant/20 pb-3 last:border-b-0 last:pb-0"
-                    >
-                      <dt className="uppercase tracking-wider text-outline">
-                        {t(`landing.api.auth.${row.termKey}`)}
-                      </dt>
-                      <dd className="font-mono text-on-surface">{t(`landing.api.auth.${row.valueKey}`)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </Card>
-            </Reveal>
-
-            <Reveal delay={150}>
-              <Card>
-                <div className="flex items-center gap-3">
-                  <CardIconBox variant="gold" size="md">
-                    <VpnKey className="!text-2xl" />
-                  </CardIconBox>
-                  <h3 className="font-display text-body-lg font-semibold text-on-surface">
-                    {t('landing.api.keysTitle')}
-                  </h3>
-                </div>
-                <ul className="mt-5 space-y-3">
-                  {SCOPE_KEYS.map((scope) => (
-                    <li key={scope} className="flex items-start gap-3">
-                      <span className="mt-0.5 shrink-0">
-                        <Chip variant="primary">{scope}</Chip>
-                      </span>
-                      <span className="text-body-md text-on-surface-variant">
-                        {t(`landing.api.keys.${scope}`)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-5 flex items-start gap-2 border-t border-outline-variant/20 pt-4 text-metadata leading-relaxed text-outline">
-                  <Lock className="!text-base mt-px shrink-0 text-primary" />
-                  {t('landing.api.keySecurityNote')}
-                </p>
-              </Card>
-            </Reveal>
-          </div>
+          <Reveal delay={90}>
+            {sample && (
+              <CodeBlock
+                code={sample.code}
+                file={sample.file}
+                labelKey="landing.teaser.ctaHint"
+                maxHeightClass="max-h-80"
+              />
+            )}
+          </Reveal>
         </div>
-
-        <Reveal delay={120}>
-          <div className="mt-4">
-            <EndpointTable />
-          </div>
-        </Reveal>
-
-        <Reveal delay={160}>
-          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3">
-            <Link
-              href="/api-keys"
-              className="inline-flex items-center gap-2 text-body-md font-semibold text-primary no-underline hover:underline"
-            >
-              <VpnKey className="!text-lg" />
-              {t('landing.api.createKey')}
-            </Link>
-            <Link
-              href="/legal/security"
-              className="inline-flex items-center gap-2 text-body-md font-semibold text-on-surface-variant no-underline hover:text-on-surface"
-            >
-              <Shield className="!text-lg" />
-              {t('landing.api.securityLink')}
-            </Link>
-          </div>
-        </Reveal>
       </div>
     </section>
-  );
-}
-
-/* ================================== footer ================================= */
-
-function Footer() {
-  const { t } = useTranslation();
-
-  const productLinks = SECTIONS.map((section) => ({
-    key: section.id,
-    id: section.id,
-    labelKey: `landing.footer.productLinks.${section.id}`,
-  }));
-
-  const helpLinks = [
-    { key: 'api', id: 'api', labelKey: 'landing.footer.helpLinks.api' },
-  ];
-
-  return (
-    <footer className="bg-surface-dim">
-      <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6">
-        <div className="grid gap-10 lg:grid-cols-[1.2fr_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
-          <div>
-            <Link href="/" className="inline-flex items-center gap-2.5 no-underline">
-              <span className="flex size-9 items-center justify-center rounded-xl bg-primary-container text-on-primary-container">
-                <Cloud className="!text-2xl" />
-              </span>
-              <span className="font-display text-body-md font-bold text-on-surface">EnStorage</span>
-            </Link>
-            <p className="mt-4 max-w-xs text-body-md leading-relaxed text-on-surface-variant">
-              {t('landing.footer.tagline')}
-            </p>
-            <p className="mt-4 text-metadata text-outline">{t('landing.footer.madeBy')}</p>
-          </div>
-
-          <div>
-            <h3 className="text-label-sm font-semibold uppercase tracking-[0.14em] text-outline">
-              {t('landing.footer.product')}
-            </h3>
-            <ul className="mt-4 space-y-2.5">
-              {productLinks.map((link) => (
-                <li key={link.key}>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => scrollToId(link.id)}
-                    className="!h-auto !px-0 !py-0 !font-normal !text-on-surface-variant hover:!text-on-surface"
-                  >
-                    {t(link.labelKey)}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="text-label-sm font-semibold uppercase tracking-[0.14em] text-outline">
-              {t('landing.footer.legal')}
-            </h3>
-            <ul className="mt-4 space-y-2.5">
-              {LEGAL_LINKS.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-body-md text-on-surface-variant no-underline transition-colors hover:text-on-surface"
-                  >
-                    {t(link.labelKey)}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="text-label-sm font-semibold uppercase tracking-[0.14em] text-outline">
-              {t('landing.footer.help')}
-            </h3>
-            <ul className="mt-4 space-y-2.5">
-              {helpLinks.map((link) => (
-                <li key={link.key}>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => scrollToId(link.id)}
-                    className="!h-auto !px-0 !py-0 !font-normal !text-on-surface-variant hover:!text-on-surface"
-                  >
-                    {t(link.labelKey)}
-                  </Button>
-                </li>
-              ))}
-              <li>
-                <a
-                  href={`mailto:${CONTACT_EMAIL}`}
-                  className="inline-flex items-center gap-2 text-body-md text-on-surface-variant no-underline transition-colors hover:text-on-surface"
-                >
-                  <Email className="!text-base" />
-                  {CONTACT_EMAIL}
-                </a>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="mt-12 flex flex-col gap-4 border-t border-outline-variant/20 pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-1">
-            <p className="text-metadata text-on-surface-variant">
-              {t('landing.footer.copyright', { year: new Date().getFullYear() })}
-            </p>
-            <p className="text-metadata text-outline">{t('landing.footer.selfHostedNote')}</p>
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={() => {
-              const reduce =
-                typeof window.matchMedia === 'function' &&
-                window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-              window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
-            }}
-            rightIcon={<ArrowForward className="!text-lg -rotate-90" />}
-          >
-            {t('landing.nav.backToTop')}
-          </Button>
-        </div>
-      </div>
-    </footer>
   );
 }
 
@@ -1221,46 +640,25 @@ function Footer() {
 
 export default function LandingClient() {
   usePageTitle('landing.pageTitle');
-  const { user, googleLogin } = useAuth();
-  const { push } = useRouter();
-  const [signingIn, setSigningIn] = useState(false);
+  const activeSection = useScrollSpy();
+
+  useHashScroll();
 
   useEffect(() => {
     const root = document.documentElement;
     const previous = root.style.scrollBehavior;
-    const reduce =
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!reduce) root.style.scrollBehavior = 'smooth';
+    if (!prefersReducedMotion()) root.style.scrollBehavior = 'smooth';
     return () => {
       root.style.scrollBehavior = previous;
     };
   }, []);
 
-  async function handleSignIn() {
-    if (user) {
-      push('/files');
-      return;
-    }
-    setSigningIn(true);
-    try {
-      await googleLogin();
-    } catch {
-      setSigningIn(false);
-      push('/login');
-    }
-  }
-
   return (
-    <div className="min-h-screen bg-background font-body text-on-surface">
-      <Header onSignIn={handleSignIn} signingIn={signingIn} />
-      <main>
-        <Hero />
-        <Features />
-        <SecuritySection />
-        <ApiSection />
-      </main>
-      <Footer />
-    </div>
+    <PublicShell activeSection={activeSection}>
+      <Hero />
+      <Features />
+      <SecuritySection />
+      <ApiSection />
+    </PublicShell>
   );
 }

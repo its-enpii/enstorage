@@ -599,7 +599,8 @@
       "theme": "Ganti tema terang/gelap",
       "language": "Ganti bahasa",
       "backToTop": "Kembali ke atas",
-      "mainNav": "Navigasi utama"
+      "mainNav": "Navigasi utama",
+      "docs": "Dokumentasi"
     },
     "cta": {
       "signIn": "Masuk",
@@ -644,28 +645,23 @@
       "items": {
         "aggregation": {
           "title": "Satu tempat untuk semua akun",
-          "body": "Hubungkan akun Google Drive Anda dan semuanya muncul di satu panel — kuota, alamat email, dan status koneksi dalam satu daftar.",
-          "bullets": "Kuota digabung dan diperbarui otomatis\nStruktur folder dan file tetap seperti biasa\nSemua akun tetap milik Anda sepenuhnya"
+          "body": "Hubungkan akun Google Drive Anda dan semuanya muncul di satu panel — kuota, alamat email, dan status koneksi dalam satu daftar."
         },
         "routing": {
           "title": "Smart routing otomatis",
-          "body": "Setiap file baru langsung dikirim ke akun dengan sisa ruang paling longgar yang cukup menampungnya. Anda tidak perlu memilih tujuan.",
-          "bullets": "Akun paling longgar dipilih otomatis\nUkuran di atas 1 GB pakai chunked upload\nTidak ada akun muat? Upload ditandai gagal"
+          "body": "Setiap file baru langsung dikirim ke akun dengan sisa ruang paling longgar yang cukup menampungnya. Anda tidak perlu memilih tujuan."
         },
         "viewer": {
           "title": "Buka dan putar langsung",
-          "body": "Lihat dokumen, gambar, atau putar video tanpa mengunduhnya lebih dulu. Semua lewat proxy EnStorage, jadi tautan Drive Anda tidak terlihat oleh pihak lain.",
-          "bullets": "Pemutar video dan audio di peramban\nPratinjau PDF, markdown, dan kode\nThumbnail gambar dibuat otomatis"
+          "body": "Lihat dokumen, gambar, atau putar video tanpa mengunduhnya lebih dulu. Semua lewat proxy EnStorage, jadi tautan Drive Anda tidak terlihat oleh pihak lain."
         },
         "isolation": {
           "title": "Data Anda hanya milik Anda",
-          "body": "File, folder, dan kredensial dipisah ketat antar pengguna. Akun Google milik satu orang tidak bisa dibuka oleh pengguna lain di instance yang sama.",
-          "bullets": "Pemisahan berdasarkan ID pengguna\nRole pemilik dan anggota\nCatatan aktivitas untuk aksi penting"
+          "body": "File, folder, dan kredensial dipisah ketat antar pengguna. Akun Google milik satu orang tidak bisa dibuka oleh pengguna lain di instance yang sama."
         },
         "api": {
           "title": "REST API dan API Key",
-          "body": "Sambungkan penyimpanan ke skrip, backend, atau n8n Anda. Buat API Key dengan scope terpisah, lalu pakai persis seperti contoh di bagian Developer di bawah.",
-          "bullets": "Scope read, write, delete, dan full\nKey hanya ditampilkan sekali\nSetiap pemakaian tercatat di log"
+          "body": "Sambungkan penyimpanan ke skrip, backend, atau n8n Anda. Buat API Key dengan scope terpisah, lalu pakai persis seperti contoh di bagian Developer di bawah."
         }
       }
     },
@@ -676,18 +672,15 @@
       "items": {
         "nonCustodial": {
           "title": "Berkas tidak mendarat di server kami",
-          "body": "File diteruskan ke akun Google Drive tujuan, lalu salinan sementara di server dihapus. EnStorage menyimpan metadata dan token, bukan isi berkas Anda.",
-          "bullets": "Folder tujuan ada di Drive Anda\nUnduhan dan pemutaran lewat proxy\nTanpa storage pihak ketiga di tengah"
+          "body": "File diteruskan ke akun Google Drive tujuan, lalu salinan sementara di server dihapus. EnStorage menyimpan metadata dan token, bukan isi berkas Anda."
         },
         "token": {
           "title": "Token OAuth terenkripsi",
-          "body": "Access token dan refresh token dienkripsi dengan Laravel Crypt (AES-256-CBC) memakai APP_KEY di instance Anda. Tanpa APP_KEY itu, isi basis data tidak bisa dibaca.",
-          "bullets": "APP_KEY hanya ada di .env Anda\nKata sandi Google tidak pernah disimpan\nAPI Key disimpan sebagai hash bcrypt"
+          "body": "Access token dan refresh token dienkripsi dengan Laravel Crypt (AES-256-CBC) memakai APP_KEY di instance Anda. Tanpa APP_KEY itu, isi basis data tidak bisa dibaca."
         },
         "limitedUse": {
           "title": "Patuh pada Google Limited Use",
-          "body": "Data Google Drive Anda tidak dijual, tidak dibagikan ke pengiklan, dan tidak dipakai untuk melatih model AI. Izin bisa Anda cabut kapan saja.",
-          "bullets": "Tanpa analitik atau pelacak pihak ketiga\nHanya akses Drive dan profil dasar\nCabut izin dari dashboard atau Google"
+          "body": "Data Google Drive Anda tidak dijual, tidak dibagikan ke pengiklan, dan tidak dipakai untuk melatih model AI. Izin bisa Anda cabut kapan saja."
         }
       },
       "policyLink": "Baca Keamanan & Disklausul API Google"
@@ -783,6 +776,329 @@
       "copyright": "Hak cipta {{year}} enpii studio. Seluruh hak dilindungi.",
       "selfHostedNote": "EnStorage dijalankan pada instance milik Anda sendiri."
     },
-    "pageTitle": "Never Leaves Your Drive."
+    "pageTitle": "Never Leaves Your Drive.",
+    "teaser": {
+      "eyebrow": "Dokumentasi",
+      "title": "Referensi API lengkap ada di halaman terpisah",
+      "subtitle": "Ringkasan singkat ada di sini: satu base URL, satu header otorisasi, dan empat langkah untuk mengirim berkas pertama Anda. Tabel endpoint, kode status, dan contoh cURL yang bisa disalin tersedia penuh di portal dokumentasi.",
+      "endpointLabel": "Endpoint terdaftar",
+      "scopeLabel": "Scope API key",
+      "groupLabel": "Grup sumber daya",
+      "cta": "Buka dokumentasi API",
+      "ctaHint": "Contoh siap salin",
+      "keyCta": "Buat API Key",
+      "securityCta": "Baca kebijakan keamanan",
+      "snippetLabel": "Contoh cURL siap salin"
+    }
+  },
+  "docs": {
+    "pageTitle": "Dokumentasi API",
+    "eyebrow": "Developer",
+    "title": "Dokumentasi REST API",
+    "subtitle": "Satu base URL, satu header otorisasi. Semua contoh di halaman ini bisa langsung disalin dan dijalankan pada instance EnStorage milik Anda. Penjelasan singkat tiap endpoint tersedia pada tabel di bagian bawah.",
+    "toc": "Navigasi Dokumentasi",
+    "tocAria": "Daftar isi dokumentasi",
+    "consoleAria": "Contoh perintah API",
+    "consolePrompt": "Jalankan",
+    "collapse": "Tutup",
+    "expand": "Buka",
+    "ownerOnly": "Owner",
+    "groupCount": "{{count}} endpoint",
+    "searchPlaceholder": "Cari endpoint atau metode",
+    "searchAria": "Cari endpoint",
+    "searchClear": "Hapus kata kunci pencarian",
+    "searchResults": "{{count}} endpoint cocok",
+    "searchEmpty": "Tidak ada endpoint yang cocok dengan kata kunci tersebut.",
+    "searchReset": "Reset pencarian",
+    "endpointColumns": {
+      "method": "Metode",
+      "path": "Path",
+      "scope": "Scope",
+      "description": "Keterangan"
+    },
+    "badge": {
+      "version": "v1",
+      "endpoints": "{{count}} endpoint",
+      "prefix": "Prefix {{prefix}}"
+    },
+    "meta": {
+      "version": "Versi",
+      "versionValue": "v1",
+      "endpoints": "Total endpoint",
+      "prefix": "Prefix"
+    },
+    "nav": {
+      "start": "Mulai Cepat",
+      "auth": "Autentikasi",
+      "scopes": "Scope & Batas",
+      "endpoints": "Tabel Endpoint",
+      "envelope": "Bentuk Respons",
+      "errors": "Kode Error",
+      "rate-limit": "Rate Limit",
+      "openapi": "OpenAPI & Tautan"
+    },
+    "start": {
+      "eyebrow": "Mulai",
+      "title": "Empat langkah ke upload pertama",
+      "subtitle": "Siapkan kredensial, kirim berkas, baca kuota gabungan, lalu bagikan hasil akhirnya. Semua langkah memakai endpoint yang sama dengan dashboard web."
+    },
+    "baseUrlTitle": "Base URL",
+    "baseUrl": {
+      "development": "Development",
+      "production": "Production"
+    },
+    "snippets": {
+      "prepare": {
+        "title": "Siapkan API key",
+        "body": "Buat key pada halaman **API Key** di dashboard. Nilai aslinya hanya tampil sekali saat pembuatan."
+      },
+      "upload": {
+        "title": "Upload berkas",
+        "body": "Kirim satu atau beberapa berkas sekaligus. Respons `202 Accepted` berarti berkas masuk antrean; penulisan ke Google Drive berjalan asinkron."
+      },
+      "summary": {
+        "title": "Baca kuota gabungan",
+        "body": "Endpoint `GET /storage/summary` menjumlahkan kuota seluruh akun yang aktif, lengkap dengan rincian per akun."
+      },
+      "search": {
+        "title": "Cari berkas",
+        "body": "Pencarian bersifat `typo-tolerant` dan bisa menyapu subtree folder dengan parameter `recursive=1`."
+      },
+      "share": {
+        "title": "Bagikan berkas",
+        "body": "Buat tautan publik dengan `expires_at` dan `max_views`. Tautan dapat dicabut kapan saja."
+      }
+    },
+    "auth": {
+      "eyebrow": "Otorisasi",
+      "title": "Dua mode akses",
+      "subtitle": "Web dashboard memakai cookie Sanctum, sedangkan integrasi mesin memakai API key. Scope hanya diberlakukan pada permintaan berbasis API key.",
+      "modes": {
+        "apiKey": "API Key via Authorization",
+        "header": "API Key via X-API-Key",
+        "sanctum": "Sanctum (dashboard & mobile)"
+      },
+      "apiKeyNote": "Tempel key pada header `Authorization` dengan prefix `Bearer`. Ini mode default untuk skrip dan layanan belakang.",
+      "headerNote": "Header khusus `X-API-Key` berguna saat nilai `Authorization` sudah dipakai sistem lain.",
+      "sanctumNote": "Login web menyimpan token pada cookie `httpOnly`. Cookie ikut terkirim otomatis, jadi tidak ada header yang perlu dikelola.",
+      "keyFormatTitle": "Format API key",
+      "keyFormatBody": "Key mengikuti pola `en_<8-char-prefix>_<40-char-secret>`. Prefiks dipakai untuk pencarian cepat, secret tidak pernah disimpan dalam bentuk teks asli.",
+      "header": "Header",
+      "prefix": "Prefix",
+      "sanctumOnlyWarning": "Endpoint `/api-keys/*` dan `/webhooks/*` hanya bisa diakses lewat Sanctum, bukan lewat API key itu sendiri."
+    },
+    "scopes": {
+      "eyebrow": "Hak akses",
+      "title": "Scope API key",
+      "subtitle": "Satu key dapat memegang beberapa scope. Permintaan ditolak `403` saat scope tidak cukup.",
+      "tableAria": "Tabel scope API key",
+      "columns": {
+        "scope": "Scope",
+        "allows": "Boleh melakukan",
+        "example": "Contoh"
+      },
+      "short": {
+        "read": "read",
+        "write": "write",
+        "delete": "delete",
+        "sanctum": "sanctum",
+        "public": "publik"
+      },
+      "allows": {
+        "read": "Semua endpoint `GET`: membaca berkas, folder, akun, dan ringkasan kuota.",
+        "write": "Membuat dan mengubah: `POST`, `PUT`, `PATCH` yang tidak merusak data.",
+        "delete": "Penghapusan permanen lewat `DELETE`, termasuk `files/bulk-delete`.",
+        "sanctum": "Khusus sesi login (cookie Sanctum). Tidak dapat diberikan ke API key.",
+        "public": "Tanpa kredensial sama sekali, misalnya tautan berbagi dan halaman masuk."
+      },
+      "example": {
+        "read": "GET /files",
+        "write": "POST /files/upload",
+        "delete": "DELETE /files/{id}",
+        "sanctum": "POST /api-keys",
+        "public": "GET /s/{token}"
+      },
+      "hint": {
+        "read": "baca",
+        "write": "ubah",
+        "delete": "hapus",
+        "sanctum": "sesi login",
+        "public": "tanpa key"
+      }
+    },
+    "groups": {
+      "auth": "Autentikasi",
+      "googleAccounts": "Akun Google",
+      "storage": "Ringkasan Storage",
+      "folders": "Folder",
+      "files": "Berkas",
+      "shareLinks": "Tautan Berbagi",
+      "discovery": "Pencarian & Terbaru",
+      "apiKeys": "API Keys",
+      "webhooks": "Webhooks",
+      "notifications": "Notifikasi"
+    },
+    "endpoints": {
+      "bulkDelete": "Hapus banyak berkas dalam satu permintaan.",
+      "byHashes": "Cocokkan banyak hash berkas sekaligus untuk cek duplikat.",
+      "byMetadata": "Cari berkas lewat kondisi metadata di badan permintaan.",
+      "changePassword": "Ganti kata sandi dengan konfirmasi sandi lama.",
+      "createFileShareLink": "Buat tautan berbagi tambahan dengan batas tayang.",
+      "createFolder": "Buat folder baru di bawah induk tertentu.",
+      "createFolderShareLink": "Buat tautan berbagi tambahan untuk folder.",
+      "createKey": "Buat key baru. Secret hanya dikirim sekali pada respons ini.",
+      "createWebhook": "Daftarkan webhook baru untuk satu atau beberapa event.",
+      "deleteFile": "Hapus berkas dari daftar dan dari Drive.",
+      "deleteFolder": "Hapus folder, opsi ikut menghapus isinya.",
+      "deleteWebhook": "Hapus webhook beserta riwayat pengiriman tersimpan.",
+      "destroyAccount": "Lepas akun; berkas yang tersimpan tidak ikut terhapus.",
+      "downloadFile": "Alirkan isi berkas dari Google Drive.",
+      "downloadFolder": "Kemas folder menjadi ZIP dan kirim sebagai unduhan.",
+      "eyebrow": "Referensi",
+      "fileStatus": "Status proses upload, untuk memolling hasil akhir.",
+      "googleAuth": "Tukar kode Google Sign-In native menjadi token Sanctum.",
+      "googleCallback": "Titik balik OAuth Google; mengalih-alihkan ke halaman depan.",
+      "googleRedirect": "Kembalikan URL otorisasi Google untuk alih-alihan web.",
+      "listAccounts": "Daftar akun Google Drive milik user, opsional dengan kuota langsung.",
+      "listFileShareLinks": "Daftar seluruh tautan berbagi milik berkas.",
+      "listFiles": "Daftar dan filter berkas: folder, tipe, status, star.",
+      "listFolderShareLinks": "Daftar seluruh tautan berbagi milik folder.",
+      "listFolders": "Daftar folder, dapat difilter per induk atau path.",
+      "listKeys": "Daftar API key milik user tanpa membuka secret.",
+      "listWebhooks": "Daftar endpoint webhook beserta event yang dipantau.",
+      "locale": "Set preferensi bahasa antar muka (`id` atau `en`).",
+      "login": "Masuk dengan email dan kata sandi; mengembalikan token Sanctum.",
+      "logout": "Mencabut token Sanctum yang sedang dipakai.",
+      "me": "Profil user saat ini beserta ringkasan jumlah aset.",
+      "moveFile": "Pindahkan berkas ke folder lain, antar akun sekalipun.",
+      "moveFolder": "Pindahkan folder ke induk lain.",
+      "notificationSettings": "Baca preferensi jenis notifikasi yang diizinkan.",
+      "oauthCallback": "Alur WebView mobile: tukar `code` + `state`.",
+      "oauthCallbackWeb": "Jembatan HTTPS publik untuk redirect Google ke aplikasi mobile.",
+      "oauthExchange": "Tukar kode OAuth menjadi koneksi akun yang tersimpan.",
+      "oauthRedirect": "URL otorisasi Google untuk menghubungkan akun baru.",
+      "publicShare": "Akses publik berkas atau daftar folder lewat token.",
+      "publicShareView": "Halaman pratinjau publik untuk sebuah token berbagi.",
+      "recent": "Campuran folder dan berkas terbaru dengan kursor halaman.",
+      "register": "Buat akun baru. Dilindungi throttle anti-spam.",
+      "registerToken": "Simpan token FCM perangkat untuk notifikasi push.",
+      "removeToken": "Cabut token perangkat saat user keluar.",
+      "revokeKey": "Cabut satu API key berdasarkan id.",
+      "revokeShareLink": "Cabut satu tautan berbagi berbasis pivot.",
+      "scan": "Pindai ulang isi folder akun ke pangkalan data.",
+      "searchFiles": "Pencarian fuzzy tahan salah ketik dengan highlight.",
+      "shareFile": "Buat atau perbarui tautan berbagi berkas.",
+      "shareFolder": "Aktifkan tautan berbagi untuk folder.",
+      "showAccount": "Detail satu akun terhubung.",
+      "showFile": "Metadata lengkap satu berkas.",
+      "showFolder": "Detail folder beserta isi langsung.",
+      "subtitle": "Dipetakan langsung dari `backend/routes/api.php`. Path ditampilkan tanpa prefix `/api/v1`.",
+      "summary": "Total, terpakai, dan sisa kuota gabungan seluruh akun.",
+      "syncQuota": "Tarik kuota terbaru dari Google untuk satu akun.",
+      "thumbnail": "Pratinjau gambar atau video dalam ukuran kecil.",
+      "title": "Tabel endpoint",
+      "unshareFile": "Cabut tautan berbagi berkas.",
+      "unshareFolder": "Cabut tautan berbagi folder.",
+      "updateAccount": "Ubah label atau status aktif akun.",
+      "updateFile": "Ubah nama atau metadata berkas.",
+      "updateFolder": "Ganti nama folder.",
+      "updateMe": "Perbarui nama dan email akun.",
+      "updateNotificationSettings": "Perbarui preferensi notifikasi user.",
+      "updateWebhook": "Ubah URL, event, atau status aktif sebuah webhook.",
+      "upload": "Unggah satu atau banyak berkas ke akun dengan ruang terbesar.",
+      "uploadChunk": "Kirim satu bagian dari berkas yang sedang diunggah.",
+      "uploadComplete": "Tandai semua bagian terkirim dan selesaikan penulisan.",
+      "uploadFromUrl": "Unduh berkas dari URL sumber lalu simpan ke Drive.",
+      "uploadInit": "Mulai upload terpotong untuk berkas berukuran besar."
+    },
+    "envelope": {
+      "eyebrow": "Kontrak",
+      "title": "Bentuk respons",
+      "subtitle": "Semua respons JSON memakai pembungkus yang sama sehingga mudah di-urai di sisi klien.",
+      "success": "Berhasil",
+      "error": "Gagal",
+      "note": "Kesalahan validasi `422` otomatis mengikuti pembungkus ini; isi `data` berisi petanya field."
+    },
+    "errors": {
+      "eyebrow": "Diagnostik",
+      "title": "Kode status",
+      "subtitle": "Kode di bawah muncul pada respons dengan pembungkus `success: false`.",
+      "meaning": {
+        "ok": "OK",
+        "created": "Created",
+        "accepted": "Accepted",
+        "unauthenticated": "Unauthenticated",
+        "forbidden": "Forbidden",
+        "notFound": "Not Found",
+        "conflict": "Conflict",
+        "validation": "Validation",
+        "rateLimited": "Too Many Requests",
+        "serverError": "Server Error",
+        "upstream": "Bad Gateway",
+        "unconfigured": "Service Unavailable"
+      },
+      "ok": "Permintaan selesai dan payload ada di `data`.",
+      "created": "Sumber daya baru terbentuk, misalnya akun atau folder.",
+      "accepted": "Permintaan masuk antrean; hasil akhir dicek via `files/{id}/status`.",
+      "unauthenticated": "Token tidak ada, kedaluwarsa, atau salah.",
+      "forbidden": "Scope kurang atau aset bukan milik user ini.",
+      "notFound": "Path, id, atau token tidak ditemukan.",
+      "conflict": "Bentrokan state, misalnya nama duplikat atau berkas belum selesai.",
+      "validation": "Body permintaan gagal divalidasi; detail per field di `data`.",
+      "rateLimited": "Batas permintaan lewat; tunggu sesuai header `Retry-After`.",
+      "serverError": "Kesalahan tak terduga; periksa `backend/storage/logs/`.",
+      "upstream": "Google API menolak atau mengembalikan galat.",
+      "unconfigured": "Instance belum diset, misalnya kredensial OAuth kosong."
+    },
+    "rateLimit": {
+      "title": "Batas permintaan",
+      "subtitle": "Pembatas berjalan per key di sisi server.",
+      "perKeyLabel": "Per key",
+      "perKey": "`60` permintaan / menit",
+      "burstLabel": "Ledakan singkat",
+      "burst": "Dibatasi `throttle.apikey`",
+      "responseLabel": "Saat terlampaui",
+      "response": "`429` + `Retry-After: 60`",
+      "eyebrow": "Ketahanan",
+      "pageTitle": "Kebijakan rate limit",
+      "pageSubtitle": "Tiga lapisan pembatas aktif bersamaan; yang paling ketat menentukan hasil akhir.",
+      "columns": {
+        "mode": "Mode akses",
+        "limit": "Batas"
+      },
+      "modes": {
+        "apiKey": "API Key",
+        "sanctum": "Sanctum",
+        "auth": "Endpoint `/auth/*`"
+      },
+      "limits": {
+        "apiKey": "`60` permintaan / menit per key (`throttle.apikey`).",
+        "sanctum": "Mengikuti `throttle` bawaan Laravel untuk sesi login.",
+        "auth": "Throttle terpisah, misalnya `5` percobaan masuk per menit."
+      },
+      "retryNote": "Saat batas tercapai, server menjawab `429 Too Many Requests` dengan header `Retry-After` berisi hitungan detik."
+    },
+    "shareLinks": {
+      "title": "Tautan berbagi",
+      "subtitle": "Satu berkas atau folder dapat punya beberapa tautan aktif sekaligus.",
+      "public": "Tanpa batas: siapa pun dengan tautan dapat membuka, tanpa login.",
+      "expiry": "Batas waktu: set `expires_at` dalam format ISO-8601.",
+      "views": "Batas tayang: `max_views` menghentikan tautan setelah tercapai.",
+      "securityLink": "Aturan data pada tautan berbagi"
+    },
+    "openapi": {
+      "eyebrow": "Ekosistem",
+      "title": "Spesifikasi & alat bantu",
+      "subtitle": "Butuh format machine-readable? Spesifikasi OpenAPI dibuat otomatis dari anotasi controller.",
+      "swaggerTitle": "Swagger UI",
+      "swaggerBody": "Jelajahi dan coba endpoint langsung dari peramban.",
+      "specTitle": "Berkas spesifikasi",
+      "specBody": "Impor ke Postman atau Insomnia untuk koleksi permintaan.",
+      "ctaHint": "Buat API Key"
+    },
+    "cta": {
+      "createKey": "Buat API Key",
+      "backHome": "Kembali ke Beranda"
+    }
   }
 }
