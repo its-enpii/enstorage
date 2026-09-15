@@ -498,7 +498,10 @@
       "changes": "10. Perubahan pada Kebijakan Ini",
       "changesBody": "Kami dapat memperbarui Kebijakan Privasi ini dari waktu ke waktu. Perubahan material akan diumumkan melalui Layanan dan pada halaman ini beserta tanggal “Terakhir diperbarui”. Penggunaan Layanan yang berkelanjutan setelah perubahan menunjukkan penerimaan terhadap kebijakan yang diperbarui.",
       "contact": "11. Kontak",
-      "contactBody": "Untuk pertanyaan terkait privasi, kepatuhan Google API Services User Data Policy, atau untuk menggunakan hak Anda, hubungi kami di enpiiofficial@gmail.com. Untuk isu keamanan, gunakan kanal pelaporan kerentanan pada halaman Keamanan."
+      "contactBody": "Untuk pertanyaan terkait privasi, kepatuhan Google API Services User Data Policy, atau untuk menggunakan hak Anda, hubungi kami di enpiiofficial@gmail.com. Untuk isu keamanan, gunakan kanal pelaporan kerentanan pada halaman Keamanan.",
+      "summary": "EnStorage bersifat non-custodial: berkas Anda disimpan langsung di Google Drive milik Anda, bukan di server kami. Yang kami simpan hanyalah token OAuth (terenkripsi AES-256-CBC dengan APP_KEY instance Anda) dan metadata berkas pada basis data yang Anda kendalikan. Data Google tidak pernah dijual, dibagikan untuk iklan, atau dipakai melatih model AI.",
+      "version": "v1.4",
+      "tab": "Kebijakan Privasi"
     },
     "terms": {
       "title": "Ketentuan Layanan",
@@ -526,7 +529,10 @@
       "governingLaw": "11. Hukum yang Berlaku",
       "governingLawBody": "Ketentuan ini diatur oleh hukum Republik Indonesia. Setiap sengketa yang timbul dari atau terkait dengan Layanan akan diselesaikan di pengadilan Indonesia, kecuali undang-undang perlindungan konsumen wajib di yurisdiksi Anda memberi Anda hak untuk mengajukan perkara secara lokal.",
       "contact": "12. Kontak",
-      "contactBody": "Pertanyaan tentang Ketentuan ini? Hubungi kami di enpiiofficial@gmail.com. Untuk laporan kerentanan keamanan, ikuti prosedur pada halaman Keamanan & Disklausul API Google."
+      "contactBody": "Pertanyaan tentang Ketentuan ini? Hubungi kami di enpiiofficial@gmail.com. Untuk laporan kerentanan keamanan, ikuti prosedur pada halaman Keamanan & Disklausul API Google.",
+      "summary": "EnStorage adalah perangkat lunak self-hosted yang Anda jalankan pada infrastruktur Anda sendiri. Kepemilikan berkas tetap sepenuhnya milik Anda, dan setiap akun Google yang terhubung tunduk pada Ketentuan Layanan Google serta Google API Services User Data Policy termasuk persyaratan Limited Use.",
+      "version": "v1.3",
+      "tab": "Ketentuan Layanan"
     },
     "security": {
       "title": "Keamanan & Disklausul API Google",
@@ -558,16 +564,35 @@
       "vulnerability": "13. Pelaporan Kerentanan Keamanan",
       "vulnerabilityBody": "Jika Anda menemukan kerentanan pada EnStorage, laporkan secara bertanggung jawab ke enpiiofficial@gmail.com dengan subjek “Security”. Mohon jangan mempublikasikan detail kerentanan (issue publik, media sosial, atau blog) sebelum ditangani.\n\nSetelah menerima laporan, kami akan mengonfirmasi penerimaan selambat-lambatnya 7 hari, menilai dampak dan tingkat keparahan, menyiapkan perbaikan atau mitigasi pada rilis berikutnya, serta berkoordinasi mengenai jadwal publikasi temuan bila Anda menghendaki kredit. Harap hindari mengakses data produksi pengguna lain, mengganggu layanan, atau mengunduh data sebagai bukti — tunjukkan titik kerentanannya saja.",
       "status": "14. Keterbatasan & Pernyataan Penutup",
-      "statusBody": "Tidak ada sistem yang sepenuhnya aman. Enkripsi melindungi token dan transport, tetapi tidak menghilangkan risiko seperti kredensial Google yang dikompromikan, konfigurasi instance yang keliru, atau social engineering. Kami memperbarui halaman ini ketika praktik keamanan berubah; perubahan material diumumkan melalui rilis beserta tanggal “Terakhir diperbarui” pada halaman ini. Untuk aspek privasi atas data pribadi Anda, lihat Kebijakan Privasi; untuk ketentuan penggunaan, lihat Ketentuan Layanan."
-    }
+      "statusBody": "Tidak ada sistem yang sepenuhnya aman. Enkripsi melindungi token dan transport, tetapi tidak menghilangkan risiko seperti kredensial Google yang dikompromikan, konfigurasi instance yang keliru, atau social engineering. Kami memperbarui halaman ini ketika praktik keamanan berubah; perubahan material diumumkan melalui rilis beserta tanggal “Terakhir diperbarui” pada halaman ini. Untuk aspek privasi atas data pribadi Anda, lihat Kebijakan Privasi; untuk ketentuan penggunaan, lihat Ketentuan Layanan.",
+      "summary": "Berkas di-stream langsung ke Google Drive Anda tanpa pernah mendarat di disk server. Refresh token dikunci AES-256-CBC melalui Laravel Crypt dengan APP_KEY lokal, komunikasi berjalan atas TLS, dan seluruh izin dapat dicabut seketika — tanpa pelatihan AI, tanpa penjualan data.",
+      "version": "v1.2",
+      "tab": "Keamanan & Google API"
+    },
+    "toc": "Daftar Isi",
+    "documentMeta": "Detail Dokumen",
+    "version": "Versi",
+    "contact": "Kontak resmi",
+    "contactEmail": "enpiiofficial@gmail.com",
+    "complianceBadge": "Google API Services User Data Policy · Limited Use",
+    "summaryTitle": "Intisari",
+    "backHome": "Kembali ke Beranda",
+    "portalTitle": "Dokumentasi Legal & Keamanan",
+    "portalSubtitle": "Tiga dokumen resmi yang mengatur bagaimana EnStorage memperlakukan data Google Drive Anda.",
+    "language": "Ganti bahasa",
+    "theme": "Ganti tema terang/gelap",
+    "home": "Beranda",
+    "apiDocs": "Dokumentasi API",
+    "github": "Repositori GitHub",
+    "pageSectionAria": "Daftar isi dokumen",
+    "switcherAria": "Pilih dokumen legal",
+    "sectionsCount": "Jumlah pasal"
   },
   "landing": {
     "nav": {
       "features": "Fitur",
       "security": "Keamanan",
-      "api": "Integrasi & API",
-      "how": "Cara Kerja",
-      "legal": "Legalitas",
+      "api": "API",
       "menu": "Buka menu navigasi",
       "close": "Tutup menu navigasi",
       "theme": "Ganti tema terang/gelap",
@@ -584,201 +609,131 @@
       "badge": "Agregator Google Drive Multi-Akun · Self-Hosted",
       "titleLead": "Never Leaves Your Drive.",
       "titleMain": "Satu Antarmuka untuk Semua Akun Google Drive Anda",
-      "subtitle": "Satukan kuota tak terbatas dari banyak akun Google Drive ke dalam satu vault terpusat. Dilengkapi smart routing otomatis, REST API terbuka, dan privasi 100% dalam kendali Anda.",
+      "subtitle": "EnStorage menyatukan kuota beberapa akun Google Drive dalam satu panel: berkas di-stream langsung ke Drive tujuan, refresh token dienkripsi AES-256-CBC dengan APP_KEY lokal, dan seluruh metadata hidup di database instance Anda sendiri. Tidak ada gudang penyimpanan perantara.",
       "primary": "Mulai Sekarang",
       "secondary": "Lihat Dokumentasi API",
-      "trust": "Berjalan di infrastruktur Anda sendiri · Kode terbuka · Tanpa perantara storage",
-      "stats": {
-        "accounts": "Akun Google Drive",
-        "accountsValue": "Tanpa batas",
-        "file": "Ukuran maksimum per file",
-        "fileValue": "1 GB",
-        "routing": "Rute penulisan berkas",
-        "routingValue": "Otomatis"
-      },
+      "trust": "Berjalan di infrastruktur Anda sendiri · Kode terbuka · Nol server storage",
       "mock": {
         "eyebrow": "Vault Pool",
         "title": "Kapasitas Terpadu",
         "subtitle": "3 akun terhubung · sinkron baru saja",
+        "liveLabel": "Langsung",
         "drive": "Drive {{n}}",
         "accounts": {
           "one": "Gmail Utama",
           "two": "Gmail Kerja",
           "three": "Gmail Cadangan"
         },
-        "of": "dari",
-        "free": "tersisa",
-        "poolLabel": "Total Vault",
+        "emails": {
+          "one": "utama@gmail.com",
+          "two": "kerja@gmail.com",
+          "three": "cadangan@gmail.com"
+        },
+        "poolLabel": "Total Pool",
         "poolHint": "Kolam kuota gabungan",
         "used": "Terpakai",
-        "freeTotal": "Tersisa",
-        "selected": "Tujuan upload terpilih",
-        "statusRouting": "Smart Routing: Aktif",
-        "statusEncryption": "Enkripsi: AES-256",
-        "statusProxy": "Direct Proxy Stream",
-        "liveLabel": "Langsung",
-        "simTitle": "Simulasikan Smart Routing",
+        "free": "Tersisa",
+        "of": "dari",
+        "remaining": "sisa",
         "sizeLabel": "Ukuran berkas",
-        "reset": "Reset Simulasi",
-        "routed": "Berkas {{size}} diarahkan ke {{account}}",
+        "routingLabel": "Mode routing",
+        "routingAuto": "Otomatis",
+        "routingManual": "Pilih manual",
+        "targetLabel": "Akun tujuan",
+        "selected": "Tujuan terpilih",
+        "routed": "Berkas {{size}} diarahkan ke {{account}} ({{free}} tersisa)",
         "none": "Tidak ada akun dengan sisa kuota cukup",
+        "statusRouting": "Smart Routing: Aktif",
+        "statusEncryption": "Enkripsi: AES-256-CBC",
+        "statusProxy": "Direct Stream",
         "mb": "{{n}} MB",
-        "gb": "{{n}} GB"
-      }
-    },
-    "assurance": {
-      "eyebrow": "Kepatuhan API Google",
-      "title": "Keamanan & Privasi Google Drive, Dijelaskan sejak Awal",
-      "subtitle": "EnStorage tidak pernah menjadi tempat penyimpanan. Drive Anda tetap menjadi satu-satunya tempat berkas berada — sistem kami hanya mengelola jalur dan metadata di server Anda sendiri.",
-      "items": {
-        "selfHosted": {
-          "title": "100% Self-Hosted & Non-Custodial",
-          "body": "Berkas mengalir langsung ke akun Google Drive Anda dan tidak pernah disimpan di server pihak ketiga. Tidak ada gudang tersembunyi, tidak ada proxy penyimpanan permanen."
-        },
-        "oauth": {
-          "title": "Perlindungan Token OAuth2",
-          "body": "Refresh token disimpan dengan enkripsi AES-256 at rest pada basis data lokal yang Anda kendalikan. Kata sandi Google Anda tidak pernah menyentuh aplikasi kami."
-        },
-        "limitedUse": {
-          "title": "Google Limited Use Compliance",
-          "body": "Data Google Drive tidak pernah dijual, tidak dibagikan ke pengiklan, dan tidak pernah dipakai untuk melatih model AI atau machine learning umum."
-        },
-        "revocation": {
-          "title": "Pencabutan Akses Seketika",
-          "body": "Cabut izin akses kapan saja langsung dari dashboard EnStorage atau dari Setelan Akun Google Anda. Setelah dicabut, koneksi benar-benar putus."
-        }
+        "gb": "{{n}} GB",
+        "reset": "Reset ke Otomatis"
       },
-      "revokeHint": "Kelola izin di myaccount.google.com/permissions",
-      "policyLink": "Baca Kebijakan Keamanan & Disklausul API Google",
-      "scopesNote": "Scope OAuth2 dibatasi pada drive.file, drive.readonly, dan profil dasar."
+      "secondaryApi": "Dokumentasi API",
+      "primarySignedIn": "Buka Dashboard"
     },
     "features": {
-      "eyebrow": "Fitur Utama",
-      "title": "Semua yang Dibutuhkan Vault Anda",
-      "subtitle": "Dibangun API-first: antarmuka web dan mobile hanyalah konsumen dari inti sistem yang sama.",
+      "eyebrow": "Fitur",
+      "title": "Enam Hal yang Benar-Benar Anda Pakai",
+      "subtitle": "Dibangun API-first: panel web, aplikasi mobile, dan skrip otomatisasi adalah konsumen dari inti yang sama.",
       "items": {
         "aggregation": {
-          "title": "Agregasi Multi-Akun",
-          "body": "Hubungkan banyak akun Google Drive tanpa batas dan pantau kuota setiap akun secara real-time dalam satu daftar.",
-          "bullets": "Monitoring kuota per akun\nToken refresh otomatis\nFolder hierarkis nested"
+          "title": "Multi-Account Pooling",
+          "body": "Hubungkan akun Google Drive tanpa batas. Kuota, email akun, dan status token tampil dalam satu daftar yang disegarkan berkala.",
+          "bullets": "Agregasi kuota real-time\nRefresh token otomatis di latar belakang\nStruktur folder hierarkis"
         },
         "routing": {
-          "title": "Smart Capacity Routing",
-          "body": "Algoritma cerdas memilih akun dengan sisa kuota terbesar yang mampu menampung berkas — instan, tanpa perlu Anda pikirkan.",
-          "bullets": "Pilih akun tersisa terbesar\nTidak ada file terpecah lintas akun\nFallback saat akun penuh"
+          "title": "Smart Routing",
+          "body": "Setiap penulisan berkas memilih akun dengan sisa kuota terbesar yang cukup menampung. Tidak ada berkas yang dipecah lintas akun.",
+          "bullets": "Seleksi berdasarkan sisa kuota\nFallback otomatis saat akun penuh\nKonsisten: satu berkas, satu akun"
         },
         "api": {
-          "title": "REST API Terbuka & API Key Bercakupan",
-          "body": "Buat key dengan scope read, write, delete, atau full untuk integrasi n8n, backend, atau skrip otomatisasi Anda.",
-          "bullets": "Format key en_<prefix>_<secret>\nHash bcrypt, ditampilkan sekali\nLog penggunaan per request"
+          "title": "Scoped REST API",
+          "body": "Key dengan scope read, write, delete, atau full untuk n8n, backend, atau cron Anda. Setiap permintaan tercatat dalam log penggunaan.",
+          "bullets": "Format key en_<prefix>_<secret>\nHash bcrypt, ditampilkan sekali\nLog pemakaian per permintaan"
         },
         "viewer": {
-          "title": "Viewer Universal & Safe Proxy",
-          "body": "Streaming video, pratinjau dokumen, dan gambar resolusi tinggi lewat proxy — tanpa mengekspos tautan privat Google Drive Anda.",
-          "bullets": "Proxy stream langsung\nThumbnail otomatis\nTautan berbagi dengan kedaluwarsa & batas views"
+          "title": "Universal Media Streaming",
+          "body": "Video, dokumen, dan gambar resolusi tinggi diputar lewat proxy aman — tautan privat Drive Anda tidak pernah bocor ke klien.",
+          "bullets": "Range request untuk video\nPratinjau markdown, PDF, dan kode\nThumbnail dibangkitkan otomatis"
         },
         "isolation": {
-          "title": "Isolasi Multi-Pengguna",
-          "body": "Berkas, folder, dan kredensial Drive terisolasi penuh antar pengguna. Akun Google milik pengguna A tidak dapat diakses pengguna B.",
-          "bullets": "Role owner & member\nAudit log aksi sensitif\nKredensial per pengguna"
+          "title": "Multi-User Isolation",
+          "body": "Berkas, folder, dan kredensial terisolasi penuh antar pengguna. Akun Google milik satu pengguna tidak dapat dijangkau pengguna lain.",
+          "bullets": "Pemisahan keras per user_id\nRole owner dan member\nAudit aksi sensitif"
         },
         "mobile": {
-          "title": "Ekosistem Mobile & Auto-Backup",
-          "body": "Aplikasi mobile Flutter dengan cadangan otomatis dari galeri lokal, lengkap dengan aturan WiFi-only dan charging-only.",
-          "bullets": "Cadangan galeri opsional\nAturan WiFi only / charging only\nOAuth khusus aplikasi mobile"
+          "title": "Mobile Companion",
+          "body": "Aplikasi Flutter dengan cadangan galeri otomatis, aturan WiFi-only dan charging-only, memakai REST API yang sama.",
+          "bullets": "Auto-backup galeri\nAturan WiFi only / charging only\nOAuth khusus aplikasi mobile"
         }
       }
     },
-    "how": {
-      "eyebrow": "Cara Kerja",
-      "title": "Tiga Langkah Menuju Satu Vault",
-      "subtitle": "Dari koneksi akun sampai tautan aman — semuanya terjadi di infrastruktur Anda sendiri.",
-      "steps": {
-        "one": {
-          "title": "Hubungkan Akun Google Drive",
-          "body": "Klik satu kali pada tombol OAuth dan setujui izin di halaman Google. Token diterima lalu dienkripsi AES-256 di basis data lokal Anda."
-        },
-        "two": {
-          "title": "Unggah Berkas atau Folder",
-          "body": "Lewat web, aplikasi mobile, atau REST API. Smart routing langsung menentukan akun tujuan berdasarkan sisa kuota terbesar."
-        },
-        "three": {
-          "title": "Nikmati Kuota Terpadu & Bagikan dengan Aman",
-          "body": "Kelola semuanya dari satu antarmuka, bagikan tautan dengan tanggal kedaluwarsa dan batas jumlah tampilan, lalu cabut kapan saja."
-        }
-      },
-      "footnote": "Non-destructive: menghapus berkas di EnStorage berarti menghapusnya di Drive — tidak ada salinan tersisa di tempat lain."
-    },
     "api": {
-      "eyebrow": "Untuk Developer",
-      "title": "REST API yang Bisa Anda Panggil dari Mana Saja",
-      "subtitle": "Satu endpoint dasar, satu header Authorization. Cocok untuk n8n, Python, Node.js, atau cURL langsung dari terminal.",
+      "eyebrow": "Developer",
+      "title": "Terminal API yang Lurus dan Lengkap",
+      "subtitle": "Satu base URL, satu header Authorization. Semua contoh di samping dapat Anda salin dan jalankan sekarang.",
       "tabs": {
-        "upload": "Unggah Berkas",
-        "quota": "Cek Kuota",
-        "share": "Tautan Berbagi"
+        "upload": "Upload",
+        "quota": "Kuota",
+        "share": "Share Link"
       },
       "captions": {
-        "upload": "Unggah multi-berkas dan sistem memilihkan akun Google Drive tujuan untuk Anda.",
-        "quota": "Ambil agregat kuota gabungan dari seluruh akun yang terhubung.",
+        "upload": "Unggah berkas; sistem memilihkan akun Google Drive tujuan.",
+        "quota": "Ambil agregat kuota gabungan seluruh akun terhubung.",
         "share": "Bangkitkan tautan berbagi dengan tanggal kedaluwarsa dan batas tampilan."
       },
       "copy": "Salin snippet",
       "copied": "Tersalin ke papan klip",
       "copyFailed": "Gagal menyalin snippet",
-      "sdkTitle": "Terintegrasi dengan Otomasi Anda",
-      "sdks": {
-        "n8n": "Node HTTP Request di workflow n8n",
-        "python": "Panggilan requests di skrip ETL",
-        "node": "fetch() di layanan Node.js",
-        "curl": "cURL dari terminal atau Makefile"
-      },
-      "keysTitle": "API Key dengan Scope",
+      "keysTitle": "Scope API Key",
       "keys": {
         "read": "Baca daftar berkas, folder, dan kuota",
         "write": "Unggah dan pindahkan berkas",
         "delete": "Hapus berkas, folder, dan tautan berbagi",
         "full": "Semua aksi di atas dalam satu key"
       },
-      "docsNote": "Dokumentasi lengkap tersedia di berkas docs/api.md pada repositori.",
+      "docsNote": "Referensi lengkap ada di docs/api.md pada repositori.",
       "snippets": {
         "upload": "curl -X POST \"$API_BASE/files/upload\" \\\n  -H \"Authorization: Bearer en_your_api_key\" \\\n  -F \"file[]=@./report.pdf\" \\\n  -F \"shareable=1\"\n\n# 202 Accepted\n{\n  \"success\": true,\n  \"data\": {\n    \"accepted\": [{\n      \"file_id\": \"01J9ZQ...\",\n      \"name\": \"report.pdf\",\n      \"size\": 820341,\n      \"status\": \"pending\",\n      \"share_url\": \"https://vault.example.id/s/a1b2c3...\"\n    }],\n    \"count\": 1\n  }\n}",
         "quota": "curl \"$API_BASE/storage/summary\" \\\n  -H \"Authorization: Bearer en_your_api_key\"\n\n# 200 OK\n{\n  \"success\": true,\n  \"data\": {\n    \"total\": 48318382080,\n    \"used\": 28577734656,\n    \"free\": 19740647424,\n    \"accounts\": [\n      { \"label\": \"Gmail Utama\", \"free\": 2726297600 },\n      { \"label\": \"Gmail Kerja\", \"free\": 8727833600 },\n      { \"label\": \"Gmail Cadangan\", \"free\": 6209673216 }\n    ]\n  }\n}",
         "share": "curl -X POST \"$API_BASE/files/01J9ZQ.../share\" \\\n  -H \"Authorization: Bearer en_your_api_key\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{ \"expires_at\": \"2026-12-31T00:00:00Z\", \"max_views\": 25 }'\n\n# 200 OK\n{\n  \"success\": true,\n  \"data\": {\n    \"share_token\": \"a1b2c3...\",\n    \"share_url\": \"https://vault.example.id/s/a1b2c3...\",\n    \"expires_at\": \"2026-12-31T00:00:00Z\",\n    \"max_views\": 25\n  }\n}"
       },
-      "sdkSnippets": {
-        "n8n": "// n8n — HTTP Request node\n{\n  \"method\": \"POST\",\n  \"url\": \"https://vault.example.id/api/v1/files/upload\",\n  \"authentication\": \"generic: Header Auth\",\n  \"sendHeaders\": true,\n  \"headers\": {\n    \"Authorization\": \"Bearer en_your_api_key\"\n  },\n  \"body\": { \"file[]\": \"@/report.pdf\" }\n}",
-        "python": "# Python\nimport requests\n\nr = requests.post(\n    f\"{BASE}/files/upload\",\n    headers={\"Authorization\": f\"Bearer {KEY}\"},\n    files={\"file[]\": open(\"report.pdf\", \"rb\")},\n)\nprint(r.json()[\"data\"][\"accepted\"][0][\"share_url\"])",
-        "node": "// Node.js\nconst res = await fetch(`${BASE}/storage/summary`, {\n  headers: { Authorization: `Bearer ${KEY}` },\n});\nconst { data } = await res.json();\nconsole.log(`${data.free} bytes free across ${data.accounts.length} accounts`);",
-        "curl": "# cURL — create a scoped API key (session auth)\ncurl -X POST \"$API_BASE/api-keys\" \\\n  -H \"Authorization: Bearer $SANCTUM_TOKEN\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{ \"label\": \"n8n Workflow\", \"scopes\": [\"read\", \"write\"] }'"
-      },
       "endpointsTitle": "Endpoint Utama",
       "keySecurityNote": "Key disimpan sebagai hash bcrypt dan hanya ditampilkan satu kali.",
-      "sdkTabs": {
-        "n8n": "n8n",
-        "python": "Python",
-        "node": "Node.js",
-        "curl": "cURL"
-      }
-    },
-    "finalCta": {
-      "eyebrow": "Siap Mencoba",
-      "title": "Miliki Kembali Kendali atas Kuota Google Drive Anda",
-      "subtitle": "Pasang EnStorage di server Anda sendiri dalam beberapa menit, atau masuk jika instance Anda sudah berjalan.",
-      "primary": "Mulai Sekarang",
-      "secondary": "Lihat Dokumentasi API",
-      "note": "Instans demo berjalan pada infrastruktur pribadi Anda — kami tidak pernah memegang berkas Anda."
+      "prompt": "enstorage@vault:~$",
+      "panelLabel": "Permintaan cURL dan respons server"
     },
     "footer": {
       "tagline": "Centralized storage dengan backend Google Drive multi-akun.",
       "product": "Produk",
       "productLinks": {
-        "features": "Fitur Utama",
+        "features": "Fitur",
         "security": "Keamanan",
-        "api": "API & Integrasi",
-        "how": "Cara Kerja"
+        "api": "API"
       },
-      "resources": "Sumber Daya",
+      "resources": "Developer",
       "resourceLinks": {
         "github": "Repositori GitHub",
         "docs": "Dokumentasi API",
@@ -794,6 +749,29 @@
       "license": "Rilis di bawah lisensi MIT.",
       "madeBy": "Dibuat oleh enpii studio · Never Leaves Your Drive."
     },
-    "pageTitle": "Never Leaves Your Drive."
+    "pageTitle": "Never Leaves Your Drive.",
+    "security": {
+      "eyebrow": "Model Keamanan",
+      "title": "Tiga Jaminan Teknis yang Bisa Diaudit",
+      "subtitle": "Bukan janji marketing — ini perilaku sistem yang dapat Anda periksa langsung pada instance Anda.",
+      "items": {
+        "streaming": {
+          "title": "Non-Custodial Direct Streaming",
+          "body": "Berkas mengalir langsung dari klien ke akun Google Drive tujuan melalui stream multipart. Server EnStorage tidak pernah menampung byte berkas Anda di disk.",
+          "bullets": "Nol penyimpanan pada server web\nChunk stream 25 MB dengan retry idempoten\nBerkas hanya ada di Drive milik Anda"
+        },
+        "token": {
+          "title": "AES-256-CBC Token Encryption",
+          "body": "Refresh token OAuth dikunci dengan Laravel Crypt (AES-256-CBC + HMAC) memakai APP_KEY pada instance lokal. Tanpa APP_KEY Anda, isi basis data tidak berarti apa pun.",
+          "bullets": "APP_key tinggal di .env Anda\nKata sandi Google tidak pernah menyentuh aplikasi\nAPI key disimpan sebagai hash bcrypt"
+        },
+        "limitedUse": {
+          "title": "Google Limited Use Compliance",
+          "body": "Data Google Drive Anda tidak pernah dijual, tidak dibagikan ke pengiklan, dan tidak pernah dipakai untuk melatih model AI atau machine learning. Izin dapat dicabut seketika.",
+          "bullets": "Nol pelatihan AI, nol penjualan data\nScope dibatasi: drive.file, drive.readonly, profil\nRevoke instan dari dashboard atau akun Google"
+        }
+      },
+      "policyLink": "Baca Keamanan & Disklausul API Google"
+    }
   }
 }

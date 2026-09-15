@@ -498,7 +498,10 @@
       "changes": "10. Changes to This Policy",
       "changesBody": "We may update this Privacy Policy from time to time. Material changes will be announced through the Service and on this page together with the “Last updated” date. Continued use of the Service after changes indicates acceptance of the updated policy.",
       "contact": "11. Contact",
-      "contactBody": "For privacy questions, questions about Google API Services User Data Policy compliance, or to exercise your rights, contact us at enpiiofficial@gmail.com. For security issues, use the vulnerability reporting channel on the Security page."
+      "contactBody": "For privacy questions, questions about Google API Services User Data Policy compliance, or to exercise your rights, contact us at enpiiofficial@gmail.com. For security issues, use the vulnerability reporting channel on the Security page.",
+      "summary": "EnStorage is non-custodial: your files are stored directly in your own Google Drive, never on our servers. We keep only OAuth tokens (encrypted with AES-256-CBC using your instance APP_KEY) and file metadata in a database you control. Google data is never sold, never shared for advertising, and never used to train AI models.",
+      "version": "v1.4",
+      "tab": "Privacy Policy"
     },
     "terms": {
       "title": "Terms of Service",
@@ -526,7 +529,10 @@
       "governingLaw": "11. Governing Law",
       "governingLawBody": "These Terms are governed by the laws of the Republic of Indonesia. Disputes arising from or related to the Service will be resolved in Indonesian courts, unless mandatory consumer protection law in your jurisdiction gives you the right to bring proceedings locally.",
       "contact": "12. Contact",
-      "contactBody": "Questions about these Terms? Contact us at enpiiofficial@gmail.com. To report a security vulnerability, follow the procedure on the Security & Google API Disclosure page."
+      "contactBody": "Questions about these Terms? Contact us at enpiiofficial@gmail.com. To report a security vulnerability, follow the procedure on the Security & Google API Disclosure page.",
+      "summary": "EnStorage is self-hosted software you run on your own infrastructure. File ownership stays entirely with you, and every connected Google account remains subject to the Google Terms of Service and the Google API Services User Data Policy, including the Limited Use requirements.",
+      "version": "v1.3",
+      "tab": "Terms of Service"
     },
     "security": {
       "title": "Security & Google API Disclosure",
@@ -558,16 +564,35 @@
       "vulnerability": "13. Reporting Security Vulnerabilities",
       "vulnerabilityBody": "If you find a vulnerability in EnStorage, please report it responsibly to enpiiofficial@gmail.com with the subject “Security”. Do not publish vulnerability details (public issues, social media, or blog posts) before it is addressed.\n\nUpon receiving a report we will acknowledge it within at most 7 days, assess impact and severity, prepare a fix or mitigation for the next release, and coordinate a disclosure timeline with you if you would like credit. Please avoid accessing other users' production data, disrupting the service, or downloading data as evidence — demonstrating the vulnerable point is enough.",
       "status": "14. Limitations & Closing Statement",
-      "statusBody": "No system is completely secure. Encryption protects tokens and transport, but it does not eliminate risks such as compromised Google credentials, misconfigured instances, or social engineering. We update this page as security practices evolve; material changes are announced through releases along with the “Last updated” date on this page. For the privacy aspects of your personal data see the Privacy Policy; for usage conditions see the Terms of Service."
-    }
+      "statusBody": "No system is completely secure. Encryption protects tokens and transport, but it does not eliminate risks such as compromised Google credentials, misconfigured instances, or social engineering. We update this page as security practices evolve; material changes are announced through releases along with the “Last updated” date on this page. For the privacy aspects of your personal data see the Privacy Policy; for usage conditions see the Terms of Service.",
+      "summary": "Files stream straight into your Google Drive without ever landing on server disk. Refresh tokens are sealed with AES-256-CBC through Laravel Crypt using a local APP_KEY, transport runs over TLS, and every grant can be revoked instantly — no AI training, no data resale.",
+      "version": "v1.2",
+      "tab": "Security & Google API"
+    },
+    "toc": "Table of Contents",
+    "documentMeta": "Document Details",
+    "version": "Version",
+    "contact": "Official contact",
+    "contactEmail": "enpiiofficial@gmail.com",
+    "complianceBadge": "Google API Services User Data Policy · Limited Use",
+    "summaryTitle": "In Brief",
+    "backHome": "Back to Home",
+    "portalTitle": "Legal & Security Documentation",
+    "portalSubtitle": "Three official documents describing how EnStorage handles your Google Drive data.",
+    "language": "Change language",
+    "theme": "Toggle light/dark theme",
+    "home": "Home",
+    "apiDocs": "API Documentation",
+    "github": "GitHub Repository",
+    "pageSectionAria": "Document table of contents",
+    "switcherAria": "Choose a legal document",
+    "sectionsCount": "Number of sections"
   },
   "landing": {
     "nav": {
       "features": "Features",
       "security": "Security",
-      "api": "Integrations & API",
-      "how": "How It Works",
-      "legal": "Legal",
+      "api": "API",
       "menu": "Open navigation menu",
       "close": "Close navigation menu",
       "theme": "Toggle light/dark theme",
@@ -584,201 +609,131 @@
       "badge": "Self-Hosted Multi-Account Google Drive Aggregator",
       "titleLead": "Never Leaves Your Drive.",
       "titleMain": "One Interface for All Your Google Drive Accounts",
-      "subtitle": "Unite unlimited quota from many Google Drive accounts into a single centralized vault. Built with automatic smart routing, an open REST API, and privacy that stays 100% in your control.",
+      "subtitle": "EnStorage unites the quota of several Google Drive accounts behind one panel: files stream straight into the destination Drive, refresh tokens are encrypted with AES-256-CBC using your local APP_KEY, and every byte of metadata lives in your own instance database. No storage warehouse in the middle.",
       "primary": "Get Started",
       "secondary": "View API Documentation",
-      "trust": "Runs on your own infrastructure · Open source · No storage middleman",
-      "stats": {
-        "accounts": "Google Drive accounts",
-        "accountsValue": "Unlimited",
-        "file": "Maximum file size",
-        "fileValue": "1 GB",
-        "routing": "File write routing",
-        "routingValue": "Automatic"
-      },
+      "trust": "Runs on your own infrastructure · Open source · Zero storage server",
       "mock": {
         "eyebrow": "Vault Pool",
         "title": "Unified Capacity",
         "subtitle": "3 connected accounts · synced just now",
+        "liveLabel": "Live",
         "drive": "Drive {{n}}",
         "accounts": {
           "one": "Personal Gmail",
           "two": "Work Gmail",
           "three": "Backup Gmail"
         },
-        "of": "of",
-        "free": "free",
-        "poolLabel": "Total Vault",
+        "emails": {
+          "one": "personal@gmail.com",
+          "two": "work@gmail.com",
+          "three": "backup@gmail.com"
+        },
+        "poolLabel": "Total Pool",
         "poolHint": "Combined quota pool",
         "used": "Used",
-        "freeTotal": "Free",
-        "selected": "Selected upload target",
-        "statusRouting": "Smart Routing: Active",
-        "statusEncryption": "Encryption: AES-256",
-        "statusProxy": "Direct Proxy Stream",
-        "liveLabel": "Live",
-        "simTitle": "Simulate Smart Routing",
+        "free": "Free",
+        "of": "of",
+        "remaining": "left",
         "sizeLabel": "File size",
-        "reset": "Reset Simulation",
-        "routed": "{{size}} routed to {{account}}",
+        "routingLabel": "Routing mode",
+        "routingAuto": "Automatic",
+        "routingManual": "Pick manually",
+        "targetLabel": "Target account",
+        "selected": "Selected target",
+        "routed": "{{size}} routed to {{account}} ({{free}} left)",
         "none": "No account has enough remaining quota",
+        "statusRouting": "Smart Routing: Active",
+        "statusEncryption": "Encryption: AES-256-CBC",
+        "statusProxy": "Direct Stream",
         "mb": "{{n}} MB",
-        "gb": "{{n}} GB"
-      }
-    },
-    "assurance": {
-      "eyebrow": "Google API Compliance",
-      "title": "Google Drive Security & Privacy, Explained Up Front",
-      "subtitle": "EnStorage is never the storage. Your Drive remains the only place your files live — our system only manages routing and metadata on your own server.",
-      "items": {
-        "selfHosted": {
-          "title": "100% Self-Hosted & Non-Custodial",
-          "body": "Files flow directly into your own Google Drive account and are never stored on a third-party server. No hidden warehouse, no permanent storage proxy."
-        },
-        "oauth": {
-          "title": "OAuth2 Token Protection",
-          "body": "Refresh tokens are stored with AES-256 encryption at rest in your self-hosted local database. Your Google password never touches our application."
-        },
-        "limitedUse": {
-          "title": "Google Limited Use Compliance",
-          "body": "Google Drive data is never sold, never shared with advertisers, and never used to train general-purpose AI or machine learning models."
-        },
-        "revocation": {
-          "title": "Instant Revocation",
-          "body": "Revoke access at any time straight from the EnStorage dashboard or from your Google Account settings. Once revoked, the connection is fully severed."
-        }
+        "gb": "{{n}} GB",
+        "reset": "Reset to Automatic"
       },
-      "revokeHint": "Manage permissions at myaccount.google.com/permissions",
-      "policyLink": "Read the Security & Google API Disclosure Policy",
-      "scopesNote": "OAuth2 scopes are limited to drive.file, drive.readonly, and the basic profile."
+      "secondaryApi": "API Documentation",
+      "primarySignedIn": "Open Dashboard"
     },
     "features": {
-      "eyebrow": "Key Features",
-      "title": "Everything Your Vault Needs",
-      "subtitle": "Built API-first: the web and mobile interfaces are just consumers of the same core system.",
+      "eyebrow": "Features",
+      "title": "Six Things You Will Actually Use",
+      "subtitle": "Built API-first: the web panel, the mobile app, and your automation scripts all consume the same core.",
       "items": {
         "aggregation": {
-          "title": "Multi-Account Aggregation",
-          "body": "Connect unlimited Google Drive accounts and monitor each account's quota in real time from a single list.",
-          "bullets": "Per-account quota monitoring\nAutomatic token refresh\nNested hierarchical folders"
+          "title": "Multi-Account Pooling",
+          "body": "Connect unlimited Google Drive accounts. Quota, account email, and token status appear in one list that refreshes on a schedule.",
+          "bullets": "Real-time quota aggregation\nBackground token refresh\nHierarchical folder structure"
         },
         "routing": {
-          "title": "Smart Capacity Routing",
-          "body": "A smart algorithm picks the account with the largest free space that can fit the file — instantly, without you thinking about it.",
-          "bullets": "Largest remaining quota wins\nNo file split across accounts\nFallback when an account fills up"
+          "title": "Smart Routing",
+          "body": "Every write picks the account with the largest remaining quota that can hold the file. No file is ever split across accounts.",
+          "bullets": "Selected by remaining quota\nAutomatic fallback when an account fills\nConsistent: one file, one account"
         },
         "api": {
-          "title": "Open REST API & Scoped API Keys",
-          "body": "Create keys scoped to read, write, delete, or full for your n8n, backend, or automation script integrations.",
-          "bullets": "en_<prefix>_<secret> key format\nbcrypt hash, shown only once\nPer-request usage log"
+          "title": "Scoped REST API",
+          "body": "Keys scoped to read, write, delete, or full for n8n, your backend, or cron. Every request lands in the usage log.",
+          "bullets": "Key format en_<prefix>_<secret>\nbcrypt hash, shown once\nPer-request usage log"
         },
         "viewer": {
-          "title": "Universal File Viewer & Safe Proxy",
-          "body": "Stream video and preview documents or high-resolution images through a proxy — without exposing your private Google Drive links.",
-          "bullets": "Direct proxy streaming\nAutomatic thumbnails\nShare links with expiry & view limits"
+          "title": "Universal Media Streaming",
+          "body": "Video, documents, and high-resolution images play through a safe proxy — your private Drive links never leak to the client.",
+          "bullets": "Range requests for video\nMarkdown, PDF, and code previews\nThumbnails generated automatically"
         },
         "isolation": {
           "title": "Multi-User Isolation",
-          "body": "Files, folders, and Drive credentials are fully isolated between users. User A's Google accounts are unreachable by user B.",
-          "bullets": "Owner & member roles\nAudit log for sensitive actions\nPer-user credentials"
+          "body": "Files, folders, and credentials are fully isolated per user. One user’s Google account is unreachable for another.",
+          "bullets": "Hard partition by user_id\nOwner and member roles\nAudit trail for sensitive actions"
         },
         "mobile": {
-          "title": "Mobile Ecosystem & Auto-Backup",
-          "body": "A Flutter mobile app with automatic local gallery backup, complete with WiFi-only and charging-only rules.",
-          "bullets": "Optional gallery backup\nWiFi only / charging only rules\nMobile-specific OAuth client"
+          "title": "Mobile Companion",
+          "body": "A Flutter app with automatic gallery backup, WiFi-only and charging-only rules, driving the same REST API.",
+          "bullets": "Gallery auto-backup\nWiFi only / charging only rules\nMobile-specific OAuth"
         }
       }
     },
-    "how": {
-      "eyebrow": "How It Works",
-      "title": "Three Steps to a Single Vault",
-      "subtitle": "From account connection to safe sharing — everything happens on your own infrastructure.",
-      "steps": {
-        "one": {
-          "title": "Connect a Google Drive Account",
-          "body": "Click the OAuth button once and approve consent on Google's page. The token is received and then encrypted with AES-256 in your local database."
-        },
-        "two": {
-          "title": "Upload Files or Folders",
-          "body": "Through the web app, the mobile app, or the REST API. Smart routing immediately decides the destination account based on the largest free space."
-        },
-        "three": {
-          "title": "Enjoy Unified Quota & Share Securely",
-          "body": "Manage everything from one interface, share links with an expiry date and view limit, then revoke at any time."
-        }
-      },
-      "footnote": "Non-destructive: deleting a file in EnStorage deletes it in Drive — no leftover copy anywhere else."
-    },
     "api": {
-      "eyebrow": "For Developers",
-      "title": "A REST API You Can Call from Anywhere",
-      "subtitle": "One base endpoint, one Authorization header. Works with n8n, Python, Node.js, or straight cURL from your terminal.",
+      "eyebrow": "Developer",
+      "title": "A Straight-To-The-Point API Terminal",
+      "subtitle": "One base URL, one Authorization header. Every sample on the right can be copied and run right now.",
       "tabs": {
-        "upload": "Upload File",
-        "quota": "Check Quota",
+        "upload": "Upload",
+        "quota": "Quota",
         "share": "Share Link"
       },
       "captions": {
-        "upload": "Upload multiple files and let the system pick the destination Google Drive account for you.",
+        "upload": "Upload a file; the system picks the destination Google Drive account.",
         "quota": "Fetch the combined quota aggregate across all connected accounts.",
         "share": "Generate a share link with an expiry date and a view limit."
       },
       "copy": "Copy snippet",
       "copied": "Copied to clipboard",
       "copyFailed": "Failed to copy snippet",
-      "sdkTitle": "Plugs into Your Automations",
-      "sdks": {
-        "n8n": "HTTP Request node in an n8n workflow",
-        "python": "requests calls inside an ETL script",
-        "node": "fetch() in a Node.js service",
-        "curl": "cURL from a terminal or Makefile"
-      },
-      "keysTitle": "Scoped API Keys",
+      "keysTitle": "API Key Scopes",
       "keys": {
         "read": "Read file, folder, and quota listings",
         "write": "Upload and move files",
         "delete": "Delete files, folders, and share links",
         "full": "Every action above in a single key"
       },
-      "docsNote": "Full documentation lives in the docs/api.md file in the repository.",
+      "docsNote": "Full reference lives in docs/api.md in the repository.",
       "snippets": {
         "upload": "curl -X POST \"$API_BASE/files/upload\" \\\n  -H \"Authorization: Bearer en_your_api_key\" \\\n  -F \"file[]=@./report.pdf\" \\\n  -F \"shareable=1\"\n\n# 202 Accepted\n{\n  \"success\": true,\n  \"data\": {\n    \"accepted\": [{\n      \"file_id\": \"01J9ZQ...\",\n      \"name\": \"report.pdf\",\n      \"size\": 820341,\n      \"status\": \"pending\",\n      \"share_url\": \"https://vault.example.id/s/a1b2c3...\"\n    }],\n    \"count\": 1\n  }\n}",
         "quota": "curl \"$API_BASE/storage/summary\" \\\n  -H \"Authorization: Bearer en_your_api_key\"\n\n# 200 OK\n{\n  \"success\": true,\n  \"data\": {\n    \"total\": 48318382080,\n    \"used\": 28577734656,\n    \"free\": 19740647424,\n    \"accounts\": [\n      { \"label\": \"Gmail Utama\", \"free\": 2726297600 },\n      { \"label\": \"Gmail Kerja\", \"free\": 8727833600 },\n      { \"label\": \"Gmail Cadangan\", \"free\": 6209673216 }\n    ]\n  }\n}",
         "share": "curl -X POST \"$API_BASE/files/01J9ZQ.../share\" \\\n  -H \"Authorization: Bearer en_your_api_key\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{ \"expires_at\": \"2026-12-31T00:00:00Z\", \"max_views\": 25 }'\n\n# 200 OK\n{\n  \"success\": true,\n  \"data\": {\n    \"share_token\": \"a1b2c3...\",\n    \"share_url\": \"https://vault.example.id/s/a1b2c3...\",\n    \"expires_at\": \"2026-12-31T00:00:00Z\",\n    \"max_views\": 25\n  }\n}"
       },
-      "sdkSnippets": {
-        "n8n": "// n8n — HTTP Request node\n{\n  \"method\": \"POST\",\n  \"url\": \"https://vault.example.id/api/v1/files/upload\",\n  \"authentication\": \"generic: Header Auth\",\n  \"sendHeaders\": true,\n  \"headers\": {\n    \"Authorization\": \"Bearer en_your_api_key\"\n  },\n  \"body\": { \"file[]\": \"@/report.pdf\" }\n}",
-        "python": "# Python\nimport requests\n\nr = requests.post(\n    f\"{BASE}/files/upload\",\n    headers={\"Authorization\": f\"Bearer {KEY}\"},\n    files={\"file[]\": open(\"report.pdf\", \"rb\")},\n)\nprint(r.json()[\"data\"][\"accepted\"][0][\"share_url\"])",
-        "node": "// Node.js\nconst res = await fetch(`${BASE}/storage/summary`, {\n  headers: { Authorization: `Bearer ${KEY}` },\n});\nconst { data } = await res.json();\nconsole.log(`${data.free} bytes free across ${data.accounts.length} accounts`);",
-        "curl": "# cURL — create a scoped API key (session auth)\ncurl -X POST \"$API_BASE/api-keys\" \\\n  -H \"Authorization: Bearer $SANCTUM_TOKEN\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{ \"label\": \"n8n Workflow\", \"scopes\": [\"read\", \"write\"] }'"
-      },
-      "endpointsTitle": "Key Endpoints",
+      "endpointsTitle": "Core Endpoints",
       "keySecurityNote": "Keys are stored as bcrypt hashes and displayed only once.",
-      "sdkTabs": {
-        "n8n": "n8n",
-        "python": "Python",
-        "node": "Node.js",
-        "curl": "cURL"
-      }
-    },
-    "finalCta": {
-      "eyebrow": "Ready When You Are",
-      "title": "Take Back Control of Your Google Drive Quota",
-      "subtitle": "Deploy EnStorage on your own server in minutes, or sign in if your instance is already running.",
-      "primary": "Get Started",
-      "secondary": "View API Documentation",
-      "note": "Your instance runs on your private infrastructure — we never hold your files."
+      "prompt": "enstorage@vault:~$",
+      "panelLabel": "cURL request and server response"
     },
     "footer": {
       "tagline": "Centralized storage backed by multiple Google Drive accounts.",
       "product": "Product",
       "productLinks": {
-        "features": "Key Features",
+        "features": "Features",
         "security": "Security",
-        "api": "API & Integrations",
-        "how": "How It Works"
+        "api": "API"
       },
-      "resources": "Resources",
+      "resources": "Developer",
       "resourceLinks": {
         "github": "GitHub Repository",
         "docs": "API Documentation",
@@ -794,6 +749,29 @@
       "license": "Released under the MIT license.",
       "madeBy": "Built by enpii studio · Never Leaves Your Drive."
     },
-    "pageTitle": "Never Leaves Your Drive."
+    "pageTitle": "Never Leaves Your Drive.",
+    "security": {
+      "eyebrow": "Security Model",
+      "title": "Three Technical Guarantees You Can Audit",
+      "subtitle": "Not marketing copy — these are system behaviours you can verify on your own instance.",
+      "items": {
+        "streaming": {
+          "title": "Non-Custodial Direct Streaming",
+          "body": "Files stream from the client straight to the destination Google Drive account via multipart streaming. The EnStorage server never parks a byte of your payload on disk.",
+          "bullets": "Zero storage on the web server\n25 MB stream chunks with idempotent retries\nYour files exist only in your own Drive"
+        },
+        "token": {
+          "title": "AES-256-CBC Token Encryption",
+          "body": "OAuth refresh tokens are sealed with Laravel Crypt (AES-256-CBC plus HMAC) using the APP_KEY on your local instance. Without your APP_KEY, the database contents are meaningless.",
+          "bullets": "APP_KEY stays in your .env\nGoogle passwords never touch the app\nAPI keys stored as bcrypt hashes"
+        },
+        "limitedUse": {
+          "title": "Google Limited Use Compliance",
+          "body": "Your Google Drive data is never sold, never shared with advertisers, and never used to train AI or machine-learning models. Access can be revoked instantly.",
+          "bullets": "Zero AI training, zero data resale\nScopes limited to drive.file, drive.readonly, profile\nInstant revoke from the dashboard or your Google account"
+        }
+      },
+      "policyLink": "Read Security & Google API Disclosure"
+    }
   }
 }

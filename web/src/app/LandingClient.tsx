@@ -1,28 +1,28 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
+  AccountTree,
   ArrowForward,
-  AutoGraph,
   CheckCircle,
   Cloud,
-  Close,
   Code,
   CopyAll,
   DarkMode,
   Devices,
+  Layers,
   Language,
-  Link as LinkIcon,
   LightMode,
   Lock,
   Menu,
+  Close,
   PlayCircle,
+  Route,
   Security,
   Shield,
   Storage,
-  Sync,
   Terminal,
   VpnKey,
 } from '@mui/icons-material';
@@ -37,26 +37,22 @@ import { getLocale, setLocale } from '@/lib/i18n';
 import { usePageTitle } from '@/lib/usePageTitle';
 
 const GITHUB_URL = 'https://github.com/enpii/enstorage';
+const DOCS_URL = `${GITHUB_URL}/blob/main/docs/api.md`;
+
+/** The three anchors offered by the top navigation. */
+const SECTIONS = [
+  { id: 'features', labelKey: 'landing.nav.features' },
+  { id: 'security', labelKey: 'landing.nav.security' },
+  { id: 'api', labelKey: 'landing.nav.api' },
+] as const;
+
 const LEGAL_LINKS = [
   { href: '/legal/privacy', labelKey: 'landing.footer.legalLinks.privacy' },
   { href: '/legal/terms', labelKey: 'landing.footer.legalLinks.terms' },
   { href: '/legal/security', labelKey: 'landing.footer.legalLinks.security' },
-];
-
-/** Anchor targets reachable from the top navigation (also used by the footer). */
-const SECTIONS = [
-  { id: 'features', labelKey: 'landing.nav.features', footerKey: 'landing.footer.productLinks.features' },
-  { id: 'security', labelKey: 'landing.nav.security', footerKey: 'landing.footer.productLinks.security' },
-  { id: 'api', labelKey: 'landing.nav.api', footerKey: 'landing.footer.productLinks.api' },
-  { id: 'how-it-works', labelKey: 'landing.nav.how', footerKey: 'landing.footer.productLinks.how' },
 ] as const;
 
-const SECTION_IDS = SECTIONS.map((s) => s.id);
-
-/** Default payload for the smart-routing simulator. */
-const DEFAULT_SIZE_MB = 820;
-
-/** Scroll offset so anchors are not hidden behind the sticky header. */
+/** Keeps anchor targets clear of the sticky header. */
 const SCROLL_MARGIN = 'scroll-mt-24';
 
 function scrollToId(id: string) {
@@ -93,8 +89,8 @@ function useScrollSpy() {
       { rootMargin: '-96px 0px -55% 0px', threshold: [0, 0.25, 0.5, 0.75, 1] },
     );
 
-    for (const id of SECTION_IDS) {
-      const el = document.getElementById(id);
+    for (const section of SECTIONS) {
+      const el = document.getElementById(section.id);
       if (el) observer.observe(el);
     }
     return () => observer.disconnect();
@@ -103,7 +99,7 @@ function useScrollSpy() {
   return active;
 }
 
-/** Fade-and-rise on first reveal; degrades to static content when reduced motion is on. */
+/** Fade-and-rise on first reveal; static content when reduced motion is on. */
 function Reveal({
   children,
   delay = 0,
@@ -113,12 +109,11 @@ function Reveal({
   delay?: number;
   className?: string;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(false);
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+    if (!node) return;
     if (
       typeof window.matchMedia === 'function' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -135,17 +130,17 @@ function Reveal({
       },
       { rootMargin: '0px 0px -10% 0px', threshold: 0.1 },
     );
-    observer.observe(el);
+    observer.observe(node);
     return () => observer.disconnect();
-  }, []);
+  }, [node]);
 
   return (
     <div
-      ref={ref}
-      style={{ transitionDelay: shown ? `${delay}ms` : '0ms' }}
+      ref={setNode}
+      style={{ transitionDelay: `${delay}ms` }}
       className={clsx(
-        'transition-all duration-700 ease-out motion-reduce:transition-none',
-        shown ? 'translate-y-0 opacity-100' : 'translate-y-6 opacity-0',
+        'transition-all duration-500 ease-out motion-reduce:transition-none',
+        shown ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0',
         className,
       )}
     >
@@ -158,279 +153,338 @@ function SectionHeading({
   eyebrowKey,
   titleKey,
   subtitleKey,
-  align = 'center',
 }: {
   eyebrowKey: string;
   titleKey: string;
   subtitleKey?: string;
-  align?: 'center' | 'left';
 }) {
   const { t } = useTranslation();
   return (
-    <div
-      className={clsx(
-        'mb-12 max-w-3xl',
-        align === 'center' ? 'mx-auto text-center' : 'text-left',
-      )}
-    >
+    <div className="mb-10 max-w-2xl">
       <p className="text-label-sm font-semibold uppercase tracking-[0.14em] text-secondary">
         {t(eyebrowKey)}
       </p>
-      <h2 className="mt-3 font-display text-headline-lg sm:text-display-xl text-on-surface">
-        {t(titleKey)}
-      </h2>
+      <h2 className="mt-3 font-display text-headline-lg text-on-surface">{t(titleKey)}</h2>
       {subtitleKey && (
-        <p className="mt-4 text-body-lg text-on-surface-variant">{t(subtitleKey)}</p>
+        <p className="mt-3 text-body-lg text-on-surface-variant">{t(subtitleKey)}</p>
       )}
     </div>
   );
 }
 
-/** Combined quota pool + smart routing simulator for the hero visual. */
-function VaultMockup() {
+function splitBullets(raw: unknown): string[] {
+  return typeof raw === 'string' ? raw.split('\n').filter(Boolean) : [];
+}
+
+/* ============================ storage pool console ============================ */
+
+type Drive = { key: 'one' | 'two' | 'three'; totalGB: number; usedGB: number };
+
+const DRIVES: Drive[] = [
+  { key: 'one', totalGB: 15, usedGB: 12.4 },
+  { key: 'two', totalGB: 15, usedGB: 6.8 },
+  { key: 'three', totalGB: 15, usedGB: 9.1 },
+];
+
+const DEFAULT_SIZE_MB = 1500;
+const MIN_SIZE_MB = 100;
+const MAX_SIZE_MB = 14000;
+
+function formatGB(value: number) {
+  return `${Number.isInteger(value) ? value : value.toFixed(1)} GB`;
+}
+
+/** Quota pool monitor with a working smart-routing selector. */
+function StoragePoolConsole() {
   const { t } = useTranslation();
   const [sizeMB, setSizeMB] = useState(DEFAULT_SIZE_MB);
-
-  function reset() {
-    setSizeMB(DEFAULT_SIZE_MB);
-  }
-
-  const drives = useMemo(
-    () => [
-      { key: 'one', total: 15, used: 12.4 },
-      { key: 'two', total: 15, used: 6.8 },
-      { key: 'three', total: 15, used: 9.1 },
-    ],
-    [],
-  );
+  const [manualIndex, setManualIndex] = useState<number | null>(null);
 
   const rows = useMemo(
     () =>
-      drives.map((drive, index) => {
-        const free = Math.max(0, drive.total - drive.used);
+      DRIVES.map((drive, index) => {
+        const free = Math.round((drive.totalGB - drive.usedGB) * 100) / 100;
         return {
           index,
           label: t(`landing.hero.mock.accounts.${drive.key}`),
+          email: t(`landing.hero.mock.emails.${drive.key}`),
           sub: t('landing.hero.mock.drive', { n: index + 1 }),
-          total: drive.total,
-          used: drive.used,
+          totalGB: drive.totalGB,
+          usedGB: drive.usedGB,
           free,
-          usedPct: Math.round((drive.used / drive.total) * 100),
+          usedPct: Math.round((drive.usedGB / drive.totalGB) * 100),
           fits: free * 1024 >= sizeMB,
         };
       }),
-    [drives, sizeMB, t],
+    [sizeMB, t],
   );
 
-  const totalGB = rows.reduce((sum, row) => sum + row.total, 0);
-  const usedGB = rows.reduce((sum, row) => sum + row.used, 0);
-  const freeGB = totalGB - usedGB;
-  const target = useMemo(() => {
+  const poolTotal = rows.reduce((sum, row) => sum + row.totalGB, 0);
+  const poolUsed = Math.round(rows.reduce((sum, row) => sum + row.usedGB, 0) * 100) / 100;
+  const poolFree = Math.round((poolTotal - poolUsed) * 100) / 100;
+  const poolPct = Math.round((poolUsed / poolTotal) * 100);
+
+  const autoTarget = useMemo(() => {
     const eligible = rows.filter((row) => row.fits);
     if (!eligible.length) return null;
     return eligible.reduce((best, row) => (row.free > best.free ? row : best));
   }, [rows]);
 
-  const usedPctTotal = Math.round((usedGB / totalGB) * 100);
-
-  function formatGB(value: number) {
-    return `${Number.isInteger(value) ? value : value.toFixed(1)} GB`;
-  }
+  const isManual = manualIndex !== null;
+  const manualTarget = isManual ? rows[manualIndex] : null;
+  const target = isManual ? manualTarget : autoTarget;
+  const sizeLabel =
+    sizeMB >= 1024
+      ? t('landing.hero.mock.gb', { n: (sizeMB / 1024).toFixed(1) })
+      : t('landing.hero.mock.mb', { n: sizeMB });
 
   return (
-    <div className="relative">
-      <div
-        aria-hidden
-        className="absolute -inset-6 -z-10 rounded-[44px] bg-primary-container/25 blur-3xl"
-      />
-      <div className="rounded-card border border-outline-variant/20 bg-surface p-inner-padding shadow-ambient">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-label-sm font-semibold uppercase tracking-[0.14em] text-secondary">
-              {t('landing.hero.mock.eyebrow')}
-            </p>
-            <h3 className="mt-1 font-display text-body-lg text-on-surface">
-              {t('landing.hero.mock.title')}
-            </h3>
-            <p className="mt-1 text-metadata text-on-surface-variant">
-              {t('landing.hero.mock.subtitle')}
-            </p>
-          </div>
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-container/30 px-2.5 py-1 text-label-sm font-semibold uppercase tracking-wider text-primary">
-            <span className="relative flex size-2">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-60 motion-reduce:animate-none" />
-              <span className="relative inline-flex size-2 rounded-full bg-current" />
-            </span>
-            {t('landing.hero.mock.liveLabel')}
+    <div className="rounded-card border border-outline-variant/20 bg-surface p-6 shadow-ambient sm:p-8">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-label-sm font-semibold uppercase tracking-[0.14em] text-secondary">
+            {t('landing.hero.mock.eyebrow')}
+          </p>
+          <h3 className="mt-1 font-display text-body-lg font-semibold text-on-surface">
+            {t('landing.hero.mock.title')}
+          </h3>
+          <p className="mt-1 text-metadata text-on-surface-variant">
+            {t('landing.hero.mock.subtitle')}
+          </p>
+        </div>
+        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-container/25 px-2.5 py-1 text-label-sm font-semibold uppercase tracking-wider text-primary">
+          <span className="relative flex size-2">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-60 motion-reduce:animate-none" />
+            <span className="relative inline-flex size-2 rounded-full bg-current" />
           </span>
-        </div>
+          {t('landing.hero.mock.liveLabel')}
+        </span>
+      </div>
 
-        <div className="mt-6 space-y-3">
-          {rows.map((row) => {
-            const active = target?.index === row.index;
-            return (
-              <div
-                key={row.index}
-                className={clsx(
-                  'rounded-xl border p-3 transition-colors',
-                  active
-                    ? 'border-primary/50 bg-primary-container/20'
-                    : 'border-outline-variant/20 bg-surface-container',
-                )}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <span
-                      className={clsx(
-                        'flex size-9 shrink-0 items-center justify-center rounded-lg',
-                        active
-                          ? 'bg-primary-container text-on-primary-container'
-                          : 'bg-surface-container-highest text-on-surface-variant',
-                      )}
-                    >
-                      <Cloud className="!text-xl" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-on-surface">
-                        {row.label}
-                      </p>
-                      <p className="text-metadata text-outline">
-                        {row.sub} · {formatGB(row.free)} {t('landing.hero.mock.free')}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold tabular-nums text-on-surface">
-                      {formatGB(row.used)}
-                    </p>
-                    <p className="text-metadata text-outline tabular-nums">
-                      {t('landing.hero.mock.of')} {formatGB(row.total)}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
-                  <div
-                    className={clsx(
-                      'h-full rounded-full transition-[width] duration-500',
-                      active ? 'bg-primary' : 'bg-secondary/70',
-                    )}
-                    style={{ width: `${row.usedPct}%` }}
-                  />
-                </div>
-                {active && (
-                  <p className="mt-2 flex items-center gap-1.5 text-metadata font-semibold text-primary">
-                    <CheckCircle className="!text-sm" />
-                    {t('landing.hero.mock.selected')}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mt-5 rounded-xl bg-surface-container p-4">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="text-metadata uppercase tracking-wider text-outline">
-                {t('landing.hero.mock.poolLabel')}
-              </p>
-              <p className="mt-1 font-display text-display-xl text-on-surface tabular-nums">
-                {formatGB(totalGB)}
-              </p>
-              <p className="text-metadata text-on-surface-variant">
-                {t('landing.hero.mock.poolHint')}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-metadata text-outline tabular-nums">
-                {t('landing.hero.mock.used')} {usedPctTotal}%
-              </p>
-              <p className="text-sm font-semibold text-primary tabular-nums">
-                {formatGB(freeGB)} {t('landing.hero.mock.freeTotal')}
-              </p>
-            </div>
+      {/* Combined pool */}
+      <div className="mt-6 rounded-xl bg-surface-container p-4">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-metadata uppercase tracking-wider text-outline">
+              {t('landing.hero.mock.poolLabel')}
+            </p>
+            <p className="mt-1 font-display text-headline-lg text-on-surface tabular-nums">
+              {formatGB(poolTotal)}
+            </p>
+            <p className="text-metadata text-on-surface-variant">
+              {t('landing.hero.mock.poolHint')}
+            </p>
           </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-container-highest">
+          <div className="text-right">
+            <p className="text-metadata text-outline tabular-nums">
+              {t('landing.hero.mock.used')} {poolPct}% · {formatGB(poolUsed)}
+            </p>
+            <p className="text-sm font-semibold text-primary tabular-nums">
+              {formatGB(poolFree)} {t('landing.hero.mock.free')}
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 flex h-3 gap-0.5 overflow-hidden rounded-full">
+          {rows.map((row) => (
             <div
-              className="h-full rounded-full bg-linear-to-r from-primary to-secondary transition-[width] duration-500"
-              style={{ width: `${usedPctTotal}%` }}
-            />
+              key={row.index}
+              className="h-full bg-surface-container-highest"
+              style={{ width: `${(row.totalGB / poolTotal) * 100}%` }}
+              title={row.label}
+            >
+              <div
+                className={clsx(
+                  'h-full transition-[width] duration-500',
+                  target?.index === row.index ? 'bg-primary' : 'bg-secondary/60',
+                )}
+                style={{ width: `${row.usedPct}%` }}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Accounts */}
+      <ul className="mt-5 space-y-3">
+        {rows.map((row) => {
+          const selected = target?.index === row.index;
+          return (
+            <li
+              key={row.index}
+              className={clsx(
+                'rounded-xl border p-3 transition-colors',
+                selected
+                  ? 'border-primary/50 bg-primary-container/15'
+                  : 'border-outline-variant/20 bg-surface-container/60',
+              )}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span
+                    className={clsx(
+                      'flex size-9 shrink-0 items-center justify-center rounded-lg',
+                      selected
+                        ? 'bg-primary-container text-on-primary-container'
+                        : 'bg-surface-container-highest text-on-surface-variant',
+                    )}
+                  >
+                    <Cloud className="!text-xl" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-on-surface">{row.label}</p>
+                    <p className="truncate text-metadata text-outline">{row.email}</p>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-semibold text-on-surface tabular-nums">
+                    {formatGB(row.free)} {t('landing.hero.mock.remaining')}
+                  </p>
+                  <p className="text-metadata text-outline tabular-nums">
+                    {formatGB(row.usedGB)} {t('landing.hero.mock.of')} {formatGB(row.totalGB)}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
+                <div
+                  className={clsx(
+                    'h-full rounded-full transition-[width] duration-500',
+                    selected ? 'bg-primary' : 'bg-secondary/60',
+                  )}
+                  style={{ width: `${row.usedPct}%` }}
+                />
+              </div>
+              {selected && (
+                <p className="mt-2 flex items-center gap-1.5 text-metadata font-semibold text-primary">
+                  <CheckCircle className="!text-sm" />
+                  {t('landing.hero.mock.selected')}
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* Routing controls */}
+      <div className="mt-5 space-y-4 rounded-xl border border-outline-variant/20 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-metadata uppercase tracking-wider text-outline">
+            {t('landing.hero.mock.routingLabel')}
+          </span>
+          <div className="flex gap-1 rounded-full bg-surface-container p-1" role="group">
+            <Button
+              type="button"
+              size="sm"
+              variant={isManual ? 'ghost' : 'primary'}
+              aria-pressed={!isManual}
+              onClick={() => setManualIndex(null)}
+              className="!h-8 rounded-full px-3"
+            >
+              {t('landing.hero.mock.routingAuto')}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={isManual ? 'primary' : 'ghost'}
+              aria-pressed={isManual}
+              onClick={() => setManualIndex((rows.find((row) => row.fits) ?? rows[0]).index)}
+              className="!h-8 rounded-full px-3"
+            >
+              {t('landing.hero.mock.routingManual')}
+            </Button>
           </div>
         </div>
 
-        <div className="mt-5">
+        {isManual && (
+          <div className="flex flex-wrap gap-2">
+            {rows.map((row) => (
+              <Button
+                key={row.index}
+                type="button"
+                size="sm"
+                variant={manualIndex === row.index ? 'primary' : 'secondary'}
+                aria-pressed={manualIndex === row.index}
+                disabled={!row.fits}
+                onClick={() => setManualIndex(row.index)}
+                className="!h-8 rounded-full px-3"
+                title={`${formatGB(row.free)} ${t('landing.hero.mock.remaining')}`}
+              >
+                {row.sub}
+              </Button>
+            ))}
+          </div>
+        )}
+
+        <div>
           <div className="flex items-center justify-between gap-3">
             <label
               htmlFor="landing-routing-size"
               className="text-metadata uppercase tracking-wider text-outline"
             >
-              {t('landing.hero.mock.simTitle')}
+              {t('landing.hero.mock.sizeLabel')}
             </label>
-            <span className="text-sm font-semibold text-on-surface tabular-nums">
-              {sizeMB >= 1024
-                ? t('landing.hero.mock.gb', { n: (sizeMB / 1024).toFixed(1) })
-                : t('landing.hero.mock.mb', { n: sizeMB })}
-            </span>
+            <span className="text-sm font-semibold text-on-surface tabular-nums">{sizeLabel}</span>
           </div>
           <input
             id="landing-routing-size"
             type="range"
-            min={250}
-            max={1024}
-            step={10}
+            min={MIN_SIZE_MB}
+            max={MAX_SIZE_MB}
+            step={100}
             value={sizeMB}
             onChange={(event) => setSizeMB(Number(event.target.value))}
             aria-describedby="landing-routing-note"
-            className="mt-3 w-full cursor-pointer accent-[var(--color-primary)]"
+            className="mt-3 w-full cursor-pointer accent-primary"
           />
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={reset}
-            className="mt-2 !h-7 self-start !px-2 text-metadata"
-            leftIcon={<Sync className="!text-base" />}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p
+            id="landing-routing-note"
+            className={clsx(
+              'flex min-w-0 flex-1 items-center gap-2 text-metadata',
+              target ? 'text-on-surface-variant' : 'text-error',
+            )}
           >
-            {t('landing.hero.mock.reset')}
-          </Button>
-        </div>
-
-        <p
-          id="landing-routing-note"
-          className={clsx(
-            'mt-4 flex items-start gap-2 text-metadata',
-            target ? 'text-on-surface-variant' : 'text-error',
+            {target ? (
+              <Route className="!text-base shrink-0 text-primary" />
+            ) : (
+              <Shield className="!text-base shrink-0" />
+            )}
+            <span>
+              {target
+                ? t('landing.hero.mock.routed', {
+                    size: sizeLabel,
+                    account: target.label,
+                    free: formatGB(target.free),
+                  })
+                : t('landing.hero.mock.none')}
+            </span>
+          </p>
+          {isManual && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setManualIndex(null)}
+              className="!h-8 text-metadata"
+            >
+              {t('landing.hero.mock.reset')}
+            </Button>
           )}
-        >
-          {target ? (
-            <AutoGraph className="!text-base shrink-0 text-primary" />
-          ) : (
-            <Shield className="!text-base shrink-0" />
-          )}
-          <span>
-            {target
-              ? t('landing.hero.mock.routed', {
-                  size:
-                    sizeMB >= 1024
-                      ? t('landing.hero.mock.gb', { n: (sizeMB / 1024).toFixed(1) })
-                      : t('landing.hero.mock.mb', { n: sizeMB }),
-                  account: target.label,
-                })
-              : t('landing.hero.mock.none')}
-          </span>
-        </p>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Chip variant="success">{t('landing.hero.mock.statusRouting')}</Chip>
-          <Chip variant="warning">{t('landing.hero.mock.statusEncryption')}</Chip>
-          <Chip variant="primary">{t('landing.hero.mock.statusProxy')}</Chip>
         </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Chip variant="success">{t('landing.hero.mock.statusRouting')}</Chip>
+        <Chip variant="warning">{t('landing.hero.mock.statusEncryption')}</Chip>
+        <Chip variant="primary">{t('landing.hero.mock.statusProxy')}</Chip>
       </div>
     </div>
   );
 }
 
-/** Locale + theme switches and the auth-aware call-to-action. */
+/* ================================== header ================================== */
+
 function HeaderActions({
   onSignIn,
   signingIn,
@@ -442,7 +496,7 @@ function HeaderActions({
 }) {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { theme, resolved, setTheme } = useTheme();
+  const { resolved, setTheme } = useTheme();
   const router = useRouter();
   const [locale, setLocaleState] = useState('id');
 
@@ -456,17 +510,11 @@ function HeaderActions({
   }
 
   function cycleTheme() {
-    const next = resolved === 'dark' ? 'light' : 'dark';
-    setTheme(theme === 'system' ? next : next);
+    setTheme(resolved === 'dark' ? 'light' : 'dark');
   }
 
   return (
-    <div
-      className={clsx(
-        'flex items-center gap-2',
-        variant === 'mobile' && 'flex-col gap-3',
-      )}
-    >
+    <div className={clsx('flex items-center gap-2', variant === 'mobile' && 'flex-col gap-3')}>
       <div
         className={clsx(
           'flex items-center rounded-full border border-outline-variant/20 bg-surface-container p-1',
@@ -497,11 +545,7 @@ function HeaderActions({
         title={t('landing.nav.theme')}
         className="size-9 rounded-full border border-outline-variant/20 bg-surface-container"
       >
-        {resolved === 'dark' ? (
-          <LightMode className="!text-lg" />
-        ) : (
-          <DarkMode className="!text-lg" />
-        )}
+        {resolved === 'dark' ? <LightMode className="!text-lg" /> : <DarkMode className="!text-lg" />}
       </IconButton>
 
       {user ? (
@@ -521,7 +565,6 @@ function HeaderActions({
           onClick={onSignIn}
           loading={signingIn}
           fullWidth={variant === 'mobile'}
-          leftIcon={<Cloud className="!text-lg" />}
         >
           {signingIn ? t('landing.cta.signInLoading') : t('landing.cta.signIn')}
         </Button>
@@ -530,14 +573,11 @@ function HeaderActions({
   );
 }
 
-function Header() {
+function Header({ onSignIn, signingIn }: { onSignIn: () => void; signingIn: boolean }) {
   const { t } = useTranslation();
-  const router = useRouter();
-  const { googleLogin } = useAuth();
   const active = useScrollSpy();
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [signingIn, setSigningIn] = useState(false);
 
   useEffect(() => {
     function onScroll() {
@@ -560,24 +600,11 @@ function Header() {
     scrollToId(id);
   }, []);
 
-  async function handleSignIn() {
-    setMenuOpen(false);
-    setSigningIn(true);
-    try {
-      await googleLogin();
-    } catch {
-      setSigningIn(false);
-      router.push('/login');
-    }
-  }
-
   return (
     <header
       className={clsx(
         'sticky top-0 z-50 border-b transition-colors duration-300',
-        scrolled
-          ? 'glass-toolbar border-outline-variant/20'
-          : 'border-transparent bg-background',
+        scrolled ? 'glass-toolbar border-outline-variant/20' : 'border-transparent bg-background',
       )}
     >
       <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
@@ -589,20 +616,10 @@ function Header() {
           <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
             <Cloud className="!text-3xl fill" />
           </span>
-          <span className="min-w-0">
-            <span className="block font-display text-body-lg font-bold text-on-surface">
-              EnStorage
-            </span>
-            <span className="block truncate text-metadata text-secondary">
-              {t('auth.login.tagline')}
-            </span>
-          </span>
+          <span className="font-display text-body-lg font-bold text-on-surface">EnStorage</span>
         </Link>
 
-        <nav
-          className="hidden items-center gap-1 lg:flex"
-          aria-label={t('landing.nav.mainNav')}
-        >
+        <nav className="hidden items-center gap-1 lg:flex" aria-label={t('landing.nav.mainNav')}>
           {SECTIONS.map((section) => (
             <Button
               key={section.id}
@@ -619,24 +636,14 @@ function Header() {
               {t(section.labelKey)}
             </Button>
           ))}
-          <span className="mx-1 h-5 w-px bg-outline-variant/40" aria-hidden />
-          {LEGAL_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="rounded-full px-3.5 py-2 text-sm font-medium text-on-surface-variant transition-colors no-underline hover:bg-surface-container hover:text-on-surface"
-            >
-              {t(link.labelKey)}
-            </Link>
-          ))}
         </nav>
 
         <div className="hidden lg:block">
-          <HeaderActions onSignIn={handleSignIn} signingIn={signingIn} />
+          <HeaderActions onSignIn={onSignIn} signingIn={signingIn} />
         </div>
 
         <IconButton
-          onClick={() => setMenuOpen((v) => !v)}
+          onClick={() => setMenuOpen((value) => !value)}
           aria-label={menuOpen ? t('landing.nav.close') : t('landing.nav.menu')}
           aria-expanded={menuOpen}
           className="size-11 rounded-xl border border-outline-variant/20 bg-surface-container lg:hidden"
@@ -664,28 +671,8 @@ function Header() {
                 </Button>
               ))}
             </nav>
-            <div className="mt-4 rounded-xl border border-outline-variant/20 bg-surface p-3">
-              <p className="text-label-sm font-semibold uppercase tracking-[0.14em] text-outline">
-                {t('landing.nav.legal')}
-              </p>
-              <div className="mt-2 grid gap-1">
-                {LEGAL_LINKS.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className="rounded-lg px-2 py-2 text-body-md text-on-surface-variant no-underline hover:bg-surface-container hover:text-on-surface"
-                  >
-                    {t(link.labelKey)}
-                  </Link>
-                ))}
-              </div>
-            </div>
             <div className="mt-6">
-              <HeaderActions
-                onSignIn={handleSignIn}
-                signingIn={signingIn}
-                variant="mobile"
-              />
+              <HeaderActions onSignIn={onSignIn} signingIn={signingIn} variant="mobile" />
             </div>
           </div>
         </div>
@@ -693,6 +680,8 @@ function Header() {
     </header>
   );
 }
+
+/* =================================== hero ================================== */
 
 function Hero() {
   const { t } = useTranslation();
@@ -714,35 +703,17 @@ function Hero() {
     }
   }
 
-  const stats = [
-    { value: t('landing.hero.stats.accountsValue'), label: t('landing.hero.stats.accounts') },
-    { value: t('landing.hero.stats.fileValue'), label: t('landing.hero.stats.file') },
-    { value: t('landing.hero.stats.routingValue'), label: t('landing.hero.stats.routing') },
-  ];
-
   return (
-    <section className="relative overflow-hidden">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 -top-40 -z-10 h-[520px] bg-radial-[at_50%_0%] from-primary-container/40 to-transparent"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-24 top-32 -z-10 size-72 rounded-full bg-secondary-container/20 blur-3xl"
-      />
-      <div className="mx-auto grid w-full max-w-7xl items-center gap-12 px-4 pb-16 pt-12 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:gap-16 lg:pb-24 lg:pt-20">
+    <section className="border-b border-outline-variant/20">
+      <div className="mx-auto grid w-full max-w-7xl items-center gap-12 px-4 py-14 sm:px-6 lg:grid-cols-[1fr_minmax(0,520px)] lg:gap-14 lg:py-20">
         <Reveal>
           <div>
-            <Chip variant="warning" className="px-3 py-1.5">
-              {t('landing.hero.badge')}
-            </Chip>
-            <h1 className="mt-6 font-display text-headline-lg-mobile sm:text-display-xl text-on-surface">
-              <span className="block text-primary">
-                {t('landing.hero.titleLead')}
-              </span>
+            <Chip variant="warning">{t('landing.hero.badge')}</Chip>
+            <h1 className="mt-5 font-display text-headline-lg-mobile text-on-surface sm:text-display-xl">
+              <span className="block text-primary">{t('landing.hero.titleLead')}</span>
               <span className="mt-2 block">{t('landing.hero.titleMain')}</span>
             </h1>
-            <p className="mt-6 max-w-2xl text-body-lg text-on-surface-variant">
+            <p className="mt-5 max-w-xl text-body-lg text-on-surface-variant">
               {t('landing.hero.subtitle')}
             </p>
 
@@ -752,112 +723,92 @@ function Hero() {
                 onClick={start}
                 loading={signingIn}
                 rightIcon={!signingIn && <ArrowForward className="!text-lg" />}
-                leftIcon={!signingIn && <Cloud className="!text-lg" />}
-                className="sm:min-w-52"
+                className="sm:min-w-48"
               >
-                {t('landing.hero.primary')}
+                {t(user ? 'landing.hero.primarySignedIn' : 'landing.hero.primary')}
               </Button>
               <Button
                 variant="secondary"
                 size="lg"
                 onClick={() => scrollToId('api')}
                 leftIcon={<Code className="!text-lg" />}
-                className="sm:min-w-52"
+                className="sm:min-w-48"
               >
-                {t('landing.hero.secondary')}
+                {t('landing.hero.secondaryApi')}
               </Button>
             </div>
 
-            <p className="mt-6 flex items-start gap-2 text-metadata text-on-surface-variant">
+            <p className="mt-6 flex items-start gap-2 text-metadata text-outline">
               <Shield className="!text-base shrink-0 text-primary" />
               {t('landing.hero.trust')}
             </p>
-
-            <dl className="mt-10 grid grid-cols-3 gap-4 border-t border-outline-variant/20 pt-6">
-              {stats.map((stat) => (
-                <div key={stat.label}>
-                  <dt className="sr-only">{stat.label}</dt>
-                  <dd>
-                    <span className="block font-display text-body-lg font-bold text-on-surface">
-                      {stat.value}
-                    </span>
-                    <span className="mt-0.5 block text-metadata text-outline">
-                      {stat.label}
-                    </span>
-                  </dd>
-                </div>
-              ))}
-            </dl>
           </div>
         </Reveal>
 
         <Reveal delay={120}>
-          <VaultMockup />
+          <StoragePoolConsole />
         </Reveal>
       </div>
     </section>
   );
 }
 
-const ASSURANCE_ICONS = {
-  selfHosted: Storage,
-  oauth: Lock,
-  limitedUse: Shield,
-  revocation: VpnKey,
-} as const;
+/* ================================= security ================================ */
 
-function Assurance() {
+const SECURITY_META = [
+  { key: 'streaming', icon: Storage },
+  { key: 'token', icon: Lock },
+  { key: 'limitedUse', icon: Security },
+] as const;
+
+function SecuritySection() {
   const { t } = useTranslation();
-  const keys = Object.keys(ASSURANCE_ICONS) as (keyof typeof ASSURANCE_ICONS)[];
 
   return (
-    <section id="security" className={clsx('py-16 sm:py-24', SCROLL_MARGIN)}>
+    <section id="security" className={clsx('border-b border-outline-variant/20 py-16 sm:py-20', SCROLL_MARGIN)}>
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
         <SectionHeading
-          eyebrowKey="landing.assurance.eyebrow"
-          titleKey="landing.assurance.title"
-          subtitleKey="landing.assurance.subtitle"
+          eyebrowKey="landing.security.eyebrow"
+          titleKey="landing.security.title"
+          subtitleKey="landing.security.subtitle"
         />
-        <div className="grid gap-4 sm:grid-cols-2">
-          {keys.map((key, index) => {
-            const Icon = ASSURANCE_ICONS[key];
-            return (
-              <Reveal key={key} delay={index * 80}>
-                <Card hover className="h-full">
-                  <div className="flex gap-4">
-                    <CardIconBox variant="primary" size="md">
-                      <Icon className="!text-2xl" />
-                    </CardIconBox>
-                    <div className="min-w-0">
-                      <h3 className="font-display text-body-lg font-semibold text-on-surface">
-                        {t(`landing.assurance.items.${key}.title`)}
-                      </h3>
-                      <p className="mt-2 text-body-md text-on-surface-variant">
-                        {t(`landing.assurance.items.${key}.body`)}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              </Reveal>
-            );
-          })}
+        <div className="grid gap-4 lg:grid-cols-3">
+          {SECURITY_META.map(({ key, icon: Icon }, index) => (
+            <Reveal key={key} delay={index * 80} className="h-full">
+              <Card hover className="flex h-full flex-col">
+                <CardIconBox variant={index === 1 ? 'gold' : 'primary'} size="md">
+                  <Icon className="!text-2xl" />
+                </CardIconBox>
+                <h3 className="mt-5 font-display text-body-lg font-semibold text-on-surface">
+                  {t(`landing.security.items.${key}.title`)}
+                </h3>
+                <p className="mt-2 text-body-md text-on-surface-variant">
+                  {t(`landing.security.items.${key}.body`)}
+                </p>
+                <ul className="mt-4 space-y-2 border-t border-outline-variant/20 pt-4">
+                  {splitBullets(t(`landing.security.items.${key}.bullets`)).map((item) => (
+                    <li
+                      key={item}
+                      className="flex items-start gap-2 text-metadata text-on-surface-variant"
+                    >
+                      <CheckCircle className="!text-base shrink-0 text-primary" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            </Reveal>
+          ))}
         </div>
-
-        <Reveal delay={320}>
-          <div className="mt-4 flex flex-col gap-4 rounded-card border border-outline-variant/20 bg-surface-container p-inner-padding sm:flex-row sm:items-center sm:justify-between">
-            <p className="flex items-start gap-3 text-body-md text-on-surface-variant">
-              <Security className="!text-2xl shrink-0 text-primary" />
-              <span>
-                {t('landing.assurance.revokeHint')}
-                <span className="mt-1 block text-metadata text-outline">
-                  {t('landing.assurance.scopesNote')}
-                </span>
-              </span>
-            </p>
-            <Link href="/legal/security" className="shrink-0 no-underline">
-              <Button variant="secondary" size="md" rightIcon={<ArrowForward className="!text-lg" />}>
-                {t('landing.assurance.policyLink')}
-              </Button>
+        <Reveal delay={260}>
+          <div className="mt-6">
+            <Link
+              href="/legal/security"
+              className="inline-flex items-center gap-2 text-body-md font-semibold text-primary no-underline hover:underline"
+            >
+              <Shield className="!text-lg" />
+              {t('landing.security.policyLink')}
+              <ArrowForward className="!text-lg" />
             </Link>
           </div>
         </Reveal>
@@ -866,25 +817,22 @@ function Assurance() {
   );
 }
 
+/* ================================= features ================================ */
+
 const FEATURE_META = [
-  { key: 'aggregation', icon: Storage, span: 'lg:col-span-2' },
-  { key: 'routing', icon: AutoGraph, span: 'lg:col-span-1' },
-  { key: 'api', icon: Code, span: 'lg:col-span-1' },
-  { key: 'viewer', icon: PlayCircle, span: 'lg:col-span-2' },
-  { key: 'isolation', icon: Security, span: 'lg:col-span-1' },
-  { key: 'mobile', icon: Devices, span: 'lg:col-span-1' },
+  { key: 'aggregation', icon: Layers },
+  { key: 'routing', icon: Route },
+  { key: 'api', icon: Code },
+  { key: 'viewer', icon: PlayCircle },
+  { key: 'isolation', icon: AccountTree },
+  { key: 'mobile', icon: Devices },
 ] as const;
 
 function Features() {
   const { t } = useTranslation();
 
-  function bullets(key: string): string[] {
-    const raw = t(`landing.features.items.${key}.bullets`);
-    return typeof raw === 'string' ? raw.split('\n').filter(Boolean) : [];
-  }
-
   return (
-    <section id="features" className={clsx('py-16 sm:py-24', SCROLL_MARGIN)}>
+    <section id="features" className={clsx('border-b border-outline-variant/20 py-16 sm:py-20', SCROLL_MARGIN)}>
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
         <SectionHeading
           eyebrowKey="landing.features.eyebrow"
@@ -892,133 +840,101 @@ function Features() {
           subtitleKey="landing.features.subtitle"
         />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURE_META.map((feature, index) => {
-            const Icon = feature.icon;
-            return (
-              <Reveal key={feature.key} delay={index * 70} className={feature.span}>
-                <Card hover className="h-full">
-                  <div className="flex items-start justify-between gap-3">
-                    <CardIconBox variant={index % 2 ? 'gold' : 'primary'} size="md">
-                      <Icon className="!text-2xl" />
-                    </CardIconBox>
-                    <span className="font-display text-metadata text-outline tabular-nums">
-                      {String(index + 1).padStart(2, '0')}
-                    </span>
-                  </div>
-                  <h3 className="mt-5 font-display text-body-lg font-semibold text-on-surface">
-                    {t(`landing.features.items.${feature.key}.title`)}
-                  </h3>
-                  <p className="mt-2 text-body-md text-on-surface-variant">
-                    {t(`landing.features.items.${feature.key}.body`)}
-                  </p>
-                  <ul className="mt-4 space-y-2 border-t border-outline-variant/20 pt-4">
-                    {bullets(feature.key).map((item) => (
-                      <li
-                        key={item}
-                        className="flex items-start gap-2 text-metadata text-on-surface-variant"
-                      >
-                        <CheckCircle className="!text-base shrink-0 text-primary" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              </Reveal>
-            );
-          })}
+          {FEATURE_META.map(({ key, icon: Icon }, index) => (
+            <Reveal key={key} delay={index * 60} className="h-full">
+              <Card hover className="flex h-full flex-col">
+                <CardIconBox variant={index % 2 ? 'gold' : 'primary'} size="md">
+                  <Icon className="!text-2xl" />
+                </CardIconBox>
+                <h3 className="mt-5 font-display text-body-lg font-semibold text-on-surface">
+                  {t(`landing.features.items.${key}.title`)}
+                </h3>
+                <p className="mt-2 text-body-md text-on-surface-variant">
+                  {t(`landing.features.items.${key}.body`)}
+                </p>
+                <ul className="mt-4 grid gap-2 border-t border-outline-variant/20 pt-4 sm:grid-cols-2">
+                  {splitBullets(t(`landing.features.items.${key}.bullets`)).map((item) => (
+                    <li
+                      key={item}
+                      className="flex items-start gap-2 text-metadata text-on-surface-variant"
+                    >
+                      <CheckCircle className="!text-base shrink-0 text-primary" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            </Reveal>
+          ))}
         </div>
       </div>
     </section>
   );
 }
 
-function HowItWorks() {
-  const { t } = useTranslation();
-  const icons = [Cloud, Sync, LinkIcon];
-  const steps = ['one', 'two', 'three'] as const;
-
-  return (
-    <section id="how-it-works" className={clsx('py-16 sm:py-24', SCROLL_MARGIN)}>
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
-        <SectionHeading
-          eyebrowKey="landing.how.eyebrow"
-          titleKey="landing.how.title"
-          subtitleKey="landing.how.subtitle"
-        />
-        <ol className="grid gap-4 lg:grid-cols-3">
-          {steps.map((step, index) => {
-            const Icon = icons[index];
-            return (
-              <li key={step} className="list-none">
-                <Reveal delay={index * 90}>
-                  <Card className="relative h-full overflow-hidden">
-                    <span
-                      aria-hidden
-                      className="pointer-events-none absolute -right-4 -top-8 font-display text-[120px] font-bold leading-none text-surface-container-highest"
-                    >
-                      {index + 1}
-                    </span>
-                    <div className="relative">
-                      <CardIconBox variant="muted" size="md">
-                        <Icon className="!text-2xl" />
-                      </CardIconBox>
-                      <h3 className="mt-5 font-display text-body-lg font-semibold text-on-surface">
-                        {t(`landing.how.steps.${step}.title`)}
-                      </h3>
-                      <p className="mt-2 text-body-md text-on-surface-variant">
-                        {t(`landing.how.steps.${step}.body`)}
-                      </p>
-                    </div>
-                  </Card>
-                </Reveal>
-              </li>
-            );
-          })}
-        </ol>
-        <Reveal delay={280}>
-          <p className="mt-6 flex items-start justify-center gap-2 text-center text-metadata text-outline">
-            <Shield className="!text-base shrink-0 text-secondary" />
-            {t('landing.how.footnote')}
-          </p>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
+/* =============================== developer api ============================== */
 
 const API_TABS = ['upload', 'quota', 'share'] as const;
-const SDK_TABS = ['n8n', 'python', 'node', 'curl'] as const;
 const SCOPE_KEYS = ['read', 'write', 'delete', 'full'] as const;
 
-function CodeBlock({ code }: { code: string }) {
+type TokenClass = 'comment' | 'string' | 'flag' | 'keyword' | 'number' | 'plain';
+
+const TOKEN_CLASS: Record<TokenClass, string> = {
+  comment: 'text-outline italic',
+  string: 'text-secondary',
+  flag: 'text-primary font-semibold',
+  keyword: 'text-primary font-semibold',
+  number: 'text-on-surface-variant tabular-nums',
+  plain: 'text-on-surface',
+};
+
+const TOKEN_PATTERN =
+  /(#[^\n]*|\/\/[^\n]*)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')|(-{1,2}[A-Za-z-]+)|\b(curl|Bearer|GET|POST|PUT|PATCH|DELETE|HTTP\/1\.1)\b|(\b\d+(?:\.\d+)?\b)/g;
+
+function tokenize(code: string): Array<{ text: string; kind: TokenClass }> {
+  const tokens: Array<{ text: string; kind: TokenClass }> = [];
+  let last = 0;
+  let match: RegExpExecArray | null;
+  TOKEN_PATTERN.lastIndex = 0;
+  while ((match = TOKEN_PATTERN.exec(code)) !== null) {
+    if (match.index > last) tokens.push({ text: code.slice(last, match.index), kind: 'plain' });
+    const kind: TokenClass = match[1]
+      ? 'comment'
+      : match[2]
+        ? 'string'
+        : match[3]
+          ? 'flag'
+          : match[4]
+            ? 'keyword'
+            : 'number';
+    tokens.push({ text: match[0], kind });
+    last = match.index + match[0].length;
+  }
+  if (last < code.length) tokens.push({ text: code.slice(last), kind: 'plain' });
+  return tokens;
+}
+
+function HighlightedCode({ code }: { code: string }) {
+  const tokens = useMemo(() => tokenize(code), [code]);
   return (
-    <pre className="max-h-[420px] overflow-auto rounded-xl bg-surface-container-lowest p-4 text-metadata leading-relaxed text-on-surface">
-      <code className="font-mono whitespace-pre">{code}</code>
+    <pre className="max-h-[420px] overflow-auto p-4 text-metadata leading-relaxed">
+      <code className="font-mono whitespace-pre">
+        {tokens.map((token, index) => (
+          <span key={`${index}-${token.text.slice(0, 12)}`} className={TOKEN_CLASS[token.kind]}>
+            {token.text}
+          </span>
+        ))}
+      </code>
     </pre>
   );
 }
 
-function SnippetPanel({
-  labelPrefix,
-  ariaLabelKey,
-  active,
-  onSelect,
-  tabs,
-  captionKey,
-  codeKey,
-}: {
-  labelPrefix: string;
-  ariaLabelKey: string;
-  active: string;
-  onSelect: (v: string) => void;
-  tabs: readonly string[];
-  captionKey: string;
-  codeKey: string;
-}) {
+function ApiConsole() {
   const { t } = useTranslation();
+  const [tab, setTab] = useState<string>(API_TABS[0]);
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
-  const code = t(`${codeKey}.${active}`);
+  const code = t(`landing.api.snippets.${tab}`);
 
   async function copy() {
     try {
@@ -1034,252 +950,187 @@ function SnippetPanel({
   }
 
   return (
-    <div className="rounded-card border border-outline-variant/20 bg-surface p-4 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div
-          className="flex flex-wrap gap-1 rounded-full bg-surface-container p-1"
-          role="tablist"
-          aria-label={t(ariaLabelKey)}
-        >
-          {tabs.map((tab) => (
+    <div role="region" aria-label={t('landing.api.panelLabel')} className="shadow-ambient">
+      <Card className="overflow-hidden !bg-surface-container-lowest !p-0">
+        <div className="flex items-center gap-2 border-b border-outline-variant/20 bg-surface-container-high px-4 py-3">
+          <span className="flex gap-1.5" aria-hidden>
+            <span className="size-2.5 rounded-full bg-error/70" />
+            <span className="size-2.5 rounded-full bg-secondary/70" />
+            <span className="size-2.5 rounded-full bg-primary/70" />
+          </span>
+          <p className="ml-2 truncate font-mono text-metadata text-on-surface-variant">
+            {t('landing.api.prompt')} ./call-{tab}.sh
+          </p>
+          <span className="ml-auto">
             <Button
-              key={tab}
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={copy}
+              leftIcon={copied ? <CheckCircle className="!text-lg" /> : <CopyAll className="!text-lg" />}
+              className={clsx('!text-on-surface-variant', copied && '!text-primary')}
+            >
+              {failed
+                ? t('landing.api.copyFailed')
+                : copied
+                  ? t('landing.api.copied')
+                  : t('landing.api.copy')}
+            </Button>
+          </span>
+        </div>
+
+        <div
+          className="flex flex-wrap gap-1 border-b border-outline-variant/20 px-3 py-2"
+          role="tablist"
+          aria-label={t('landing.api.eyebrow')}
+        >
+          {API_TABS.map((value) => (
+            <Button
+              key={value}
               type="button"
               size="sm"
               role="tab"
-              aria-selected={active === tab}
-              variant={active === tab ? 'primary' : 'ghost'}
-              onClick={() => onSelect(tab)}
-              className="!h-8 rounded-full px-3.5 uppercase tracking-wider"
+              aria-selected={tab === value}
+              variant={tab === value ? 'primary' : 'ghost'}
+              onClick={() => setTab(value)}
+              className="!h-8 rounded-full px-3.5"
             >
-              {t(`${labelPrefix}.${tab}`)}
+              {t(`landing.api.tabs.${value}`)}
             </Button>
           ))}
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={copy}
-          leftIcon={<CopyAll className="!text-lg" />}
-        >
-          {copied ? t('landing.api.copied') : t('landing.api.copy')}
-        </Button>
-      </div>
-      <p className="mt-4 text-metadata text-outline">{t(captionKey)}</p>
-      {failed && (
-        <p className="mt-2 flex items-center gap-1.5 text-metadata text-error">
-          <Shield className="!text-base shrink-0" />
-          {t('landing.api.copyFailed')}
-        </p>
-      )}
-      <div className="mt-3">
-        <CodeBlock code={code} />
-      </div>
+
+        <p className="px-4 pt-3 text-metadata text-outline">{t(`landing.api.captions.${tab}`)}</p>
+        <HighlightedCode code={code} />
+      </Card>
     </div>
   );
 }
 
-function ApiShowcase() {
-  const { t } = useTranslation();
-  const [endpoint, setEndpoint] = useState<string>(API_TABS[0]);
-  const [sdk, setSdk] = useState<string>(SDK_TABS[0]);
+const ENDPOINTS = [
+  { method: 'POST', path: '/api/v1/files/upload', scope: 'write' },
+  { method: 'GET', path: '/api/v1/files', scope: 'read' },
+  { method: 'GET', path: '/api/v1/storage/summary', scope: 'read' },
+  { method: 'POST', path: '/api/v1/files/{id}/share', scope: 'read' },
+  { method: 'DELETE', path: '/api/v1/files/{id}', scope: 'delete' },
+  { method: 'POST', path: '/api/v1/api-keys', scope: 'session' },
+];
 
-  const endpoints = [
-    { method: 'POST', path: '/api/v1/files/upload', scope: 'write' },
-    { method: 'GET', path: '/api/v1/files', scope: 'read' },
-    { method: 'GET', path: '/api/v1/storage/summary', scope: 'read' },
-    { method: 'POST', path: '/api/v1/files/{id}/share', scope: 'read' },
-    { method: 'DELETE', path: '/api/v1/files/{id}', scope: 'delete' },
-    { method: 'POST', path: '/api/v1/api-keys', scope: 'session' },
-  ];
+function ApiSection() {
+  const { t } = useTranslation();
 
   return (
-    <section id="api" className={clsx('py-16 sm:py-24', SCROLL_MARGIN)}>
+    <section id="api" className={clsx('border-b border-outline-variant/20 py-16 sm:py-20', SCROLL_MARGIN)}>
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
         <SectionHeading
           eyebrowKey="landing.api.eyebrow"
           titleKey="landing.api.title"
           subtitleKey="landing.api.subtitle"
         />
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
           <Reveal>
-            <SnippetPanel
-              labelPrefix="landing.api.tabs"
-              active={endpoint}
-              onSelect={setEndpoint}
-              tabs={API_TABS}
-              ariaLabelKey="landing.api.eyebrow"
-              captionKey={`landing.api.captions.${endpoint}`}
-              codeKey="landing.api.snippets"
-            />
+            <ApiConsole />
           </Reveal>
-          <Reveal delay={100}>
-            <SnippetPanel
-              labelPrefix="landing.api.sdkTabs"
-              active={sdk}
-              onSelect={setSdk}
-              tabs={SDK_TABS}
-              captionKey={`landing.api.sdks.${sdk}`}
-              ariaLabelKey="landing.api.sdkTitle"
-              codeKey="landing.api.sdkSnippets"
-            />
-          </Reveal>
-        </div>
-
-        <div className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_1fr]">
-          <Reveal delay={140}>
-            <Card className="h-full">
-              <div className="flex items-center gap-3">
-                <CardIconBox variant="muted" size="md">
-                  <Terminal className="!text-2xl" />
-                </CardIconBox>
-                <div>
-                  <h3 className="font-display text-body-lg font-semibold text-on-surface">
-                    {t('landing.api.endpointsTitle')}
-                  </h3>
-                  <p className="text-metadata text-outline">
-                    {t('landing.api.docsNote')}
-                  </p>
+          <div className="grid gap-4">
+            <Reveal delay={90}>
+              <Card>
+                <div className="flex items-center gap-3">
+                  <CardIconBox variant="muted" size="md">
+                    <Terminal className="!text-2xl" />
+                  </CardIconBox>
+                  <div className="min-w-0">
+                    <h3 className="font-display text-body-lg font-semibold text-on-surface">
+                      {t('landing.api.endpointsTitle')}
+                    </h3>
+                    <p className="text-metadata text-outline">{t('landing.api.docsNote')}</p>
+                  </div>
                 </div>
-              </div>
-              <ul className="mt-5 space-y-2">
-                {endpoints.map((row) => (
-                  <li
-                    key={`${row.method}${row.path}`}
-                    className="flex flex-wrap items-center gap-2 rounded-xl bg-surface-container px-3 py-2"
-                  >
-                    <span className="font-mono text-metadata font-semibold text-secondary">
-                      {row.method}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate font-mono text-metadata text-on-surface">
-                      {row.path}
-                    </span>
-                    <Chip variant="default">{row.scope}</Chip>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          </Reveal>
+                <ul className="mt-5 space-y-2">
+                  {ENDPOINTS.map((row) => (
+                    <li
+                      key={`${row.method}${row.path}`}
+                      className="flex flex-wrap items-center gap-2 rounded-xl bg-surface-container px-3 py-2"
+                    >
+                      <span className="font-mono text-metadata font-semibold text-secondary">
+                        {row.method}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate font-mono text-metadata text-on-surface">
+                        {row.path}
+                      </span>
+                      <Chip variant="default">{row.scope}</Chip>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            </Reveal>
 
-          <Reveal delay={200}>
-            <Card className="h-full">
-              <div className="flex items-center gap-3">
-                <CardIconBox variant="gold" size="md">
-                  <VpnKey className="!text-2xl" />
-                </CardIconBox>
-                <h3 className="font-display text-body-lg font-semibold text-on-surface">
-                  {t('landing.api.keysTitle')}
-                </h3>
-              </div>
-              <ul className="mt-5 space-y-3">
-                {SCOPE_KEYS.map((scope) => (
-                  <li key={scope} className="flex items-start gap-3">
-                    <span className="mt-0.5 shrink-0">
-                      <Chip variant="primary">{scope}</Chip>
-                    </span>
-                    <span className="text-body-md text-on-surface-variant">
-                      {t(`landing.api.keys.${scope}`)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-5 flex items-start gap-2 border-t border-outline-variant/20 pt-4 text-metadata text-outline">
-                <Lock className="!text-base shrink-0 text-primary" />
-                {t('landing.api.keySecurityNote')}
-              </p>
-            </Card>
-          </Reveal>
+            <Reveal delay={150}>
+              <Card>
+                <div className="flex items-center gap-3">
+                  <CardIconBox variant="gold" size="md">
+                    <VpnKey className="!text-2xl" />
+                  </CardIconBox>
+                  <h3 className="font-display text-body-lg font-semibold text-on-surface">
+                    {t('landing.api.keysTitle')}
+                  </h3>
+                </div>
+                <ul className="mt-5 space-y-3">
+                  {SCOPE_KEYS.map((scope) => (
+                    <li key={scope} className="flex items-start gap-3">
+                      <span className="mt-0.5 shrink-0">
+                        <Chip variant="primary">{scope}</Chip>
+                      </span>
+                      <span className="text-body-md text-on-surface-variant">
+                        {t(`landing.api.keys.${scope}`)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-5 flex items-start gap-2 border-t border-outline-variant/20 pt-4 text-metadata text-outline">
+                  <Lock className="!text-base shrink-0 text-primary" />
+                  {t('landing.api.keySecurityNote')}
+                </p>
+              </Card>
+            </Reveal>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function FinalCta() {
-  const { t } = useTranslation();
-  const { user } = useAuth();
-  const router = useRouter();
-
-  return (
-    <section className="px-4 pb-20 sm:px-6">
-      <Reveal className="mx-auto w-full max-w-7xl">
-        <div className="relative overflow-hidden rounded-card border border-outline-variant/20 bg-surface p-inner-padding shadow-ambient">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -left-16 -top-24 size-80 rounded-full bg-primary-container/30 blur-3xl"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -bottom-28 -right-10 size-80 rounded-full bg-secondary-container/25 blur-3xl"
-          />
-          <div className="relative flex flex-col items-start gap-8 lg:flex-row lg:items-center lg:justify-between">
-            <div className="max-w-2xl">
-              <p className="text-label-sm font-semibold uppercase tracking-[0.14em] text-secondary">
-                {t('landing.finalCta.eyebrow')}
-              </p>
-              <h2 className="mt-3 font-display text-headline-lg text-on-surface">
-                {t('landing.finalCta.title')}
-              </h2>
-              <p className="mt-3 text-body-lg text-on-surface-variant">
-                {t('landing.finalCta.subtitle')}
-              </p>
-              <p className="mt-4 flex items-start gap-2 text-metadata text-outline">
-                <Shield className="!text-base shrink-0 text-primary" />
-                {t('landing.finalCta.note')}
-              </p>
-            </div>
-            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-              <Button
-                size="lg"
-                onClick={() => router.push(user ? '/files' : '/login')}
-                rightIcon={<ArrowForward className="!text-lg" />}
-              >
-                {t('landing.finalCta.primary')}
-              </Button>
-              <Button
-                size="lg"
-                variant="secondary"
-                onClick={() => scrollToId('api')}
-                leftIcon={<Code className="!text-lg" />}
-              >
-                {t('landing.finalCta.secondary')}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </Reveal>
-    </section>
-  );
-}
+/* ================================== footer ================================= */
 
 function Footer() {
   const { t } = useTranslation();
 
-  const resourceLinks = [
-    { href: GITHUB_URL, label: t('landing.footer.resourceLinks.github'), external: true },
-    { href: `${GITHUB_URL}/blob/main/docs/api.md`, label: t('landing.footer.resourceLinks.docs'), external: true },
-    { href: '/legal/security', label: t('legal.security.title'), external: false },
+  const productLinks = SECTIONS.map((section) => ({
+    href: `#${section.id}`,
+    labelKey: `landing.footer.productLinks.${section.id}`,
+    id: section.id,
+  }));
+
+  const developerLinks = [
+    { href: GITHUB_URL, labelKey: 'landing.footer.resourceLinks.github', external: true },
+    { href: DOCS_URL, labelKey: 'landing.footer.resourceLinks.docs', external: true },
+    { href: '/login', labelKey: 'landing.footer.resourceLinks.login', external: false },
   ];
 
   return (
-    <footer className="border-t border-outline-variant/20 bg-surface-container-low">
+    <footer className="bg-surface-dim">
       <div className="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6">
-        <div className="grid gap-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
+        <div className="grid gap-10 lg:grid-cols-[1.2fr_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
           <div>
-            <div className="flex items-center gap-3">
+            <Link href="/" className="inline-flex items-center gap-3 no-underline">
               <span className="flex size-11 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
                 <Cloud className="!text-3xl fill" />
               </span>
-              <span className="font-display text-body-lg font-bold text-on-surface">
-                EnStorage
-              </span>
-            </div>
-            <p className="mt-4 max-w-sm text-body-md text-on-surface-variant">
+              <span className="font-display text-body-lg font-bold text-on-surface">EnStorage</span>
+            </Link>
+            <p className="mt-4 max-w-xs text-body-md text-on-surface-variant">
               {t('landing.footer.tagline')}
             </p>
-            <p className="mt-3 text-metadata text-secondary">
-              {t('landing.hero.titleLead')}
-            </p>
+            <p className="mt-4 text-metadata text-outline">{t('landing.footer.madeBy')}</p>
           </div>
 
           <div>
@@ -1287,47 +1138,19 @@ function Footer() {
               {t('landing.footer.product')}
             </h3>
             <ul className="mt-4 space-y-2.5">
-              {SECTIONS.map((section) => (
-                <li key={section.id}>
+              {productLinks.map((link) => (
+                <li key={link.id}>
                   <Button
                     type="button"
-                    variant="ghost"
                     size="sm"
-                    onClick={() => scrollToId(section.id)}
-                    className="!h-auto !px-0 text-left font-medium text-on-surface-variant hover:!bg-transparent hover:text-on-surface"
+                    variant="ghost"
+                    onClick={() => scrollToId(link.id)}
+                    className="!h-auto !px-2 !py-1 !font-normal !text-on-surface-variant hover:!text-on-surface"
                   >
-                    {t(section.labelKey)}
+                    {t(link.labelKey)}
                   </Button>
                 </li>
               ))}
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="text-label-sm font-semibold uppercase tracking-[0.14em] text-outline">
-              {t('landing.footer.resources')}
-            </h3>
-            <ul className="mt-4 space-y-2.5">
-              {resourceLinks.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    target={link.external ? '_blank' : undefined}
-                    rel={link.external ? 'noreferrer noopener' : undefined}
-                    className="text-body-md text-on-surface-variant no-underline transition-colors hover:text-on-surface"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-              <li>
-                <Link
-                  href="/login"
-                  className="text-body-md text-on-surface-variant no-underline transition-colors hover:text-on-surface"
-                >
-                  {t('landing.footer.resourceLinks.login')}
-                </Link>
-              </li>
             </ul>
           </div>
 
@@ -1348,6 +1171,26 @@ function Footer() {
               ))}
             </ul>
           </div>
+
+          <div>
+            <h3 className="text-label-sm font-semibold uppercase tracking-[0.14em] text-outline">
+              {t('landing.footer.resources')}
+            </h3>
+            <ul className="mt-4 space-y-2.5">
+              {developerLinks.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    target={link.external ? '_blank' : undefined}
+                    rel={link.external ? 'noreferrer noopener' : undefined}
+                    className="text-body-md text-on-surface-variant no-underline transition-colors hover:text-on-surface"
+                  >
+                    {t(link.labelKey)}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
 
         <div className="mt-12 flex flex-col gap-4 border-t border-outline-variant/20 pt-6 sm:flex-row sm:items-center sm:justify-between">
@@ -1356,7 +1199,6 @@ function Footer() {
               {t('landing.footer.copyright', { year: new Date().getFullYear() })}
             </p>
             <p className="text-metadata text-outline">{t('landing.footer.license')}</p>
-            <p className="text-metadata text-outline">{t('landing.footer.madeBy')}</p>
           </div>
           <Button
             type="button"
@@ -1373,8 +1215,13 @@ function Footer() {
   );
 }
 
+/* ================================== page =================================== */
+
 export default function LandingClient() {
   usePageTitle('landing.pageTitle');
+  const { user, googleLogin } = useAuth();
+  const { push } = useRouter();
+  const [signingIn, setSigningIn] = useState(false);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -1388,16 +1235,28 @@ export default function LandingClient() {
     };
   }, []);
 
+  async function handleSignIn() {
+    if (user) {
+      push('/files');
+      return;
+    }
+    setSigningIn(true);
+    try {
+      await googleLogin();
+    } catch {
+      setSigningIn(false);
+      push('/login');
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background font-body text-on-surface">
-      <Header />
+      <Header onSignIn={handleSignIn} signingIn={signingIn} />
       <main>
         <Hero />
-        <Assurance />
         <Features />
-        <HowItWorks />
-        <ApiShowcase />
-        <FinalCta />
+        <SecuritySection />
+        <ApiSection />
       </main>
       <Footer />
     </div>
