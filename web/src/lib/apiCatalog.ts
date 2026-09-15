@@ -8,7 +8,7 @@
 import type { CodeLang } from '@/lib/highlight';
 import { buildSnippets, SAMPLE_FOLDER_ID, type SnippetSet, type SnippetCall } from '@/lib/apiSnippets';
 
-export type ApiScope = 'read' | 'write' | 'delete' | 'sanctum' | 'public';
+export type ApiScope = 'read' | 'write' | 'delete' | 'full' | 'sanctum' | 'public';
 
 export type Endpoint = {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -29,7 +29,7 @@ export type EndpointGroup = {
 
 export const API_PREFIX = '/api/v1';
 
-export const SCOPE_ORDER: ApiScope[] = ['read', 'write', 'delete', 'sanctum', 'public'];
+export const SCOPE_ORDER: ApiScope[] = ['read', 'write', 'delete', 'full', 'sanctum', 'public'];
 
 export const ENDPOINT_GROUPS: EndpointGroup[] = [
   {

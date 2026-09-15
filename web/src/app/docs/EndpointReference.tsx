@@ -24,10 +24,11 @@ import { InlineMarkdown } from '@/components/InlineMarkdown';
 import { MultiLangSnippet, type SnippetLang } from '@/components/MultiLangSnippet';
 import { API_PREFIX, REFERENCE_SECTIONS, type ApiScope, type ParamRow, type ReferenceEntry } from '@/lib/apiCatalog';
 
-const SCOPE_CHIP: Record<ApiScope, 'success' | 'primary' | 'danger' | 'default'> = {
+const SCOPE_CHIP: Record<ApiScope, 'success' | 'primary' | 'danger' | 'warning' | 'default'> = {
   read: 'success',
   write: 'primary',
   delete: 'danger',
+  full: 'warning',
   sanctum: 'default',
   public: 'default',
 };

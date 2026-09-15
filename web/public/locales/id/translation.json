@@ -964,6 +964,7 @@
         "read": "read",
         "write": "write",
         "delete": "delete",
+        "full": "full",
         "sanctum": "sanctum",
         "public": "publik"
       },
@@ -971,6 +972,7 @@
         "read": "Semua endpoint `GET`: membaca berkas, folder, akun, dan ringkasan kuota.",
         "write": "Membuat dan mengubah: `POST`, `PUT`, `PATCH` yang tidak merusak data.",
         "delete": "Penghapusan permanen lewat `DELETE`, termasuk `files/bulk-delete`.",
+        "full": "Semua hal di atas. Shortcut praktis untuk kunci serbaguna milik Anda sendiri.",
         "sanctum": "Khusus sesi login (cookie Sanctum). Tidak dapat diberikan ke API key.",
         "public": "Tanpa kredensial sama sekali, misalnya tautan berbagi dan halaman masuk."
       },
@@ -978,6 +980,7 @@
         "read": "GET /files",
         "write": "POST /files/upload",
         "delete": "DELETE /files/{id}",
+        "full": "full = read + write + delete",
         "sanctum": "POST /api-keys",
         "public": "GET /s/{token}"
       },
@@ -985,6 +988,7 @@
         "read": "baca",
         "write": "ubah",
         "delete": "hapus",
+        "full": "semua hak",
         "sanctum": "sesi login",
         "public": "tanpa key"
       }

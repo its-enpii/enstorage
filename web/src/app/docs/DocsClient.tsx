@@ -92,10 +92,11 @@ const GROUP_ICONS: Record<string, typeof Cloud> = {
   admin: Shield,
 };
 
-const SCOPE_CHIP: Record<ApiScope, 'success' | 'primary' | 'danger' | 'default'> = {
+const SCOPE_CHIP: Record<ApiScope, 'success' | 'primary' | 'danger' | 'warning' | 'default'> = {
   read: 'success',
   write: 'primary',
   delete: 'danger',
+  full: 'warning',
   sanctum: 'default',
   public: 'default',
 };

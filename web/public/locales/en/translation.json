@@ -964,6 +964,7 @@
         "read": "read",
         "write": "write",
         "delete": "delete",
+        "full": "full",
         "sanctum": "sanctum",
         "public": "public"
       },
@@ -971,6 +972,7 @@
         "read": "Every `GET` endpoint: files, folders, accounts, and quota summaries.",
         "write": "Create and modify: non-destructive `POST`, `PUT`, `PATCH` requests.",
         "delete": "Permanent removal through `DELETE`, including `files/bulk-delete`.",
+        "full": "Everything above. A convenient shortcut for a single all-purpose key of your own.",
         "sanctum": "Reserved for login sessions (Sanctum cookies). Cannot be granted to an API key.",
         "public": "No credentials at all, for example share links and sign-in pages."
       },
@@ -978,6 +980,7 @@
         "read": "GET /files",
         "write": "POST /files/upload",
         "delete": "DELETE /files/{id}",
+        "full": "full = read + write + delete",
         "sanctum": "POST /api-keys",
         "public": "GET /s/{token}"
       },
@@ -985,6 +988,7 @@
         "read": "read",
         "write": "modify",
         "delete": "delete",
+        "full": "all rights",
         "sanctum": "login session",
         "public": "no key"
       }
