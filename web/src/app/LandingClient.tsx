@@ -24,12 +24,7 @@ import { CodeBlock } from '@/components/CodeBlock';
 import { PublicShell } from '@/components/PublicShell';
 import { useGoogleSignIn } from '@/lib/useGoogleSignIn';
 import { DOCS_HREF, prefersReducedMotion, scrollToId } from '@/lib/site';
-import {
-  ENDPOINT_GROUPS,
-  SCOPE_ORDER,
-  SNIPPETS,
-  TOTAL_ENDPOINTS,
-} from '@/lib/apiCatalog';
+import { ENDPOINT_GROUPS, SNIPPETS, TOTAL_ENDPOINTS } from '@/lib/apiCatalog';
 import { usePageTitle } from '@/lib/usePageTitle';
 
 /** Landing anchors the shared header nav points at. */

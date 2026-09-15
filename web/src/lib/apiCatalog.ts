@@ -157,6 +157,13 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
       { method: 'PATCH', path: '/notifications/settings', scope: 'sanctum', key: 'updateNotificationSettings' },
     ],
   },
+  {
+    id: 'admin',
+    key: 'admin',
+    endpoints: [
+      { method: 'GET', path: '/admin/ping', scope: 'sanctum', key: 'adminPing', flag: 'ownerOnly' },
+    ],
+  },
 ];
 
 export const ERROR_CODES: Array<{ status: string; key: string }> = [

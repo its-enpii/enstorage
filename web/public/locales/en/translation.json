@@ -936,7 +936,8 @@
       "discovery": "Search & recent",
       "apiKeys": "API keys",
       "webhooks": "Webhooks",
-      "notifications": "Notifications"
+      "notifications": "Notifications",
+      "admin": "Administration"
     },
     "endpoints": {
       "bulkDelete": "Delete many files in a single request.",
@@ -1009,7 +1010,8 @@
       "uploadChunk": "Send one part of a file currently being uploaded.",
       "uploadComplete": "Mark all parts received and finish the write.",
       "uploadFromUrl": "Fetch a file from a source URL and store it in Drive.",
-      "uploadInit": "Start a chunked upload for a large file."
+      "uploadInit": "Start a chunked upload for a large file.",
+      "adminPing": "Instance health check reserved for the owner role."
     },
     "envelope": {
       "eyebrow": "Contract",

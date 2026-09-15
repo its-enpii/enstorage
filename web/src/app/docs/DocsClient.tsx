@@ -83,6 +83,7 @@ const GROUP_ICONS: Record<string, typeof Cloud> = {
   discovery: Search,
   'api-keys': Api,
   webhooks: Notifications,
+  admin: Shield,
 };
 
 const SCOPE_CHIP: Record<ApiScope, 'success' | 'primary' | 'danger' | 'default'> = {

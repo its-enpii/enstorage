@@ -936,7 +936,8 @@
       "discovery": "Pencarian & Terbaru",
       "apiKeys": "API Keys",
       "webhooks": "Webhooks",
-      "notifications": "Notifikasi"
+      "notifications": "Notifikasi",
+      "admin": "Administrasi"
     },
     "endpoints": {
       "bulkDelete": "Hapus banyak berkas dalam satu permintaan.",
@@ -1009,7 +1010,8 @@
       "uploadChunk": "Kirim satu bagian dari berkas yang sedang diunggah.",
       "uploadComplete": "Tandai semua bagian terkirim dan selesaikan penulisan.",
       "uploadFromUrl": "Unduh berkas dari URL sumber lalu simpan ke Drive.",
-      "uploadInit": "Mulai upload terpotong untuk berkas berukuran besar."
+      "uploadInit": "Mulai upload terpotong untuk berkas berukuran besar.",
+      "adminPing": "Health check instance khusus role owner."
     },
     "envelope": {
       "eyebrow": "Kontrak",
