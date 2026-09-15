@@ -14,13 +14,15 @@ export default function TermsPage() {
         'legal.terms.acceptableUse',
         'legal.terms.yourContent',
         'legal.terms.service',
+        'legal.terms.googleTerms',
         'legal.terms.termination',
         'legal.terms.liability',
+        'legal.terms.warranty',
         'legal.terms.changes',
         'legal.terms.governingLaw',
         'legal.terms.contact',
       ]}
-      lastUpdated="2026-06-25"
+      lastUpdated="2026-09-14"
       pageTitleKey="legal.terms.title"
     />
   );

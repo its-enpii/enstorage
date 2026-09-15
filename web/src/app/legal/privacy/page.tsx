@@ -11,6 +11,8 @@ export default function PrivacyPage() {
       sectionKeys={[
         'legal.privacy.dataWeCollect',
         'legal.privacy.howWeUse',
+        'legal.privacy.googleScopes',
+        'legal.privacy.limitedUse',
         'legal.privacy.sharing',
         'legal.privacy.thirdParty',
         'legal.privacy.security',
@@ -19,7 +21,7 @@ export default function PrivacyPage() {
         'legal.privacy.changes',
         'legal.privacy.contact',
       ]}
-      lastUpdated="2026-06-25"
+      lastUpdated="2026-09-14"
       pageTitleKey="legal.privacy.title"
     />
   );

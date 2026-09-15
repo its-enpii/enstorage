@@ -1,18 +1,16 @@
-'use client';
+import type { Metadata } from 'next';
+import { pageTitle } from '@/lib/serverMetadata';
+import LandingClient from './LandingClient';
 
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import { useAuth } from '@/components/AuthProvider';
-import { Loading } from '@/components/Loading';
+// Description stays literal (like the root layout's) because metadata is
+// rendered once on the server and cannot follow the client locale switch.
+export const metadata: Metadata = {
+  ...pageTitle('landing.pageTitle'),
+  description:
+    'Satu antarmuka untuk semua akun Google Drive Anda: agregasi multi-akun, smart routing kuota, ' +
+    'REST API terbuka, dan privasi self-hosted 100%. Never Leaves Your Drive.',
+};
 
-export default function Home() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (loading) return;
-    router.replace(user ? '/files' : '/login');
-  }, [user, loading, router]);
-
-  return <Loading fullscreen size="lg" />;
+export default function Page() {
+  return <LandingClient />;
 }

@@ -476,49 +476,324 @@
     "lastUpdated": "Last updated",
     "privacy": {
       "title": "Privacy Policy",
-      "intro": "This Privacy Policy describes how enpii studio ('we', 'us', or 'our') collects, uses, and protects information when you use EnStorage ('the Service'). By using the Service you agree to the practices described below.",
+      "intro": "This Privacy Policy explains how enpii studio (“we”) collects, uses, and protects information when you use EnStorage (the “Service”). EnStorage is a self-hosted application: all data is processed on an instance you control, and your files are stored directly in your own Google Drive account. By using the Service, you agree to the practices described below.",
       "dataWeCollect": "1. Information We Collect",
-      "dataWeCollectBody": "Account information: When you sign in with Google, we receive your name, email address, and profile picture from Google. We use this to identify your account and personalize the interface.\n\nFiles and metadata: We store the files you upload and the metadata needed to organize them (folder names, star flags, share settings). File contents are stored exactly as uploaded.\n\nUsage data: We log basic request metadata (timestamp, endpoint, status code) for security and abuse prevention. We do not use third-party analytics or tracking pixels.\n\nAPI keys: When you create a personal access token, only a salted hash is stored. The plaintext token is shown to you once and cannot be recovered later.\n\nGoogle account links: If you connect a Google account for cross-cloud features, we store an encrypted refresh token. We never see your Google password.",
+      "dataWeCollectBody": "Basic Google profile: When you sign in or connect an account with Google, we receive your name, email address, and profile picture (OIDC scopes `userinfo.profile` and `userinfo.email`). We use this to identify your account and personalize the interface.\n\nOAuth tokens: For each Google Drive account you connect, we store an access token, a refresh token, and its expiry. Refresh tokens are encrypted with AES-256 at rest before being written to the database. We never receive or see your Google password.\n\nFile metadata: We store the metadata required to manage files (name, size, MIME type, folder path, upload date, star flags, share link token and settings, and the object ID in Google Drive). The file itself lives in your Google Drive account, not on our server.\n\nAPI keys & webhooks: When you create a personal access token, only a bcrypt hash and the 8-character prefix are stored. The plaintext token is shown once and cannot be retrieved again. For webhooks we store the label, target URL, event list, and an encrypted secret.\n\nUsage data: We log basic request metadata (timestamp, endpoint, status code, API key ID) for security, auditing of sensitive actions, and abuse prevention. We do not ship third-party analytics, advertising, or tracking pixels.",
       "howWeUse": "2. How We Use Information",
-      "howWeUseBody": "We use the information we collect solely to operate the Service: to authenticate you, store and retrieve your files, deliver files you share via share links, and notify you of activity on your account. We do not sell, rent, or trade your personal information to third parties for marketing purposes.",
-      "sharing": "3. File Sharing",
-      "sharingBody": "Folders you choose to share become accessible to anyone who has the share link. Share links include a random token and may be revoked at any time from your Folders page. You are responsible for the content you make available through share links.",
-      "thirdParty": "4. Third-Party Services",
-      "thirdPartyBody": "We rely on the following third parties to operate the Service:\n\nGoogle (OAuth & Google Drive integration): governed by Google's Privacy Policy. We only request the scopes needed to sign you in and, optionally, to access files you choose to import.\n\nHosting and storage providers: data may transit through or be stored on infrastructure providers that we use to run the Service.\n\nEmail providers: if we send transactional email (for example password resets), it is routed through a standard SMTP provider.",
-      "security": "5. Security",
-      "securityBody": "We use industry-standard measures to protect your data, including HTTPS for all transport, hashed passwords, and hashed API keys. No system is perfectly secure; if you discover a vulnerability, please contact us at the address below.",
-      "retention": "6. Data Retention and Deletion",
-      "retentionBody": "Your files remain in your account until you delete them. Deleting a file or folder moves it to a soft-delete state and it is permanently removed after 30 days, unless you restore it. If you delete your account, all associated data is permanently deleted within 30 days.",
-      "yourRights": "7. Your Rights",
-      "yourRightsBody": "You may access, correct, or delete your personal information at any time through the Profile page, or by contacting us. If you are located in the European Economic Area, United Kingdom, or California, you have additional rights under applicable law (GDPR / CCPA), including the right to data portability and to lodge a complaint with a supervisory authority.",
-      "changes": "8. Changes to This Policy",
-      "changesBody": "We may update this Privacy Policy from time to time. Material changes will be announced through the Service. Continued use of the Service after a change indicates acceptance of the updated policy.",
-      "contact": "9. Contact",
-      "contactBody": "For privacy-related questions or to exercise your rights, contact us at enpiiofficial@gmail.com."
+      "howWeUseBody": "We use the information collected solely to operate the Service as you request: authenticating you, routing file writes to the Google Drive account with the largest remaining quota, storing and retrieving your files, generating the share links you ask for, showing combined quota totals, and notifying you of account activity through webhooks.\n\nWe do not sell, rent, trade, or relinquish your personal information to third parties. We do not use your Google Drive data — including its content, names, or any metadata — for unrelated tracking, targeted advertising, or training general-purpose artificial intelligence / machine learning models.",
+      "googleScopes": "3. Google Drive API Policy & OAuth2 Scopes",
+      "googleScopesBody": "EnStorage connects to Google Drive on your behalf, and therefore must comply with the Google API Services User Data Policy, including the Limited Use requirements.\n\nThe scopes we request are limited to the file-management functionality you explicitly ask for:\n\n- `https://www.googleapis.com/auth/drive.file` — create, read, update, and delete files and folders created by EnStorage inside the `EnStorage` folder on your Drive.\n- `https://www.googleapis.com/auth/drive.readonly` — list and read file metadata, and read account quota information (`about.get`) when you enable quota monitoring and cross-cloud sync.\n- `https://www.googleapis.com/auth/userinfo.profile` and `https://www.googleapis.com/auth/userinfo.email` — basic profile for sign-in.\n\nAll of these are non-default scopes and are only requested on the Google consent screen after you press the connect or sign-in button. We never access files outside the structure you manage through EnStorage, never share credentials or tokens with third parties, and never request access to Google services other than Drive and the basic profile.\n\nTransparency note: in some configurations (for example scanning an existing folder structure or reading an account's global quota), your instance may request a broader Drive scope. Consent is always displayed explicitly by Google on the consent screen, and you are free to revoke it at any time.",
+      "limitedUse": "4. Limited Use Compliance",
+      "limitedUseBody": "In line with the Limited Use principles of the Google API Services User Data Policy, we state that:\n\n- We only use or share user data accessed from Google APIs to provide or allow access to legitimate EnStorage features that are relevant to you.\n- We never sell Google Drive user data in any way.\n- We never use or share that data for advertising, regardless of its source.\n- We never use or allow the use of that data to train machine learning or AI models, including generative AI models, either directly or as part of another project or product.\n- We restrict access to that data only to personnel who need it to process it on our behalf, and ensure they are bound by confidentiality obligations.\n\nSelf-hosted instances run on your own infrastructure, so the data controller for your Google Drive data is you, not enpii studio.",
+      "sharing": "5. File Sharing & Share Links",
+      "sharingBody": "Files or folders you choose to share can be accessed by anyone holding the share link. Links contain a random token and can be given an expiry date and a maximum view count. Links can be revoked at any time from the Folder or File page, or through the REST API (`DELETE /api/v1/files/{id}/share`).\n\nWhen a folder is shared, its files are rendered through the EnStorage proxy so your private Google Drive links are never exposed to the recipient. You remain responsible for the content you share through those links.",
+      "thirdParty": "6. Third-Party Services",
+      "thirdPartyBody": "We rely on the following third parties to operate the Service:\n\nGoogle (OAuth2 & Google Drive API): processing is subject to the Google Privacy Policy. We only request the scopes needed to handle sign-in and the file management you ask for, in accordance with the Limited Use clause above.\n\nHosting infrastructure: on self-hosted instances all data resides on servers you control. On managed deployments, data may transit the infrastructure used to run the Service.\n\nEmail providers: if your instance sends transactional email (for example notifications or password resets), mail is routed through the SMTP configuration you provide.",
+      "security": "7. Security",
+      "securityBody": "We apply industry-standard measures to protect your data:\n\n- Transport: all web, mobile, and REST API communication is served over HTTPS/TLS.\n- OAuth tokens: access and refresh tokens are encrypted with AES-256 at rest in your self-hosted local database, with the key derived from your instance's `APP_KEY`.\n- API keys: stored as a bcrypt hash plus a plaintext prefix for lookup; the secret value can never be read back.\n- Account passwords: hashed one-way, never stored in plaintext.\n- Isolation: files, folders, and Drive credentials are scoped per user so other users cannot read them.\n- Rate limiting and audit logs for sensitive actions.\n\nFull details of the security architecture are on the Security & Google API Disclosure page. No system is completely secure; if you discover a vulnerability, follow the reporting procedure described on that page.",
+      "retention": "8. Data Retention and Deletion",
+      "retentionBody": "Your files remain in your Google Drive account until you delete them. Deleting a file or folder moves it to a soft-deleted state and it is permanently removed after 30 days unless you restore it.\n\nSpecific deletions:\n\n- Detaching a Google account: when you revoke a Google account from EnStorage, we attempt to revoke the token at Google, then permanently delete the refresh token, access token, and all file metadata associated with that account from the database.\n- Deleting your EnStorage account: all of your rows (files, folders, share links, API keys, webhooks, activity logs, and Google tokens) are permanently deleted through cascade relations, and tokens are revoked at Google. Files that remain in your Drive are still yours and you can manage them directly in Drive.\n- Share links: revocation takes effect immediately; expired tokens are revoked automatically by a scheduler.\n\nOnce access is revoked, EnStorage has no way to read the contents of your Drive anymore.",
+      "yourRights": "9. Your Rights & Access Controls",
+      "yourRightsBody": "You hold full control over access to your data:\n\n- Revoking access: remove the Google account from the Google Accounts page in EnStorage, or open Google Account Settings → Security → Third-party apps & services (myaccount.google.com/permissions) and revoke EnStorage. Revoking on Google's side also severs the connection permanently.\n- Deleting data: delete files, folders, or share links at any time; delete your account from the Profile page to erase all local metadata.\n- Portability: every operation is available through the REST API, so you can export your file listing and contents programmatically.\n- Access & correction: review or change your profile, language, and password from the Profile page.\n\nIf you are in the European Economic Area, the United Kingdom, or California, you have additional rights under applicable law (GDPR / CCPA), including the right to data portability and the right to lodge a complaint with a supervisory authority. On self-hosted deployments you exercise these requests through your instance administrator.",
+      "changes": "10. Changes to This Policy",
+      "changesBody": "We may update this Privacy Policy from time to time. Material changes will be announced through the Service and on this page together with the “Last updated” date. Continued use of the Service after changes indicates acceptance of the updated policy.",
+      "contact": "11. Contact",
+      "contactBody": "For privacy questions, questions about Google API Services User Data Policy compliance, or to exercise your rights, contact us at enpiiofficial@gmail.com. For security issues, use the vulnerability reporting channel on the Security page."
     },
     "terms": {
       "title": "Terms of Service",
-      "intro": "These Terms of Service ('Terms') govern your use of EnStorage operated by enpii studio ('we', 'us', or 'our'). By creating an account or using the Service, you agree to these Terms.",
+      "intro": "These Terms of Service (the “Terms”) govern your use of EnStorage, developed by enpii studio (“we”). EnStorage is released as self-hosted software: you install and run it on infrastructure you control. By creating an account or using the Service, you agree to these Terms.",
       "eligibility": "1. Eligibility",
-      "eligibilityBody": "You must be at least 13 years old (or the minimum age of digital consent in your jurisdiction) to use the Service. By using the Service you represent that you meet this requirement.",
-      "account": "2. Your Account",
-      "accountBody": "You are responsible for activity on your account and for keeping your credentials secure. You agree to provide accurate information and to notify us promptly of any unauthorized use. We may suspend or terminate accounts that violate these Terms.",
+      "eligibilityBody": "You must be at least 13 years old (or the minimum digital consent age in your jurisdiction) to use the Service. You must own the Google Drive account you connect, or be authorized to act on its owner's behalf. By using the Service, you represent that you meet these requirements.",
+      "account": "2. Your Account & Credentials",
+      "accountBody": "You are responsible for activity on your account and for keeping your credentials secure, including API keys, share tokens, and your instance password. You agree to provide accurate information and to notify your instance administrator promptly of any unauthorized use. API keys must be created with the minimum scope your integration needs, and it is your responsibility to revoke keys you no longer use.",
       "acceptableUse": "3. Acceptable Use",
-      "acceptableUseBody": "You agree not to use the Service to:\n\n- Store or distribute content that is illegal in your jurisdiction, infringes intellectual property rights, or is intended to harm others.\n- Upload malware, ransomware, or other malicious code.\n- Attempt to gain unauthorized access to other accounts, the Service, or its infrastructure.\n- Use the Service in a way that imposes a disproportionate load or interferes with other users.\n- Resell or sublicense access to the Service without our written permission.",
-      "yourContent": "4. Your Content",
-      "yourContentBody": "You retain all rights to the files you upload. You grant us a limited license to host, store, transmit, and process your content solely to operate the Service for you. This license ends when you delete the content, except where retention is required by law.",
-      "service": "5. The Service",
-      "serviceBody": "We may modify, suspend, or discontinue features of the Service at any time, with reasonable notice for material changes. We provide the Service 'as is' and do not guarantee that it will be uninterrupted or error-free.",
-      "termination": "6. Termination",
-      "terminationBody": "You may stop using the Service at any time and delete your account from the Profile page. We may suspend or terminate your access if you breach these Terms, with or without prior notice. Upon termination, your right to use the Service ends, but the sections of these Terms that by their nature should survive will survive.",
-      "liability": "7. Limitation of Liability",
-      "liabilityBody": "To the maximum extent permitted by law, our aggregate liability for any claim arising from or related to the Service is limited to the amount you paid us (if any) in the 12 months before the claim, or USD 10, whichever is greater. We are not liable for indirect, incidental, special, consequential, or punitive damages.",
-      "changes": "8. Changes to These Terms",
-      "changesBody": "We may update these Terms from time to time. Material changes will be announced through the Service. Continued use after a change indicates acceptance of the updated Terms.",
-      "governingLaw": "9. Governing Law",
-      "governingLawBody": "These Terms are governed by the laws of the Republic of Indonesia. Any dispute arising from or related to the Service will be resolved in the courts of Indonesia, unless mandatory consumer protection laws in your jurisdiction give you the right to bring proceedings locally.",
-      "contact": "10. Contact",
-      "contactBody": "Questions about these Terms? Contact us at enpiiofficial@gmail.com."
+      "acceptableUseBody": "You agree not to use the Service to:\n\n- Store or distribute content that is illegal in your jurisdiction, infringes another party's intellectual property rights, or is intended to harm others.\n- Upload malware, ransomware, or other harmful code.\n- Attempt to gain unauthorized access to other accounts, the Service, or its infrastructure.\n- Use the Service in a way that disproportionately burdens or disrupts other users, including flooding the Google Drive API until your quota or Google project is suspended.\n- Resell or sublicense access to the Service without our written permission.\n- Use EnStorage share links to disguise content that violates the Google Drive Terms of Service or the Google API Terms of Service.",
+      "yourContent": "4. Your Content & File Ownership",
+      "yourContentBody": "You retain all rights to the files you upload. Files are physically stored in your own Google Drive account, so your storage relationship with Google is governed by the Google Terms, not by us. You grant the EnStorage instance a limited license to create, move, and delete objects inside the `EnStorage` folder on your Drive solely to perform the functions you request. This license ends when you detach the account or shut down the instance.",
+      "service": "5. The Self-Hosted Nature of the Service",
+      "serviceBody": "EnStorage is provided “as is”. We do not operate a public storage hosting service and do not keep copies of your files on our servers. As a consequence:\n\n- Your instance administrator is responsible for installation, configuration, database backups, `APP_KEY` management, security updates, and legal compliance in your jurisdiction.\n- Availability, capacity, and storage integrity depend on your infrastructure and on the availability of the Google Drive API.\n- We may change, suspend, or discontinue features in future releases at any time, with reasonable notice for material changes in a release version.",
+      "googleTerms": "6. Compliance with Google Terms",
+      "googleTermsBody": "Because EnStorage accesses the Google Drive API, your use of Google-related features is subject to the Google API Terms of Service, the Google Drive Terms of Service, and the Google API Services User Data Policy, including the Limited Use requirements. You may only connect Google accounts you control or whose owner has granted you permission. Google is a third party unrelated to enpii studio and provides no warranties for this Service. You may revoke Google's permission at any time through myaccount.google.com/permissions, and doing so is not a breach of these Terms.",
+      "termination": "7. Termination",
+      "terminationBody": "You may stop using the Service at any time by detaching your Google accounts from the dashboard, deleting your EnStorage account from the Profile page, or shutting down your instance. Your instance administrator may suspend or terminate your access if you breach these Terms, with or without prior notice. After termination, your local metadata is deleted in accordance with the Privacy Policy, while files in your Drive remain yours. Provisions of these Terms that by their nature should survive will survive.",
+      "liability": "8. Limitation of Liability",
+      "liabilityBody": "To the maximum extent permitted by law, we are not liable for losses arising from: failures of your self-hosted infrastructure, loss of Google Drive access, revocation of permissions by Google, changes to or discontinuation of the Google Drive API, damage caused by a leaked or lost `APP_KEY` (which makes stored encrypted tokens unrecoverable), and file deletions you instruct.\n\nOur aggregate liability for any claim arising from or related to the Service is limited to the amount you paid us (if any) in the 12 months before the claim, or USD 10, whichever is greater. We are not liable for indirect, incidental, special, consequential, or punitive damages. We do not warrant that the Service is error-free or always available.",
+      "warranty": "9. Warranties & Disclaimers",
+      "warrantyBody": "Unless expressly stated in release documentation, we disclaim all implied warranties, including merchantability, fitness for a particular purpose, and non-infringement. Open-source releases may be used under the accompanying MIT license; that license does not replace these Terms for commercial use under the EnStorage name.",
+      "changes": "10. Changes to These Terms",
+      "changesBody": "We may update these Terms from time to time. Material changes will be announced through the Service and on this page together with the “Last updated” date. Continued use after changes indicates acceptance of the updated Terms.",
+      "governingLaw": "11. Governing Law",
+      "governingLawBody": "These Terms are governed by the laws of the Republic of Indonesia. Disputes arising from or related to the Service will be resolved in Indonesian courts, unless mandatory consumer protection law in your jurisdiction gives you the right to bring proceedings locally.",
+      "contact": "12. Contact",
+      "contactBody": "Questions about these Terms? Contact us at enpiiofficial@gmail.com. To report a security vulnerability, follow the procedure on the Security & Google API Disclosure page."
+    },
+    "security": {
+      "title": "Security & Google API Disclosure",
+      "intro": "This page describes EnStorage's security architecture and our formal disclosure regarding use of the Google Drive API. It applies to every client: web, mobile, and REST API. The guiding principle is simple — EnStorage is never the storage. Your files stay in your Google Drive account while our system manages only tokens, routing, and metadata on the instance you control.",
+      "architecture": "1. Non-Custodial Architecture",
+      "architectureBody": "When you upload a file, the backend receives the byte stream from your client and forwards it directly (multipart / resumable upload) to the destination Google Drive account inside the `EnStorage` folder. The instance does not write files to disk as permanent storage and keeps no copy warehouse.\n\nAs a result:\n\n- No third-party server ever holds the contents of your files.\n- Revoking access immediately stops the system's ability to read your Drive.\n- Detaching an account or deleting the instance leaves no hidden copy with us, because we never had one.",
+      "transport": "2. Encryption in Transit (TLS/HTTPS)",
+      "transportBody": "Every data path runs over HTTPS/TLS: web pages, the mobile app, OAuth callbacks, the stream/preview proxy, and all REST API endpoints. We recommend serving public deployments behind a reverse proxy with valid certificates, HSTS, and regularly updated TLS suites. Security headers are sent on web responses, and shared content is rendered through the proxy so your Google Drive object IDs are never leaked to end clients.",
+      "atRest": "3. Encryption at Rest for OAuth Tokens",
+      "atRestBody": "Google access and refresh tokens are stored encrypted with AES-256 at rest in the local database (`AES-256-CBC` cipher), with the encryption key derived from your instance's `APP_KEY`, which is never stored alongside the database.\n\nOperational consequences you should understand:\n\n- If the `APP_KEY` is lost, stored tokens cannot be recovered and every Google account must be reconnected.\n- Because that key is yours, we are cryptographically unable to open your tokens.\n- We recommend volume encryption on the database host, encrypted backups, and planned `APP_KEY` rotation in line with your organization's security policy.",
+      "credentials": "4. Password & API Key Hashing",
+      "credentialsBody": "Account passwords are one-way hashed with bcrypt and are never stored or transmitted in plaintext. API keys are generated in the format `en_<8-char-prefix>_<40-char-secret>`; only the bcrypt hash and the prefix are stored in the database, while the secret value is displayed once at creation and cannot be retrieved afterwards. Inbound requests are verified by matching the prefix and then comparing the hash (bcrypt compare).\n\nIn addition: every request is logged with its key ID, scopes are enforced per endpoint (`read`, `write`, `delete`, `full`), keys can expire or be revoked at any time, and rate limiting thwarts brute-force attempts. We recommend one key per integration with the minimum scope, plus periodic rotation.",
+      "scopes": "5. Google OAuth2 Scope Minimization",
+      "scopesBody": "EnStorage only requests the Google scopes needed for the features you enable, and never silently: `drive.file` for file management inside app-created folders, `drive.readonly` for file listing and quota reads, and `userinfo.profile` / `userinfo.email` for the basic sign-in profile. The Google consent screen explicitly shows the requested scopes before any token is issued, and consent is granted by you, not by us.\n\nRefresh tokens are used only to reissue access tokens for operations on your account's behalf; we never sell, share, or publish Google credentials to third parties. The app is designed to meet the verification requirements and the Google API Services User Data Policy, including the Limited Use requirements.",
+      "limitedUse": "6. Limited Use & AI Training Prohibition",
+      "limitedUseBody": "We comply with the Limited Use requirements of the Google API Services User Data Policy. We explicitly state that Google Drive user data:\n\n- Is never sold or rented to anyone.\n- Is never used for advertising or unrelated tracking beyond the features you request.\n- Is never used to train general-purpose machine learning or artificial intelligence models, by us or by anyone acting on our behalf.\n- Is never shared with third parties except for processing on our behalf under confidentiality obligations, or where lawfully required.\n- Is only accessed as strictly necessary to perform the file-management functions you instruct.",
+      "isolation": "7. Multi-Tenant Isolation",
+      "isolationBody": "Every database row — files, folders, Google accounts, API keys, share links, and activity logs — is scoped to its owner's `user_id` and verified on each request. User A's Google accounts cannot be seen, referenced, or used to store User B's files. `owner` and `member` roles differ only in governance actions (user invitations and system-wide audit logs) and never grant access to another user's Drive credentials. API key and Google account management endpoints accept user sessions only and reject API key authentication.",
+      "sharing": "8. Share Link Access Controls",
+      "sharingBody": "Share links use unguessable random tokens, can be given an expiry date and a maximum view count, and can be revoked instantly from the UI or the API. Shared files and folders are rendered through a proxy so the original Google Drive URL is never exposed. Links that expire or reach their view limit are revoked automatically by a scheduler. We recommend always setting an expiry and a view limit when sharing sensitive content.",
+      "logging": "9. Logging, Auditing & Abuse Detection",
+      "loggingBody": "The instance records request metadata (timestamp, endpoint, status code, key/session identity) and audit logs for sensitive actions such as API key creation/revocation, Google account connection/revocation, share link changes, and delete operations. These logs serve security and forensic needs, not behavioral profiling. No third-party analytics, advertising, or tracking pixels ship in the codebase. Because the instance is yours, log retention and access are under your administrator's control.",
+      "userControls": "10. User Controls & Revocation",
+      "userControlsBody": "You can revoke access at any time through two independent paths:\n\n- From EnStorage: open the Google Accounts page and choose Revoke. The system revokes the token at Google (best effort) and permanently deletes the refresh token, access token, and related metadata from the database.\n- From Google: open myaccount.google.com/permissions, select EnStorage, and revoke access. You can also review and sign out of sessions via myaccount.google.com/signin.\n\nAfter revocation the tokens are worthless and the system can no longer read or write files in your Drive. Deleting your EnStorage account from the Profile page performs a thorough deletion of all your local metadata plus token revocation at Google.",
+      "deletion": "11. Data Deletion & Right to Be Forgotten",
+      "deletionBody": "Deletion is permanent and layered: detaching a Google account removes that account's tokens and related metadata; deleting your EnStorage account removes files, folders, share links, API keys, webhooks, logs, and tokens through cascade relations; shutting down the instance removes all metadata from your system. Files in your Google Drive can be deleted directly from Drive, and the cleanup scheduler reconciles that state on the metadata side. Since file contents never reside on our servers, no additional deletion request to enpii studio is needed.",
+      "userResponsibilities": "12. Instance Administrator Responsibilities",
+      "userResponsibilitiesBody": "Because EnStorage is self-hosted, the security of your deployment is also your responsibility. We recommend:\n\n- Keeping `APP_KEY` in a secret manager, never in the database or a repository.\n- Restricting database access and accepting connections only from the application network.\n- Serving the instance behind a reverse proxy with current TLS, HSTS, and rate limiting.\n- Applying security updates regularly and keeping encrypted database backups.\n- Enabling two-step verification on connected Google accounts and creating minimum-scope API keys.\n- Removing unused accounts, revoking unused API keys, and reviewing activity logs periodically.",
+      "vulnerability": "13. Reporting Security Vulnerabilities",
+      "vulnerabilityBody": "If you find a vulnerability in EnStorage, please report it responsibly to enpiiofficial@gmail.com with the subject “Security”. Do not publish vulnerability details (public issues, social media, or blog posts) before it is addressed.\n\nUpon receiving a report we will acknowledge it within at most 7 days, assess impact and severity, prepare a fix or mitigation for the next release, and coordinate a disclosure timeline with you if you would like credit. Please avoid accessing other users' production data, disrupting the service, or downloading data as evidence — demonstrating the vulnerable point is enough.",
+      "status": "14. Limitations & Closing Statement",
+      "statusBody": "No system is completely secure. Encryption protects tokens and transport, but it does not eliminate risks such as compromised Google credentials, misconfigured instances, or social engineering. We update this page as security practices evolve; material changes are announced through releases along with the “Last updated” date on this page. For the privacy aspects of your personal data see the Privacy Policy; for usage conditions see the Terms of Service."
     }
+  },
+  "landing": {
+    "nav": {
+      "features": "Features",
+      "security": "Security",
+      "api": "Integrations & API",
+      "how": "How It Works",
+      "legal": "Legal",
+      "menu": "Open navigation menu",
+      "close": "Close navigation menu",
+      "theme": "Toggle light/dark theme",
+      "language": "Change language",
+      "backToTop": "Back to top",
+      "mainNav": "Main navigation"
+    },
+    "cta": {
+      "signIn": "Sign In",
+      "dashboard": "Open Dashboard",
+      "signInLoading": "Redirecting to Google…"
+    },
+    "hero": {
+      "badge": "Self-Hosted Multi-Account Google Drive Aggregator",
+      "titleLead": "Never Leaves Your Drive.",
+      "titleMain": "One Interface for All Your Google Drive Accounts",
+      "subtitle": "Unite unlimited quota from many Google Drive accounts into a single centralized vault. Built with automatic smart routing, an open REST API, and privacy that stays 100% in your control.",
+      "primary": "Get Started",
+      "secondary": "View API Documentation",
+      "trust": "Runs on your own infrastructure · Open source · No storage middleman",
+      "stats": {
+        "accounts": "Google Drive accounts",
+        "accountsValue": "Unlimited",
+        "file": "Maximum file size",
+        "fileValue": "1 GB",
+        "routing": "File write routing",
+        "routingValue": "Automatic"
+      },
+      "mock": {
+        "eyebrow": "Vault Pool",
+        "title": "Unified Capacity",
+        "subtitle": "3 connected accounts · synced just now",
+        "drive": "Drive {{n}}",
+        "accounts": {
+          "one": "Personal Gmail",
+          "two": "Work Gmail",
+          "three": "Backup Gmail"
+        },
+        "of": "of",
+        "free": "free",
+        "poolLabel": "Total Vault",
+        "poolHint": "Combined quota pool",
+        "used": "Used",
+        "freeTotal": "Free",
+        "selected": "Selected upload target",
+        "statusRouting": "Smart Routing: Active",
+        "statusEncryption": "Encryption: AES-256",
+        "statusProxy": "Direct Proxy Stream",
+        "liveLabel": "Live",
+        "simTitle": "Simulate Smart Routing",
+        "sizeLabel": "File size",
+        "reset": "Reset Simulation",
+        "routed": "{{size}} routed to {{account}}",
+        "none": "No account has enough remaining quota",
+        "mb": "{{n}} MB",
+        "gb": "{{n}} GB"
+      }
+    },
+    "assurance": {
+      "eyebrow": "Google API Compliance",
+      "title": "Google Drive Security & Privacy, Explained Up Front",
+      "subtitle": "EnStorage is never the storage. Your Drive remains the only place your files live — our system only manages routing and metadata on your own server.",
+      "items": {
+        "selfHosted": {
+          "title": "100% Self-Hosted & Non-Custodial",
+          "body": "Files flow directly into your own Google Drive account and are never stored on a third-party server. No hidden warehouse, no permanent storage proxy."
+        },
+        "oauth": {
+          "title": "OAuth2 Token Protection",
+          "body": "Refresh tokens are stored with AES-256 encryption at rest in your self-hosted local database. Your Google password never touches our application."
+        },
+        "limitedUse": {
+          "title": "Google Limited Use Compliance",
+          "body": "Google Drive data is never sold, never shared with advertisers, and never used to train general-purpose AI or machine learning models."
+        },
+        "revocation": {
+          "title": "Instant Revocation",
+          "body": "Revoke access at any time straight from the EnStorage dashboard or from your Google Account settings. Once revoked, the connection is fully severed."
+        }
+      },
+      "revokeHint": "Manage permissions at myaccount.google.com/permissions",
+      "policyLink": "Read the Security & Google API Disclosure Policy",
+      "scopesNote": "OAuth2 scopes are limited to drive.file, drive.readonly, and the basic profile."
+    },
+    "features": {
+      "eyebrow": "Key Features",
+      "title": "Everything Your Vault Needs",
+      "subtitle": "Built API-first: the web and mobile interfaces are just consumers of the same core system.",
+      "items": {
+        "aggregation": {
+          "title": "Multi-Account Aggregation",
+          "body": "Connect unlimited Google Drive accounts and monitor each account's quota in real time from a single list.",
+          "bullets": "Per-account quota monitoring\nAutomatic token refresh\nNested hierarchical folders"
+        },
+        "routing": {
+          "title": "Smart Capacity Routing",
+          "body": "A smart algorithm picks the account with the largest free space that can fit the file — instantly, without you thinking about it.",
+          "bullets": "Largest remaining quota wins\nNo file split across accounts\nFallback when an account fills up"
+        },
+        "api": {
+          "title": "Open REST API & Scoped API Keys",
+          "body": "Create keys scoped to read, write, delete, or full for your n8n, backend, or automation script integrations.",
+          "bullets": "en_<prefix>_<secret> key format\nbcrypt hash, shown only once\nPer-request usage log"
+        },
+        "viewer": {
+          "title": "Universal File Viewer & Safe Proxy",
+          "body": "Stream video and preview documents or high-resolution images through a proxy — without exposing your private Google Drive links.",
+          "bullets": "Direct proxy streaming\nAutomatic thumbnails\nShare links with expiry & view limits"
+        },
+        "isolation": {
+          "title": "Multi-User Isolation",
+          "body": "Files, folders, and Drive credentials are fully isolated between users. User A's Google accounts are unreachable by user B.",
+          "bullets": "Owner & member roles\nAudit log for sensitive actions\nPer-user credentials"
+        },
+        "mobile": {
+          "title": "Mobile Ecosystem & Auto-Backup",
+          "body": "A Flutter mobile app with automatic local gallery backup, complete with WiFi-only and charging-only rules.",
+          "bullets": "Optional gallery backup\nWiFi only / charging only rules\nMobile-specific OAuth client"
+        }
+      }
+    },
+    "how": {
+      "eyebrow": "How It Works",
+      "title": "Three Steps to a Single Vault",
+      "subtitle": "From account connection to safe sharing — everything happens on your own infrastructure.",
+      "steps": {
+        "one": {
+          "title": "Connect a Google Drive Account",
+          "body": "Click the OAuth button once and approve consent on Google's page. The token is received and then encrypted with AES-256 in your local database."
+        },
+        "two": {
+          "title": "Upload Files or Folders",
+          "body": "Through the web app, the mobile app, or the REST API. Smart routing immediately decides the destination account based on the largest free space."
+        },
+        "three": {
+          "title": "Enjoy Unified Quota & Share Securely",
+          "body": "Manage everything from one interface, share links with an expiry date and view limit, then revoke at any time."
+        }
+      },
+      "footnote": "Non-destructive: deleting a file in EnStorage deletes it in Drive — no leftover copy anywhere else."
+    },
+    "api": {
+      "eyebrow": "For Developers",
+      "title": "A REST API You Can Call from Anywhere",
+      "subtitle": "One base endpoint, one Authorization header. Works with n8n, Python, Node.js, or straight cURL from your terminal.",
+      "tabs": {
+        "upload": "Upload File",
+        "quota": "Check Quota",
+        "share": "Share Link"
+      },
+      "captions": {
+        "upload": "Upload multiple files and let the system pick the destination Google Drive account for you.",
+        "quota": "Fetch the combined quota aggregate across all connected accounts.",
+        "share": "Generate a share link with an expiry date and a view limit."
+      },
+      "copy": "Copy snippet",
+      "copied": "Copied to clipboard",
+      "copyFailed": "Failed to copy snippet",
+      "sdkTitle": "Plugs into Your Automations",
+      "sdks": {
+        "n8n": "HTTP Request node in an n8n workflow",
+        "python": "requests calls inside an ETL script",
+        "node": "fetch() in a Node.js service",
+        "curl": "cURL from a terminal or Makefile"
+      },
+      "keysTitle": "Scoped API Keys",
+      "keys": {
+        "read": "Read file, folder, and quota listings",
+        "write": "Upload and move files",
+        "delete": "Delete files, folders, and share links",
+        "full": "Every action above in a single key"
+      },
+      "docsNote": "Full documentation lives in the docs/api.md file in the repository.",
+      "snippets": {
+        "upload": "curl -X POST \"$API_BASE/files/upload\" \\\n  -H \"Authorization: Bearer en_your_api_key\" \\\n  -F \"file[]=@./report.pdf\" \\\n  -F \"shareable=1\"\n\n# 202 Accepted\n{\n  \"success\": true,\n  \"data\": {\n    \"accepted\": [{\n      \"file_id\": \"01J9ZQ...\",\n      \"name\": \"report.pdf\",\n      \"size\": 820341,\n      \"status\": \"pending\",\n      \"share_url\": \"https://vault.example.id/s/a1b2c3...\"\n    }],\n    \"count\": 1\n  }\n}",
+        "quota": "curl \"$API_BASE/storage/summary\" \\\n  -H \"Authorization: Bearer en_your_api_key\"\n\n# 200 OK\n{\n  \"success\": true,\n  \"data\": {\n    \"total\": 48318382080,\n    \"used\": 28577734656,\n    \"free\": 19740647424,\n    \"accounts\": [\n      { \"label\": \"Gmail Utama\", \"free\": 2726297600 },\n      { \"label\": \"Gmail Kerja\", \"free\": 8727833600 },\n      { \"label\": \"Gmail Cadangan\", \"free\": 6209673216 }\n    ]\n  }\n}",
+        "share": "curl -X POST \"$API_BASE/files/01J9ZQ.../share\" \\\n  -H \"Authorization: Bearer en_your_api_key\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{ \"expires_at\": \"2026-12-31T00:00:00Z\", \"max_views\": 25 }'\n\n# 200 OK\n{\n  \"success\": true,\n  \"data\": {\n    \"share_token\": \"a1b2c3...\",\n    \"share_url\": \"https://vault.example.id/s/a1b2c3...\",\n    \"expires_at\": \"2026-12-31T00:00:00Z\",\n    \"max_views\": 25\n  }\n}"
+      },
+      "sdkSnippets": {
+        "n8n": "// n8n — HTTP Request node\n{\n  \"method\": \"POST\",\n  \"url\": \"https://vault.example.id/api/v1/files/upload\",\n  \"authentication\": \"generic: Header Auth\",\n  \"sendHeaders\": true,\n  \"headers\": {\n    \"Authorization\": \"Bearer en_your_api_key\"\n  },\n  \"body\": { \"file[]\": \"@/report.pdf\" }\n}",
+        "python": "# Python\nimport requests\n\nr = requests.post(\n    f\"{BASE}/files/upload\",\n    headers={\"Authorization\": f\"Bearer {KEY}\"},\n    files={\"file[]\": open(\"report.pdf\", \"rb\")},\n)\nprint(r.json()[\"data\"][\"accepted\"][0][\"share_url\"])",
+        "node": "// Node.js\nconst res = await fetch(`${BASE}/storage/summary`, {\n  headers: { Authorization: `Bearer ${KEY}` },\n});\nconst { data } = await res.json();\nconsole.log(`${data.free} bytes free across ${data.accounts.length} accounts`);",
+        "curl": "# cURL — create a scoped API key (session auth)\ncurl -X POST \"$API_BASE/api-keys\" \\\n  -H \"Authorization: Bearer $SANCTUM_TOKEN\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{ \"label\": \"n8n Workflow\", \"scopes\": [\"read\", \"write\"] }'"
+      },
+      "endpointsTitle": "Key Endpoints",
+      "keySecurityNote": "Keys are stored as bcrypt hashes and displayed only once.",
+      "sdkTabs": {
+        "n8n": "n8n",
+        "python": "Python",
+        "node": "Node.js",
+        "curl": "cURL"
+      }
+    },
+    "finalCta": {
+      "eyebrow": "Ready When You Are",
+      "title": "Take Back Control of Your Google Drive Quota",
+      "subtitle": "Deploy EnStorage on your own server in minutes, or sign in if your instance is already running.",
+      "primary": "Get Started",
+      "secondary": "View API Documentation",
+      "note": "Your instance runs on your private infrastructure — we never hold your files."
+    },
+    "footer": {
+      "tagline": "Centralized storage backed by multiple Google Drive accounts.",
+      "product": "Product",
+      "productLinks": {
+        "features": "Key Features",
+        "security": "Security",
+        "api": "API & Integrations",
+        "how": "How It Works"
+      },
+      "resources": "Resources",
+      "resourceLinks": {
+        "github": "GitHub Repository",
+        "docs": "API Documentation",
+        "login": "Sign in to Instance"
+      },
+      "legal": "Legal",
+      "legalLinks": {
+        "privacy": "Privacy Policy",
+        "terms": "Terms of Service",
+        "security": "Security & Google API"
+      },
+      "copyright": "Copyright {{year}} enpii studio. All rights reserved.",
+      "license": "Released under the MIT license.",
+      "madeBy": "Built by enpii studio · Never Leaves Your Drive."
+    },
+    "pageTitle": "Never Leaves Your Drive."
   }
 }
