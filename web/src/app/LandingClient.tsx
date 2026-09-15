@@ -5,7 +5,6 @@ import Link from 'next/link';
 import {
   AccountTree,
   ArrowForward,
-  Cloud,
   Code,
   Layers,
   Lock,
@@ -24,8 +23,9 @@ import { CodeBlock } from '@/components/CodeBlock';
 import { PublicShell } from '@/components/PublicShell';
 import { useGoogleSignIn } from '@/lib/useGoogleSignIn';
 import { DOCS_HREF, prefersReducedMotion, scrollToId } from '@/lib/site';
-import { ENDPOINT_GROUPS, SNIPPETS, TOTAL_ENDPOINTS } from '@/lib/apiCatalog';
+import { ENDPOINT_GROUPS, SNIPPETS, TOTAL_ENDPOINTS, snippetCode } from '@/lib/apiCatalog';
 import { usePageTitle } from '@/lib/usePageTitle';
+import { ArchitectureFlowHero } from './ArchitectureFlowHero';
 
 /** Landing anchors the shared header nav points at. */
 const SECTIONS = [
@@ -177,211 +177,6 @@ function SectionHeading({
   );
 }
 
-/* ============================ storage pool console ============================ */
-
-type Drive = { key: 'one' | 'two' | 'three'; totalGB: number; usedGB: number };
-
-/** Free-tier sized accounts so the pool maths stays believable. */
-const DRIVES: Drive[] = [
-  { key: 'one', totalGB: 15, usedGB: 12.4 },
-  { key: 'two', totalGB: 15, usedGB: 6.8 },
-  { key: 'three', totalGB: 15, usedGB: 9.1 },
-];
-
-const PRESET_SIZES_GB = [2, 6, 12] as const;
-
-function formatGB(value: number) {
-  return `${Number.isInteger(value) ? value : value.toFixed(1)} GB`;
-}
-
-/**
- * Read-only preview of the real routing rule: the whole file goes to the
- * connected account with the largest remaining space that can fit it.
- */
-function StoragePoolConsole() {
-  const { t } = useTranslation();
-  const [sizeGB, setSizeGB] = useState<number>(PRESET_SIZES_GB[0]);
-
-  const rows = useMemo(
-    () =>
-      DRIVES.map((drive, index) => {
-        const free = Math.round((drive.totalGB - drive.usedGB) * 10) / 10;
-        return {
-          index,
-          label: t(`landing.hero.mock.accounts.${drive.key}`),
-          email: t(`landing.hero.mock.emails.${drive.key}`),
-          totalGB: drive.totalGB,
-          usedGB: drive.usedGB,
-          free,
-          usedPct: Math.round((drive.usedGB / drive.totalGB) * 100),
-          fits: free >= sizeGB,
-        };
-      }),
-    [sizeGB, t],
-  );
-
-  const poolTotal = rows.reduce((sum, row) => sum + row.totalGB, 0);
-  const poolUsed = Math.round(rows.reduce((sum, row) => sum + row.usedGB, 0) * 10) / 10;
-  const poolFree = Math.round((poolTotal - poolUsed) * 10) / 10;
-  const poolPct = Math.round((poolUsed / poolTotal) * 100);
-
-  const target = useMemo(() => {
-    const eligible = rows.filter((row) => row.fits);
-    if (!eligible.length) return null;
-    return eligible.reduce((best, row) => (row.free > best.free ? row : best));
-  }, [rows]);
-
-  const sizeLabel = t('landing.hero.mock.sizeGb', { n: sizeGB });
-
-  return (
-    <div className="rounded-card border border-outline-variant/20 bg-surface p-6 shadow-ambient sm:p-7">
-      <div className="flex items-baseline justify-between gap-4">
-        <h3 className="font-display text-body-lg font-semibold text-on-surface">
-          {t('landing.hero.mock.title')}
-        </h3>
-        <p className="text-metadata text-outline">{t('landing.hero.mock.subtitle')}</p>
-      </div>
-
-      {/* Combined pool */}
-      <div className="mt-5 rounded-xl bg-surface-container p-4">
-        <p className="text-metadata uppercase tracking-wider text-outline">
-          {t('landing.hero.mock.poolLabel')}
-        </p>
-        <div className="mt-1 flex items-end justify-between gap-3">
-          <p className="font-display text-headline-lg text-on-surface tabular-nums">
-            {formatGB(poolTotal)}
-          </p>
-          <p className="text-metadata text-on-surface-variant tabular-nums">
-            {t('landing.hero.mock.used')} {poolPct}% · {formatGB(poolUsed)}
-          </p>
-        </div>
-        <div className="mt-3 flex h-2 gap-px overflow-hidden rounded-full bg-surface-container-highest">
-          {rows.map((row) => (
-            <div
-              key={row.index}
-              className="h-full bg-surface-container-highest"
-              style={{ width: `${(row.totalGB / poolTotal) * 100}%` }}
-              title={row.label}
-            >
-              <div
-                className={clsx('h-full', target?.index === row.index ? 'bg-primary' : 'bg-secondary/60')}
-                style={{ width: `${row.usedPct}%` }}
-              />
-            </div>
-          ))}
-        </div>
-        <p className="mt-2 text-metadata font-semibold text-primary tabular-nums">
-          {formatGB(poolFree)} {t('landing.hero.mock.free')}
-        </p>
-      </div>
-
-      {/* Accounts */}
-      <ul className="mt-4 space-y-2">
-        {rows.map((row) => {
-          const selected = target?.index === row.index;
-          return (
-            <li
-              key={row.index}
-              className={clsx(
-                'rounded-xl border px-3 py-2.5',
-                selected
-                  ? 'border-primary/45 bg-primary-container/12'
-                  : 'border-outline-variant/20 bg-surface-container/50',
-              )}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <span
-                    className={clsx(
-                      'flex size-8 shrink-0 items-center justify-center rounded-lg',
-                      selected
-                        ? 'bg-primary-container text-on-primary-container'
-                        : 'bg-surface-container-highest text-on-surface-variant',
-                    )}
-                  >
-                    <Cloud className="!text-lg" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-on-surface">{row.label}</p>
-                    <p className="truncate text-metadata text-outline">{row.email}</p>
-                  </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-sm font-semibold text-on-surface tabular-nums">
-                    {formatGB(row.free)} {t('landing.hero.mock.free')}
-                  </p>
-                  <p className="text-metadata text-outline tabular-nums">
-                    {formatGB(row.usedGB)} / {formatGB(row.totalGB)}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
-                <div
-                  className={clsx('h-full rounded-full', selected ? 'bg-primary' : 'bg-secondary/60')}
-                  style={{ width: `${row.usedPct}%` }}
-                />
-              </div>
-              {selected && (
-                <p className="mt-2 flex items-center gap-1.5 text-metadata font-semibold text-primary">
-                  <Route className="!text-sm" />
-                  {t('landing.hero.mock.selected')}
-                </p>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-
-      {/* Routing preview */}
-      <div className="mt-5 border-t border-outline-variant/20 pt-4">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-metadata uppercase tracking-wider text-outline">
-            {t('landing.hero.mock.sizeLabel')}
-          </span>
-          <div className="flex gap-1 rounded-full bg-surface-container p-1" role="group">
-            {PRESET_SIZES_GB.map((size) => (
-              <Button
-                key={size}
-                type="button"
-                size="sm"
-                variant={sizeGB === size ? 'primary' : 'ghost'}
-                aria-pressed={sizeGB === size}
-                onClick={() => setSizeGB(size)}
-                className="!h-8 rounded-full px-3 tabular-nums"
-              >
-                {t('landing.hero.mock.sizeGb', { n: size })}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <p
-          className={clsx(
-            'mt-3 flex items-start gap-2 text-metadata leading-relaxed',
-            target ? 'text-on-surface-variant' : 'text-error',
-          )}
-        >
-          {target ? (
-            <Route className="!text-base mt-0.5 shrink-0 text-primary" />
-          ) : (
-            <Shield className="!text-base mt-0.5 shrink-0" />
-          )}
-          <span>
-            {target
-              ? t('landing.hero.mock.routed', {
-                  size: sizeLabel,
-                  account: target.label,
-                  free: formatGB(target.free),
-                })
-              : t('landing.hero.mock.none', { size: sizeLabel })}
-          </span>
-        </p>
-        <p className="mt-2 text-metadata text-outline">{t('landing.hero.mock.noSplit')}</p>
-      </div>
-    </div>
-  );
-}
-
 /* =================================== hero =================================== */
 
 function Hero() {
@@ -429,7 +224,7 @@ function Hero() {
         </Reveal>
 
         <Reveal delay={120}>
-          <StoragePoolConsole />
+          <ArchitectureFlowHero />
         </Reveal>
       </div>
     </section>
@@ -618,7 +413,7 @@ function ApiSection() {
           <Reveal delay={90}>
             {sample && (
               <CodeBlock
-                code={sample.code}
+                code={snippetCode(sample)}
                 file={sample.file}
                 labelKey="landing.teaser.ctaHint"
                 maxHeightClass="max-h-80"

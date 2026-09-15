@@ -636,6 +636,66 @@
         "routed": "A {{size}} file is stored whole in {{account}} — {{free}} free.",
         "none": "{{size}} is larger than the roomiest account has free — uploads like this fail early instead of being split.",
         "noSplit": "One file is always stored whole in one account, never split across accounts."
+      },
+      "flow": {
+        "title": "Architecture flow diagram",
+        "subtitle": "Users, apps, and scripts talk to one hub — EnStorage picks the destination Drive",
+        "inbound": "User side",
+        "outbound": "Your Google Drives",
+        "hub": "EnStorage Core Engine",
+        "hubHint": "Runs on your own server",
+        "simulate": "Run flow",
+        "requestLabel": "Request type",
+        "sizeLabel": "New file size",
+        "sizeGb": "{{n}} GB",
+        "free": "free",
+        "usedOf": "{{used}} / {{total}}",
+        "target": "Target",
+        "trunkAria": "Request flowing into EnStorage",
+        "branchAria": "Write flowing from EnStorage into a Google Drive account",
+        "noSplit": "One file is always stored whole in one account, never split across accounts.",
+        "nodes": {
+          "user": "User",
+          "userHint": "Web dashboard & mobile",
+          "script": "Scripts & integrations",
+          "scriptHint": "REST API + API key",
+          "apps": "Client apps",
+          "appsHint": "Upload, read, delete, stream"
+        },
+        "requests": {
+          "upload": "Upload",
+          "read": "Read",
+          "stream": "Stream",
+          "delete": "Delete"
+        },
+        "capabilities": {
+          "routing": "Smart capacity routing",
+          "vault": "AES-256 encrypted token vault",
+          "proxy": "Direct proxy streamer"
+        },
+        "accounts": {
+          "one": "Primary Drive account",
+          "two": "Work Drive account",
+          "three": "Backup Drive account"
+        },
+        "emails": {
+          "one": "primary@gmail.com",
+          "two": "work@gmail.com",
+          "three": "backup@gmail.com"
+        },
+        "phase": {
+          "inbound": "Request reaches the hub: API key checked, scope verified.",
+          "routing": "The hub compares the remaining quota of every Drive.",
+          "outbound": "Writing to the destination Drive with an encrypted token.",
+          "done": "Done."
+        },
+        "verdict": {
+          "upload": "A {{size}} file is stored whole in {{account}} — {{free}} free.",
+          "read": "The file is read from {{account}} and served back through the hub — your Drive links stay private.",
+          "stream": "Playback streams straight from {{account}} through the EnStorage proxy, no download first.",
+          "delete": "Deletion runs against {{account}} — the object is removed from Google Drive for good."
+        },
+        "none": "{{size}} is larger than the roomiest account has free — uploads like this are rejected early, never split."
       }
     },
     "features": {
@@ -819,13 +879,15 @@
     "badge": {
       "version": "v1",
       "endpoints": "{{count}} endpoints",
-      "prefix": "{{prefix}} prefix"
+      "prefix": "{{prefix}} prefix",
+      "reference": "{{count}} fully documented"
     },
     "meta": {
       "version": "Version",
       "versionValue": "v1",
       "endpoints": "Total endpoints",
-      "prefix": "Prefix"
+      "prefix": "Prefix",
+      "reference": "Reference cards"
     },
     "nav": {
       "start": "Quick start",
@@ -835,7 +897,8 @@
       "envelope": "Response format",
       "errors": "Error codes",
       "rate-limit": "Rate limiting",
-      "openapi": "OpenAPI & links"
+      "openapi": "OpenAPI & links",
+      "reference": "Endpoint reference"
     },
     "start": {
       "eyebrow": "Start here",
@@ -1101,6 +1164,346 @@
     "cta": {
       "createKey": "Create an API key",
       "backHome": "Back to home"
+    },
+    "snippetAria": "Request code example",
+    "responseAria": "Response example",
+    "lang": {
+      "label": "Snippet language",
+      "aria": "Choose snippet language",
+      "short": {
+        "curl": "cURL",
+        "javascript": "JS",
+        "php": "PHP",
+        "phpGuzzle": "Guzzle"
+      },
+      "curl": "cURL",
+      "javascript": "JavaScript (Node.js / Fetch)",
+      "php": "PHP (cURL)",
+      "phpGuzzle": "PHP (Guzzle)"
+    },
+    "ref": {
+      "eyebrow": "Reference",
+      "title": "Every endpoint, in detail",
+      "subtitle": "Each card carries a parameter table, request samples in four languages, and the real response. Pick a language once and the whole page follows.",
+      "legend": "**{{count}}** endpoints with request, parameters, and response.",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all",
+      "required": "required",
+      "optional": "optional",
+      "default": "default",
+      "errorsLabel": "Errors:",
+      "columns": {
+        "name": "Name",
+        "type": "Type",
+        "required": "Status",
+        "description": "Description"
+      },
+      "tables": {
+        "headers": "Headers",
+        "path": "Path parameters",
+        "query": "Query parameters",
+        "body": "Request body",
+        "request": "Request",
+        "response": "Response"
+      },
+      "groups": {
+        "auth": {
+          "title": "Authentication & API keys",
+          "hint": "Sign in, sessions, and issuing access keys."
+        },
+        "files": {
+          "title": "Files",
+          "hint": "Smart upload, listing, metadata, download/stream, edit, delete."
+        },
+        "folders": {
+          "title": "Folders",
+          "hint": "Create, read, move, and remove the folder tree."
+        },
+        "storage": {
+          "title": "Storage & quota",
+          "hint": "Pooled quota and the connected Drive accounts."
+        },
+        "share": {
+          "title": "Share links",
+          "hint": "Public links with expiry dates and view budgets."
+        },
+        "discovery": {
+          "title": "Search, starred & recent",
+          "hint": "Find files without memorising their paths."
+        },
+        "webhooks": {
+          "title": "Webhooks",
+          "hint": "Push events into your own systems."
+        }
+      },
+      "notes": {
+        "cookieNote": "The same response also sets an `httpOnly` cookie for the web dashboard.",
+        "sanctumOnlyNote": "`/api-keys/*` and `/webhooks/*` are reachable through a Sanctum session only, never through an API key.",
+        "keyFormatNote": "Keys follow `en_<8-char-prefix>_<40-char-secret>`: the prefix speeds up lookups, the secret is never stored in plaintext.",
+        "asyncNote": "`202` means the file entered the queue. Poll `GET /files/{id}/status` until it reads `done`.",
+        "rootDefaultNote": "Without `folder_id` the result is scoped to the root. Send `folder_id=` (empty) for files in every folder.",
+        "noTempStorageNote": "Bytes are proxied straight from Drive to the client; your server keeps no copy.",
+        "statusValuesNote": "Status moves `pending` → `uploading` → `done`, or `failed` when Drive refuses.",
+        "rangeNote": "The proxy streams the response, so HTML5 players can seek without exposing a Drive link.",
+        "renameOnMoveNote": "If the name is taken in the destination folder, EnStorage appends a suffix (`laporan (1).pdf`) and reports it in `renamed`.",
+        "permanentNote": "There is no EnStorage trash bin: once gone, the object is gone from Google Drive too.",
+        "batchStarNote": "Batch move and batch star run as repeated `PATCH /files/{id}` calls; only batch delete has its own route.",
+        "publicUrlNote": "The URL must be public: private hosts, non-80/443 ports, and suspicious redirects are rejected.",
+        "resumeNote": "Re-sending a chunk you already delivered is safe — the server answers `200` without duplicating bytes.",
+        "illegalCharsNote": "Folder names cannot contain `\\ / : * ? \" < > |`.",
+        "cycleNote": "Moving a folder inside one of its own descendants is rejected with `422`.",
+        "quotaCacheNote": "Quota is read from the Google API and cached for 5 minutes per account, so this call is cheap.",
+        "oauthOutNote": "Raw Google OAuth callbacks are deliberately undocumented: connect accounts through the dashboard instead.",
+        "shareIdempotentNote": "A second call returns the same token; use `/share-links` when you need extra links.",
+        "folderShareNote": "Folders use the matching pair: `GET|POST /folders/{id}/share-links`.",
+        "revokeAllNote": "`DELETE /files/{id}/share` revokes every link on the file at once.",
+        "streamNote": "Without `?info=1` the response is binary, so the same URL feeds a `<video>` / `<audio>` element.",
+        "starredNote": "Stars live in the EnStorage index, not as a Google Drive property.",
+        "cursorNote": "Pass `next_cursor` back unchanged; the format is opaque and can change.",
+        "webhookSanctumNote": "Like API keys: session auth only.",
+        "signatureNote": "Verify the `X-Webhook-Signature` header with that secret before trusting a payload."
+      },
+      "items": {
+        "login": {
+          "title": "Sign in with email",
+          "body": "Exchange an email and password for a Sanctum session."
+        },
+        "me": {
+          "title": "Current session",
+          "body": "The signed-in user record."
+        },
+        "listKeys": {
+          "title": "List API keys",
+          "body": "Every key owned by this account."
+        },
+        "createKey": {
+          "title": "Create an API key",
+          "body": "The response carries `plaintext` exactly once."
+        },
+        "revokeKey": {
+          "title": "Revoke an API key",
+          "body": "Retire a key before its expiry date."
+        },
+        "upload": {
+          "title": "Upload files",
+          "body": "Multipart upload with smart routing to the roomiest account."
+        },
+        "listFiles": {
+          "title": "List files",
+          "body": "Filters, sorting, and pagination in one call."
+        },
+        "showFile": {
+          "title": "File details",
+          "body": "Full metadata for one file."
+        },
+        "fileStatus": {
+          "title": "Upload status",
+          "body": "Follow the write to Google Drive."
+        },
+        "downloadFile": {
+          "title": "Download a file",
+          "body": "Byte stream proxied from Drive."
+        },
+        "streamFile": {
+          "title": "Stream media",
+          "body": "Play audio, video, or documents without downloading first."
+        },
+        "thumbnail": {
+          "title": "Fetch thumbnail",
+          "body": "Generated WebP preview."
+        },
+        "updateFile": {
+          "title": "Update a file",
+          "body": "Rename or star it."
+        },
+        "moveFile": {
+          "title": "Move a file",
+          "body": "Relocate it to another folder or the root."
+        },
+        "deleteFile": {
+          "title": "Delete permanently",
+          "body": "The object disappears from Google Drive."
+        },
+        "bulkDelete": {
+          "title": "Batch delete",
+          "body": "Remove up to 50 files in one request."
+        },
+        "uploadFromUrl": {
+          "title": "Upload from URL",
+          "body": "The server pulls a public URL into a file."
+        },
+        "uploadInit": {
+          "title": "Start a chunked upload",
+          "body": "Open a multi-chunk upload session."
+        },
+        "uploadChunk": {
+          "title": "Send one chunk",
+          "body": "Upload a single part by index."
+        },
+        "uploadComplete": {
+          "title": "Finish chunked upload",
+          "body": "Assemble the parts and store the file."
+        },
+        "createFolder": {
+          "title": "Create a folder",
+          "body": "Add a folder in the root or under a parent."
+        },
+        "listFolders": {
+          "title": "List folders",
+          "body": "Direct children of one folder."
+        },
+        "showFolder": {
+          "title": "Folder contents",
+          "body": "Subfolders and files inside one folder."
+        },
+        "updateFolder": {
+          "title": "Update a folder",
+          "body": "Rename or star it."
+        },
+        "moveFolder": {
+          "title": "Move a folder",
+          "body": "Relocate a whole subtree."
+        },
+        "downloadFolder": {
+          "title": "Download a folder",
+          "body": "Everything arrives as one ZIP."
+        },
+        "deleteFolder": {
+          "title": "Delete a folder",
+          "body": "Remove the folder and its contents."
+        },
+        "summary": {
+          "title": "Storage summary",
+          "body": "Total, used, and free across every account."
+        },
+        "listAccounts": {
+          "title": "List Google accounts",
+          "body": "Connected Drive accounts with per-account quota."
+        },
+        "syncQuota": {
+          "title": "Sync quota",
+          "body": "Force one account to re-read its quota."
+        },
+        "shareFile": {
+          "title": "Create a share link",
+          "body": "Issue a public token with expiry and view limits."
+        },
+        "listFileShareLinks": {
+          "title": "List share links",
+          "body": "Every active link on one file."
+        },
+        "createFileShareLink": {
+          "title": "Add a share link",
+          "body": "Create another link with its own limits."
+        },
+        "revokeShareLink": {
+          "title": "Revoke a link",
+          "body": "Kill one link without touching the rest."
+        },
+        "publicShare": {
+          "title": "Public access",
+          "body": "Download or stream a file with the token alone."
+        },
+        "publicShareView": {
+          "title": "Link page",
+          "body": "Redirect to the viewer for one token."
+        },
+        "searchFiles": {
+          "title": "Search files",
+          "body": "Typo-tolerant search with highlighted matches."
+        },
+        "starredFiles": {
+          "title": "Starred files",
+          "body": "Every file you starred."
+        },
+        "recent": {
+          "title": "Recent items",
+          "body": "Newest root-level files and folders."
+        },
+        "byHashes": {
+          "title": "Duplicate check by hash",
+          "body": "Ask which SHA-256 hashes already exist."
+        },
+        "listWebhooks": {
+          "title": "List webhooks",
+          "body": "Every registered webhook."
+        },
+        "createWebhook": {
+          "title": "Create a webhook",
+          "body": "Register an endpoint to receive events."
+        }
+      }
+    },
+    "p": {
+      "bearerHeader": "Your `en_…` API key or Sanctum token, prefixed with `Bearer `.",
+      "jsonHeader": "Always `application/json` for JSON bodies.",
+      "email": "Account email address.",
+      "password": "Password, minimum 8 characters when registering.",
+      "keyLabel": "Internal label, up to 100 characters.",
+      "keyScopes": "Any of `read`, `write`, `delete`, `full`.",
+      "keyExpires": "Auto-expiry; leave empty for a permanent key.",
+      "keyId": "Key id as shown in the list.",
+      "fileField": "Send one file with `file=@…` or several with `file[]=@…`. Up to 10 files, 1 GB each.",
+      "folderIdField": "Destination folder; omit for the root.",
+      "clientKey": "Your own id for matching the reply. `A-Za-z0-9._:-`, up to 128 characters.",
+      "shareable": "Create a public link as soon as the upload is accepted.",
+      "shareExpiresField": "Expiry for the link created with this upload.",
+      "shareMaxViewsField": "1–10000 visits; empty means unlimited.",
+      "contentHash": "SHA-256 hex (64 characters) for client-side dedup.",
+      "folderIdQuery": "`null` or empty means the root; send `folder_id=` empty for every folder.",
+      "searchQuery": "Substring match on the name, case-insensitive.",
+      "typeQuery": "Shortcut: `image`, `pdf`, `doc`, `video`, `audio`.",
+      "mimeTypeQuery": "MIME prefix filter, e.g. `image/`.",
+      "statusQuery": "`pending`, `uploading`, `done`, `failed`. Failed uploads are hidden by default.",
+      "starredQuery": "Only starred items.",
+      "sortQuery": "`name`, `size`, `created_at`, or `uploaded_at`.",
+      "dirQuery": "Sort direction.",
+      "page": "Page number, starting at 1.",
+      "perPage": "1–100 items per page.",
+      "fileId": "File id from a listing or an upload reply.",
+      "inlineQuery": "`1` sends `Content-Disposition: inline` for previews.",
+      "inlineTrue": "`1` so the browser plays instead of saving.",
+      "isStarred": "Add or remove the star.",
+      "newName": "New name, up to 255 characters.",
+      "folderIdBody": "Destination folder; `null` moves to the root.",
+      "idsBatch": "1–50 ids. Ones you do not own come back in `not_found`.",
+      "sourceUrl": "Public http/https URL the server can fetch.",
+      "nameOverride": "Override the stored name; defaults to the URL or Content-Disposition.",
+      "fileName": "Final file name, up to 255 characters.",
+      "mimeTypeBody": "MIME type reported to Drive.",
+      "totalSize": "Full size in bytes.",
+      "totalChunks": "1–1000.",
+      "uploadFileId": "Id returned by `POST /files/upload/init`.",
+      "chunkIndex": "0 through `total_chunks - 1`.",
+      "folderId": "Folder id.",
+      "folderName": "Folder name, up to 255 characters.",
+      "parentId": "New parent; `null` moves to the root.",
+      "parentIdQuery": "`null` default = root only.",
+      "deleteFiles": "`1` also deletes the files inside from Drive.",
+      "keyIdPath": "API key id.",
+      "withQuota": "`1` re-reads Drive quotas live.",
+      "accountId": "Google account id.",
+      "shareExpires": "When the link stops working; empty for never.",
+      "shareMaxViews": "1–10000 visits before the link retires.",
+      "shareId": "Link row id, not the token.",
+      "shareToken": "32 hex characters from the share URL.",
+      "infoQuery": "`1` returns metadata JSON instead of bytes.",
+      "downloadQuery": "`1` forces `Content-Disposition: attachment`.",
+      "thumbnailQuery": "`1` returns the WebP thumbnail.",
+      "fileIdInFolder": "For shared folders: pick one file inside.",
+      "searchQ": "Search term, 1–100 characters.",
+      "folderPathQuery": "Search inside one subtree.",
+      "recursiveQuery": "`1` includes all subfolders.",
+      "sortScore": "Adds `score` for relevance ordering.",
+      "starredTrue": "Always `1`.",
+      "folderIdEmpty": "Empty = ignore the folder structure.",
+      "limitQuery": "1–100 items.",
+      "cursorQuery": "Opaque cursor from `next_cursor`.",
+      "hashesQuery": "Comma-separated SHA-256 hex list, up to 100.",
+      "webhookLabel": "Reminder label.",
+      "webhookUrl": "HTTPS receiving endpoint.",
+      "webhookEvents": "For example `file.uploaded`, `file.deleted`.",
+      "webhookActive": "Pause watching without deleting the configuration."
     }
   }
 }

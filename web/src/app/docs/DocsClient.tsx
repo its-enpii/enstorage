@@ -28,6 +28,7 @@ import { Chip } from '@/components/Chip';
 import { CodeBlock } from '@/components/CodeBlock';
 import { InlineMarkdown } from '@/components/InlineMarkdown';
 import { Input } from '@/components/Input';
+import { MultiLangSnippet, SNIPPET_LANGS, type SnippetLang } from '@/components/MultiLangSnippet';
 import { PublicShell } from '@/components/PublicShell';
 import { usePageTitle } from '@/lib/usePageTitle';
 import { prefersReducedMotion, scrollToId } from '@/lib/site';
@@ -39,12 +40,15 @@ import {
   ENVELOPE_SAMPLES,
   ERROR_CODES,
   OPENAPI_URLS,
+  REFERENCE_COUNT,
+  REFERENCE_GROUPS,
   SCOPE_ORDER,
   SNIPPETS,
   TOTAL_ENDPOINTS,
   type ApiScope,
   type Endpoint,
 } from '@/lib/apiCatalog';
+import { EndpointReference } from './EndpointReference';
 
 /** Keeps anchor targets clear of the sticky header. */
 const SCROLL_MARGIN = 'scroll-mt-24';
@@ -53,6 +57,7 @@ const SECTION_IDS = [
   'start',
   'auth',
   'scopes',
+  'reference',
   'endpoints',
   'envelope',
   'errors',
@@ -66,6 +71,7 @@ const SECTIONS: Array<{ id: SectionId; icon: typeof Cloud }> = [
   { id: 'start', icon: Terminal },
   { id: 'auth', icon: VpnKey },
   { id: 'scopes', icon: Shield },
+  { id: 'reference', icon: InsertDriveFile },
   { id: 'endpoints', icon: Api },
   { id: 'envelope', icon: DataObject },
   { id: 'errors', icon: Bolt },
@@ -93,6 +99,15 @@ const SCOPE_CHIP: Record<ApiScope, 'success' | 'primary' | 'danger' | 'default'>
   sanctum: 'default',
   public: 'default',
 };
+
+/** Shared preference so every snippet on the page speaks the same language. */
+const LANG_STORAGE_KEY = 'enstorage.docs.lang';
+
+function readStoredLang(): SnippetLang {
+  if (typeof window === 'undefined') return 'curl';
+  const stored = window.localStorage.getItem(LANG_STORAGE_KEY);
+  return SNIPPET_LANGS.includes(stored as SnippetLang) ? (stored as SnippetLang) : 'curl';
+}
 
 const METHOD_CLASS: Record<Endpoint['method'], string> = {
   GET: 'text-primary',
@@ -195,12 +210,16 @@ function DocsToc({
   onQueryChange,
   matchCount,
   onClear,
+  lang,
+  onLangChange,
 }: {
   activeId: string;
   query: string;
   onQueryChange: (value: string) => void;
   matchCount: number;
   onClear: () => void;
+  lang: SnippetLang;
+  onLangChange: (value: SnippetLang) => void;
 }) {
   const { t } = useTranslation();
 
@@ -261,11 +280,46 @@ function DocsToc({
                   <Icon className="!text-base shrink-0" />
                   {t(`docs.nav.${section.id}`)}
                 </a>
+                {section.id === 'reference' && (
+                  <ul className="mb-1 ml-6 space-y-0.5 border-l border-outline-variant/20 pl-2">
+                    {REFERENCE_GROUPS.map((group) => (
+                      <li key={group.id}>
+                        <a
+                          href={`#ref-${group.id}`}
+                          className="block truncate rounded-md px-2 py-1 text-metadata text-on-surface-variant no-underline transition-colors hover:bg-surface-container hover:text-on-surface"
+                        >
+                          {t(`docs.ref.groups.${group.key}.title`)}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             );
           })}
         </ol>
       </nav>
+
+      <div className="mt-5 border-t border-outline-variant/20 pt-4">
+        <p className="text-metadata font-semibold uppercase tracking-wider text-outline">
+          {t('docs.lang.label')}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-1" role="group" aria-label={t('docs.lang.aria')}>
+          {SNIPPET_LANGS.map((option) => (
+            <Button
+              key={option}
+              type="button"
+              size="sm"
+              variant={lang === option ? 'primary' : 'secondary'}
+              aria-pressed={lang === option}
+              onClick={() => onLangChange(option)}
+              className="!h-7 rounded-full !px-2.5 !text-metadata"
+            >
+              {t(`docs.lang.short.${option}`)}
+            </Button>
+          ))}
+        </div>
+      </div>
 
       <div className="mt-5 border-t border-outline-variant/20 pt-4">
         <dl className="space-y-2 text-metadata">
@@ -280,6 +334,10 @@ function DocsToc({
             <dd className="font-semibold text-on-surface tabular-nums">{TOTAL_ENDPOINTS}</dd>
           </div>
           <div className="flex items-center justify-between gap-3">
+            <dt className="text-outline">{t('docs.meta.reference')}</dt>
+            <dd className="font-semibold text-on-surface tabular-nums">{REFERENCE_COUNT}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-3">
             <dt className="text-outline">{t('docs.meta.prefix')}</dt>
             <dd className="font-mono font-semibold text-on-surface">{API_PREFIX}</dd>
           </div>
@@ -291,7 +349,7 @@ function DocsToc({
 
 /* ================================== content ================================= */
 
-function QuickStart() {
+function QuickStart({ lang, onLangChange }: { lang: SnippetLang; onLangChange: (value: SnippetLang) => void }) {
   const { t } = useTranslation();
   const steps = ['prepare', 'upload', 'summary', 'share'] as const;
 
@@ -342,7 +400,16 @@ function QuickStart() {
                   </p>
                 </div>
               </div>
-              <CodeBlock code={snippet.code} file={snippet.file} />
+              {snippet.call ? (
+                <MultiLangSnippet
+                  call={snippet.call}
+                  lang={lang}
+                  onLangChange={onLangChange}
+                  label={t(`docs.snippets.${snippet.key}.title`)}
+                />
+              ) : (
+                <CodeBlock code={snippet.code} file={snippet.file} />
+              )}
             </li>
           );
         })}
@@ -553,6 +620,21 @@ function EndpointRow({ endpoint }: { endpoint: Endpoint }) {
         )}
       </td>
     </tr>
+  );
+}
+
+function Reference({ lang, onLangChange, query }: { lang: SnippetLang; onLangChange: (value: SnippetLang) => void; query: string }) {
+  const { t } = useTranslation();
+
+  return (
+    <DocsSection
+      id="reference"
+      eyebrowKey="docs.ref.eyebrow"
+      titleKey="docs.ref.title"
+      subtitleKey="docs.ref.subtitle"
+    >
+      <EndpointReference lang={lang} onLangChange={onLangChange} query={query} />
+    </DocsSection>
   );
 }
 
@@ -868,6 +950,16 @@ export default function DocsClient() {
   const activeId = useActiveSection(SECTION_IDS);
   const [query, setQuery] = useState('');
   const [matchCount, setMatchCount] = useState(TOTAL_ENDPOINTS);
+  const [lang, setLang] = useState<SnippetLang>('curl');
+
+  useEffect(() => {
+    setLang(readStoredLang());
+  }, []);
+
+  function changeLang(value: SnippetLang) {
+    setLang(value);
+    if (typeof window !== 'undefined') window.localStorage.setItem(LANG_STORAGE_KEY, value);
+  }
 
   useEffect(() => {
     const root = document.documentElement;
@@ -912,13 +1004,16 @@ export default function DocsClient() {
               onQueryChange={setQuery}
               matchCount={matchCount}
               onClear={() => setQuery('')}
+              lang={lang}
+              onLangChange={changeLang}
             />
           </aside>
 
           <div className="min-w-0">
-            <QuickStart />
+            <QuickStart lang={lang} onLangChange={changeLang} />
             <Authentication />
             <Scopes />
+            <Reference lang={lang} onLangChange={changeLang} query={query} />
             <Endpoints query={query} onQueryChange={setQuery} onMatchesChange={setMatchCount} />
             <ResponseFormat />
             <ErrorCodes />
