@@ -11,9 +11,8 @@ import {
   Code,
   CopyAll,
   DarkMode,
-  Devices,
+  Email,
   Layers,
-  Language,
   LightMode,
   Lock,
   Menu,
@@ -22,7 +21,6 @@ import {
   Route,
   Security,
   Shield,
-  Storage,
   Terminal,
   VpnKey,
 } from '@mui/icons-material';
@@ -36,8 +34,8 @@ import { useTheme } from '@/components/ThemeProvider';
 import { getLocale, setLocale } from '@/lib/i18n';
 import { usePageTitle } from '@/lib/usePageTitle';
 
-const GITHUB_URL = 'https://github.com/enpii/enstorage';
-const DOCS_URL = `${GITHUB_URL}/blob/main/docs/api.md`;
+/** Contact address published across the landing page and legal portal. */
+const CONTACT_EMAIL = 'enpiiofficial@gmail.com';
 
 /** The three anchors offered by the top navigation. */
 const SECTIONS = [
@@ -176,115 +174,101 @@ function splitBullets(raw: unknown): string[] {
   return typeof raw === 'string' ? raw.split('\n').filter(Boolean) : [];
 }
 
+function BulletList({ items, className }: { items: string[]; className?: string }) {
+  return (
+    <ul className={clsx('space-y-2 border-t border-outline-variant/20 pt-4', className)}>
+      {items.map((item) => (
+        <li
+          key={item}
+          className="flex items-start gap-2 text-metadata leading-relaxed text-on-surface-variant"
+        >
+          <CheckCircle className="!text-base shrink-0 text-primary" />
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /* ============================ storage pool console ============================ */
 
 type Drive = { key: 'one' | 'two' | 'three'; totalGB: number; usedGB: number };
 
+/** Free-tier sized accounts so the pool maths stays believable. */
 const DRIVES: Drive[] = [
   { key: 'one', totalGB: 15, usedGB: 12.4 },
   { key: 'two', totalGB: 15, usedGB: 6.8 },
   { key: 'three', totalGB: 15, usedGB: 9.1 },
 ];
 
-const DEFAULT_SIZE_MB = 1500;
-const MIN_SIZE_MB = 100;
-const MAX_SIZE_MB = 14000;
+const PRESET_SIZES_GB = [2, 6, 12] as const;
 
 function formatGB(value: number) {
   return `${Number.isInteger(value) ? value : value.toFixed(1)} GB`;
 }
 
-/** Quota pool monitor with a working smart-routing selector. */
+/**
+ * Read-only preview of the real routing rule: the whole file goes to the
+ * connected account with the largest remaining space that can fit it.
+ */
 function StoragePoolConsole() {
   const { t } = useTranslation();
-  const [sizeMB, setSizeMB] = useState(DEFAULT_SIZE_MB);
-  const [manualIndex, setManualIndex] = useState<number | null>(null);
+  const [sizeGB, setSizeGB] = useState<number>(PRESET_SIZES_GB[0]);
 
   const rows = useMemo(
     () =>
       DRIVES.map((drive, index) => {
-        const free = Math.round((drive.totalGB - drive.usedGB) * 100) / 100;
+        const free = Math.round((drive.totalGB - drive.usedGB) * 10) / 10;
         return {
           index,
           label: t(`landing.hero.mock.accounts.${drive.key}`),
           email: t(`landing.hero.mock.emails.${drive.key}`),
-          sub: t('landing.hero.mock.drive', { n: index + 1 }),
           totalGB: drive.totalGB,
           usedGB: drive.usedGB,
           free,
           usedPct: Math.round((drive.usedGB / drive.totalGB) * 100),
-          fits: free * 1024 >= sizeMB,
+          fits: free >= sizeGB,
         };
       }),
-    [sizeMB, t],
+    [sizeGB, t],
   );
 
   const poolTotal = rows.reduce((sum, row) => sum + row.totalGB, 0);
-  const poolUsed = Math.round(rows.reduce((sum, row) => sum + row.usedGB, 0) * 100) / 100;
-  const poolFree = Math.round((poolTotal - poolUsed) * 100) / 100;
+  const poolUsed = Math.round(rows.reduce((sum, row) => sum + row.usedGB, 0) * 10) / 10;
+  const poolFree = Math.round((poolTotal - poolUsed) * 10) / 10;
   const poolPct = Math.round((poolUsed / poolTotal) * 100);
 
-  const autoTarget = useMemo(() => {
+  const target = useMemo(() => {
     const eligible = rows.filter((row) => row.fits);
     if (!eligible.length) return null;
     return eligible.reduce((best, row) => (row.free > best.free ? row : best));
   }, [rows]);
 
-  const isManual = manualIndex !== null;
-  const manualTarget = isManual ? rows[manualIndex] : null;
-  const target = isManual ? manualTarget : autoTarget;
-  const sizeLabel =
-    sizeMB >= 1024
-      ? t('landing.hero.mock.gb', { n: (sizeMB / 1024).toFixed(1) })
-      : t('landing.hero.mock.mb', { n: sizeMB });
+  const sizeLabel = t('landing.hero.mock.sizeGb', { n: sizeGB });
 
   return (
-    <div className="rounded-card border border-outline-variant/20 bg-surface p-6 shadow-ambient sm:p-8">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-label-sm font-semibold uppercase tracking-[0.14em] text-secondary">
-            {t('landing.hero.mock.eyebrow')}
-          </p>
-          <h3 className="mt-1 font-display text-body-lg font-semibold text-on-surface">
-            {t('landing.hero.mock.title')}
-          </h3>
-          <p className="mt-1 text-metadata text-on-surface-variant">
-            {t('landing.hero.mock.subtitle')}
-          </p>
-        </div>
-        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-container/25 px-2.5 py-1 text-label-sm font-semibold uppercase tracking-wider text-primary">
-          <span className="relative flex size-2">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-60 motion-reduce:animate-none" />
-            <span className="relative inline-flex size-2 rounded-full bg-current" />
-          </span>
-          {t('landing.hero.mock.liveLabel')}
-        </span>
+    <div className="rounded-card border border-outline-variant/20 bg-surface p-6 shadow-ambient sm:p-7">
+      <div className="flex items-baseline justify-between gap-4">
+        <h3 className="font-display text-body-lg font-semibold text-on-surface">
+          {t('landing.hero.mock.title')}
+        </h3>
+        <p className="text-metadata text-outline">{t('landing.hero.mock.subtitle')}</p>
       </div>
 
       {/* Combined pool */}
-      <div className="mt-6 rounded-xl bg-surface-container p-4">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="text-metadata uppercase tracking-wider text-outline">
-              {t('landing.hero.mock.poolLabel')}
-            </p>
-            <p className="mt-1 font-display text-headline-lg text-on-surface tabular-nums">
-              {formatGB(poolTotal)}
-            </p>
-            <p className="text-metadata text-on-surface-variant">
-              {t('landing.hero.mock.poolHint')}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-metadata text-outline tabular-nums">
-              {t('landing.hero.mock.used')} {poolPct}% · {formatGB(poolUsed)}
-            </p>
-            <p className="text-sm font-semibold text-primary tabular-nums">
-              {formatGB(poolFree)} {t('landing.hero.mock.free')}
-            </p>
-          </div>
+      <div className="mt-5 rounded-xl bg-surface-container p-4">
+        <p className="text-metadata uppercase tracking-wider text-outline">
+          {t('landing.hero.mock.poolLabel')}
+        </p>
+        <div className="mt-1 flex items-end justify-between gap-3">
+          <p className="font-display text-headline-lg text-on-surface tabular-nums">
+            {formatGB(poolTotal)}
+          </p>
+          <p className="text-metadata text-on-surface-variant tabular-nums">
+            {t('landing.hero.mock.used')} {poolPct}% · {formatGB(poolUsed)}
+          </p>
         </div>
-        <div className="mt-3 flex h-3 gap-0.5 overflow-hidden rounded-full">
+        <div className="mt-3 flex h-2 gap-px overflow-hidden rounded-full bg-surface-container-highest">
           {rows.map((row) => (
             <div
               key={row.index}
@@ -293,42 +277,42 @@ function StoragePoolConsole() {
               title={row.label}
             >
               <div
-                className={clsx(
-                  'h-full transition-[width] duration-500',
-                  target?.index === row.index ? 'bg-primary' : 'bg-secondary/60',
-                )}
+                className={clsx('h-full', target?.index === row.index ? 'bg-primary' : 'bg-secondary/60')}
                 style={{ width: `${row.usedPct}%` }}
               />
             </div>
           ))}
         </div>
+        <p className="mt-2 text-metadata font-semibold text-primary tabular-nums">
+          {formatGB(poolFree)} {t('landing.hero.mock.free')}
+        </p>
       </div>
 
       {/* Accounts */}
-      <ul className="mt-5 space-y-3">
+      <ul className="mt-4 space-y-2">
         {rows.map((row) => {
           const selected = target?.index === row.index;
           return (
             <li
               key={row.index}
               className={clsx(
-                'rounded-xl border p-3 transition-colors',
+                'rounded-xl border px-3 py-2.5',
                 selected
-                  ? 'border-primary/50 bg-primary-container/15'
-                  : 'border-outline-variant/20 bg-surface-container/60',
+                  ? 'border-primary/45 bg-primary-container/12'
+                  : 'border-outline-variant/20 bg-surface-container/50',
               )}
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <span
                     className={clsx(
-                      'flex size-9 shrink-0 items-center justify-center rounded-lg',
+                      'flex size-8 shrink-0 items-center justify-center rounded-lg',
                       selected
                         ? 'bg-primary-container text-on-primary-container'
                         : 'bg-surface-container-highest text-on-surface-variant',
                     )}
                   >
-                    <Cloud className="!text-xl" />
+                    <Cloud className="!text-lg" />
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-on-surface">{row.label}</p>
@@ -337,19 +321,16 @@ function StoragePoolConsole() {
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="text-sm font-semibold text-on-surface tabular-nums">
-                    {formatGB(row.free)} {t('landing.hero.mock.remaining')}
+                    {formatGB(row.free)} {t('landing.hero.mock.free')}
                   </p>
                   <p className="text-metadata text-outline tabular-nums">
-                    {formatGB(row.usedGB)} {t('landing.hero.mock.of')} {formatGB(row.totalGB)}
+                    {formatGB(row.usedGB)} / {formatGB(row.totalGB)}
                   </p>
                 </div>
               </div>
-              <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
                 <div
-                  className={clsx(
-                    'h-full rounded-full transition-[width] duration-500',
-                    selected ? 'bg-primary' : 'bg-secondary/60',
-                  )}
+                  className={clsx('h-full rounded-full', selected ? 'bg-primary' : 'bg-secondary/60')}
                   style={{ width: `${row.usedPct}%` }}
                 />
               </div>
@@ -364,120 +345,51 @@ function StoragePoolConsole() {
         })}
       </ul>
 
-      {/* Routing controls */}
-      <div className="mt-5 space-y-4 rounded-xl border border-outline-variant/20 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Routing preview */}
+      <div className="mt-5 border-t border-outline-variant/20 pt-4">
+        <div className="flex items-center justify-between gap-3">
           <span className="text-metadata uppercase tracking-wider text-outline">
-            {t('landing.hero.mock.routingLabel')}
+            {t('landing.hero.mock.sizeLabel')}
           </span>
           <div className="flex gap-1 rounded-full bg-surface-container p-1" role="group">
-            <Button
-              type="button"
-              size="sm"
-              variant={isManual ? 'ghost' : 'primary'}
-              aria-pressed={!isManual}
-              onClick={() => setManualIndex(null)}
-              className="!h-8 rounded-full px-3"
-            >
-              {t('landing.hero.mock.routingAuto')}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={isManual ? 'primary' : 'ghost'}
-              aria-pressed={isManual}
-              onClick={() => setManualIndex((rows.find((row) => row.fits) ?? rows[0]).index)}
-              className="!h-8 rounded-full px-3"
-            >
-              {t('landing.hero.mock.routingManual')}
-            </Button>
-          </div>
-        </div>
-
-        {isManual && (
-          <div className="flex flex-wrap gap-2">
-            {rows.map((row) => (
+            {PRESET_SIZES_GB.map((size) => (
               <Button
-                key={row.index}
+                key={size}
                 type="button"
                 size="sm"
-                variant={manualIndex === row.index ? 'primary' : 'secondary'}
-                aria-pressed={manualIndex === row.index}
-                disabled={!row.fits}
-                onClick={() => setManualIndex(row.index)}
-                className="!h-8 rounded-full px-3"
-                title={`${formatGB(row.free)} ${t('landing.hero.mock.remaining')}`}
+                variant={sizeGB === size ? 'primary' : 'ghost'}
+                aria-pressed={sizeGB === size}
+                onClick={() => setSizeGB(size)}
+                className="!h-8 rounded-full px-3 tabular-nums"
               >
-                {row.sub}
+                {t('landing.hero.mock.sizeGb', { n: size })}
               </Button>
             ))}
           </div>
-        )}
-
-        <div>
-          <div className="flex items-center justify-between gap-3">
-            <label
-              htmlFor="landing-routing-size"
-              className="text-metadata uppercase tracking-wider text-outline"
-            >
-              {t('landing.hero.mock.sizeLabel')}
-            </label>
-            <span className="text-sm font-semibold text-on-surface tabular-nums">{sizeLabel}</span>
-          </div>
-          <input
-            id="landing-routing-size"
-            type="range"
-            min={MIN_SIZE_MB}
-            max={MAX_SIZE_MB}
-            step={100}
-            value={sizeMB}
-            onChange={(event) => setSizeMB(Number(event.target.value))}
-            aria-describedby="landing-routing-note"
-            className="mt-3 w-full cursor-pointer accent-primary"
-          />
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p
-            id="landing-routing-note"
-            className={clsx(
-              'flex min-w-0 flex-1 items-center gap-2 text-metadata',
-              target ? 'text-on-surface-variant' : 'text-error',
-            )}
-          >
-            {target ? (
-              <Route className="!text-base shrink-0 text-primary" />
-            ) : (
-              <Shield className="!text-base shrink-0" />
-            )}
-            <span>
-              {target
-                ? t('landing.hero.mock.routed', {
-                    size: sizeLabel,
-                    account: target.label,
-                    free: formatGB(target.free),
-                  })
-                : t('landing.hero.mock.none')}
-            </span>
-          </p>
-          {isManual && (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => setManualIndex(null)}
-              className="!h-8 text-metadata"
-            >
-              {t('landing.hero.mock.reset')}
-            </Button>
+        <p
+          className={clsx(
+            'mt-3 flex items-start gap-2 text-metadata leading-relaxed',
+            target ? 'text-on-surface-variant' : 'text-error',
           )}
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Chip variant="success">{t('landing.hero.mock.statusRouting')}</Chip>
-        <Chip variant="warning">{t('landing.hero.mock.statusEncryption')}</Chip>
-        <Chip variant="primary">{t('landing.hero.mock.statusProxy')}</Chip>
+        >
+          {target ? (
+            <Route className="!text-base mt-0.5 shrink-0 text-primary" />
+          ) : (
+            <Shield className="!text-base mt-0.5 shrink-0" />
+          )}
+          <span>
+            {target
+              ? t('landing.hero.mock.routed', {
+                  size: sizeLabel,
+                  account: target.label,
+                  free: formatGB(target.free),
+                })
+              : t('landing.hero.mock.none', { size: sizeLabel })}
+          </span>
+        </p>
+        <p className="mt-2 text-metadata text-outline">{t('landing.hero.mock.noSplit')}</p>
       </div>
     </div>
   );
@@ -492,7 +404,7 @@ function HeaderActions({
 }: {
   onSignIn: () => void;
   signingIn: boolean;
-  variant?: 'desktop' | 'mobile';
+  variant?: 'desktop' | 'stacked';
 }) {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -513,17 +425,18 @@ function HeaderActions({
     setTheme(resolved === 'dark' ? 'light' : 'dark');
   }
 
+  const stacked = variant === 'stacked';
+
   return (
-    <div className={clsx('flex items-center gap-2', variant === 'mobile' && 'flex-col gap-3')}>
+    <div className={clsx('flex items-center gap-2', stacked && 'flex-col gap-3')}>
       <div
         className={clsx(
-          'flex items-center rounded-full border border-outline-variant/20 bg-surface-container p-1',
-          variant === 'mobile' && 'w-full justify-center',
+          'flex items-center gap-1 rounded-full border border-outline-variant/20 bg-surface-container px-1 py-1',
+          stacked && 'w-full justify-center',
         )}
         role="group"
         aria-label={t('landing.nav.language')}
       >
-        <Language className="!text-base mx-1 text-outline" aria-hidden />
         {(['id', 'en'] as const).map((code) => (
           <Button
             key={code}
@@ -532,7 +445,7 @@ function HeaderActions({
             variant={locale === code ? 'primary' : 'ghost'}
             aria-pressed={locale === code}
             onClick={() => pickLocale(code)}
-            className="!h-7 rounded-full px-3 uppercase tracking-wider"
+            className="!h-7 rounded-full px-2.5 text-metadata uppercase tracking-wider"
           >
             {code}
           </Button>
@@ -545,7 +458,11 @@ function HeaderActions({
         title={t('landing.nav.theme')}
         className="size-9 rounded-full border border-outline-variant/20 bg-surface-container"
       >
-        {resolved === 'dark' ? <LightMode className="!text-lg" /> : <DarkMode className="!text-lg" />}
+        {resolved === 'dark' ? (
+          <LightMode className="!text-lg" />
+        ) : (
+          <DarkMode className="!text-lg" />
+        )}
       </IconButton>
 
       {user ? (
@@ -554,7 +471,7 @@ function HeaderActions({
           size="md"
           onClick={() => router.push('/files')}
           rightIcon={<ArrowForward className="!text-lg" />}
-          fullWidth={variant === 'mobile'}
+          fullWidth={stacked}
         >
           {t('landing.cta.dashboard')}
         </Button>
@@ -564,7 +481,7 @@ function HeaderActions({
           size="md"
           onClick={onSignIn}
           loading={signingIn}
-          fullWidth={variant === 'mobile'}
+          fullWidth={stacked}
         >
           {signingIn ? t('landing.cta.signInLoading') : t('landing.cta.signIn')}
         </Button>
@@ -607,30 +524,33 @@ function Header({ onSignIn, signingIn }: { onSignIn: () => void; signingIn: bool
         scrolled ? 'glass-toolbar border-outline-variant/20' : 'border-transparent bg-background',
       )}
     >
-      <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
+      <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-4 px-4 sm:px-6">
         <Link
           href="/"
-          className="flex min-w-0 items-center gap-3 no-underline"
+          className="flex shrink-0 items-center gap-2.5 no-underline"
           aria-label="EnStorage"
         >
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
-            <Cloud className="!text-3xl fill" />
+          <span className="flex size-9 items-center justify-center rounded-xl bg-primary-container text-on-primary-container">
+            <Cloud className="!text-2xl" />
           </span>
-          <span className="font-display text-body-lg font-bold text-on-surface">EnStorage</span>
+          <span className="font-display text-body-md font-bold text-on-surface">EnStorage</span>
         </Link>
 
-        <nav className="hidden items-center gap-1 lg:flex" aria-label={t('landing.nav.mainNav')}>
+        <nav
+          className="mx-auto hidden items-center gap-1 lg:flex"
+          aria-label={t('landing.nav.mainNav')}
+        >
           {SECTIONS.map((section) => (
             <Button
               key={section.id}
               type="button"
               size="sm"
-              variant={active === section.id ? 'secondary' : 'ghost'}
+              variant="ghost"
               aria-current={active === section.id ? 'true' : undefined}
               onClick={() => goSection(section.id)}
               className={clsx(
-                '!h-auto rounded-full px-3.5 py-2 font-medium',
-                active === section.id && '!bg-surface-container !text-primary',
+                '!h-9 !rounded-lg !px-3 !font-medium !text-on-surface-variant',
+                active === section.id && '!bg-surface-container !text-on-surface',
               )}
             >
               {t(section.labelKey)}
@@ -638,7 +558,7 @@ function Header({ onSignIn, signingIn }: { onSignIn: () => void; signingIn: bool
           ))}
         </nav>
 
-        <div className="hidden lg:block">
+        <div className="ml-auto hidden lg:block">
           <HeaderActions onSignIn={onSignIn} signingIn={signingIn} />
         </div>
 
@@ -646,21 +566,20 @@ function Header({ onSignIn, signingIn }: { onSignIn: () => void; signingIn: bool
           onClick={() => setMenuOpen((value) => !value)}
           aria-label={menuOpen ? t('landing.nav.close') : t('landing.nav.menu')}
           aria-expanded={menuOpen}
-          className="size-11 rounded-xl border border-outline-variant/20 bg-surface-container lg:hidden"
+          className="ml-auto size-9 rounded-lg border border-outline-variant/20 bg-surface-container lg:hidden"
         >
-          {menuOpen ? <Close className="!text-xl" /> : <Menu className="!text-xl" />}
+          {menuOpen ? <Close className="!text-lg" /> : <Menu className="!text-lg" />}
         </IconButton>
       </div>
 
       {menuOpen && (
-        <div className="glass-toolbar max-h-[calc(100vh-5rem)] overflow-y-auto border-t border-outline-variant/20 lg:hidden">
-          <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
+        <div className="glass-toolbar max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-outline-variant/20 lg:hidden">
+          <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6">
             <nav className="grid gap-1" aria-label={t('landing.nav.mainNav')}>
               {SECTIONS.map((section) => (
                 <Button
                   key={section.id}
                   type="button"
-                  fullWidth
                   size="lg"
                   variant={active === section.id ? 'primary' : 'ghost'}
                   onClick={() => goSection(section.id)}
@@ -671,8 +590,8 @@ function Header({ onSignIn, signingIn }: { onSignIn: () => void; signingIn: bool
                 </Button>
               ))}
             </nav>
-            <div className="mt-6">
-              <HeaderActions onSignIn={onSignIn} signingIn={signingIn} variant="mobile" />
+            <div className="mt-5">
+              <HeaderActions onSignIn={onSignIn} signingIn={signingIn} variant="stacked" />
             </div>
           </div>
         </div>
@@ -681,7 +600,7 @@ function Header({ onSignIn, signingIn }: { onSignIn: () => void; signingIn: bool
   );
 }
 
-/* =================================== hero ================================== */
+/* =================================== hero =================================== */
 
 function Hero() {
   const { t } = useTranslation();
@@ -705,15 +624,13 @@ function Hero() {
 
   return (
     <section className="border-b border-outline-variant/20">
-      <div className="mx-auto grid w-full max-w-7xl items-center gap-12 px-4 py-14 sm:px-6 lg:grid-cols-[1fr_minmax(0,520px)] lg:gap-14 lg:py-20">
+      <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 lg:gap-16 lg:py-24">
         <Reveal>
           <div>
-            <Chip variant="warning">{t('landing.hero.badge')}</Chip>
-            <h1 className="mt-5 font-display text-headline-lg-mobile text-on-surface sm:text-display-xl">
-              <span className="block text-primary">{t('landing.hero.titleLead')}</span>
-              <span className="mt-2 block">{t('landing.hero.titleMain')}</span>
+            <h1 className="font-display text-display-xl text-on-surface">
+              {t('landing.hero.title')}
             </h1>
-            <p className="mt-5 max-w-xl text-body-lg text-on-surface-variant">
+            <p className="mt-5 max-w-xl text-body-lg leading-relaxed text-on-surface-variant">
               {t('landing.hero.subtitle')}
             </p>
 
@@ -723,7 +640,7 @@ function Hero() {
                 onClick={start}
                 loading={signingIn}
                 rightIcon={!signingIn && <ArrowForward className="!text-lg" />}
-                className="sm:min-w-48"
+                className="sm:min-w-44"
               >
                 {t(user ? 'landing.hero.primarySignedIn' : 'landing.hero.primary')}
               </Button>
@@ -732,14 +649,14 @@ function Hero() {
                 size="lg"
                 onClick={() => scrollToId('api')}
                 leftIcon={<Code className="!text-lg" />}
-                className="sm:min-w-48"
+                className="sm:min-w-44"
               >
                 {t('landing.hero.secondaryApi')}
               </Button>
             </div>
 
-            <p className="mt-6 flex items-start gap-2 text-metadata text-outline">
-              <Shield className="!text-base shrink-0 text-primary" />
+            <p className="mt-7 flex items-start gap-2 text-metadata leading-relaxed text-outline">
+              <Shield className="!text-base mt-px shrink-0 text-primary" />
               {t('landing.hero.trust')}
             </p>
           </div>
@@ -753,10 +670,57 @@ function Hero() {
   );
 }
 
+/* ================================= features ================================ */
+
+const FEATURE_META = [
+  { key: 'aggregation', icon: Layers, span: 'lg:col-span-3' },
+  { key: 'routing', icon: Route, span: 'lg:col-span-3' },
+  { key: 'viewer', icon: PlayCircle, span: 'lg:col-span-2' },
+  { key: 'api', icon: Code, span: 'lg:col-span-2' },
+  { key: 'isolation', icon: AccountTree, span: 'lg:col-span-2' },
+] as const;
+
+function Features() {
+  const { t } = useTranslation();
+
+  return (
+    <section id="features" className={clsx('border-b border-outline-variant/20 py-16 sm:py-20', SCROLL_MARGIN)}>
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+        <SectionHeading
+          eyebrowKey="landing.features.eyebrow"
+          titleKey="landing.features.title"
+          subtitleKey="landing.features.subtitle"
+        />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+          {FEATURE_META.map(({ key, icon: Icon, span }, index) => (
+            <Reveal key={key} delay={index * 60} className={clsx('h-full', span)}>
+              <Card hover className="flex h-full flex-col">
+                <CardIconBox variant={index % 2 ? 'gold' : 'primary'} size="md">
+                  <Icon className="!text-2xl" />
+                </CardIconBox>
+                <h3 className="mt-5 font-display text-body-lg font-semibold text-on-surface">
+                  {t(`landing.features.items.${key}.title`)}
+                </h3>
+                <p className="mt-2 text-body-md leading-relaxed text-on-surface-variant">
+                  {t(`landing.features.items.${key}.body`)}
+                </p>
+                <BulletList
+                  className="mt-auto pt-4 sm:grid sm:grid-cols-2 sm:gap-x-4 sm:space-y-0"
+                  items={splitBullets(t(`landing.features.items.${key}.bullets`))}
+                />
+              </Card>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ================================= security ================================ */
 
 const SECURITY_META = [
-  { key: 'streaming', icon: Storage },
+  { key: 'nonCustodial', icon: Shield },
   { key: 'token', icon: Lock },
   { key: 'limitedUse', icon: Security },
 ] as const;
@@ -766,7 +730,7 @@ function SecuritySection() {
 
   return (
     <section id="security" className={clsx('border-b border-outline-variant/20 py-16 sm:py-20', SCROLL_MARGIN)}>
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
         <SectionHeading
           eyebrowKey="landing.security.eyebrow"
           titleKey="landing.security.title"
@@ -782,20 +746,10 @@ function SecuritySection() {
                 <h3 className="mt-5 font-display text-body-lg font-semibold text-on-surface">
                   {t(`landing.security.items.${key}.title`)}
                 </h3>
-                <p className="mt-2 text-body-md text-on-surface-variant">
+                <p className="mt-2 text-body-md leading-relaxed text-on-surface-variant">
                   {t(`landing.security.items.${key}.body`)}
                 </p>
-                <ul className="mt-4 space-y-2 border-t border-outline-variant/20 pt-4">
-                  {splitBullets(t(`landing.security.items.${key}.bullets`)).map((item) => (
-                    <li
-                      key={item}
-                      className="flex items-start gap-2 text-metadata text-on-surface-variant"
-                    >
-                      <CheckCircle className="!text-base shrink-0 text-primary" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
+                <BulletList className="mt-auto" items={splitBullets(t(`landing.security.items.${key}.bullets`))} />
               </Card>
             </Reveal>
           ))}
@@ -817,65 +771,24 @@ function SecuritySection() {
   );
 }
 
-/* ================================= features ================================ */
-
-const FEATURE_META = [
-  { key: 'aggregation', icon: Layers },
-  { key: 'routing', icon: Route },
-  { key: 'api', icon: Code },
-  { key: 'viewer', icon: PlayCircle },
-  { key: 'isolation', icon: AccountTree },
-  { key: 'mobile', icon: Devices },
-] as const;
-
-function Features() {
-  const { t } = useTranslation();
-
-  return (
-    <section id="features" className={clsx('border-b border-outline-variant/20 py-16 sm:py-20', SCROLL_MARGIN)}>
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
-        <SectionHeading
-          eyebrowKey="landing.features.eyebrow"
-          titleKey="landing.features.title"
-          subtitleKey="landing.features.subtitle"
-        />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURE_META.map(({ key, icon: Icon }, index) => (
-            <Reveal key={key} delay={index * 60} className="h-full">
-              <Card hover className="flex h-full flex-col">
-                <CardIconBox variant={index % 2 ? 'gold' : 'primary'} size="md">
-                  <Icon className="!text-2xl" />
-                </CardIconBox>
-                <h3 className="mt-5 font-display text-body-lg font-semibold text-on-surface">
-                  {t(`landing.features.items.${key}.title`)}
-                </h3>
-                <p className="mt-2 text-body-md text-on-surface-variant">
-                  {t(`landing.features.items.${key}.body`)}
-                </p>
-                <ul className="mt-4 grid gap-2 border-t border-outline-variant/20 pt-4 sm:grid-cols-2">
-                  {splitBullets(t(`landing.features.items.${key}.bullets`)).map((item) => (
-                    <li
-                      key={item}
-                      className="flex items-start gap-2 text-metadata text-on-surface-variant"
-                    >
-                      <CheckCircle className="!text-base shrink-0 text-primary" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            </Reveal>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /* =============================== developer api ============================== */
 
 const API_TABS = ['upload', 'quota', 'share'] as const;
 const SCOPE_KEYS = ['read', 'write', 'delete', 'full'] as const;
+
+/** Straight from the backend route table — see docs/api.md. */
+const ENDPOINTS = [
+  { method: 'POST', path: '/api/v1/files/upload', scope: 'write', noteKey: 'upload' },
+  { method: 'POST', path: '/api/v1/files/upload/init', scope: 'write', noteKey: 'uploadInit' },
+  { method: 'GET', path: '/api/v1/files', scope: 'read', noteKey: 'listFiles' },
+  { method: 'GET', path: '/api/v1/files/{id}/download', scope: 'read', noteKey: 'download' },
+  { method: 'GET', path: '/api/v1/storage/summary', scope: 'read', noteKey: 'summary' },
+  { method: 'GET', path: '/api/v1/google-accounts', scope: 'read', noteKey: 'accounts' },
+  { method: 'PUT', path: '/api/v1/files/{id}/move', scope: 'write', noteKey: 'move' },
+  { method: 'DELETE', path: '/api/v1/files/{id}', scope: 'delete', noteKey: 'delete' },
+  { method: 'POST', path: '/api/v1/api-keys', scope: 'session', noteKey: 'apiKeys' },
+  { method: 'GET', path: '/api/v1/s/{token}', scope: 'public', noteKey: 'publicShare' },
+] as const;
 
 type TokenClass = 'comment' | 'string' | 'flag' | 'keyword' | 'number' | 'plain';
 
@@ -953,30 +866,23 @@ function ApiConsole() {
     <div role="region" aria-label={t('landing.api.panelLabel')} className="shadow-ambient">
       <Card className="overflow-hidden !bg-surface-container-lowest !p-0">
         <div className="flex items-center gap-2 border-b border-outline-variant/20 bg-surface-container-high px-4 py-3">
-          <span className="flex gap-1.5" aria-hidden>
-            <span className="size-2.5 rounded-full bg-error/70" />
-            <span className="size-2.5 rounded-full bg-secondary/70" />
-            <span className="size-2.5 rounded-full bg-primary/70" />
-          </span>
-          <p className="ml-2 truncate font-mono text-metadata text-on-surface-variant">
+          <p className="min-w-0 flex-1 truncate font-mono text-metadata text-on-surface-variant">
             {t('landing.api.prompt')} ./call-{tab}.sh
           </p>
-          <span className="ml-auto">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={copy}
-              leftIcon={copied ? <CheckCircle className="!text-lg" /> : <CopyAll className="!text-lg" />}
-              className={clsx('!text-on-surface-variant', copied && '!text-primary')}
-            >
-              {failed
-                ? t('landing.api.copyFailed')
-                : copied
-                  ? t('landing.api.copied')
-                  : t('landing.api.copy')}
-            </Button>
-          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={copy}
+            leftIcon={copied ? <CheckCircle className="!text-lg" /> : <CopyAll className="!text-lg" />}
+            className={clsx('!h-8 shrink-0 !text-on-surface-variant', copied && '!text-primary')}
+          >
+            {failed
+              ? t('landing.api.copyFailed')
+              : copied
+                ? t('landing.api.copied')
+                : t('landing.api.copy')}
+          </Button>
         </div>
 
         <div
@@ -1007,60 +913,118 @@ function ApiConsole() {
   );
 }
 
-const ENDPOINTS = [
-  { method: 'POST', path: '/api/v1/files/upload', scope: 'write' },
-  { method: 'GET', path: '/api/v1/files', scope: 'read' },
-  { method: 'GET', path: '/api/v1/storage/summary', scope: 'read' },
-  { method: 'POST', path: '/api/v1/files/{id}/share', scope: 'read' },
-  { method: 'DELETE', path: '/api/v1/files/{id}', scope: 'delete' },
-  { method: 'POST', path: '/api/v1/api-keys', scope: 'session' },
-];
+const SCOPE_CHIP_VARIANTS = {
+  read: 'success',
+  write: 'primary',
+  delete: 'danger',
+  session: 'default',
+  public: 'default',
+} as const;
+
+function ScopeChip({ scope }: { scope: keyof typeof SCOPE_CHIP_VARIANTS }) {
+  return <Chip variant={SCOPE_CHIP_VARIANTS[scope]}>{scope}</Chip>;
+}
+
+function EndpointTable() {
+  const { t } = useTranslation();
+
+  return (
+    <Card className="!p-0">
+      <div className="flex items-center gap-3 border-b border-outline-variant/20 px-5 py-4">
+        <CardIconBox variant="muted" size="md">
+          <Terminal className="!text-2xl" />
+        </CardIconBox>
+        <div className="min-w-0">
+          <h3 className="font-display text-body-lg font-semibold text-on-surface">
+            {t('landing.api.endpointsTitle')}
+          </h3>
+          <p className="text-metadata text-outline">{t('landing.api.endpointNote')}</p>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] border-collapse text-left">
+          <thead>
+            <tr className="bg-surface-container/60">
+              {['method', 'path', 'scope', 'description'].map((col) => (
+                <th
+                  key={col}
+                  scope="col"
+                  className="px-5 py-2.5 text-metadata font-semibold uppercase tracking-wider text-outline"
+                >
+                  {t(`landing.api.table.${col}`)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {ENDPOINTS.map((row) => (
+              <tr key={`${row.method}${row.path}`} className="border-t border-outline-variant/20">
+                <td className="px-5 py-2.5 font-mono text-metadata font-semibold text-secondary">
+                  {row.method}
+                </td>
+                <td className="px-5 py-2.5 font-mono text-metadata text-on-surface">{row.path}</td>
+                <td className="px-5 py-2.5">
+                  <ScopeChip scope={row.scope} />
+                </td>
+                <td className="px-5 py-2.5 text-metadata text-on-surface-variant">
+                  {t(`landing.api.endpointNotes.${row.noteKey}`)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
 
 function ApiSection() {
   const { t } = useTranslation();
 
   return (
     <section id="api" className={clsx('border-b border-outline-variant/20 py-16 sm:py-20', SCROLL_MARGIN)}>
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
         <SectionHeading
           eyebrowKey="landing.api.eyebrow"
           titleKey="landing.api.title"
           subtitleKey="landing.api.subtitle"
         />
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
           <Reveal>
             <ApiConsole />
           </Reveal>
-          <div className="grid gap-4">
+
+          <div className="grid gap-4 content-start">
             <Reveal delay={90}>
               <Card>
                 <div className="flex items-center gap-3">
                   <CardIconBox variant="muted" size="md">
-                    <Terminal className="!text-2xl" />
+                    <Code className="!text-2xl" />
                   </CardIconBox>
-                  <div className="min-w-0">
-                    <h3 className="font-display text-body-lg font-semibold text-on-surface">
-                      {t('landing.api.endpointsTitle')}
-                    </h3>
-                    <p className="text-metadata text-outline">{t('landing.api.docsNote')}</p>
-                  </div>
+                  <h3 className="font-display text-body-lg font-semibold text-on-surface">
+                    {t('landing.api.authTitle')}
+                  </h3>
                 </div>
-                <ul className="mt-5 space-y-2">
-                  {ENDPOINTS.map((row) => (
-                    <li
-                      key={`${row.method}${row.path}`}
-                      className="flex flex-wrap items-center gap-2 rounded-xl bg-surface-container px-3 py-2"
+                <dl className="mt-5 space-y-3 text-metadata">
+                  {[
+                    { termKey: 'base', valueKey: 'baseValue' },
+                    { termKey: 'header', valueKey: 'headerValue' },
+                    { termKey: 'format', valueKey: 'formatValue' },
+                    { termKey: 'limit', valueKey: 'limitValue' },
+                    { termKey: 'envelope', valueKey: 'envelopeValue' },
+                  ].map((row) => (
+                    <div
+                      key={row.termKey}
+                      className="flex flex-wrap items-baseline justify-between gap-2 border-b border-outline-variant/20 pb-3 last:border-b-0 last:pb-0"
                     >
-                      <span className="font-mono text-metadata font-semibold text-secondary">
-                        {row.method}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate font-mono text-metadata text-on-surface">
-                        {row.path}
-                      </span>
-                      <Chip variant="default">{row.scope}</Chip>
-                    </li>
+                      <dt className="uppercase tracking-wider text-outline">
+                        {t(`landing.api.auth.${row.termKey}`)}
+                      </dt>
+                      <dd className="font-mono text-on-surface">{t(`landing.api.auth.${row.valueKey}`)}</dd>
+                    </div>
                   ))}
-                </ul>
+                </dl>
               </Card>
             </Reveal>
 
@@ -1086,14 +1050,39 @@ function ApiSection() {
                     </li>
                   ))}
                 </ul>
-                <p className="mt-5 flex items-start gap-2 border-t border-outline-variant/20 pt-4 text-metadata text-outline">
-                  <Lock className="!text-base shrink-0 text-primary" />
+                <p className="mt-5 flex items-start gap-2 border-t border-outline-variant/20 pt-4 text-metadata leading-relaxed text-outline">
+                  <Lock className="!text-base mt-px shrink-0 text-primary" />
                   {t('landing.api.keySecurityNote')}
                 </p>
               </Card>
             </Reveal>
           </div>
         </div>
+
+        <Reveal delay={120}>
+          <div className="mt-4">
+            <EndpointTable />
+          </div>
+        </Reveal>
+
+        <Reveal delay={160}>
+          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3">
+            <Link
+              href="/api-keys"
+              className="inline-flex items-center gap-2 text-body-md font-semibold text-primary no-underline hover:underline"
+            >
+              <VpnKey className="!text-lg" />
+              {t('landing.api.createKey')}
+            </Link>
+            <Link
+              href="/legal/security"
+              className="inline-flex items-center gap-2 text-body-md font-semibold text-on-surface-variant no-underline hover:text-on-surface"
+            >
+              <Shield className="!text-lg" />
+              {t('landing.api.securityLink')}
+            </Link>
+          </div>
+        </Reveal>
       </div>
     </section>
   );
@@ -1105,29 +1094,27 @@ function Footer() {
   const { t } = useTranslation();
 
   const productLinks = SECTIONS.map((section) => ({
-    href: `#${section.id}`,
-    labelKey: `landing.footer.productLinks.${section.id}`,
+    key: section.id,
     id: section.id,
+    labelKey: `landing.footer.productLinks.${section.id}`,
   }));
 
-  const developerLinks = [
-    { href: GITHUB_URL, labelKey: 'landing.footer.resourceLinks.github', external: true },
-    { href: DOCS_URL, labelKey: 'landing.footer.resourceLinks.docs', external: true },
-    { href: '/login', labelKey: 'landing.footer.resourceLinks.login', external: false },
+  const helpLinks = [
+    { key: 'api', id: 'api', labelKey: 'landing.footer.helpLinks.api' },
   ];
 
   return (
     <footer className="bg-surface-dim">
-      <div className="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6">
+      <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6">
         <div className="grid gap-10 lg:grid-cols-[1.2fr_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
           <div>
-            <Link href="/" className="inline-flex items-center gap-3 no-underline">
-              <span className="flex size-11 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
-                <Cloud className="!text-3xl fill" />
+            <Link href="/" className="inline-flex items-center gap-2.5 no-underline">
+              <span className="flex size-9 items-center justify-center rounded-xl bg-primary-container text-on-primary-container">
+                <Cloud className="!text-2xl" />
               </span>
-              <span className="font-display text-body-lg font-bold text-on-surface">EnStorage</span>
+              <span className="font-display text-body-md font-bold text-on-surface">EnStorage</span>
             </Link>
-            <p className="mt-4 max-w-xs text-body-md text-on-surface-variant">
+            <p className="mt-4 max-w-xs text-body-md leading-relaxed text-on-surface-variant">
               {t('landing.footer.tagline')}
             </p>
             <p className="mt-4 text-metadata text-outline">{t('landing.footer.madeBy')}</p>
@@ -1139,13 +1126,13 @@ function Footer() {
             </h3>
             <ul className="mt-4 space-y-2.5">
               {productLinks.map((link) => (
-                <li key={link.id}>
+                <li key={link.key}>
                   <Button
                     type="button"
                     size="sm"
                     variant="ghost"
                     onClick={() => scrollToId(link.id)}
-                    className="!h-auto !px-2 !py-1 !font-normal !text-on-surface-variant hover:!text-on-surface"
+                    className="!h-auto !px-0 !py-0 !font-normal !text-on-surface-variant hover:!text-on-surface"
                   >
                     {t(link.labelKey)}
                   </Button>
@@ -1174,21 +1161,31 @@ function Footer() {
 
           <div>
             <h3 className="text-label-sm font-semibold uppercase tracking-[0.14em] text-outline">
-              {t('landing.footer.resources')}
+              {t('landing.footer.help')}
             </h3>
             <ul className="mt-4 space-y-2.5">
-              {developerLinks.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    target={link.external ? '_blank' : undefined}
-                    rel={link.external ? 'noreferrer noopener' : undefined}
-                    className="text-body-md text-on-surface-variant no-underline transition-colors hover:text-on-surface"
+              {helpLinks.map((link) => (
+                <li key={link.key}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => scrollToId(link.id)}
+                    className="!h-auto !px-0 !py-0 !font-normal !text-on-surface-variant hover:!text-on-surface"
                   >
                     {t(link.labelKey)}
-                  </Link>
+                  </Button>
                 </li>
               ))}
+              <li>
+                <a
+                  href={`mailto:${CONTACT_EMAIL}`}
+                  className="inline-flex items-center gap-2 text-body-md text-on-surface-variant no-underline transition-colors hover:text-on-surface"
+                >
+                  <Email className="!text-base" />
+                  {CONTACT_EMAIL}
+                </a>
+              </li>
             </ul>
           </div>
         </div>
@@ -1198,13 +1195,18 @@ function Footer() {
             <p className="text-metadata text-on-surface-variant">
               {t('landing.footer.copyright', { year: new Date().getFullYear() })}
             </p>
-            <p className="text-metadata text-outline">{t('landing.footer.license')}</p>
+            <p className="text-metadata text-outline">{t('landing.footer.selfHostedNote')}</p>
           </div>
           <Button
             type="button"
             size="sm"
             variant="secondary"
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            onClick={() => {
+              const reduce =
+                typeof window.matchMedia === 'function' &&
+                window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+              window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+            }}
             rightIcon={<ArrowForward className="!text-lg -rotate-90" />}
           >
             {t('landing.nav.backToTop')}
@@ -1215,7 +1217,7 @@ function Footer() {
   );
 }
 
-/* ================================== page =================================== */
+/* =================================== page ================================== */
 
 export default function LandingClient() {
   usePageTitle('landing.pageTitle');

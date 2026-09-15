@@ -18,12 +18,14 @@ import { useTranslation } from 'react-i18next';
 import { Button, IconButton } from '@/components/Button';
 import { Card, CardIconBox } from '@/components/Card';
 import { Chip } from '@/components/Chip';
+import { useAuth } from '@/components/AuthProvider';
 import { useTheme } from '@/components/ThemeProvider';
 import { getLocale, setLocale } from '@/lib/i18n';
 import { usePageTitle } from '@/lib/usePageTitle';
 
-const GITHUB_URL = 'https://github.com/enpii/enstorage';
-const DOCS_URL = `${GITHUB_URL}/blob/main/docs/api.md`;
+/** Internal-only destinations: no external code hosting anywhere in the portal. */
+const API_DOCS_HREF = '/#api';
+const CONTACT_EMAIL = 'enpiiofficial@gmail.com';
 
 export type LegalDocId = 'privacy' | 'terms' | 'security';
 
@@ -186,22 +188,23 @@ function PortalControls() {
 
 function PortalHeader({ doc }: { doc: DocMeta }) {
   const { t } = useTranslation();
+  const { user } = useAuth();
 
   return (
-    <header className="sticky top-0 z-50 border-b border-outline-variant/20 bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
-      <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
-        <div className="flex min-w-0 items-center gap-4">
+    <header className="sticky top-0 z-50 border-b border-outline-variant/20 bg-background">
+      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
           <Link
             href="/"
             className="flex shrink-0 items-center gap-2.5 no-underline"
             aria-label="EnStorage"
           >
-            <span className="flex size-10 items-center justify-center rounded-xl bg-primary-container text-on-primary-container">
-              <Cloud className="!text-2xl fill" />
+            <span className="flex size-9 items-center justify-center rounded-xl bg-primary-container text-on-primary-container">
+              <Cloud className="!text-2xl" />
             </span>
-            <span className="font-display text-body-lg font-bold text-on-surface">EnStorage</span>
+            <span className="font-display text-body-md font-bold text-on-surface">EnStorage</span>
           </Link>
-          <span className="hidden h-6 w-px bg-outline-variant/40 sm:block" aria-hidden />
+          <span className="hidden h-5 w-px bg-outline-variant/40 sm:block" aria-hidden />
           <Link
             href="/"
             className="hidden items-center gap-1.5 text-metadata font-semibold text-on-surface-variant no-underline transition-colors hover:text-primary sm:inline-flex"
@@ -210,14 +213,22 @@ function PortalHeader({ doc }: { doc: DocMeta }) {
             {t('legal.backHome')}
           </Link>
         </div>
-        <PortalControls />
+        <div className="flex items-center gap-2">
+          <Link
+            href={user ? '/files' : '/login'}
+            className="hidden items-center gap-1.5 rounded-xl bg-primary-container px-3.5 py-2 text-sm font-semibold text-on-primary-container no-underline transition-colors hover:bg-primary-container/80 sm:inline-flex"
+          >
+            {t(user ? 'landing.cta.dashboard' : 'landing.cta.signIn')}
+          </Link>
+          <PortalControls />
+        </div>
       </div>
 
       <nav
         className="border-t border-outline-variant/20"
         aria-label={t('legal.switcherAria')}
       >
-        <div className="mx-auto flex w-full max-w-7xl gap-1 overflow-x-auto px-4 sm:px-6">
+        <div className="mx-auto flex w-full max-w-6xl gap-1 overflow-x-auto px-4 sm:px-6">
           {DOCS.map((item) => {
             const Icon = item.icon;
             const active = item.id === doc.id;
@@ -336,28 +347,27 @@ function PortalFooter() {
   const { t } = useTranslation();
 
   const links = [
-    { href: '/', labelKey: 'legal.home', external: false },
-    { href: DOCS_URL, labelKey: 'legal.apiDocs', external: true },
-    { href: GITHUB_URL, labelKey: 'legal.github', external: true },
+    { href: '/', labelKey: 'legal.home' },
+    { href: API_DOCS_HREF, labelKey: 'legal.apiDocs' },
+    { href: '/legal/privacy', labelKey: 'legal.footerPrivacy' },
+    { href: '/legal/terms', labelKey: 'legal.footerTerms' },
   ];
 
   return (
     <footer className="border-t border-outline-variant/20 bg-surface-dim">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-8 sm:px-6 md:flex-row md:items-center md:justify-between">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-8 sm:px-6 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              target={link.external ? '_blank' : undefined}
-              rel={link.external ? 'noreferrer noopener' : undefined}
               className="text-body-md text-on-surface-variant no-underline transition-colors hover:text-on-surface"
             >
               {t(link.labelKey)}
             </Link>
           ))}
           <a
-            href="mailto:enpiiofficial@gmail.com"
+            href={`mailto:${CONTACT_EMAIL}`}
             className="text-body-md text-on-surface-variant no-underline transition-colors hover:text-primary"
           >
             {t('legal.contactEmail')}
@@ -394,7 +404,7 @@ export function LegalDocument({ doc, lastUpdated }: Props) {
     <div className="min-h-screen bg-background font-body text-on-surface">
       <PortalHeader doc={meta} />
 
-      <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
+      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
         <div className="mb-6 border-b border-outline-variant/20 pb-6">
           <p className="text-label-sm font-semibold uppercase tracking-[0.14em] text-secondary">
             EnStorage

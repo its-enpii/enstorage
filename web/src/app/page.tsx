@@ -7,8 +7,8 @@ import LandingClient from './LandingClient';
 export const metadata: Metadata = {
   ...pageTitle('landing.pageTitle'),
   description:
-    'Satu antarmuka untuk semua akun Google Drive Anda: agregasi multi-akun, smart routing kuota, ' +
-    'REST API terbuka, dan privasi self-hosted 100%. Never Leaves Your Drive.',
+    'Satu tempat untuk semua akun Google Drive Anda: kuota digabung, file otomatis disimpan ke akun ' +
+    'dengan ruang kosong terbesar, dapat dibuka lewat web, dan tersedia lewat REST API.',
 };
 
 export default function Page() {
