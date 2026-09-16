@@ -54,6 +54,28 @@ class ShareLink extends Model
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * Factory: buat share link untuk file atau folder mana pun.
+     *
+     * Token dibuat sendiri (bukan caller-supplied) supaya pemanggil tidak
+     * perlu tahu soal encoding; `expires_at`/`max_views` boleh null =
+     * unlimited. Dipakai FolderController::share yang selalu bikin pivot row
+     * baru lalu mirror token-nya ke kolom legacy `folders.share_token`.
+     *
+     * @param  array{expires_at?:mixed, max_views?:int|null}  $options
+     */
+    public static function createFor(Model $shareable, string $userId, array $options = []): self
+    {
+        return static::create([
+            'user_id' => $userId,
+            'shareable_type' => get_class($shareable),
+            'shareable_id' => $shareable->getKey(),
+            'token' => bin2hex(random_bytes(16)),
+            'expires_at' => $options['expires_at'] ?? null,
+            'max_views' => $options['max_views'] ?? null,
+        ]);
+    }
+
     public function shareable(): MorphTo
     {
         return $this->morphTo();

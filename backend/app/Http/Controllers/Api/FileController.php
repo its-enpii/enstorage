@@ -914,9 +914,16 @@ class FileController extends Controller
     }
 
     /**
-     * Return a read-only JSON listing of a shared folder.
+     * Apakah $folderId berada di dalam (atau sama dengan) $rootFolderId.
+     *
+     * Dua strategi, keduanya dipakai supaya tidak ada false negative:
+     *  1. Naik lewat parent_id (akurat, tapi rantai bisa terputus bila folder
+     *     di-move / parent-nya hilang dari hasil select).
+     *  2. Fallback materialized `path`: folder dianggap descendent bila
+     *     path-nya berawalan path root + '/'. Ini menyelamatkan kasus rantai
+     *     parent terputus (file di branch yang benar tapi 404 sebelum fix ini).
      */
-    private function isFolderDescendant(string $folderId, string $rootFolderId): bool
+    private function isFolderDescendant(string $folderId, string $rootFolderId, ?string $userId = null): bool
     {
         if ($folderId === $rootFolderId) {
             return true;
@@ -930,14 +937,110 @@ class FileController extends Controller
                 return true;
             }
             if (in_array($currentId, $visited, true)) {
-                break;
+                break; // cegah loop parent_id sikular
             }
             $visited[] = $currentId;
-            $folder = Folder::select('id', 'parent_id')->find($currentId);
-            $currentId = $folder?->parent_id;
+
+            $folder = Folder::select('id', 'parent_id', 'path', 'user_id')->find($currentId);
+            if (! $folder) {
+                break;
+            }
+
+            // Rantai parent terputus sebelum ketemu root → coba path.
+            if (! $folder->parent_id) {
+                break;
+            }
+            $currentId = $folder->parent_id;
         }
 
-        return false;
+        return $this->isFolderBeneathByPath($folderId, $rootFolderId, $userId);
+    }
+
+    /**
+     * Fallback berbasis materialized path: folder $folderId berada di dalam
+     * folder root $rootFolderId bila path-nya berprefix path root.
+     */
+    private function isFolderBeneathByPath(string $folderId, string $rootFolderId, ?string $userId = null): bool
+    {
+        $target = Folder::select('id', 'path', 'user_id')->find($folderId);
+        $root = Folder::select('id', 'path', 'user_id')->find($rootFolderId);
+
+        if (! $target || ! $root || ! $target->path || ! $root->path) {
+            return false;
+        }
+
+        if ($userId !== null && (string) $target->user_id !== (string) $userId) {
+            return false;
+        }
+
+        return str_starts_with($target->path.'/', rtrim($root->path, '/').'/');
+    }
+
+    /**
+     * SATU guard untuk semua mode akses share folder: listing (folder_id),
+     * preview/stream, ?download=1, ?thumbnail=1, dan ?info=1 semuanya lewat
+     * sini supaya tidak ada mode yang lolos pemeriksaan kepemilikan.
+     *
+     * Aturan keamanan (docs/architecture.md §Isolasi Data Per-User):
+     *  - file/folder target harus dimiliki user yang sama dengan pemilik
+     *    folder share — file_id milik user lain ditolak walau kebetulan
+     *    strukturnya terlihat seperti descendant.
+     *  - file hanya boleh diakses bila folder-nya ada di dalam folder root
+     *    share (rantai parent ATAU materialized path).
+     */
+    private function findFileInSharedFolder(Request $request, Folder $rootFolder, string $fileId): ?FileModel
+    {
+        if ($fileId === '') {
+            return null;
+        }
+
+        $file = FileModel::where('id', $fileId)
+            ->where('user_id', $rootFolder->user_id)
+            ->where('upload_status', FileModel::STATUS_DONE)
+            ->first();
+
+        if (! $file) {
+            return null;
+        }
+
+        // File harus benar-benar berada di dalam folder share. File dengan
+        // folder_id NULL berada di root penyimpanan user (bukan di dalam
+        // folder mana pun, termasuk folder share) — tidak pernah muncul di
+        // listing, jadi juga tidak boleh bisa dibuka lewat file_id.
+        if (! $file->folder_id) {
+            return null;
+        }
+
+        return $this->isFolderDescendant((string) $file->folder_id, (string) $rootFolder->id, $rootFolder->user_id)
+            ? $file
+            : null;
+    }
+
+    /**
+     * Validasi permintaan folder_id: folder target harus milik pemilik share
+     * dan berada di dalam (atau sama dengan) folder root yang di-share.
+     */
+    private function findFolderInSharedFolder(Request $request, Folder $rootFolder, string $folderId): ?Folder
+    {
+        if ($folderId === '') {
+            return null;
+        }
+
+        if ($folderId === (string) $rootFolder->id) {
+            return $rootFolder;
+        }
+
+        $folder = Folder::where('id', $folderId)
+            ->where('user_id', $rootFolder->user_id)
+            ->first();
+
+        if (! $folder) {
+            return null;
+        }
+
+        return $this->isFolderDescendant((string) $folder->id, (string) $rootFolder->id, $rootFolder->user_id)
+            ? $folder
+            : null;
     }
 
     private function getBreadcrumbs(Folder $currentFolder, Folder $rootFolder): array
@@ -964,33 +1067,34 @@ class FileController extends Controller
     private function respondSharedFolder(Request $request, Folder $folder): StreamedResponse|JsonResponse|BinaryFileResponse
     {
         if ($request->has('file_id')) {
-            $fileId = (string) $request->query('file_id');
-            $file = FileModel::where('id', $fileId)->where('upload_status', 'done')->first();
-            if ($file && $file->folder_id && $this->isFolderDescendant($file->folder_id, $folder->id)) {
-                return $this->resolveFileResponse($request, $file);
+            $file = $this->findFileInSharedFolder($request, $folder, (string) $request->query('file_id'));
+
+            if (! $file) {
+                return $this->fail(__('File tidak ditemukan pada folder share ini.'), 404);
             }
-            return $this->fail(__('File tidak ditemukan pada folder share ini.'), 404);
+
+            // info=1 / thumbnail=1 / download=1 / stream ditangani satu
+            // fungsi yang sama — guard di atas sudah dilewati untuk semuanya.
+            return $this->resolveFileResponse($request, $file);
         }
 
         $targetFolder = $folder;
         if ($request->filled('folder_id')) {
-            $requestedFolderId = (string) $request->query('folder_id');
-            if (! $this->isFolderDescendant($requestedFolderId, $folder->id)) {
+            $requested = $this->findFolderInSharedFolder($request, $folder, (string) $request->query('folder_id'));
+            if (! $requested) {
                 return $this->fail(__('Folder tidak ditemukan pada folder share ini.'), 404);
             }
-            $found = Folder::find($requestedFolderId);
-            if (! $found) {
-                return $this->fail(__('Folder tidak ditemukan.'), 404);
-            }
-            $targetFolder = $found;
+            $targetFolder = $requested;
         }
 
         $subfolders = Folder::where('parent_id', $targetFolder->id)
+            ->where('user_id', $folder->user_id)
             ->orderBy('name')
             ->get();
 
         $files = FileModel::where('folder_id', $targetFolder->id)
-            ->where('upload_status', 'done')
+            ->where('user_id', $folder->user_id)
+            ->where('upload_status', FileModel::STATUS_DONE)
             ->with('thumbnail:id,file_id')
             ->orderByDesc('created_at')
             ->get(['id', 'name', 'original_name', 'mime_type', 'size']);

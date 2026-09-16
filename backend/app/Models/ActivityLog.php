@@ -24,6 +24,7 @@ class ActivityLog extends Model
     public const ACTION_USER_REGISTER = 'USER_REGISTER';
     public const ACTION_USER_UPDATE = 'USER_UPDATE';
     public const ACTION_USER_PASSWORD_CHANGE = 'USER_PASSWORD_CHANGE';
+    public const ACTION_USER_DELETE = 'USER_DELETE';
     public const ACTION_GOOGLE_ACCOUNT_ADD = 'GOOGLE_ACCOUNT_ADD';
     public const ACTION_GOOGLE_ACCOUNT_REMOVE = 'GOOGLE_ACCOUNT_REMOVE';
     public const ACTION_GOOGLE_ACCOUNT_QUOTA_SYNC = 'GOOGLE_ACCOUNT_QUOTA_SYNC';
@@ -32,6 +33,8 @@ class ActivityLog extends Model
     public const ACTION_FOLDER_MOVE = 'FOLDER_MOVE';
     public const ACTION_FOLDER_DELETE = 'FOLDER_DELETE';
     public const ACTION_FOLDER_STAR = 'FOLDER_STAR';
+    public const ACTION_FOLDER_SHARE = 'FOLDER_SHARE';
+    public const ACTION_FOLDER_UNSHARE = 'FOLDER_UNSHARE';
     public const ACTION_FILE_UPLOAD = 'FILE_UPLOAD';
     public const ACTION_FILE_UPLOAD_FAILED = 'FILE_UPLOAD_FAILED';
     public const ACTION_FILE_RENAME = 'FILE_RENAME';

@@ -39,4 +39,25 @@ class FolderPathService
             $this->refreshSubtree($child);
         }
     }
+
+    /**
+     * Sinkronkan kolom `path` seluruh descendant saja (bukan folder itu
+     * sendiri). Caller di FolderController::update / ::move sudah menghitung
+     * + menyimpan path folder yang đổi nama/posisi sebelum memanggil ini,
+     * sehingga di sini cukup turun rekursif ke anak-anaknya.
+     *
+     * Urutan top-down penting: path anak selalu diturunkan dari path parent
+     * yang sudah tersimpan lebih dulu.
+     */
+    public function cascadePathUpdate(Folder $folder): void
+    {
+        $children = Folder::where('parent_id', $folder->id)->get();
+
+        foreach ($children as $child) {
+            $child->path = $this->computePath($child);
+            $child->saveQuietly();
+
+            $this->cascadePathUpdate($child);
+        }
+    }
 }

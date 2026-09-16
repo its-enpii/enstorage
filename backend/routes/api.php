@@ -49,6 +49,9 @@ Route::get('google-accounts/oauth/callback-web', [GoogleAccountController::class
 // Protected
 Route::middleware('auth.apikey')->group(function () {
     Route::post('auth/logout', [AuthController::class, 'logout']);
+    // Hapus akun permanen — Sanctum only (API key tidak boleh bisa
+    // menghapus identitas user, sama seperti /api-keys & /webhooks).
+    Route::delete('auth/account', [AuthController::class, 'deleteAccount'])->middleware('auth.sanctum.only');
     Route::get('auth/me', [AuthController::class, 'me']);
     Route::patch('auth/me', [AuthController::class, 'updateMe']);
     Route::post('auth/change-password', [AuthController::class, 'changePassword']);
@@ -153,7 +156,11 @@ Route::middleware('auth.apikey')->group(function () {
 
 // API Key scope + throttle + log — hanya berlaku jika request pakai API key
 // (CheckScope/ThrottleApiKey/ActivityLogApiKey skip otomatis untuk Sanctum).
-Route::middleware(['throttle.apikey', 'log.apikey'])->group(function () {
+// `auth.apikey` WAJIB ada di sini: grup ini me-register ulang URI yang sama
+// (mis. google-accounts/{id}/scan) dan registrasi terakhir menang di Route
+// Collection. Tanpa auth.apikey, route tersebut jatuh tanpa user → controller
+// mengakses `$request->user()->id` pada null.
+Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(function () {
     Route::middleware('check.scope:write')->group(function () {
         Route::post('files/upload', [FileUploadController::class, 'upload']);
         Route::post('files/upload-from-url', [FileUploadController::class, 'uploadFromUrl']);

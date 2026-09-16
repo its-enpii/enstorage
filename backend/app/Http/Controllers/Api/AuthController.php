@@ -4,18 +4,23 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Models\File as FileModel;
 use App\Models\GoogleAccount;
 use App\Models\User;
 use App\Services\ActivityLogService;
+use App\Services\Google\GoogleClientFactory;
+use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleTokenService;
 use App\Services\Google\QuotaManager;
 use App\Services\NotificationService;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Throwable;
 
 class AuthController extends Controller
 {
@@ -459,6 +464,94 @@ class AuthController extends Controller
         );
 
         return $this->ok(null, __('Logout berhasil.'));
+    }
+
+    /**
+     * DELETE /auth/account — hapus akun utama (user) beserta seluruh isi
+     * vault-nya. Khusus Sanctum (tidak bisa dipanggil pakai API key) supaya
+     * kredensial mesin tidak bisa menghapus identitas manusia.
+     *
+     * Urutan kerja:
+     *  1. Revoke token Google tiap akun (best-effort).
+     *  2. Hapus thumbnail fisik di storage lokal (best-effort).
+     *  3. Hapus folder root EnStorage di Google Drive per akun (best-effort —
+     *     folder root berisi seluruh file/folder akun tersebut).
+     *  4. Hapus token Sanctum lalu baris user. FK cascade membersihkan
+     *     google_accounts, folders, files, api_keys, api_key_logs, webhooks,
+     *     device_tokens, share_links; activity_logs.user_id nullOnDelete.
+     *
+     * Kegagalan call ke Google hanya di-log dan tidak memblokir penghapusan —
+     * user yang meminta akunnya dihapus tidak boleh terkunci oleh API yang mati.
+     */
+    public function deleteAccount(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $userId = $user->id;
+
+        $accounts = GoogleAccount::where('user_id', $userId)->get();
+        $thumbnailPaths = FileModel::where('user_id', $userId)
+            ->with('thumbnail:id,file_id,path')
+            ->get()
+            ->pluck('thumbnail')
+            ->filter()
+            ->pluck('path')
+            ->all();
+
+        // Log ditulis SEBELUM user dihapus supaya activity_logs menyimpan
+        // user_id asli (kolomnya nullOnDelete, jadi baris tetap ada setelahnya).
+        $this->activityLog->log(
+            ActivityLog::ACTION_USER_DELETE,
+            userId: $userId,
+            metadata: ['email' => $user->email, 'google_accounts' => $accounts->count()],
+            request: $request,
+        );
+
+        DB::transaction(function () use ($user, $accounts, $thumbnailPaths) {
+            // 1 + 3. Google: revoke token lalu hapus folder root EnStorage.
+            $clientFactory = app(GoogleClientFactory::class);
+            $folderService = app(GoogleDriveFolderService::class);
+
+            foreach ($accounts as $account) {
+                try {
+                    $clientFactory->makeFor($account)->revokeToken($account->access_token);
+                } catch (Throwable $e) {
+                    Log::warning('Revoke token gagal saat hapus akun', [
+                        'account_id' => $account->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+
+                try {
+                    $rootFolderId = $account->gdrive_root_folder_id
+                        ?: $this->quota->ensureRootFolder($account);
+                } catch (Throwable $e) {
+                    Log::warning('Resolve root folder gagal saat hapus akun', [
+                        'account_id' => $account->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                    $rootFolderId = null;
+                }
+
+                if ($rootFolderId) {
+                    $folderService->deleteFolderOnDrive($account, $rootFolderId);
+                }
+
+                $this->quota->invalidate($account);
+            }
+
+            // 2. Thumbnail lokal (metadata ikut ter-cascade dari files).
+            foreach ($thumbnailPaths as $path) {
+                @unlink(storage_path('app/'.$path));
+            }
+
+            // 4. Token Sanctum + baris user.
+            $user->tokens()->delete();
+            $user->delete();
+        });
+
+        Log::info('Akun user telah dihapus permanen', ['user_id' => $userId]);
+
+        return $this->ok(null, __('Akun berhasil dihapus.'));
     }
 
     public function me(Request $request): JsonResponse

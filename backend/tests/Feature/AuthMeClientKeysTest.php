@@ -14,6 +14,12 @@ use Tests\TestCase;
 /**
  * Coverage for the `client_keys` field of GET /auth/me.
  *
+ * /auth/me returns the user payload flat inside the response envelope
+ * (`data` IS the user) — unlike /auth/login & /auth/register which wrap it
+ * as `data.user`. Consumers rely on that: web's AuthProvider calls
+ * `apiRequest<User>('/auth/me?with_counts=1')` (apiRequest already unwraps
+ * `.data`), and the mobile repository reads `body['data']` directly.
+ *
  * Only files with `client_key_origin = 'client'` should appear in the
  * returned list. Server-generated keys (uploaded without a `client_key`
  * field) are not real device identifiers and must not be exposed to
@@ -42,7 +48,7 @@ class AuthMeClientKeysTest extends TestCase
         $response = $this->getJson('/api/v1/auth/me');
 
         $response->assertOk();
-        $this->assertSame([], $response->json('data.user.client_keys'));
+        $this->assertSame([], $response->json('data.client_keys'));
     }
 
     public function test_me_excludes_server_generated_client_keys(): void
@@ -87,7 +93,7 @@ class AuthMeClientKeysTest extends TestCase
         $response = $this->getJson('/api/v1/auth/me');
 
         $response->assertOk();
-        $this->assertSame([], $response->json('data.user.client_keys'));
+        $this->assertSame([], $response->json('data.client_keys'));
     }
 
     public function test_me_includes_only_client_origin_client_keys(): void
@@ -143,9 +149,11 @@ class AuthMeClientKeysTest extends TestCase
         $response = $this->getJson('/api/v1/auth/me');
 
         $response->assertOk();
-        $keys = $response->json('data.user.client_keys');
+        $keys = $response->json('data.client_keys');
+        $this->assertIsArray($keys, 'client_keys must always be an array in the /auth/me payload');
         sort($keys);
-        $this->assertSame([$anotherDeviceKey, $deviceKey], $keys);
+        // sort() puts chrome before firefox — compare against the sorted pair.
+        $this->assertSame([$deviceKey, $anotherDeviceKey], $keys);
     }
 
     public function test_me_does_not_leak_other_users_client_keys(): void
@@ -189,6 +197,6 @@ class AuthMeClientKeysTest extends TestCase
         $response = $this->getJson('/api/v1/auth/me');
 
         $response->assertOk();
-        $this->assertSame([$aliceKey], $response->json('data.user.client_keys'));
+        $this->assertSame([$aliceKey], $response->json('data.client_keys'));
     }
 }

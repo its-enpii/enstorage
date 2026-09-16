@@ -10,7 +10,9 @@ use App\Models\ShareLink;
 use App\Models\File;
 use App\Services\ActivityLogService;
 use App\Services\Folder\FolderPathService;
+use App\Models\GoogleAccount;
 use App\Services\Google\GoogleClientFactory;
+use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
 use App\Services\WebhookService;
@@ -31,6 +33,7 @@ class FolderController extends Controller
         private readonly ActivityLogService $activityLog,
         private readonly WebhookService $webhooks,
         private readonly GoogleDriveUploader $uploader,
+        private readonly GoogleDriveFolderService $folders,
     ) {}
 
     /**
@@ -366,6 +369,111 @@ class FolderController extends Controller
     /**
      * Dapatkan semua folder ID turunan (termasuk folder ini sendiri).
      */
+    /**
+     * Kumpulkan folder Google Drive (folder utama + descendant) yang harus
+     * ikut dihapus, sudah terurut leaf → root.
+     *
+     * @param  array<int, string>  $folderIds
+     * @return array<int, array{folder_id: string, gdrive_folder_id: string, google_account_id: ?string}>
+     */
+    private function collectDriveFolderTargets(string $rootFolderId, string $userId, array $folderIds): array
+    {
+        $folders = Folder::where('user_id', $userId)
+            ->whereIn('id', $folderIds)
+            ->get(['id', 'parent_id', 'gdrive_folder_id']);
+
+        $childrenByParent = [];
+        foreach ($folders as $candidate) {
+            $childrenByParent[$candidate->parent_id][] = $candidate->id;
+        }
+
+        // Post-order traversal: anak sebelum bapak (leaf → root).
+        $leafFirst = [];
+        $walk = function (string $id) use (&$walk, &$leafFirst, &$childrenByParent): void {
+            foreach ($childrenByParent[$id] ?? [] as $childId) {
+                $walk($childId);
+            }
+            $leafFirst[] = $id;
+        };
+        $walk($rootFolderId);
+
+        $byId = $folders->keyBy('id');
+        $targets = [];
+
+        foreach ($leafFirst as $id) {
+            $model = $byId->get($id);
+            if (! $model || ! $model->gdrive_folder_id) {
+                continue;
+            }
+
+            $targets[] = [
+                'folder_id' => $id,
+                'gdrive_folder_id' => (string) $model->gdrive_folder_id,
+                'google_account_id' => File::where('folder_id', $id)
+                    ->whereNotNull('google_account_id')
+                    ->value('google_account_id'),
+            ];
+        }
+
+        return $targets;
+    }
+
+    /**
+     * Hapus folder-folder Google Drive hasil collectDriveFolderTargets().
+     * Best-effort: kegagalan hanya di-log, tidak memblokir response delete.
+     *
+     * @param  array<int, array{folder_id: string, gdrive_folder_id: string, google_account_id: ?string}>  $targets
+     */
+    private function deleteDriveFolders(string $userId, array $targets): void
+    {
+        if (empty($targets)) {
+            return;
+        }
+
+        $fallbackAccountIds = GoogleAccount::where('user_id', $userId)
+            ->where('is_active', true)
+            ->pluck('id')
+            ->all();
+
+        foreach ($targets as $target) {
+            $candidates = array_values(array_unique(array_filter(
+                array_merge([$target['google_account_id']], $fallbackAccountIds),
+            )));
+
+            if (empty($candidates)) {
+                Log::warning('Folder Google Drive tidak dihapus: akun Google tidak ditemukan', [
+                    'folder_id' => $target['folder_id'],
+                    'gdrive_folder_id' => $target['gdrive_folder_id'],
+                ]);
+
+                continue;
+            }
+
+            $deleted = false;
+
+            foreach ($candidates as $accountId) {
+                $account = GoogleAccount::find($accountId);
+                if (! $account) {
+                    continue;
+                }
+
+                if ($this->folders->deleteFolderOnDrive($account, $target['gdrive_folder_id'])) {
+                    $deleted = true;
+
+                    break;
+                }
+            }
+
+            if (! $deleted) {
+                Log::warning('Folder Google Drive gagal dihapus dari Drive', [
+                    'folder_id' => $target['folder_id'],
+                    'gdrive_folder_id' => $target['gdrive_folder_id'],
+                    'accounts_tried' => count($candidates),
+                ]);
+            }
+        }
+    }
+
     private function getDescendantFolderIds(string $folderId, string $userId): array
     {
         $ids = [$folderId];
@@ -388,7 +496,14 @@ class FolderController extends Controller
     }
 
     /**
-     * DELETE /folders/{id} — hapus folder (jika delete_files=true, hapus semua file & subfolders; jika false, file dipindah ke NULL = root).
+     * DELETE /folders/{id} — hapus folder.
+     *
+     * `delete_files=true`  : hapus seluruh file + subfolder di DB dan ikut
+     *                        menghapus folder Google Drive 1:1-nya (root +
+     *                        semua descendant, urut leaf → root).
+     * `delete_files=false` : folder EnStorage hilang dari DB, file dipindah ke
+     *                        root. Folder Google Drive TIDAK dihapus — isinya
+     *                        memang sengaja ditinggalkan di Drive.
      */
     public function destroy(Request $request, string $id): JsonResponse
     {
@@ -404,6 +519,12 @@ class FolderController extends Controller
 
         if ($deleteFiles) {
             $descendantFolderIds = $this->getDescendantFolderIds($folderId, $userId);
+
+            // Snapshot target Google Drive SEBELUM barisnya hilang dari DB:
+            // folder tidak menyimpan google_account_id, jadi akun pemilik
+            // folder diambil dari file pertama di dalamnya (fallback: semua
+            // akun aktif milik user, dicoba satu per satu).
+            $driveFolderTargets = $this->collectDriveFolderTargets($folderId, $userId, $descendantFolderIds);
 
             // Ambil semua file di dalam folder ini dan seluruh subfoldernya
             $filesToDelete = File::where('user_id', $userId)
@@ -458,6 +579,10 @@ class FolderController extends Controller
 
             // Hapus folder utama (FK cascade akan menghapus subfolder-subfolder di DB)
             $folder->delete();
+
+            // DB sudah bersih — baru hapus foldernya di Google Drive (leaf →
+            // root) supaya tidak ada folder yatim tersisa di Drive.
+            $this->deleteDriveFolders($userId, $driveFolderTargets);
         } else {
             $filesInFolder = File::where('folder_id', $folder->id)->get();
 
@@ -530,11 +655,18 @@ class FolderController extends Controller
             request: $request,
         );
 
-        // Webhook event dispatch
+        // Webhook event dispatch — pakai helper yang sama dengan file share
+        // supaya URL selalu mengarah ke frontend (bukan APP_URL backend).
+        $shareUrl = WebhookService::shareUrlFor($link->token);
+
         $this->webhooks->dispatch($request->user()->id, 'folder.shared', [
             'folder_id' => $folder->id,
-            'share_url' => url("/s/{$link->token}"),
+            'name' => $folder->name,
+            'share_token' => $link->token,
+            'share_url' => $shareUrl,
+            'share_preview_url' => WebhookService::shareUrlFor($link->token, true),
             'expires_at' => $expiresAt,
+            'max_views' => $maxViews ? (int) $maxViews : null,
         ]);
 
         // Realtime broadcast
@@ -542,7 +674,8 @@ class FolderController extends Controller
 
         return $this->ok([
             'share_token' => $link->token,
-            'share_url' => url("/s/{$link->token}"),
+            'share_url' => $shareUrl,
+            'share_preview_url' => WebhookService::shareUrlFor($link->token, true),
             'share_link_id' => $link->id,
             'expires_at' => $link->expires_at?->toISOString(),
             'max_views' => $link->max_views,
@@ -559,9 +692,11 @@ class FolderController extends Controller
             return $this->fail(__('Folder tidak ditemukan.'), 404);
         }
 
-        // Revoke semua active links untuk folder ini
-        ShareLink::where('subject_type', Folder::class)
-            ->where('subject_id', $folder->id)
+        // Revoke semua active links untuk folder ini. Kolom pivot polymorphic
+        // namanya `shareable_*` (lihat migration create_share_links_table) —
+        // `subject_*` milik activity_logs, jadi jangan ketukar.
+        ShareLink::where('shareable_type', Folder::class)
+            ->where('shareable_id', $folder->id)
             ->whereNull('revoked_at')
             ->update(['revoked_at' => now()]);
 

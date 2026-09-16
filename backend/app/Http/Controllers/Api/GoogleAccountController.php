@@ -14,6 +14,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class GoogleAccountController extends Controller
@@ -541,6 +542,18 @@ HTML;
             return $this->fail(__('Akun tidak ditemukan.'), 404);
         }
 
+        // Akun utama (parent) = identitas pemilik vault. Tidak boleh dicabut
+        // dari daftar akun — penghapusan total hanya lewat halaman Pengaturan.
+        if ($this->isPrimaryAccount($request, $account)) {
+            return $this->fail(__('Akun utama tidak dapat dicabut dari daftar akun. Gunakan Hapus Akun di Pengaturan.'), 403);
+        }
+
+        // Kondisi abnormal: user login tidak punya akun utama sama sekali
+        // (email user tidak match akun mana pun) → tidak boleh menghapus apa pun.
+        if (! $this->userHasPrimaryAccount($request)) {
+            return $this->fail(__('Hanya akun utama yang dapat mengelola daftar akun.'), 403);
+        }
+
         // Coba revoke token di Google
         try {
             $client = app(\App\Services\Google\GoogleClientFactory::class)->makeFor($account);
@@ -591,8 +604,12 @@ HTML;
 
     public function scan(Request $request, ?string $id = null): JsonResponse
     {
-        $userId = $request->user()->id;
-        $query = GoogleAccount::where('user_id', $userId)->where('is_active', true);
+        $user = $request->user();
+        if (! $user) {
+            return $this->fail(__('Autentikasi diperlukan.'), 401);
+        }
+
+        $query = GoogleAccount::where('user_id', $user->id)->where('is_active', true);
         if ($id) {
             $query->where('id', $id);
         }
@@ -609,6 +626,11 @@ HTML;
             'files_updated' => 0,
         ];
 
+        // Error per akun tidak lagi ditelan diam-diam: tetap HTTP 200 selama
+        // ada sebagian yang sukses, tapi rincian kegagalan ikut dikirim supaya
+        // user tahu akun mana yang bermasalah dan kenapa.
+        $errors = [];
+
         foreach ($accounts as $account) {
             try {
                 $stats = $folderService->scanGoogleDrive($account);
@@ -616,11 +638,57 @@ HTML;
                 $totalStats['files_created'] += $stats['files_created'];
                 $totalStats['files_updated'] += $stats['files_updated'];
             } catch (Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('Scan Google Drive failed for account '.$account->id.': '.$e->getMessage());
+                Log::warning('Scan Google Drive failed for account '.$account->id.': '.$e->getMessage());
+                $errors[] = [
+                    'account_id' => $account->id,
+                    'email' => $account->email,
+                    'message' => $e->getMessage(),
+                ];
             }
         }
 
-        return $this->ok($totalStats, __('Scan dan pemetaan 1:1 Google Drive selesai.'));
+        $payload = $totalStats + [
+            'accounts_scanned' => $accounts->count() - count($errors),
+            'errors' => $errors,
+        ];
+
+        if (count($errors) === $accounts->count()) {
+            return $this->fail(
+                __('Scan Google Drive gagal: ').$errors[0]['message'],
+                502,
+                $payload,
+            );
+        }
+
+        $message = $errors
+            ? __('Scan Google Drive selesai dengan :count akun bermasalah.', ['count' => count($errors)])
+            : __('Scan dan pemetaan 1:1 Google Drive selesai.');
+
+        return $this->ok($payload, $message);
+    }
+
+    /**
+     * Apakah akun ini adalah akun utama (parent) — yaitu emailnya sama dengan
+     * email user pemilik vault. Akun lain dianggap child.
+     */
+    private function isPrimaryAccount(Request $request, GoogleAccount $account): bool
+    {
+        $userEmail = (string) $request->user()->email;
+
+        return $userEmail !== '' && strcasecmp(trim($account->email), trim($userEmail)) === 0;
+    }
+
+    /**
+     * Apakah user yang login memiliki akun utama di vault-nya sendiri
+     * (ada google_accounts dengan email == users.email).
+     */
+    private function userHasPrimaryAccount(Request $request): bool
+    {
+        $user = $request->user();
+
+        return GoogleAccount::where('user_id', $user->id)
+            ->whereRaw('LOWER(email) = LOWER(?)', [$user->email])
+            ->exists();
     }
 
     private function findOwned(Request $request, string $id): ?GoogleAccount
