@@ -89,18 +89,6 @@ function curve(x1: number, y1: number, x2: number, y2: number) {
   return `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
 }
 
-function ColumnLabel({ children, align }: { children: string; align: 'left' | 'right' }) {
-  return (
-    <p
-      className={`text-label-sm uppercase tracking-[0.16em] text-outline ${
-        align === 'right' ? 'md:text-right' : 'md:text-left'
-      }`}
-    >
-      {children}
-    </p>
-  );
-}
-
 export function ArchitectureFlowHero() {
   const { t } = useTranslation();
   const frameRef = useRef<HTMLDivElement | null>(null);
@@ -201,7 +189,7 @@ export function ArchitectureFlowHero() {
   };
 
   return (
-    <div className="relative mx-auto mt-12 w-full max-w-5xl overflow-hidden rounded-3xl border border-outline-variant/30 bg-surface-container/30 p-6 backdrop-blur-xs sm:p-10">
+    <div className="relative w-full overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container/40 p-4 backdrop-blur-xs sm:p-5 lg:p-6">
       <h2 className="sr-only">{t('landing.hero.flow.title')}</h2>
 
       {/*
@@ -214,7 +202,7 @@ export function ArchitectureFlowHero() {
       */}
       <div
         ref={frameRef}
-        className="relative grid grid-cols-1 items-center gap-x-10 gap-y-5 md:grid-cols-[1fr_auto_1fr] md:gap-x-12 lg:gap-x-16"
+        className="relative grid grid-cols-1 items-center gap-x-6 gap-y-5 md:grid-cols-[1fr_auto_1fr] md:gap-x-8 lg:gap-x-12"
       >
         {/* Wires + pulses: 2 inbound lanes into the hub, 3 outbound lanes to the Drives. */}
         <svg
@@ -275,12 +263,11 @@ export function ArchitectureFlowHero() {
 
         {/* Inbound sources */}
         <div className="relative z-10 flex min-w-0 flex-col gap-3">
-          <ColumnLabel align="left">{t('landing.hero.flow.inbound')}</ColumnLabel>
           {SOURCES.map(({ id, icon: Icon, tone, labelKey, hintKey }) => (
             <div
               key={id}
               ref={register(id)}
-              className="flex items-center gap-3 rounded-2xl border border-outline-variant/30 bg-surface px-4 py-3 shadow-inner-glow transition-colors duration-200 hover:border-primary/30"
+              className="flex w-full items-center gap-3 rounded-xl border border-outline-variant/30 bg-surface px-3.5 py-2.5 shadow-inner-glow transition duration-200 hover:-translate-y-0.5 hover:border-primary/30"
             >
               <span
                 className="flex size-9 shrink-0 items-center justify-center rounded-xl border"
@@ -301,7 +288,7 @@ export function ArchitectureFlowHero() {
         <div className="relative z-10 justify-self-center">
           <div
             ref={register('hub')}
-            className="flex size-28 flex-col items-center justify-center gap-1.5 rounded-[26px] border border-primary/40 bg-surface-container hub-glow lg:size-32"
+            className="flex size-32 flex-col items-center justify-center gap-1.5 rounded-[26px] border border-primary/40 bg-surface-container hub-glow lg:size-36"
           >
             <span
               className="flex size-10 items-center justify-center rounded-2xl border border-primary/25"
@@ -324,12 +311,11 @@ export function ArchitectureFlowHero() {
 
         {/* Outbound Drive accounts */}
         <div className="relative z-10 flex min-w-0 flex-col gap-3">
-          <ColumnLabel align="right">{t('landing.hero.flow.outbound')}</ColumnLabel>
           {TARGETS.map(({ id, labelKey, emailKey, capacityKey }) => (
             <div
               key={id}
               ref={register(id)}
-              className="flex items-center gap-3 rounded-2xl border border-outline-variant/30 bg-surface px-4 py-2.5 shadow-inner-glow transition-colors duration-200 hover:border-primary/30"
+              className="flex w-full items-center gap-3 rounded-xl border border-outline-variant/30 bg-surface px-3.5 py-2 shadow-inner-glow transition duration-200 hover:-translate-y-0.5 hover:border-primary/30"
             >
               <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <Storage className="!text-base" />
@@ -346,11 +332,6 @@ export function ArchitectureFlowHero() {
         </div>
       </div>
 
-      <p className="mt-5 text-center text-metadata text-outline md:hidden">{t('landing.hero.flow.hubHint')}</p>
-
-      <p className="mt-6 text-center text-metadata leading-relaxed text-outline">
-        {t('landing.hero.flow.noSplit')}
-      </p>
     </div>
   );
 }
