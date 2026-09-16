@@ -8,12 +8,14 @@ import { apiRequest, ApiError, type GoogleAccount } from '@/lib/api';
 import { AppShell } from '@/components/AppShell';
 import { Button, IconButton } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { Chip } from '@/components/Chip';
 import { Alert } from '@/components/Alert';
 import { EmptyState } from '@/components/EmptyState';
 import { ProgressBar } from '@/components/ProgressBar';
 import { Loading } from '@/components/Loading';
 import { Spinner } from '@/components/Spinner';
 import { usePrompt } from '@/components/usePrompt';
+import { useAuth } from '@/components/AuthProvider';
 import { createViewStore } from '@/lib/viewStore';
 import { usePageTitle } from '@/lib/usePageTitle';
 import {
@@ -21,6 +23,7 @@ import {
   CloudIcon,
   LinkOffIcon,
   RefreshIcon,
+  ScanIcon,
 } from '@/lib/icons';
 
 const accountsStore = createViewStore<GoogleAccount[]>(async () => {
@@ -51,6 +54,7 @@ export default function GoogleAccountsClient() {
 
 function AccountsContent() {
   const { t, i18n } = useTranslation();
+  const { user } = useAuth();
   const { alert, confirm } = usePrompt();
   usePageTitle(t('accounts.title'));
   const router = useRouter();
@@ -171,7 +175,7 @@ function AccountsContent() {
               onClick={() => scanDrive()}
               disabled={scanning}
               size="lg"
-              leftIcon={<RefreshIcon />}
+              leftIcon={<ScanIcon />}
             >
               {scanning ? t('accounts.scanning') : t('accounts.scanDrive')}
             </Button>
@@ -206,6 +210,7 @@ function AccountsContent() {
             const used = acc.quota?.used ?? 0;
             const total = acc.quota?.total ?? 0;
             const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
+            const isPrimary = Boolean(user?.email && acc.email.toLowerCase() === user.email.toLowerCase());
             return (
               <Card
                 key={acc.id}
@@ -216,9 +221,9 @@ function AccountsContent() {
                   <IconButton
                     onClick={() => scanDrive(acc.id)}
                     disabled={scanning || busy === acc.id}
-                    title="Scan Google Drive 1:1"
+                    title={t('accounts.scanDriveAccount')}
                   >
-                    <RefreshIcon />
+                    <ScanIcon />
                   </IconButton>
                   <IconButton
                     onClick={() => syncQuota(acc.id)}
@@ -227,14 +232,16 @@ function AccountsContent() {
                   >
                     {busy === acc.id ? <Spinner size="xs" /> : <RefreshIcon />}
                   </IconButton>
-                  <Button
-                    variant="danger-soft"
-                    size="sm"
-                    onClick={() => remove(acc.id)}
-                    disabled={busy === acc.id}
-                  >
-                    <LinkOffIcon /> {t('accounts.revoke')}
-                  </Button>
+                  {!isPrimary && (
+                    <Button
+                      variant="danger-soft"
+                      size="sm"
+                      onClick={() => remove(acc.id)}
+                      disabled={busy === acc.id}
+                    >
+                      <LinkOffIcon /> {t('accounts.revoke')}
+                    </Button>
+                  )}
                 </div>
 
                 <div className="w-16 h-16 rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container shrink-0">
@@ -243,9 +250,16 @@ function AccountsContent() {
 
                 <div className="flex-1 min-w-0 flex flex-col gap-3">
                   <div className="min-w-0">
-                    <h3 className="font-body text-body-lg font-semibold text-on-surface break-words">
-                      {acc.label && acc.label !== acc.email ? acc.label : acc.email}
-                    </h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-body text-body-lg font-semibold text-on-surface break-words">
+                        {acc.label && acc.label !== acc.email ? acc.label : acc.email}
+                      </h3>
+                      {isPrimary && (
+                        <Chip variant="primary">
+                          {t('accounts.primary')}
+                        </Chip>
+                      )}
+                    </div>
                     {acc.label && acc.label !== acc.email && (
                       <p className="text-metadata text-outline font-mono truncate">{acc.email}</p>
                     )}

@@ -321,7 +321,9 @@
     "lastSynced": "Sync terakhir",
     "loadingLabel": "Memuat akun",
     "scanDrive": "Pindai Google Drive (1:1)",
+    "scanDriveAccount": "Pindai Google Drive (1:1)",
     "scanning": "Memindai...",
+    "primary": "Akun Utama",
     "quota": "Penggunaan kuota"
   },
   "starred": {
@@ -359,7 +361,23 @@
     "themeSistem": "Sistem",
     "bahasa": "Bahasa",
     "bahasaIndonesia": "Bahasa Indonesia",
-    "bahasaEnglish": "English"
+    "bahasaEnglish": "English",
+    "dangerZone": "Zona Berbahaya",
+    "dangerDesc": "Tindakan permanen untuk sesi dan akun Anda.",
+    "logout": "Keluar",
+    "logoutConfirmTitle": "Keluar?",
+    "logoutConfirmDesc": "Sesi Anda di perangkat ini akan diakhiri.",
+    "deleteAccount": "Hapus Akun",
+    "deleteAccountDesc": "Hapus akun Anda dan semua data vault terkait secara permanen.",
+    "deleteAccountDialog": {
+      "title": "Hapus Akun Secara Permanen?",
+      "description": "Tindakan ini tidak dapat dibatalkan. Semua file, folder, akun terhubung, dan pengaturan Anda di EnStorage akan dihapus permanen.",
+      "instruction": "Ketik {{confirmWord}} untuk mengonfirmasi:",
+      "confirmWord": "HAPUS",
+      "placeholder": "Ketik HAPUS di sini",
+      "confirm": "Hapus Akun",
+      "failed": "Gagal menghapus akun."
+    }
   },
   "share": {
     "title": "Bagikan File",
