@@ -166,9 +166,11 @@ export function ArchitectureFlowHero() {
   };
 
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container/40 p-4 backdrop-blur-xs sm:p-5 lg:p-6">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" aria-hidden="true" />
-      <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-b from-white/[0.03] via-transparent to-transparent" aria-hidden="true" />
+    <div className="relative w-full overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container/30 p-5 backdrop-blur-md before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-primary/25 before:to-transparent sm:p-6 lg:p-7 shadow-ambient">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(198,192,255,0.035)_1px,transparent_1px)] [background-size:20px_20px]"
+      />
       <h2 className="sr-only">{t('landing.hero.flow.title')}</h2>
 
       <div
@@ -217,14 +219,39 @@ export function ArchitectureFlowHero() {
             return (
               <g key={lane.id}>
                 <path
+                  d={lane.d}
+                  stroke={lane.color}
+                  strokeOpacity="0.15"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  fill="none"
+                />
+                <path
                   id={`arch-${lane.id}`}
                   d={lane.d}
                   stroke={strokeId}
-                  strokeWidth="1.4"
+                  strokeWidth="1.5"
                   strokeLinecap="round"
+                  fill="none"
                 />
-                <circle cx={lane.from.x} cy={lane.from.y} r="2.4" fill={lane.color} opacity="0.9" />
-                <circle cx={lane.to.x} cy={lane.to.y} r="2.4" fill={lane.color} opacity="0.9" />
+                <circle
+                  cx={lane.from.x}
+                  cy={lane.from.y}
+                  r="2.5"
+                  fill={lane.color}
+                  stroke="var(--color-surface-container)"
+                  strokeWidth="1"
+                  opacity="0.95"
+                />
+                <circle
+                  cx={lane.to.x}
+                  cy={lane.to.y}
+                  r="2.5"
+                  fill={lane.color}
+                  stroke="var(--color-surface-container)"
+                  strokeWidth="1"
+                  opacity="0.95"
+                />
               </g>
             );
           })}
@@ -252,13 +279,13 @@ export function ArchitectureFlowHero() {
             <div
               key={id}
               ref={register(id)}
-              className="flex w-full items-center gap-3 rounded-xl border border-outline-variant/25 bg-surface px-4 py-3 shadow-inner-glow transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/35 hover:bg-surface-container-high/60"
+              className="flex w-full items-center gap-3 rounded-xl border border-outline-variant/25 bg-surface/80 px-4 py-3 shadow-inner-glow transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-surface-container-high/70"
             >
               <span
                 className={
                   tone === 'secondary'
-                    ? 'flex size-9 shrink-0 items-center justify-center rounded-xl border border-secondary/20 bg-secondary/10 text-secondary'
-                    : 'flex size-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary'
+                    ? 'flex size-9 shrink-0 items-center justify-center rounded-lg border border-secondary/25 bg-secondary/15 text-secondary'
+                    : 'flex size-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary'
                 }
               >
                 <Icon className="!text-lg" />
@@ -275,20 +302,26 @@ export function ArchitectureFlowHero() {
         <div className="relative z-10 justify-self-center">
           <div
             ref={register('hub')}
-            className="relative flex size-32 flex-col items-center justify-center gap-1.5 overflow-hidden rounded-[26px] border border-primary/35 bg-surface-container ring-1 ring-primary/15 hub-glow lg:size-36"
+            className="relative flex size-32 flex-col items-center justify-center gap-2 overflow-hidden rounded-[28px] border border-primary/40 bg-surface-container ring-1 ring-primary/20 hub-glow lg:size-36"
           >
-            <span className="pointer-events-none absolute inset-0 rounded-[26px] bg-gradient-to-br from-primary/[0.09] via-transparent to-transparent" aria-hidden="true" />
-            <span className="pointer-events-none absolute inset-0 rounded-[26px] border border-white/5" aria-hidden="true" />
-            <span className="relative flex size-10 items-center justify-center rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/15 to-primary/5">
-              <Cloud className="!text-xl text-primary lg:!text-2xl" />
+            <span
+              className="pointer-events-none absolute inset-0 rounded-[28px] bg-gradient-to-br from-primary/10 via-transparent to-transparent"
+              aria-hidden="true"
+            />
+            <span
+              className="pointer-events-none absolute inset-0 rounded-[28px] border border-white/5"
+              aria-hidden="true"
+            />
+            <span className="relative flex size-10 items-center justify-center rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/20 to-primary/5 text-primary shadow-sm">
+              <Cloud className="!text-xl lg:!text-2xl" />
             </span>
-            <span className="relative font-display text-metadata font-semibold tracking-tight text-on-surface lg:text-body-md">
+            <span className="relative font-display text-body-md font-bold tracking-tight text-on-surface">
               EnStorage
             </span>
+            <span className="relative rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium tracking-wide text-primary">
+              Core Engine
+            </span>
           </div>
-          <p className="absolute left-1/2 top-full hidden -translate-x-1/2 whitespace-nowrap pt-3 text-metadata text-outline md:block">
-            {t('landing.hero.flow.hubHint')}
-          </p>
           <ArrowDownward className="!text-lg mx-auto mt-1 text-outline/60 md:!hidden" aria-hidden="true" />
         </div>
 
@@ -299,15 +332,15 @@ export function ArchitectureFlowHero() {
               ref={register(id)}
               className={
                 accent
-                  ? 'flex w-full items-center gap-3 rounded-xl border border-secondary/30 bg-surface px-4 py-3 shadow-inner-glow ring-1 ring-secondary/10 transition-all duration-300 hover:-translate-y-0.5 hover:border-secondary/40 hover:bg-surface-container-high/60'
-                  : 'flex w-full items-center gap-3 rounded-xl border border-outline-variant/25 bg-surface px-4 py-3 shadow-inner-glow transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-surface-container-high/60'
+                  ? 'flex w-full items-center gap-3 rounded-xl border border-secondary/45 bg-secondary/[0.03] px-4 py-3 shadow-inner-glow ring-1 ring-secondary/15 transition-all duration-300 hover:-translate-y-0.5 hover:border-secondary/50 hover:bg-secondary/[0.06]'
+                  : 'flex w-full items-center gap-3 rounded-xl border border-outline-variant/25 bg-surface/80 px-4 py-3 shadow-inner-glow transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-surface-container-high/60'
               }
             >
               <span
                 className={
                   accent
-                    ? 'flex size-8 shrink-0 items-center justify-center rounded-lg border border-secondary/20 bg-secondary/10 text-secondary'
-                    : 'flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary'
+                    ? 'flex size-8 shrink-0 items-center justify-center rounded-lg border border-secondary/25 bg-secondary/15 text-secondary'
+                    : 'flex size-8 shrink-0 items-center justify-center rounded-lg border border-primary/10 bg-primary/10 text-primary'
                 }
               >
                 <Storage className="!text-base" />
@@ -319,7 +352,7 @@ export function ArchitectureFlowHero() {
               <span
                 className={
                   accent
-                    ? 'shrink-0 rounded-full border border-secondary/20 bg-secondary/10 px-2.5 py-0.5 text-label-sm font-medium tabular-nums text-secondary'
+                    ? 'shrink-0 rounded-full border border-secondary/30 bg-secondary/15 px-2.5 py-0.5 text-label-sm font-semibold tabular-nums text-secondary'
                     : 'shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-label-sm font-medium tabular-nums text-primary'
                 }
               >

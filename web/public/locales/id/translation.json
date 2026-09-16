@@ -629,12 +629,13 @@
       "signInLoading": "Mengalihkan ke Google…"
     },
     "hero": {
+      "eyebrow": "Infrastruktur Penyimpanan Multi-Akun",
       "title": "Never Leaves Your Drive.",
       "subtitle": "Kelola banyak akun Google Drive dalam satu tempat. File otomatis disimpan ke akun dengan ruang kosong terbesar, dapat diakses lewat web, dan siap diintegrasikan lewat REST API.",
       "primary": "Mulai Sekarang",
       "primarySignedIn": "Buka Dashboard",
       "secondaryApi": "Dokumentasi API",
-      "trust": "Dipasang di server Anda sendiri. File tetap di Google Drive Anda — EnStorage tidak pernah menampungnya secara permanen.",
+      "trust": "File tetap di Google Drive Anda — EnStorage hanya mengarahkan dan tidak pernah menampungnya secara permanen.",
       "mock": {
         "title": "Kolam kuota gabungan",
         "subtitle": "3 akun terhubung",
@@ -662,7 +663,6 @@
         "title": "Diagram alur arsitektur",
         "subtitle": "User, aplikasi, dan skrip bicara ke satu hub — EnStorage yang memilih Drive tujuan",
         "hub": "EnStorage Core Engine",
-        "hubHint": "Diproses di server Anda sendiri",
         "simulate": "Simulasi alur",
         "requestLabel": "Jenis request",
         "sizeLabel": "Ukuran file baru",

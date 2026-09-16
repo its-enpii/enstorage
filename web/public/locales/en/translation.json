@@ -629,12 +629,13 @@
       "signInLoading": "Redirecting to Google…"
     },
     "hero": {
+      "eyebrow": "Non-Custodial Storage Infrastructure",
       "title": "Never Leaves Your Drive.",
       "subtitle": "Manage several Google Drive accounts in one place. Files are saved automatically to the account with the most free space, readable from the web, and ready to integrate through a REST API.",
       "primary": "Get started",
       "primarySignedIn": "Open dashboard",
       "secondaryApi": "API documentation",
-      "trust": "Installed on your own server. Files stay in your Google Drive — EnStorage never keeps them permanently.",
+      "trust": "Files stay in your Google Drive — EnStorage only routes and never keeps them permanently.",
       "mock": {
         "title": "Combined quota pool",
         "subtitle": "3 connected accounts",
@@ -662,7 +663,6 @@
         "title": "Architecture flow diagram",
         "subtitle": "Users, apps, and scripts talk to one hub — EnStorage picks the destination Drive",
         "hub": "EnStorage Core Engine",
-        "hubHint": "Runs on your own server",
         "simulate": "Run flow",
         "requestLabel": "Request type",
         "sizeLabel": "New file size",

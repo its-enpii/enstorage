@@ -184,18 +184,26 @@ function Hero() {
   const { user, signIn, signingIn } = useGoogleSignIn();
 
   return (
-    <section className="border-b border-outline-variant/20">
-      <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-4 py-14 sm:px-6 lg:gap-12 lg:px-8 lg:py-20">
+    <section className="relative isolate overflow-hidden border-b border-outline-variant/20">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_0%,rgba(198,192,255,0.06),transparent)]" />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent" />
+        <div className="absolute left-1/2 top-[-8rem] h-[28rem] w-[48rem] -translate-x-1/2 rounded-full bg-primary/5 blur-3xl" />
+      </div>
+      <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:py-20">
         <Reveal>
-          <div>
-            <h1 className="font-display text-display-xl text-on-surface">
+          <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
+            <span className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/8 px-3 py-1 text-label-sm font-medium text-primary">
+              <span aria-hidden="true" className="size-1.5 rounded-full bg-primary" />
+              {t('landing.hero.eyebrow')}
+            </span>
+            <h1 className="mt-6 font-display text-display-xl leading-[1.08] tracking-tight text-on-surface text-balance">
               {t('landing.hero.title')}
             </h1>
-            <p className="mt-5 max-w-xl text-body-lg leading-relaxed text-on-surface-variant">
+            <p className="mx-auto mt-5 max-w-2xl text-body-lg leading-relaxed text-on-surface-variant text-pretty">
               {t('landing.hero.subtitle')}
             </p>
-
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
               <Button
                 size="lg"
                 onClick={signIn}
@@ -215,15 +223,13 @@ function Hero() {
                 {t('landing.hero.secondaryApi')}
               </Button>
             </div>
-
-            <p className="mt-7 flex items-start gap-2 text-metadata leading-relaxed text-outline">
-              <Shield className="!text-base mt-px shrink-0 text-primary" />
-              {t('landing.hero.trust')}
+            <p className="mt-7 flex items-center justify-center gap-2 text-metadata leading-relaxed text-outline">
+              <Shield className="!text-base shrink-0 text-primary" />
+              <span>{t('landing.hero.trust')}</span>
             </p>
           </div>
         </Reveal>
-
-        <Reveal delay={120}>
+        <Reveal delay={120} className="mt-10 lg:mt-14">
           <ArchitectureFlowHero />
         </Reveal>
       </div>
