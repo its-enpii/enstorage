@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../config/google_oauth.dart';
 import '../../l10n/gen/app_localizations.dart';
 import '../../state/auth_state.dart';
 import '../../state/theme_state.dart';
@@ -15,11 +16,6 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/etheric_button.dart';
 import '../../widgets/app_snackbar.dart';
-
-/// OAuth scopes requested during sign-in.
-const List<String> _kScopes = <String>[
-  'https://www.googleapis.com/auth/drive.file',
-];
 
 /// Web OAuth client ID — same as in google_accounts_screen.dart.
 /// Sourced from --dart-define=GOOGLE_CLIENT_ID=... (see scripts/run_dev.sh,
@@ -50,7 +46,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   // dan `sync-quota` akan gagal dengan "missing required parameter:
   // refresh_token". iOS mengabaikan flag ini.
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: _kScopes,
+    scopes: kGoogleOAuthScopes,
     serverClientId: _kWebClientId,
     forceCodeForRefreshToken: true,
   );
