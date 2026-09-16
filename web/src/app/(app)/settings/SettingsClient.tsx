@@ -2,23 +2,38 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Add, Cloud, CloudOff, DarkMode, LightMode, SettingsBrightness, Storage } from '@mui/icons-material';
+import { useRouter } from 'next/navigation';
+import {
+  Add,
+  Cloud,
+  CloudOff,
+  DarkMode,
+  DeleteForever,
+  LightMode,
+  Logout,
+  SettingsBrightness,
+  Storage,
+} from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { apiRequest, type StorageSummary, type Webhook } from '@/lib/api';
+import { apiRequest, ApiError, type StorageSummary, type Webhook } from '@/lib/api';
 import clsx from 'clsx';
 import { AppShell } from '@/components/AppShell';
 import { Card, CardIconBox } from '@/components/Card';
 import { Button, buttonClasses } from '@/components/Button';
 import { Chip } from '@/components/Chip';
 import { Alert } from '@/components/Alert';
+import { Dialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
 import { OptionTile } from '@/components/OptionTile';
 import { ProgressBar } from '@/components/ProgressBar';
-import { Input } from '@/components/Input';
+import { Field, Input } from '@/components/Input';
 import { Toggle } from '@/components/Switch';
 import { useTheme } from '@/components/ThemeProvider';
+import { useAuth } from '@/components/AuthProvider';
+import { usePrompt } from '@/components/usePrompt';
 import { WebhooksSection } from '@/components/WebhooksSection';
 import { setLocale } from '@/lib/i18n';
+import { DeleteIcon } from '@/lib/icons';
 import { createViewStore } from '@/lib/viewStore';
 import { usePageTitle } from '@/lib/usePageTitle';
 
@@ -51,10 +66,20 @@ export default function SettingsClient() {
 function SettingsContent() {
   const { t, i18n } = useTranslation();
   usePageTitle(t('settings.title'));
+  const router = useRouter();
+  const { user, logout } = useAuth();
+  const { confirm } = usePrompt();
   const { data: summary, loading, error, revalidate } = summaryStore.useStore();
   const [notif, setNotif] = useState({ upload: true, quota: true, security: true });
   const { theme, setTheme } = useTheme();
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
+
+  // Delete account state
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const expectedWord = t('settings.deleteAccountDialog.confirmWord');
 
   async function loadWebhooks() {
     try {
@@ -76,6 +101,45 @@ function SettingsContent() {
     } catch {
       // ignore — localStorage is already updated
     }
+  }
+
+  async function handleLogout() {
+    const ok = await confirm(t('settings.logoutConfirmDesc'), {
+      title: t('settings.logoutConfirmTitle'),
+      danger: true,
+      confirmLabel: t('settings.logout'),
+    });
+    if (!ok) return;
+    await logout();
+    router.replace('/login');
+  }
+
+  async function handleDeleteAccount() {
+    if (confirmText.trim() !== expectedWord || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await apiRequest('/auth/account', { method: 'DELETE' });
+      await logout();
+      router.replace('/login');
+    } catch (e) {
+      setDeleteError(
+        e instanceof ApiError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : t('settings.deleteAccountDialog.failed'),
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  function handleCloseDeleteDialog() {
+    if (deleting) return;
+    setDeleteOpen(false);
+    setConfirmText('');
+    setDeleteError(null);
   }
 
   return (
@@ -296,7 +360,90 @@ function SettingsContent() {
         </Card>
 
         <WebhooksSection webhooks={webhooks} onChange={loadWebhooks} />
+
+        {/* Zona Berbahaya */}
+        <Card as="section" className="lg:col-span-2 border border-error/20 flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h2 className="font-body text-body-lg font-semibold text-error">
+                {t('settings.dangerZone')}
+              </h2>
+              <p className="text-metadata text-outline mt-1">
+                {t('settings.dangerDesc')}
+              </p>
+            </div>
+            <div className="flex items-center gap-3 shrink-0 flex-wrap">
+              <Button
+                variant="danger-soft"
+                onClick={handleLogout}
+                leftIcon={<Logout className="!text-lg" />}
+              >
+                {t('settings.logout')}
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => setDeleteOpen(true)}
+                leftIcon={<DeleteForever className="!text-lg" />}
+              >
+                {t('settings.deleteAccount')}
+              </Button>
+            </div>
+          </div>
+        </Card>
       </div>
+
+      <Dialog
+        open={deleteOpen}
+        onClose={handleCloseDeleteDialog}
+        title={t('settings.deleteAccountDialog.title')}
+        description={t('settings.deleteAccountDialog.description')}
+        icon={<DeleteForever className="!text-2xl text-error" />}
+        variant="danger"
+        actions={
+          <>
+            <Button
+              variant="ghost"
+              size="md"
+              onClick={handleCloseDeleteDialog}
+              disabled={deleting}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              onClick={() => void handleDeleteAccount()}
+              disabled={confirmText.trim() !== expectedWord || deleting}
+            >
+              {deleting ? (
+                <div className="w-4 h-4 rounded-full border-2 border-on-primary/30 border-t-on-primary animate-spin mr-1" />
+              ) : (
+                <DeleteForever className="!text-lg" />
+              )}
+              {t('settings.deleteAccountDialog.confirm')}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {deleteError && (
+            <Alert tone="danger">{deleteError}</Alert>
+          )}
+          <Field
+            label={t('settings.deleteAccountDialog.instruction', { confirmWord: expectedWord })}
+            htmlFor="delete-account-confirm-input"
+          >
+            <Input
+              id="delete-account-confirm-input"
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder={t('settings.deleteAccountDialog.placeholder')}
+              disabled={deleting}
+              autoFocus
+            />
+          </Field>
+        </div>
+      </Dialog>
     </>
   );
 }

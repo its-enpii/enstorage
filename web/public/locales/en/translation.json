@@ -321,7 +321,9 @@
     "lastSynced": "Last synced",
     "loadingLabel": "Loading accounts",
     "scanDrive": "Scan Google Drive (1:1)",
+    "scanDriveAccount": "Scan Google Drive (1:1)",
     "scanning": "Scanning...",
+    "primary": "Primary",
     "quota": "Quota usage"
   },
   "starred": {
@@ -359,7 +361,23 @@
     "themeSistem": "System",
     "bahasa": "Language",
     "bahasaIndonesia": "Bahasa Indonesia",
-    "bahasaEnglish": "English"
+    "bahasaEnglish": "English",
+    "dangerZone": "Danger Zone",
+    "dangerDesc": "Permanent actions for your session and account.",
+    "logout": "Sign Out",
+    "logoutConfirmTitle": "Sign Out?",
+    "logoutConfirmDesc": "Your session on this device will be ended.",
+    "deleteAccount": "Delete Account",
+    "deleteAccountDesc": "Permanently delete your account and all associated vault data.",
+    "deleteAccountDialog": {
+      "title": "Delete Account Permanently?",
+      "description": "This action cannot be undone. All your files, folders, connected accounts, and configuration in EnStorage will be permanently deleted.",
+      "instruction": "Please type {{confirmWord}} to confirm:",
+      "confirmWord": "DELETE",
+      "placeholder": "Type DELETE here",
+      "confirm": "Delete Account",
+      "failed": "Failed to delete account."
+    }
   },
   "share": {
     "title": "Share File",
