@@ -1,97 +1,269 @@
 'use client';
 
-import { Cloud } from '@mui/icons-material';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowDownward, Cloud, Code, Person, Storage } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
+import { prefersReducedMotion } from '@/lib/site';
+
+/** Flow endpoints registered by their DOM nodes, keyed by node id. */
+type Box = { left: number; right: number; top: number; bottom: number };
+type Lane = { id: string; d: string; dot: { x: number; y: number }; color: string; dur: string };
+
+const SOURCES = [
+  {
+    id: 'user',
+    icon: Person,
+    tone: 'var(--color-primary)',
+    labelKey: 'landing.hero.flow.nodes.user',
+    hintKey: 'landing.hero.flow.nodes.userHint',
+    dur: '2s',
+  },
+  {
+    id: 'api',
+    icon: Code,
+    tone: 'var(--color-secondary)',
+    labelKey: 'landing.hero.flow.nodes.script',
+    hintKey: 'landing.hero.flow.nodes.scriptHint',
+    dur: '2.4s',
+  },
+] as const;
+
+const TARGETS = [
+  { id: 'one', labelKey: 'landing.hero.flow.accounts.one', dur: '2.2s' },
+  { id: 'two', labelKey: 'landing.hero.flow.accounts.two', dur: '1.8s' },
+  { id: 'three', labelKey: 'landing.hero.flow.accounts.three', dur: '2.5s' },
+] as const;
+
+/** Curves shorter than this would double back on themselves on tight layouts. */
+const MIN_RUN = 20;
+
+function curve(x1: number, y1: number, x2: number, y2: number) {
+  const bend = Math.max(MIN_RUN * 0.5, (x2 - x1) * 0.5);
+  return `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
+}
 
 export function ArchitectureFlowHero() {
+  const { t } = useTranslation();
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const nodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [lanes, setLanes] = useState<Lane[]>([]);
+  const [canvas, setCanvas] = useState({ width: 0, height: 0 });
+  const [animate, setAnimate] = useState(false);
+
+  useEffect(() => {
+    setAnimate(!prefersReducedMotion());
+  }, []);
+
+  /**
+   * Lanes are measured, not guessed: every curve starts and ends on the real
+   * edge of its node, so the animated dots ride the visible wire end to end.
+   */
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+
+    const measure = () => {
+      const frameRect = frame.getBoundingClientRect();
+      if (!frameRect.width || !frameRect.height) return;
+
+      const boxOf = (id: string): Box | null => {
+        const el = nodeRefs.current[id];
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return {
+          left: r.left - frameRect.left,
+          right: r.right - frameRect.left,
+          top: r.top - frameRect.top,
+          bottom: r.bottom - frameRect.top,
+        };
+      };
+
+      const hub = boxOf('hub');
+      if (!hub) return;
+      const hubCy = (hub.top + hub.bottom) / 2;
+      const next: Lane[] = [];
+
+      for (const source of SOURCES) {
+        const node = boxOf(source.id);
+        if (!node) continue;
+        const x1 = node.right;
+        const y1 = (node.top + node.bottom) / 2;
+        const x2 = hub.left;
+        if (x2 - x1 < MIN_RUN) continue;
+        next.push({
+          id: `${source.id}-to-hub`,
+          d: curve(x1, y1, x2, hubCy),
+          dot: { x: (x1 + x2) / 2, y: (y1 + hubCy) / 2 },
+          color: source.tone,
+          dur: source.dur,
+        });
+      }
+
+      for (const target of TARGETS) {
+        const node = boxOf(target.id);
+        if (!node) continue;
+        const x1 = hub.right;
+        const y1 = hubCy;
+        const x2 = node.left;
+        if (x2 - x1 < MIN_RUN) continue;
+        next.push({
+          id: `hub-to-${target.id}`,
+          d: curve(x1, y1, x2, (node.top + node.bottom) / 2),
+          dot: { x: (x1 + x2) / 2, y: (y1 + (node.top + node.bottom) / 2) / 2 },
+          color: 'var(--color-primary)',
+          dur: target.dur,
+        });
+      }
+
+      setCanvas({ width: frameRect.width, height: frameRect.height });
+      setLanes(next);
+    };
+
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(frame);
+    for (const el of Object.values(nodeRefs.current)) if (el) observer.observe(el);
+    window.addEventListener('resize', measure);
+    // Webfonts land after first paint and change node widths.
+    if (document.fonts?.ready) void document.fonts.ready.then(measure).catch(() => {});
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+
+  const register = (id: string) => (el: HTMLDivElement | null) => {
+    nodeRefs.current[id] = el;
+  };
+
   return (
-    <div className="relative mx-auto mt-12 w-full max-w-5xl overflow-hidden rounded-3xl border border-outline-variant/30 bg-surface-container/30 p-6 backdrop-blur-xs sm:p-12">
-      {/* SVG Canvas for Inbound & Outbound Glowing Beams */}
-      <svg
-        className="pointer-events-none absolute inset-0 size-full"
-        viewBox="0 0 1000 450"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        preserveAspectRatio="xMidYMid meet"
+    <div className="relative mx-auto mt-12 w-full max-w-5xl overflow-hidden rounded-3xl border border-outline-variant/30 bg-surface-container/30 p-6 backdrop-blur-xs sm:p-10">
+      <div
+        ref={frameRef}
+        className="relative flex flex-col items-center gap-4 md:flex-row md:items-center md:justify-between md:gap-4 lg:gap-6"
       >
-        <defs>
-          <linearGradient id="beamLeft" x1="0%" y1="50%" x2="100%" y2="50%">
-            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.05" />
-            <stop offset="60%" stopColor="#38bdf8" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="#818cf8" stopOpacity="0.75" />
-          </linearGradient>
-          <linearGradient id="beamRight" x1="0%" y1="50%" x2="100%" y2="50%">
-            <stop offset="0%" stopColor="#a855f7" stopOpacity="0.8" />
-            <stop offset="50%" stopColor="#c084fc" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#e879f9" stopOpacity="0.05" />
-          </linearGradient>
-          <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="5" result="blur" />
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-          </filter>
-        </defs>
+        {/* Wires + pulses: 2 inbound lanes into the hub, 3 outbound lanes to the Drives. */}
+        <svg
+          className="pointer-events-none absolute inset-0 hidden size-full md:block"
+          viewBox={`0 0 ${canvas.width || 1} ${canvas.height || 1}`}
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <defs>
+            <linearGradient id="archLineIn" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.85" />
+            </linearGradient>
+            <linearGradient id="archLineOut" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.85" />
+              <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.25" />
+            </linearGradient>
+            <filter id="archDotGlow" x="-150%" y="-150%" width="400%" height="400%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+          </defs>
 
-        {/* Inbound Converging Lines (User/Client requests converging into Hub) */}
-        <path d="M 0 50 C 250 80, 400 200, 480 225" stroke="url(#beamLeft)" strokeWidth="1.5" />
-        <path d="M 0 110 C 250 130, 400 210, 480 225" stroke="url(#beamLeft)" strokeWidth="1.5" />
-        <path d="M 0 170 C 250 180, 400 220, 480 225" stroke="url(#beamLeft)" strokeWidth="2" />
-        <path d="M 0 225 L 480 225" stroke="url(#beamLeft)" strokeWidth="2.5" />
-        <path d="M 0 280 C 250 270, 400 230, 480 225" stroke="url(#beamLeft)" strokeWidth="2" />
-        <path d="M 0 340 C 250 320, 400 240, 480 225" stroke="url(#beamLeft)" strokeWidth="1.5" />
-        <path d="M 0 400 C 250 370, 400 250, 480 225" stroke="url(#beamLeft)" strokeWidth="1.5" />
+          {lanes.map((lane) => (
+            <path
+              key={lane.id}
+              id={`arch-${lane.id}`}
+              d={lane.d}
+              stroke={lane.id.endsWith('-to-hub') ? 'url(#archLineIn)' : 'url(#archLineOut)'}
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          ))}
 
-        {/* Animated Data Pulse on Central Inbound Line */}
-        <circle cx="240" cy="225" r="4" fill="#38bdf8" filter="url(#glow)">
-          <animate attributeName="cx" values="0;480" dur="2.8s" repeatCount="indefinite" />
-          <animate attributeName="opacity" values="0;1;0" dur="2.8s" repeatCount="indefinite" />
-        </circle>
+          {lanes.map((lane) => (
+            <circle
+              key={`${lane.id}-dot`}
+              r="4"
+              cx={animate ? undefined : lane.dot.x}
+              cy={animate ? undefined : lane.dot.y}
+              fill={lane.color}
+              filter="url(#archDotGlow)"
+            >
+              {animate && (
+                <animateMotion dur={lane.dur} repeatCount="indefinite">
+                  {/* href for SVG2 engines, xlinkHref for older WebKit. */}
+                  <mpath href={`#arch-${lane.id}`} xlinkHref={`#arch-${lane.id}`} />
+                </animateMotion>
+              )}
+            </circle>
+          ))}
+        </svg>
 
-        {/* Outbound Distribution Lines (Hub routing to multiple Google Drive targets) */}
-        <path d="M 520 225 L 1000 225" stroke="url(#beamRight)" strokeWidth="2" />
-        <path d="M 520 225 C 600 225, 620 120, 720 120 L 1000 120" stroke="url(#beamRight)" strokeWidth="1.5" />
-        <path d="M 520 225 C 600 225, 620 330, 720 330 L 1000 330" stroke="url(#beamRight)" strokeWidth="1.5" />
-
-        {/* Outbound Animated Data Pulses */}
-        <circle cx="520" cy="225" r="4" fill="#c084fc" filter="url(#glow)">
-          <animate attributeName="cx" values="520;1000" dur="3s" repeatCount="indefinite" />
-          <animate attributeName="opacity" values="1;1;0" dur="3s" repeatCount="indefinite" />
-        </circle>
-        <circle cx="720" cy="120" r="3.5" fill="#e879f9" filter="url(#glow)">
-          <animate attributeName="cx" values="720;1000" dur="3.5s" repeatCount="indefinite" />
-          <animate attributeName="opacity" values="1;1;0" dur="3.5s" repeatCount="indefinite" />
-        </circle>
-
-        {/* Circuit Nodes on Right Beam */}
-        <circle cx="780" cy="225" r="4" fill="#a855f7" filter="url(#glow)" />
-        <circle cx="900" cy="225" r="4" fill="#c084fc" filter="url(#glow)" />
-      </svg>
-
-      {/* Center EnStorage Central Hub Emblem */}
-      <div className="relative z-10 flex min-h-[320px] items-center justify-center">
-        {/* Floating Circuit Sub-Nodes */}
-        <div className="absolute top-8 right-[26%] hidden size-11 items-center justify-center rounded-xl border border-purple-500/30 bg-surface/80 shadow-[0_0_15px_rgba(168,85,247,0.25)] backdrop-blur-md sm:flex">
-          <span className="size-3.5 rounded-sm bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.8)]" />
+        {/* Inbound sources */}
+        <div className="z-10 flex w-full min-w-0 shrink-0 flex-col gap-3 md:w-auto">
+          <p className="text-label-sm uppercase tracking-[0.14em] text-outline md:text-secondary">
+            {t('landing.hero.flow.inbound')}
+          </p>
+          {SOURCES.map(({ id, icon: Icon, labelKey, hintKey }) => (
+            <div
+              key={id}
+              ref={register(id)}
+              className="flex items-center gap-3 rounded-2xl border border-outline-variant/30 bg-surface px-4 py-3 shadow-inner-glow"
+            >
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-container text-on-primary-container">
+                <Icon className="!text-xl" />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-body-md font-semibold text-on-surface">{t(labelKey)}</span>
+                <span className="hidden truncate text-metadata text-outline lg:block">{t(hintKey)}</span>
+              </span>
+            </div>
+          ))}
         </div>
-        <div className="absolute bottom-8 left-[30%] hidden size-11 items-center justify-center rounded-xl border border-indigo-500/30 bg-surface/80 shadow-[0_0_15px_rgba(99,102,241,0.25)] backdrop-blur-md sm:flex">
-          <div className="grid grid-cols-2 gap-1">
-            <span className="size-1.5 rounded-xs bg-indigo-400" />
-            <span className="size-1.5 rounded-xs bg-indigo-400" />
-            <span className="size-1.5 rounded-xs bg-indigo-400" />
-            <span className="size-1.5 rounded-xs bg-indigo-400" />
-          </div>
-        </div>
 
-        {/* Central App Emblem */}
-        <div className="group relative flex size-32 items-center justify-center rounded-3xl border border-outline-variant/40 bg-surface p-1 shadow-[0_0_50px_rgba(129,140,248,0.25)] transition-transform duration-300 hover:scale-105 sm:size-36">
-          <div className="absolute -inset-1 rounded-3xl bg-linear-to-r from-blue-500/20 via-indigo-500/30 to-purple-500/20 blur-md" />
-          <div className="relative flex size-full items-center justify-center rounded-[22px] bg-surface-container shadow-inner">
-            <div className="relative flex items-center justify-center">
-              <span className="flex size-14 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container shadow-sm">
-                <Cloud className="!text-3xl text-primary" />
+        {/* Mobile-only flow hint; the wires above carry this on desktop. */}
+        <ArrowDownward className="!text-xl text-outline md:hidden" aria-hidden="true" />
+
+        {/* The hub */}
+        <div className="z-10 flex shrink-0 flex-col items-center gap-2">
+          <div
+            ref={register('hub')}
+            className="flex size-24 items-center justify-center rounded-3xl border-2 border-primary/50 bg-surface p-1 lg:size-28"
+            style={{ boxShadow: '0 0 30px color-mix(in srgb, var(--color-primary) 25%, transparent)' }}
+          >
+            <div className="flex size-full flex-col items-center justify-center rounded-[18px] bg-surface-container text-center">
+              <Cloud className="!text-2xl text-primary lg:!text-3xl" />
+              <span className="mt-1 font-display text-metadata font-semibold text-on-surface lg:text-body-md">
+                EnStorage
               </span>
             </div>
           </div>
+          <p className="max-w-44 text-center text-metadata text-outline">
+            {t('landing.hero.flow.hubHint')}
+          </p>
+        </div>
+
+        <ArrowDownward className="!text-xl text-outline md:hidden" aria-hidden="true" />
+
+        {/* Outbound Drive accounts */}
+        <div className="z-10 flex w-full min-w-0 shrink-0 flex-col gap-3 md:w-auto">
+          <p className="text-label-sm uppercase tracking-[0.14em] text-outline md:text-secondary">
+            {t('landing.hero.flow.outbound')}
+          </p>
+          {TARGETS.map(({ id, labelKey }) => (
+            <div
+              key={id}
+              ref={register(id)}
+              className="flex items-center gap-3 rounded-2xl border border-outline-variant/30 bg-surface px-4 py-2.5 shadow-inner-glow"
+            >
+              <Storage className="!text-lg shrink-0 text-primary" />
+              <span className="min-w-0 text-metadata font-semibold text-on-surface">{t(labelKey)}</span>
+            </div>
+          ))}
         </div>
       </div>
+
+      <p className="mt-6 text-center text-metadata leading-relaxed text-outline">
+        {t('landing.hero.flow.noSplit')}
+      </p>
     </div>
   );
 }

@@ -7,6 +7,8 @@ import { apiRequest, type Webhook, WEBHOOK_EVENTS } from '@/lib/api';
 import clsx from 'clsx';
 import { Dialog } from '@/components/Dialog';
 import { Button, IconButton } from '@/components/Button';
+import { CheckboxTile } from '@/components/Checkbox';
+import { EmptyState } from '@/components/EmptyState';
 import { Card } from '@/components/Card';
 import { Input, Field } from '@/components/Input';
 import { usePrompt } from '@/components/usePrompt';
@@ -58,9 +60,10 @@ export function WebhooksSection({ webhooks, onChange }: Props) {
       </div>
 
       {webhooks.length === 0 ? (
-        <div className="border-2 border-dashed border-outline-variant/20 rounded-xl p-6 text-center">
-          <p className="text-sm text-outline">{t('webhooks.noWebhooks')}</p>
-        </div>
+        <EmptyState
+          className="!rounded-xl !py-6"
+          title={t('webhooks.noWebhooks')}
+        />
       ) : (
         <div className="space-y-2">
           {webhooks.map((w) => (
@@ -209,13 +212,15 @@ function CreateWebhookDialog({
           </p>
           <div className="bg-surface-container rounded-xl px-4 py-3 flex items-center gap-2">
             <code className="flex-1 text-sm text-on-surface font-mono break-all">{secret}</code>
-            <button
+            <IconButton
+              bare
               onClick={copySecret}
-              className="shrink-0 text-primary hover:text-on-surface transition-colors p-1"
+              className="shrink-0 !text-primary hover:!text-on-surface"
               title={t('share.copy')}
+              aria-label={t('share.copy')}
             >
               {copied ? <Check className="!text-base" /> : <ContentCopy className="!text-base" />}
-            </button>
+            </IconButton>
           </div>
         </div>
       </Dialog>
@@ -254,41 +259,16 @@ function CreateWebhookDialog({
         </Field>
         <Field label={t('webhooks.events')} hint={t('webhooks.eventHint')}>
           <div className="grid grid-cols-1 gap-2">
-            {WEBHOOK_EVENTS.map((ev) => {
-              const checked = events.includes(ev);
-              return (
-                <label
-                  key={ev}
-                  className={clsx(
-                    'group flex items-center gap-3 p-3 rounded-xl border transition-colors cursor-pointer',
-                    checked
-                      ? 'border-primary bg-primary-container/30'
-                      : 'border-outline-variant/20 bg-surface-container hover:border-primary/40',
-                  )}
-                >
-                  <div
-                    className={clsx(
-                      'w-5 h-5 shrink-0 rounded-md border-2 flex items-center justify-center transition-colors',
-                      checked
-                        ? 'bg-primary border-primary'
-                        : 'border-outline-variant group-hover:border-primary/50',
-                    )}
-                  >
-                    {checked && <Check className="!text-base text-on-primary" />}
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleEvent(ev)}
-                    className="sr-only"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-on-surface font-medium">{EVENT_LABELS[ev]}</p>
-                    <code className="text-xs text-outline">{ev}</code>
-                  </div>
-                </label>
-              );
-            })}
+            {WEBHOOK_EVENTS.map((ev) => (
+              <CheckboxTile
+                key={ev}
+                variant="tile"
+                checked={events.includes(ev)}
+                onChange={() => toggleEvent(ev)}
+                label={EVENT_LABELS[ev]}
+                description={<code className="text-xs text-outline font-mono">{ev}</code>}
+              />
+            ))}
           </div>
         </Field>
         {error && <p className="text-sm text-error">{error}</p>}

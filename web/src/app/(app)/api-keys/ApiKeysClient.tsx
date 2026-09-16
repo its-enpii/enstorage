@@ -15,7 +15,12 @@ import clsx from 'clsx';
 import { apiRequest, ApiError, type ApiKey } from '@/lib/api';
 import { AppShell } from '@/components/AppShell';
 import { Button, IconButton } from '@/components/Button';
+import { Card } from '@/components/Card';
+import { Chip } from '@/components/Chip';
 import { Dialog } from '@/components/Dialog';
+import { Alert } from '@/components/Alert';
+import { EmptyState } from '@/components/EmptyState';
+import { OptionTile } from '@/components/OptionTile';
 import { Loading } from '@/components/Loading';
 import { usePrompt } from '@/components/usePrompt';
 import { Field, Input } from '@/components/Input';
@@ -152,22 +157,23 @@ function ApiKeysContent() {
         <Loading label={t('common.loadingLabel')} />
       ) : keys.length === 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-card-gap">
-          <div className="col-span-full border-2 border-dashed border-outline-variant/20 rounded-card p-inner-padding flex flex-col items-center justify-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center text-outline">
-              <Key className="!text-4xl" />
-            </div>
-            <span className="text-metadata text-outline">{t('apikeys.empty')}</span>
-            <Button variant="ghost" size="sm" onClick={openCreate}>
-              {t('apikeys.emptyAction')}
-            </Button>
-          </div>
+          <EmptyState
+            icon={<Key className="!text-4xl" />}
+            title={t('apikeys.empty')}
+            action={
+              <Button variant="ghost" size="sm" onClick={openCreate}>
+                {t('apikeys.emptyAction')}
+              </Button>
+            }
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-card-gap">
           {keys.map((k) => (
-            <div
+            <Card
               key={k.id}
-              className="bg-surface p-inner-padding rounded-card shadow-inner-glow flex flex-col gap-4 group hover-lift relative"
+              hover
+              className="flex flex-col gap-4 group relative"
             >
               <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100">
                 <Button variant="danger-soft" size="sm" onClick={() => revoke(k.id)}>
@@ -187,12 +193,13 @@ function ApiKeysContent() {
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {k.scopes.map((s) => (
-                  <span
+                  <Chip
                     key={s}
-                    className="px-2 py-0.5 rounded-full bg-surface-container text-label-sm text-primary uppercase tracking-wider"
+                    variant="primary"
+                    className="font-mono"
                   >
                     {s}
-                  </span>
+                  </Chip>
                 ))}
               </div>
               <div className="text-metadata text-outline space-y-0.5">
@@ -200,7 +207,7 @@ function ApiKeysContent() {
                 <p>{t('apikeys.lastUsed')}: {fmt(k.last_used_at, i18n.language)}</p>
                 {k.expires_at && <p>{t('apikeys.expired')}: {fmt(k.expires_at, i18n.language)}</p>}
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
@@ -233,76 +240,57 @@ function CreateKeyForm({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-background/80 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm bg-surface rounded-card shadow-ambient p-inner-padding"
-      >
-        <h2 className="font-display text-headline-lg-mobile text-on-surface mb-1">
-          {t('apikeys.createFormTitle')}
-        </h2>
-        <p className="text-metadata text-on-surface-variant mb-6">
-          {t('apikeys.createFormDesc')}
-        </p>
-
-        <Field label={t('apikeys.label')}>
-          <Input
-            autoFocus
-            value={label}
-            onChange={(e) => onChange({ label: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') onSubmit();
-            }}
-            placeholder={t('apikeys.labelPlaceholder')}
-          />
-        </Field>
-
-        <div className="mt-6">
-          <span className="block text-label-sm uppercase text-on-surface-variant mb-3">
-            {t('apikeys.scopes')}
-          </span>
-          <div className="grid grid-cols-2 gap-2">
-            {SCOPES.map((s) => {
-              const on = scopes.includes(s);
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => toggleScope(s)}
-                  className={clsx(
-                    'h-11 rounded-xl border text-sm font-semibold uppercase tracking-wider flex items-center justify-center gap-2 transition',
-                    on
-                      ? 'border-primary bg-primary-container text-on-primary-container'
-                      : 'border-outline-variant/20 bg-background text-outline hover:border-primary/40',
-                  )}
-                >
-                  {on && <Check className="!text-base" />}
-                  {s}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {error && (
-          <div className="mt-4 rounded-xl bg-error-container/30 border border-error/30 px-3 py-2 text-metadata text-error">
-            {error}
-          </div>
-        )}
-
-        <div className="mt-8 flex gap-2 justify-end">
+    <Dialog
+      open
+      onClose={onClose}
+      size="sm"
+      title={t('apikeys.createFormTitle')}
+      description={t('apikeys.createFormDesc')}
+      icon={<Key className="!text-3xl" />}
+      actions={
+        <>
           <Button variant="secondary" type="button" onClick={onClose}>
             {t('apikeys.cancel')}
           </Button>
           <Button type="button" onClick={onSubmit} loading={loading}>
             {loading ? t('apikeys.creating') : t('apikeys.create')}
           </Button>
+        </>
+      }
+    >
+      <Field label={t('apikeys.label')}>
+        <Input
+          autoFocus
+          value={label}
+          onChange={(e) => onChange({ label: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onSubmit();
+          }}
+          placeholder={t('apikeys.labelPlaceholder')}
+        />
+      </Field>
+
+      <div className="mt-6">
+        <span className="block text-label-sm uppercase text-on-surface-variant mb-3">
+          {t('apikeys.scopes')}
+        </span>
+        <div className="grid grid-cols-2 gap-2">
+          {SCOPES.map((s) => (
+            <OptionTile
+              key={s}
+              label={<span className="uppercase tracking-wider">{s}</span>}
+              selected={scopes.includes(s)}
+              layout="row"
+              onClick={() => toggleScope(s)}
+            />
+          ))}
         </div>
       </div>
-    </div>
+
+      {error && (
+        <Alert className="mt-4 !text-metadata">{error}</Alert>
+      )}
+    </Dialog>
   );
 }
 
@@ -330,48 +318,44 @@ function PlaintextReveal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm px-4"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md bg-surface rounded-card shadow-ambient p-inner-padding"
-      >
-        <h2 className="font-display text-headline-lg-mobile text-on-surface mb-2">
-          {t('apikeys.plaintext')}
-        </h2>
-        <p className="text-metadata text-on-surface-variant mb-6">
-          {t('apikeys.plaintextDesc')} <span className="text-secondary font-semibold">{t('apikeys.plaintextOnce')}</span>.
-          {' '}{t('apikeys.plaintextSave')}
-        </p>
-        <div className="flex items-center gap-2 bg-background rounded-xl p-3 mb-4">
-          <code className="flex-1 text-metadata text-primary font-mono break-all">
-            {show ? data.plaintext : '•'.repeat(Math.min(data.plaintext.length, 50))}
-          </code>
-          <button
-            onClick={() => setShow(!show)}
-            className="text-on-surface-variant hover:text-primary"
-            title={show ? t('common.hide') : t('common.reveal')}
-          >
-            {show ? <VisibilityOff /> : <Visibility />}
-          </button>
-          <button
-            onClick={handleCopy}
-            className={clsx(
-              'transition',
-              copied ? 'text-primary' : 'text-on-surface-variant hover:text-primary',
-            )}
-            title={copied ? t('apikeys.copied') : t('apikeys.copyKey')}
-            aria-label={copied ? t('apikeys.copied') : t('apikeys.copyKey')}
-          >
-            {copied ? <Check /> : <ContentCopy />}
-          </button>
-        </div>
+    <Dialog
+      open
+      onClose={onClose}
+      title={t('apikeys.plaintext')}
+      description={t('apikeys.plaintextDesc')}
+      icon={<Key className="!text-3xl" />}
+      actions={
         <Button onClick={onClose} fullWidth size="lg">
           {t('apikeys.plaintextSaved')}
         </Button>
+      }
+    >
+      <p className="text-metadata text-on-surface-variant mb-6">
+        <span className="text-secondary font-semibold">{t('apikeys.plaintextOnce')}</span>.
+        {' '}{t('apikeys.plaintextSave')}
+      </p>
+      <div className="flex items-center gap-2 bg-background rounded-xl p-3">
+        <code className="flex-1 text-metadata text-primary font-mono break-all">
+          {show ? data.plaintext : '•'.repeat(Math.min(data.plaintext.length, 50))}
+        </code>
+        <IconButton
+          bare
+          onClick={() => setShow(!show)}
+          title={show ? t('common.hide') : t('common.reveal')}
+          aria-label={show ? t('common.hide') : t('common.reveal')}
+        >
+          {show ? <VisibilityOff /> : <Visibility />}
+        </IconButton>
+        <IconButton
+          bare
+          onClick={handleCopy}
+          className={clsx(copied && 'text-primary')}
+          title={copied ? t('apikeys.copied') : t('apikeys.copyKey')}
+          aria-label={copied ? t('apikeys.copied') : t('apikeys.copyKey')}
+        >
+          {copied ? <Check /> : <ContentCopy />}
+        </IconButton>
       </div>
-    </div>
+    </Dialog>
   );
 }

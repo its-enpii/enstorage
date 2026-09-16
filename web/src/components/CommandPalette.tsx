@@ -11,6 +11,9 @@ import { apiRequest, ApiError, getToken, type FileItem, type Folder as FolderTyp
 import { FileIcon, FolderIcon } from '@/lib/icons';
 import { bytes } from '@/lib/format';
 import { Loading } from '@/components/Loading';
+import { Button, IconButton } from '@/components/Button';
+import { Input } from '@/components/Input';
+import { Modal } from '@/components/Modal';
 import { FileViewer } from '@/components/FileViewer';
 import { ShareDialog } from '@/components/ShareDialog';
 import { usePrompt } from '@/components/usePrompt';
@@ -304,37 +307,40 @@ export function CommandPalette({ open, onClose }: Props) {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[80] flex items-start justify-center pt-[10vh] px-4 bg-background/75 backdrop-blur-sm"
-      onClick={onClose}
+    <Modal
+      open
+      onClose={onClose}
+      className="!z-[80] !items-start !pt-[10vh] !bg-background/75"
+      panelClassName="!max-w-2xl rounded-card overflow-hidden flex flex-col max-h-[70vh] bg-surface"
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl bg-surface rounded-card shadow-ambient overflow-hidden flex flex-col max-h-[70vh]"
-      >
-        {/* Search input */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-outline-variant/20">
-          <SearchIcon className="text-outline !text-xl shrink-0" />
-          <input
-            ref={inputRef}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('search.placeholderAlt')}
-            className="flex-1 bg-transparent text-on-surface placeholder:text-outline text-base focus:outline-none"
-          />
-          {query && (
-            <button
-              onClick={() => setQuery('')}
-              className="text-outline hover:text-on-surface transition-colors"
-              title={t('common.delete')}
-            >
-              <Close className="!text-lg" />
-            </button>
-          )}
-          <kbd className="hidden sm:inline-flex h-6 px-2 items-center bg-surface-container text-outline text-label-sm rounded-md font-mono">
-            Esc
-          </kbd>
-        </div>
+      {/* Search input */}
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-outline-variant/20 shrink-0">
+        <SearchIcon className="text-outline !text-xl shrink-0" />
+        <Input
+          variant="bare"
+          ref={inputRef}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t('search.placeholderAlt')}
+          aria-label={t('search.placeholder')}
+          wrapperClassName="flex-1 min-w-0"
+          className="!text-base"
+        />
+        {query && (
+          <IconButton
+            bare
+            shape="circle"
+            onClick={() => setQuery('')}
+            title={t('common.delete')}
+            aria-label={t('common.delete')}
+          >
+            <Close className="!text-lg" />
+          </IconButton>
+        )}
+        <kbd className="hidden sm:inline-flex h-6 px-2 items-center bg-surface-container text-outline text-label-sm rounded-md font-mono">
+          Esc
+        </kbd>
+      </div>
 
         {/* Results */}
         <div className="flex-1 overflow-y-auto">
@@ -412,8 +418,7 @@ export function CommandPalette({ open, onClose }: Props) {
             buka
           </span>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -441,23 +446,24 @@ function ResultRow({
   subtitle?: string;
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      fullWidth
       onClick={onClick}
       onMouseEnter={onHover}
       className={clsx(
-        'w-full flex items-center gap-3 px-5 py-2.5 text-left transition-colors',
-        active ? 'bg-primary-container/30' : 'hover:bg-surface-container',
+        '!h-auto !justify-start gap-3 px-5 py-2.5 !font-normal text-left',
+        active && '!bg-primary-container/30',
       )}
     >
-      <div className="shrink-0 w-10 h-10 flex items-center justify-center overflow-hidden rounded-lg">
+      <span className="shrink-0 w-10 h-10 flex items-center justify-center overflow-hidden rounded-lg">
         {icon}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-on-surface font-medium truncate">{title}</p>
-        {subtitle && <p className="text-metadata text-outline truncate">{subtitle}</p>}
-      </div>
-    </button>
+      </span>
+      <span className="flex-1 min-w-0 text-left">
+        <span className="block text-sm text-on-surface font-medium truncate">{title}</span>
+        {subtitle && <span className="block text-metadata text-outline truncate">{subtitle}</span>}
+      </span>
+    </Button>
   );
 }
 

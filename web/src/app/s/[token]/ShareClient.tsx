@@ -5,6 +5,10 @@ import { useParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { usePageTitle } from '@/lib/usePageTitle';
 import { FileViewer } from '@/components/FileViewer';
+import { IconButton, IconLink, LinkButton, TextAction } from '@/components/Button';
+import { Card } from '@/components/Card';
+import { Spinner } from '@/components/Spinner';
+import { EmptyState } from '@/components/EmptyState';
 import type { FileItem } from '@/lib/api';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080/api/v1';
@@ -201,7 +205,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="flex items-center gap-3 text-on-surface-variant">
-          <span className="material-symbols-outlined animate-spin">progress_activity</span>
+          <Spinner size="sm" />
           <span>{t('share.sharedLoading')}</span>
         </div>
       </div>
@@ -211,7 +215,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
   if (state.status === 'error') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <div className="w-full max-w-sm bg-surface rounded-card shadow-ambient p-8 text-center">
+        <Card className="w-full max-w-sm !p-8 text-center">
           <div className="w-16 h-16 rounded-2xl bg-error-container flex items-center justify-center mx-auto mb-4">
             <span className="material-symbols-outlined !text-4xl text-on-error-container">error</span>
           </div>
@@ -219,7 +223,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
             {t('share.sharedNotFound')}
           </h1>
           <p className="text-metadata text-outline">{state.message}</p>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -264,7 +268,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
 
   return (
     <div className="min-h-screen bg-background p-4">
-      <div className="max-w-2xl mx-auto bg-surface rounded-card shadow-ambient p-6 sm:p-8">
+      <Card as="main" className="max-w-2xl mx-auto !p-6 sm:!p-8">
         {/* Header Folder Info */}
         <div className="flex items-center gap-3 mb-4">
           <div className="w-12 h-12 rounded-2xl bg-primary-container flex items-center justify-center shrink-0">
@@ -291,13 +295,12 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
                   {isLast ? (
                     <span className="font-semibold text-on-surface max-w-[200px] truncate">{crumb.name}</span>
                   ) : (
-                    <button
-                      type="button"
+                    <TextAction
                       onClick={() => setCurrentFolderId(crumb.id === rootId ? null : crumb.id)}
-                      className="hover:text-primary transition-colors max-w-[150px] truncate underline-offset-2 hover:underline"
+                      className="!text-sm !font-normal max-w-[150px] truncate text-inherit underline-offset-2 hover:underline"
                     >
                       {crumb.name}
-                    </button>
+                    </TextAction>
                   )}
                 </div>
               );
@@ -374,22 +377,31 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
                     <span className="text-xs text-outline tabular-nums mr-2 shrink-0">
                       {formatBytes(f.size)}
                     </span>
-                    <button
-                      type="button"
-                      className="p-1 rounded-full text-outline group-hover:text-primary group-hover:bg-primary-container/20 transition-colors shrink-0"
-                      title={t('files.actions.preview', 'Preview')}
+                    <IconButton
+                      bare
+                      shape="circle"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPreviewFile(item);
+                      }}
+                      className="group-hover:!text-primary"
+                      title={t('files.actions.preview')}
+                      aria-label={t('files.actions.preview')}
                     >
                       <span className="material-symbols-outlined !text-xl">visibility</span>
-                    </button>
-                    <a
+                    </IconButton>
+                    <IconLink
+                      bare
+                      shape="circle"
                       href={`${API_BASE}/s/${token}?file_id=${f.id}&download=1`}
                       onClick={(e) => e.stopPropagation()}
                       download
-                      className="p-1 rounded-full text-outline hover:text-primary hover:bg-primary-container/20 transition-colors shrink-0"
+                      className="hover:!text-primary"
                       title={t('files.actions.download')}
+                      aria-label={t('files.actions.download')}
                     >
                       <span className="material-symbols-outlined !text-xl">download</span>
-                    </a>
+                    </IconLink>
                   </li>
                 );
               })}
@@ -407,24 +419,26 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
         )}
 
         {subfolders.length === 0 && files.length === 0 && (
-          <div className="mt-6 text-center py-10 bg-surface-container/50 rounded-2xl border border-outline-variant/10">
-            <span className="material-symbols-outlined !text-4xl text-outline mb-2">folder_open</span>
-            <p className="text-sm text-outline">{t('share.sharedEmpty')}</p>
-            {isInsideSubfolder && (
-              <button
-                type="button"
-                onClick={() => setCurrentFolderId(null)}
-                className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-              >
-                <span className="material-symbols-outlined !text-sm">arrow_back</span>
-                <span>{root_folder?.name ?? t('share.folderTitle')}</span>
-              </button>
-            )}
-          </div>
+          <EmptyState
+            className="mt-6 !py-10"
+            variant="panel"
+            icon={<span className="material-symbols-outlined !text-4xl">folder_open</span>}
+            title={t('share.sharedEmpty')}
+            action={
+              isInsideSubfolder ? (
+                <TextAction
+                  onClick={() => setCurrentFolderId(null)}
+                  leftIcon={<span className="material-symbols-outlined !text-sm">arrow_back</span>}
+                >
+                  {root_folder?.name ?? t('share.folderTitle')}
+                </TextAction>
+              ) : undefined
+            }
+          />
         )}
 
         <p className="mt-6 text-xs text-outline text-center">{t('share.sharedVia')}</p>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -535,7 +549,7 @@ function FilePreview({
                 </div>
               )}
               {isVideo && (
-                <div className="rounded-2xl overflow-hidden bg-black max-h-80 flex items-center justify-center">
+                <div className="rounded-2xl overflow-hidden bg-media-backdrop max-h-80 flex items-center justify-center">
                   <video src={streamUrl} controls className="max-h-80 w-full" />
                 </div>
               )}
@@ -563,21 +577,28 @@ function FilePreview({
 
           <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3 w-full">
             {canPreview && (
-              <a
+              <LinkButton
+                variant="secondary"
+                size="pill"
                 href={viewerUrl}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-surface-container text-on-surface hover:bg-surface-container-highest transition-colors font-medium text-sm"
+                fullWidth
+                className="sm:!w-auto !bg-surface-container font-medium !text-on-surface hover:!bg-surface-container-highest"
+                leftIcon={<span className="material-symbols-outlined !text-lg">fullscreen</span>}
               >
-                <span className="material-symbols-outlined !text-lg">fullscreen</span>
                 {t('share.viewInline')}
-              </a>
+              </LinkButton>
             )}
-            <a
+            <LinkButton
+              variant="primary"
+              size="pill"
               href={downloadUrl}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full bg-primary text-on-primary hover:bg-primary/90 transition-colors font-medium text-sm"
+              download
+              fullWidth
+              className="sm:!w-auto !px-6 !bg-primary !text-on-primary hover:!bg-primary/90 font-medium"
+              leftIcon={<span className="material-symbols-outlined !text-lg">download</span>}
             >
-              <span className="material-symbols-outlined !text-lg">download</span>
               {t('files.actions.download')}
-            </a>
+            </LinkButton>
           </div>
         </div>
       </div>
@@ -605,6 +626,8 @@ function ViewerOnly({
   textFetchUrl: string;
   fallbackUrl: string;
 }) {
+  const { t } = useTranslation();
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
@@ -619,15 +642,18 @@ function ViewerOnly({
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex items-center justify-center select-none">
-      <a
+    <div className="fixed inset-0 z-50 bg-media-backdrop flex items-center justify-center select-none">
+      <IconLink
+        bare
+        shape="circle"
+        size="lg"
         href={`/s/${typeof window !== 'undefined' ? window.location.pathname.split('/').filter(Boolean)[1] : ''}`}
-        className="absolute top-4 left-4 z-10 inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
-        aria-label="Back"
-        title="Back"
+        className="absolute top-4 left-4 z-10 !bg-on-media/10 !text-on-media hover:!bg-on-media/20"
+        aria-label={t('share.viewerBackLabel')}
+        title={t('share.viewerBackLabel')}
       >
         <span className="material-symbols-outlined">arrow_back</span>
-      </a>
+      </IconLink>
       {isImage && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -661,6 +687,7 @@ function ViewerOnly({
 }
 
 function TextPreview({ streamUrl }: { streamUrl: string }) {
+  const { t } = useTranslation();
   const [content, setContent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -684,7 +711,7 @@ function TextPreview({ streamUrl }: { streamUrl: string }) {
   return (
     <div className="rounded-2xl overflow-hidden bg-surface-container border border-outline-variant/20 mb-4">
       {content === null && error === null && (
-        <p className="text-sm text-outline p-4">Loading…</p>
+        <p className="text-sm text-outline p-4">{t('common.loading')}</p>
       )}
       {error && <p className="text-sm text-error p-4">{error}</p>}
       {content !== null && (
@@ -697,6 +724,7 @@ function TextPreview({ streamUrl }: { streamUrl: string }) {
 }
 
 function TextPreviewDark({ streamUrl }: { streamUrl: string }) {
+  const { t } = useTranslation();
   const [content, setContent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -720,11 +748,11 @@ function TextPreviewDark({ streamUrl }: { streamUrl: string }) {
   return (
     <div className="w-full h-full overflow-auto p-6">
       {content === null && error === null && (
-        <p className="text-sm text-white/60">Loading…</p>
+        <p className="text-sm text-on-media-muted">{t('common.loading')}</p>
       )}
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-error">{error}</p>}
       {content !== null && (
-        <pre className="text-xs text-white/90 whitespace-pre-wrap break-words font-mono">
+        <pre className="text-xs text-on-media whitespace-pre-wrap break-words font-mono">
           {content}
         </pre>
       )}

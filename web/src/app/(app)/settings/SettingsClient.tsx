@@ -1,14 +1,19 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Add, Cloud, CloudOff, DarkMode, LightMode, SettingsBrightness, Storage } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { apiRequest, type StorageSummary, type Webhook } from '@/lib/api';
 import clsx from 'clsx';
 import { AppShell } from '@/components/AppShell';
 import { Card, CardIconBox } from '@/components/Card';
-import { Button } from '@/components/Button';
+import { Button, buttonClasses } from '@/components/Button';
 import { Chip } from '@/components/Chip';
+import { Alert } from '@/components/Alert';
+import { EmptyState } from '@/components/EmptyState';
+import { OptionTile } from '@/components/OptionTile';
+import { ProgressBar } from '@/components/ProgressBar';
 import { Input } from '@/components/Input';
 import { Toggle } from '@/components/Switch';
 import { useTheme } from '@/components/ThemeProvider';
@@ -80,9 +85,7 @@ function SettingsContent() {
       </h1>
 
       {error && (
-        <div className="mb-6 rounded-xl bg-error-container/30 border border-error/30 px-4 py-2 text-sm text-error">
-          {error}
-        </div>
+        <Alert className="mb-6">{error}</Alert>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-card-gap">
@@ -107,13 +110,13 @@ function SettingsContent() {
                     : t('settings.belumAkun')}
               </p>
             </div>
-            <a
+            <Link
               href="/google-accounts"
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-primary-container text-on-primary-container text-label-sm font-semibold hover:bg-primary-container/80 transition-colors shrink-0"
+              className={buttonClasses('primary', 'sm', 'shrink-0')}
             >
               <Add className="!text-base" />
               {t('settings.kelola')}
-            </a>
+            </Link>
           </div>
 
           {loading ? (
@@ -129,17 +132,12 @@ function SettingsContent() {
                     {t('settings.storageFree', { free: bytes(summary.free) })}
                   </span>
                 </div>
-                <div className="w-full bg-surface-container h-3 rounded-full overflow-hidden">
-                  <div
-                    className={clsx(
-                      'h-full rounded-full transition-all',
-                      pct(summary.used, summary.total) > 90
-                        ? 'bg-error'
-                        : 'bg-secondary',
-                    )}
-                    style={{ width: `${pct(summary.used, summary.total)}%` }}
-                  />
-                </div>
+                <ProgressBar
+                  value={pct(summary.used, summary.total)}
+                  size="md"
+                  tone={pct(summary.used, summary.total) > 90 ? 'error' : 'secondary'}
+                  label={t('settings.storage')}
+                />
               </div>
 
               {summary.breakdown.length > 0 && (
@@ -151,7 +149,7 @@ function SettingsContent() {
                     const q = b.quota;
                     if (!q) {
                       return (
-                        <a
+                        <Link
                           key={b.account_id}
                           href="/google-accounts"
                           className="flex items-start gap-4 p-4 rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors"
@@ -163,12 +161,12 @@ function SettingsContent() {
                             <p className="text-sm text-on-surface font-medium truncate">{b.email}</p>
                             <p className="text-metadata text-error truncate">{b.error || 'Gagal memuat kuota'}</p>
                           </div>
-                        </a>
+                        </Link>
                       );
                     }
                     const p = pct(q.used, q.total);
                     return (
-                      <a
+                      <Link
                         key={b.account_id}
                         href="/google-accounts"
                         className="flex items-start gap-4 p-4 rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors"
@@ -179,12 +177,12 @@ function SettingsContent() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-on-surface font-medium truncate mb-2">{b.email}</p>
                           <div className="flex items-center gap-2">
-                            <div className="flex-1 h-1.5 bg-surface-container-high rounded-full overflow-hidden">
-                              <div
-                                className={clsx('h-full rounded-full transition-all', p > 90 ? 'bg-error' : 'bg-secondary')}
-                                style={{ width: `${p}%` }}
-                              />
-                            </div>
+                            <ProgressBar
+                              value={p}
+                              size="xs"
+                              tone={p > 90 ? 'error' : 'secondary'}
+                              trackClassName="flex-1 bg-surface-container-high"
+                            />
                             <span className="text-metadata text-outline shrink-0">
                               {bytes(q.used)} / {bytes(q.total)}
                             </span>
@@ -196,25 +194,25 @@ function SettingsContent() {
                             </span>
                           </div>
                         </div>
-                      </a>
-                    );
+                        </Link>
+                      );
                   })}
                 </div>
               )}
             </>
           ) : (
-            <a
-              href="/google-accounts"
-              className="border-2 border-dashed border-outline-variant/20 rounded-card p-inner-padding flex flex-col items-center justify-center gap-3 hover:border-primary/40 hover:bg-primary/5 transition-all"
-            >
-              <div className="w-12 h-12 rounded-2xl bg-surface-container flex items-center justify-center text-outline">
-                <CloudOff className="!text-3xl" />
-              </div>
-              <p className="text-sm text-on-surface">{t('accounts.noAccounts')}</p>
-              <span className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-secondary text-on-secondary text-label-sm font-semibold">
-                {t('settings.hubungkanSekarang')}
-              </span>
-            </a>
+            <EmptyState
+              icon={<CloudOff className="!text-3xl" />}
+              title={t('accounts.noAccounts')}
+              action={
+                <Link
+                  href="/google-accounts"
+                  className={buttonClasses('primary', 'sm', '!bg-secondary !text-on-secondary hover:!bg-secondary/90')}
+                >
+                  {t('settings.hubungkanSekarang')}
+                </Link>
+              }
+            />
           )}
         </Card>
 
@@ -248,22 +246,25 @@ function SettingsContent() {
           <div>
             <p className="text-metadata uppercase tracking-wider text-on-surface-variant mb-3">{t('settings.tema')}</p>
             <div className="grid grid-cols-3 gap-2">
-              <ThemeOption
+              <OptionTile
                 icon={<DarkMode className="!text-lg" />}
                 label={t('settings.themeGelap')}
-                active={theme === 'dark'}
+                selected={theme === 'dark'}
+                showTick={false}
                 onClick={() => setTheme('dark')}
               />
-              <ThemeOption
+              <OptionTile
                 icon={<LightMode className="!text-lg" />}
                 label={t('settings.themeTerang')}
-                active={theme === 'light'}
+                selected={theme === 'light'}
+                showTick={false}
                 onClick={() => setTheme('light')}
               />
-              <ThemeOption
+              <OptionTile
                 icon={<SettingsBrightness className="!text-lg" />}
                 label={t('settings.themeSistem')}
-                active={theme === 'system'}
+                selected={theme === 'system'}
+                showTick={false}
                 onClick={() => setTheme('system')}
               />
             </div>
@@ -272,30 +273,24 @@ function SettingsContent() {
           <div>
             <p className="text-metadata uppercase tracking-wider text-on-surface-variant mb-2">{t('settings.bahasa')}</p>
             <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
+              <OptionTile
+                layout="row"
+                className="!h-10 justify-center"
+                showTick={false}
+                icon={<span className="text-base leading-none">🇮🇩</span>}
+                label={t('settings.bahasaIndonesia')}
+                selected={i18n.language === 'id'}
                 onClick={() => switchLocale('id')}
-                className={clsx(
-                  'flex items-center justify-center gap-2 h-10 rounded-xl border text-sm font-semibold transition-colors',
-                  i18n.language === 'id'
-                    ? 'border-primary bg-primary-container text-on-primary-container'
-                    : 'border-outline-variant/20 bg-background text-outline hover:border-primary/40 hover:text-on-surface',
-                )}
-              >
-                <span className="text-base leading-none">🇮🇩</span> {t('settings.bahasaIndonesia')}
-              </button>
-              <button
-                type="button"
+              />
+              <OptionTile
+                layout="row"
+                className="!h-10 justify-center"
+                showTick={false}
+                icon={<span className="text-base leading-none">🇺🇸</span>}
+                label={t('settings.bahasaEnglish')}
+                selected={i18n.language === 'en'}
                 onClick={() => switchLocale('en')}
-                className={clsx(
-                  'flex items-center justify-center gap-2 h-10 rounded-xl border text-sm font-semibold transition-colors',
-                  i18n.language === 'en'
-                    ? 'border-primary bg-primary-container text-on-primary-container'
-                    : 'border-outline-variant/20 bg-background text-outline hover:border-primary/40 hover:text-on-surface',
-                )}
-              >
-                <span className="text-base leading-none">🇺🇸</span> {t('settings.bahasaEnglish')}
-              </button>
+              />
             </div>
           </div>
         </Card>
@@ -310,37 +305,3 @@ function pct(used: number, total: number): number {
   if (total <= 0) return 0;
   return Math.min(100, Math.round((used / total) * 100));
 }
-
-function ThemeOption({
-  icon,
-  label,
-  active,
-  disabled,
-  onClick,
-}: {
-  icon: ReactNode;
-  label: string;
-  active?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={clsx(
-        'flex flex-col items-center justify-center gap-1.5 h-20 rounded-xl border text-sm font-semibold transition-colors',
-        active
-          ? 'border-primary bg-primary-container text-on-primary-container'
-          : 'border-outline-variant/20 bg-background text-outline',
-        disabled && 'opacity-40 cursor-not-allowed',
-        !disabled && !active && 'hover:border-primary/40 hover:text-on-surface',
-      )}
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
-  );
-}
-

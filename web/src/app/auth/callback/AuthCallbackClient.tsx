@@ -4,6 +4,10 @@ import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/components/AuthProvider';
+import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
+import { Alert } from '@/components/Alert';
+import { Spinner } from '@/components/Spinner';
 import { usePageTitle } from '@/lib/usePageTitle';
 
 function CallbackContent() {
@@ -39,30 +43,22 @@ function CallbackContent() {
 
   if (error) {
     return (
-      <div className="w-full max-w-sm bg-surface rounded-card shadow-inner-glow p-inner-padding text-center">
-        <div className="rounded-xl bg-error-container/30 border border-error/30 px-3 py-2 text-metadata text-error mb-5">
-          {error}
-        </div>
-        <button
-          onClick={() => router.replace('/login')}
-          className="text-label-lg text-primary hover:underline"
-        >
+      <Card className="w-full max-w-sm text-center">
+        <Alert className="mb-5 !text-metadata">{error}</Alert>
+        <Button variant="link" onClick={() => router.replace('/login')}>
           {t('auth.reLogin')}
-        </button>
-      </div>
+        </Button>
+      </Card>
     );
   }
 
   return (
-    <div className="w-full max-w-sm bg-surface rounded-card shadow-inner-glow p-inner-padding text-center">
+    <Card className="w-full max-w-sm text-center">
       <div className="flex items-center justify-center gap-2 text-on-surface-variant">
-        <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
+        <Spinner size="sm" />
         <span className="text-metadata">{t('auth.callback.processing')}</span>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -71,14 +67,9 @@ export default function AuthCallbackClient() {
     <main className="flex min-h-screen items-center justify-center px-4 bg-background">
       <Suspense
         fallback={
-          <div className="w-full max-w-sm bg-surface rounded-card shadow-inner-glow p-inner-padding text-center">
-            <div className="flex items-center justify-center gap-2 text-on-surface-variant">
-              <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            </div>
-          </div>
+          <Card className="w-full max-w-sm flex items-center justify-center text-center">
+            <Spinner />
+          </Card>
         }
       >
         <CallbackContent />

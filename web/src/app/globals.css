@@ -57,6 +57,16 @@
   --color-error-container: #93000a;
   --color-on-error-container: #ffdad6;
 
+  /* === MEDIA STAGE (intentionally dark in both themes: viewers, lightboxes) === */
+  --color-media-backdrop: #0c0e14;
+  --color-on-media: #e2e2eb;
+  --color-on-media-muted: rgba(226, 226, 235, 0.6);
+
+  /* === SLIDE CANVAS (renders the document as its author sees it) === */
+  --color-slide-canvas: #ffffff;
+  --color-slide-ink: #111827;
+  --color-slide-muted: #374151;
+
   /* === RADIUS === */
   --radius-sm: 0.25rem;
   --radius-md: 0.75rem;

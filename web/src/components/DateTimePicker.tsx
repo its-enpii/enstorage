@@ -4,7 +4,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
-import { Event as EventIcon } from '@mui/icons-material';
+import { Close, Event as EventIcon } from '@mui/icons-material';
+import clsx from 'clsx';
+import { IconButton } from '@/components/Button';
+import { Input } from '@/components/Input';
 import { useTranslation } from 'react-i18next';
 
 type Props = {
@@ -19,17 +22,17 @@ const useIsoLayoutEffect =
   typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 /**
- * DateTime picker — react-day-picker v10 + native <input type="time">.
+ * DateTime picker — react-day-picker v10 + themed time field (`Input`).
  *
  * - Trigger: button dengan icon + label lokal
  * - Popover: position:fixed via createPortal ke document.body
  * - Hidden via CSS visibility supaya offsetHeight selalu valid
  * - onSelect callback stabil (built-in DayPicker API)
- * - Time input terpisah di bawah calendar (native, browser-styled dark via color-scheme)
+ * - Time input terpisah di bawah calendar (native type=time, themed via the Input kit)
  */
 export function DateTimePicker({ value, onChange, min, disabled }: Props) {
   const { t, i18n } = useTranslation();
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -124,35 +127,45 @@ export function DateTimePicker({ value, onChange, min, disabled }: Props) {
 
   return (
     <>
-      <button
+      <div
         ref={triggerRef}
-        type="button"
-        onClick={() => {
-          if (disabled) return;
-          setOpen((v) => !v);
-        }}
-        disabled={disabled}
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        aria-disabled={disabled || undefined}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="w-full flex items-center justify-between gap-2 rounded-lg bg-surface-container border border-outline-variant/20 px-3 py-2 text-sm text-on-surface hover:bg-surface-container-high transition-colors disabled:opacity-50"
+        onClick={() => {
+          if (!disabled) setOpen((v) => !v);
+        }}
+        onKeyDown={(e) => {
+          if (disabled) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setOpen((v) => !v);
+          }
+        }}
+        className="w-full cursor-pointer flex items-center justify-between gap-2 rounded-xl bg-surface-container border border-outline-variant/20 px-3 py-2 text-sm text-on-surface hover:bg-surface-container-high transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50 disabled:cursor-not-allowed select-none"
       >
         <span className="flex items-center gap-2 min-w-0">
           <EventIcon className="!text-base shrink-0 text-on-surface-variant" />
-          <span className={`truncate ${value ? '' : 'text-outline'}`}>{displayLabel}</span>
+          <span className={clsx('truncate', !value && 'text-outline')}>{displayLabel}</span>
         </span>
         {value && (
-          <button
-            type="button"
+          <IconButton
+            bare
+            size="sm"
+            shape="circle"
+            aria-label={t('share.clear')}
+            title={t('share.clear')}
             onClick={(e) => {
               e.stopPropagation();
               onChange(null);
             }}
-            className="shrink-0 text-xs text-outline hover:text-error transition-colors"
           >
-            {t('share.clear')}
-          </button>
+            <Close className="!text-base" />
+          </IconButton>
         )}
-      </button>
+      </div>
       {typeof document !== 'undefined' &&
         createPortal(
           <div
@@ -164,7 +177,7 @@ export function DateTimePicker({ value, onChange, min, disabled }: Props) {
               visibility: open ? 'visible' : 'hidden',
               pointerEvents: open ? 'auto' : 'none',
             }}
-            className="z-[1100] rounded-xl bg-surface-container-highest shadow-ambient border border-outline-variant/20 p-3 rdp-dark"
+            className="z-[1100] rounded-xl bg-surface-container-highest shadow-ambient border border-outline-variant/20 p-3"
           >
             <DayPicker
               mode="single"
@@ -180,12 +193,13 @@ export function DateTimePicker({ value, onChange, min, disabled }: Props) {
               <label className="text-xs text-on-surface-variant shrink-0">
                 {t('share.timeLabel')}
               </label>
-              <input
+              <Input
                 type="time"
                 value={selectedTime}
                 onChange={handleTimeChange}
-                style={{ colorScheme: 'dark' }}
-                className="flex-1 rounded-md bg-surface-container border border-outline-variant/20 px-2 py-1 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
+                aria-label={t('share.timeLabel')}
+                wrapperClassName="flex-1 min-w-0"
+                className="!h-9 !bg-surface-container !rounded-lg"
               />
             </div>
           </div>,

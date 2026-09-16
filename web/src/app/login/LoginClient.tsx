@@ -5,6 +5,7 @@ import { Cloud } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/components/AuthProvider';
 import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
 import { usePageTitle } from '@/lib/usePageTitle';
 
 export default function LoginClient() {
@@ -27,7 +28,7 @@ export default function LoginClient() {
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4 bg-background">
-      <div className="w-full max-w-sm bg-surface p-inner-padding rounded-card shadow-inner-glow">
+      <Card className="w-full max-w-sm">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-12 h-12 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center shrink-0">
             <Cloud className="!text-3xl fill" />
@@ -66,7 +67,7 @@ export default function LoginClient() {
             {loading ? t('auth.login.googleLoading') : t('auth.login.googleButton')}
           </Button>
         </div>
-      </div>
+      </Card>
     </main>
   );
 }

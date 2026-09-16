@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { DarkMode, LightMode, Menu, Search as SearchIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { IconButton } from '@/components/Button';
+import { Button, IconButton } from '@/components/Button';
 import { useTheme } from '@/components/ThemeProvider';
 import { SearchInput } from '@/components/SearchInput';
 import { CommandPalette } from '@/components/CommandPalette';
@@ -43,50 +43,49 @@ export function TopBar({
     <>
       <header className="h-16 sm:h-20 px-4 sm:px-container-padding flex items-center gap-3 sm:gap-4 z-40 shrink-0">
         {/* Hamburger — mobile only, opens sidebar drawer */}
-        <button
+        <IconButton
           type="button"
           onClick={onToggleSidebar}
-          aria-label="Open menu"
-          className="sm:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-xl bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors"
+          aria-label={t('nav.menu', 'Menu')}
+          size="lg"
+          className="sm:hidden"
         >
           <Menu className="!text-xl" />
-        </button>
+        </IconButton>
 
-        {/* Search — mobile: icon button, desktop: full text input */}
+        {/* Search — mobile: icon button, desktop: faux field that opens the palette */}
         <div className="flex-1 max-w-2xl mx-auto">
           {/* Mobile icon */}
-          <button
+          <IconButton
             type="button"
             onClick={openPalette}
             aria-label={t('search.placeholder')}
-            className="sm:hidden w-10 h-10 mx-auto flex items-center justify-center rounded-xl bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors"
+            size="lg"
+            className="sm:hidden mx-auto"
           >
             <SearchIcon className="!text-xl" />
-          </button>
-          {/* Desktop text input */}
-          <button
+          </IconButton>
+          {/* Desktop field */}
+          <Button
+            variant="secondary"
+            size="lg"
             onClick={openPalette}
-            className="hidden sm:block w-full text-left"
             aria-label={t('search.placeholder')}
+            leftIcon={<SearchIcon className="!text-xl shrink-0" />}
+            className="hidden sm:inline-flex w-full !justify-start !font-normal !bg-surface-container hover:!bg-surface-container-high text-outline"
           >
-            <SearchInput
-              readOnly
-              value=""
-              onChange={() => {}}
-              placeholder={searchPlaceholder ?? t('search.placeholder')}
-              className="cursor-pointer"
-            />
-          </button>
+            <span className="truncate">{searchPlaceholder ?? t('search.placeholder')}</span>
+          </Button>
         </div>
 
         <div className="flex items-center gap-3 sm:gap-4">
-          <button
+          <IconButton
             onClick={toggleTheme}
             title={resolved === 'dark' ? t('settings.themeTerang') : t('settings.themeGelap')}
-            className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors"
+            size="lg"
           >
             {resolved === 'dark' ? <LightMode className="!text-xl" /> : <DarkMode className="!text-xl" />}
-          </button>
+          </IconButton>
         </div>
       </header>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

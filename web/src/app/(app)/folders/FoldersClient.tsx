@@ -10,6 +10,8 @@ import { Input } from '@/components/Input';
 import { ItemCard } from '@/components/ItemCard';
 import { UploadToolbar } from '@/components/UploadToolbar';
 import { Loading } from '@/components/Loading';
+import { Alert } from '@/components/Alert';
+import { EmptyState } from '@/components/EmptyState';
 import { DeleteFolderDialog } from '@/components/DeleteFolderDialog';
 import { usePrompt } from '@/components/usePrompt';
 import { useAuth } from '@/components/AuthProvider';
@@ -376,24 +378,22 @@ function FoldersContent() {
       </div>
 
       {error && (
-        <div className="mb-6 rounded-xl bg-error-container/30 border border-error/30 px-4 py-2 text-sm text-error">
-          {error}
-        </div>
+        <Alert className="mb-6">{error}</Alert>
       )}
 
       {loading ? (
         <Loading label={t('files.loadingLabel')} />
       ) : folders.length === 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-card-gap">
-          <div className="col-span-full bg-transparent border-2 border-dashed border-outline-variant/20 rounded-card p-inner-padding flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all">
-            <div className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-outline">
-              <AddIcon />
-            </div>
-            <span className="text-sm text-outline">{t('folders.emptyTitle')}</span>
-            <Button variant="ghost" size="sm" onClick={createFolder}>
-              {t('folders.emptyAction')}
-            </Button>
-          </div>
+          <EmptyState
+            icon={<AddIcon />}
+            title={t('folders.emptyTitle')}
+            action={
+              <Button variant="ghost" size="sm" onClick={createFolder}>
+                {t('folders.emptyAction')}
+              </Button>
+            }
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-card-gap">

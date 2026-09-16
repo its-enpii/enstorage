@@ -10,7 +10,7 @@ import { getToken } from '@/lib/api';
 import { bytes } from '@/lib/format';
 import { DropdownMenu, type MenuItem } from '@/components/DropdownMenu';
 import { Tabs } from '@/components/Tabs';
-import { Button, IconButton } from '@/components/Button';
+import { Button, IconButton, LinkButton, TextAction } from '@/components/Button';
 
 type Props = {
   file: FileItem;
@@ -87,9 +87,15 @@ function ImageViewer({ file }: { file: FileItem }) {
         <IconButton onClick={zoomOut} title="Zoom out" aria-label="Zoom out" className="!w-8 !h-8">
           <Remove className="!text-sm" />
         </IconButton>
-        <button onClick={resetZoom} className="px-2 text-xs font-mono text-on-surface hover:text-primary transition-colors">
+        <TextAction
+          onClick={resetZoom}
+          size="sm"
+          className="!px-2 font-mono"
+          aria-label="Reset zoom"
+          title="Reset zoom"
+        >
           {Math.round(scale * 100)}%
-        </button>
+        </TextAction>
         <IconButton onClick={zoomIn} title="Zoom in" aria-label="Zoom in" className="!w-8 !h-8">
           <Add className="!text-sm" />
         </IconButton>
@@ -319,12 +325,15 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
         <div className="text-center max-w-md">
           <p className="text-on-surface font-semibold text-lg mb-1">{file.name}</p>
           <p className="text-outline text-xs mb-4">{bytes(file.size)}</p>
-          <a
+          <LinkButton
+            variant="primary"
+            size="pill"
             href={fileUrl(file).replace('?inline=1', '').replace('&inline=1', '')}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary rounded-full text-sm font-medium shadow-md"
+            leftIcon={<Download className="!text-base" />}
+            className="!bg-primary !text-on-primary hover:!bg-primary/90 shadow-md"
           >
-            <Download className="!text-base" /> Download PPTX
-          </a>
+            Download PPTX
+          </LinkButton>
         </div>
       </div>
     );
@@ -337,7 +346,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
     return (
       <div
         ref={containerRef}
-        className="w-screen h-screen bg-black flex items-center justify-center overflow-hidden relative" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
+        className="w-screen h-screen bg-media-backdrop flex items-center justify-center overflow-hidden relative" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
         onClick={(e) => e.stopPropagation()}
       >
         {current.images && current.images.length > 0 ? (
@@ -349,14 +358,14 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
             draggable={false}
           />
         ) : (
-          <div className="w-full h-full flex flex-col justify-center items-center p-8 sm:p-16 text-center bg-white text-gray-900">
+          <div className="w-full h-full flex flex-col justify-center items-center p-8 sm:p-16 text-center bg-slide-canvas text-slide-ink">
             <h1 className="text-3xl sm:text-5xl md:text-6xl font-display font-extrabold leading-tight mb-4 sm:mb-8">
               {current.title}
             </h1>
             {current.texts.length > 0 && (
               <div className="flex flex-col gap-3 sm:gap-5 max-w-4xl">
                 {current.texts.map((p, idx) => (
-                  <p key={idx} className="text-gray-700 text-lg sm:text-2xl md:text-3xl leading-snug font-medium">
+                  <p key={idx} className="text-slide-muted text-lg sm:text-2xl md:text-3xl leading-snug font-medium">
                     {p}
                   </p>
                 ))}
@@ -366,14 +375,17 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
         )}
 
         {/* Exit button - subtle on hover */}
-        <button
-          type="button"
+        <IconButton
+          bare
+          shape="circle"
+          size="lg"
           onClick={toggleFullscreen}
-          className="absolute top-4 right-4 z-30 p-2.5 rounded-full bg-black/50 text-white opacity-0 hover:opacity-100 transition-opacity duration-300 backdrop-blur"
+          className="absolute top-4 right-4 z-30 !bg-media-backdrop/60 !text-on-media opacity-0 hover:!opacity-100 hover:!bg-media-backdrop/80 transition-opacity duration-300 backdrop-blur"
           title="Keluar Fullscreen (Esc)"
+          aria-label="Keluar Fullscreen (Esc)"
         >
           <FullscreenExit className="!text-xl" />
-        </button>
+        </IconButton>
       </div>
     );
   }
@@ -386,17 +398,18 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
       onClick={(e) => e.stopPropagation()}
     >
       {/* Main Slide Canvas Container */}
-      <div className="flex-1 relative flex items-center justify-center p-4 sm:p-8 md:p-12 overflow-hidden bg-surface-container-dark/40 min-h-0" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+      <div className="flex-1 relative flex items-center justify-center p-4 sm:p-8 md:p-12 overflow-hidden bg-surface-container-lowest/40 min-h-0" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
         {/* Mode Presentasi Button */}
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={toggleFullscreen}
-          className="absolute top-4 right-4 z-20 flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-surface-container-highest/80 backdrop-blur text-on-surface hover:bg-surface-container-highest transition-colors text-xs font-semibold shadow-md border border-outline-variant/20"
+          leftIcon={<Fullscreen className="!text-lg" />}
+          className="absolute top-4 right-4 z-20 !px-3.5 !py-1.5 !h-auto backdrop-blur shadow-md"
           title="Mode Presentasi Layar Penuh"
         >
-          <Fullscreen className="!text-lg" />
-          <span>Mode Presentasi</span>
-        </button>
+          Mode Presentasi
+        </Button>
 
         {/* Pure Direct Slide Visual Canvas (No outer white box frame, no inner black padding bars) */}
         {current.images && current.images.length > 0 ? (
@@ -408,14 +421,14 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
             draggable={false}
           />
         ) : (
-          <div className="w-full max-w-4xl aspect-[16/9] bg-white rounded-xl sm:rounded-2xl p-6 sm:p-10 shadow-2xl border border-outline-variant/20 flex flex-col justify-center items-center text-center overflow-hidden">
-            <h1 className="text-xl sm:text-3xl md:text-4xl font-display font-extrabold text-gray-900 leading-tight mb-2 sm:mb-4">
+          <div className="w-full max-w-4xl aspect-[16/9] bg-slide-canvas rounded-xl sm:rounded-2xl p-6 sm:p-10 shadow-2xl border border-outline-variant/20 flex flex-col justify-center items-center text-center overflow-hidden">
+            <h1 className="text-xl sm:text-3xl md:text-4xl font-display font-extrabold text-slide-ink leading-tight mb-2 sm:mb-4">
               {current.title}
             </h1>
             {current.texts.length > 0 && (
               <div className="flex flex-col gap-1.5 sm:gap-2 max-w-xl overflow-hidden">
                 {current.texts.map((p, idx) => (
-                  <p key={idx} className="text-gray-700 text-xs sm:text-base md:text-lg leading-snug font-medium break-words">
+                  <p key={idx} className="text-slide-muted text-xs sm:text-base md:text-lg leading-snug font-medium break-words">
                     {p}
                   </p>
                 ))}
@@ -427,7 +440,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
 
       {/* Thumbnail Sidebar */}
       {slides.length > 1 && (
-        <div className="w-full md:w-64 lg:w-72 h-20 sm:h-24 md:h-full border-t md:border-t-0 md:border-l border-outline-variant/15 bg-surface-container-dark/80 backdrop-blur-md flex flex-row md:flex-col shrink-0 overflow-hidden">
+        <div className="w-full md:w-64 lg:w-72 h-20 sm:h-24 md:h-full border-t md:border-t-0 md:border-l border-outline-variant/15 bg-surface-container-lowest/80 backdrop-blur-md flex flex-row md:flex-col shrink-0 overflow-hidden">
           <div className="flex-1 overflow-x-auto md:overflow-y-auto p-2 sm:p-3 flex flex-row md:flex-col gap-2 sm:gap-3 items-center md:items-stretch">
             {slides.map((s, idx) => {
               const isActive = activeSlide === idx;
@@ -445,7 +458,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
                     {idx + 1}
                   </span>
                   <div
-                    className={`h-full md:h-auto aspect-[16/9] w-24 sm:w-28 md:w-full bg-white rounded-lg p-1 sm:p-1.5 shadow border-2 transition-all flex flex-col justify-center overflow-hidden ${
+                    className={`h-full md:h-auto aspect-[16/9] w-24 sm:w-28 md:w-full bg-slide-canvas rounded-lg p-1 sm:p-1.5 shadow border-2 transition-all flex flex-col justify-center overflow-hidden ${
                       isActive
                         ? 'border-primary ring-2 ring-primary/30 scale-[1.02]'
                         : 'border-outline-variant/20 hover:border-outline-variant/60'
@@ -456,7 +469,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
                       <img src={s.images[0]} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-contain rounded" />
                     ) : (
                       <div className="flex flex-col justify-center items-center text-center p-0.5">
-                        <p className="text-[8px] sm:text-[10px] font-bold text-gray-900 line-clamp-2 leading-tight">
+                        <p className="text-[8px] sm:text-[10px] font-bold text-slide-ink line-clamp-2 leading-tight">
                           {s.title}
                         </p>
                       </div>
@@ -541,15 +554,17 @@ function CodeTextViewer({ file }: { file: FileItem }) {
     <div className="flex-1 flex flex-col overflow-hidden min-h-0 h-full max-w-5xl w-full mx-auto p-4" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-outline font-mono">{lines.length} lines</span>
-        <button
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={copyToClipboard}
-          className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-highest text-on-surface transition-colors border border-outline-variant/20"
+          className="!px-3 !py-1.5 !h-auto text-xs"
+          leftIcon={copied ? <Check className="!text-sm text-primary" /> : <ContentCopy className="!text-sm" />}
         >
-          {copied ? <Check className="!text-sm text-primary" /> : <ContentCopy className="!text-sm" />}
           {copied ? 'Copied' : 'Copy'}
-        </button>
+        </Button>
       </div>
-      <div className="flex-1 min-h-0 overflow-auto bg-surface-container-dark border border-outline-variant/20 rounded-2xl p-4 font-mono text-sm shadow-xl flex">
+      <div className="flex-1 min-h-0 overflow-auto bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-4 font-mono text-sm shadow-xl flex">
         <div className="select-none text-right pr-4 text-outline/40 border-r border-outline-variant/20 mr-4 font-mono text-xs leading-relaxed">
           {lines.map((_, i) => (
             <div key={i}>{i + 1}</div>
@@ -574,12 +589,16 @@ function OtherViewer({ file }: { file: FileItem }) {
         <p className="text-on-surface font-display text-lg mb-1">{file.name}</p>
         <p className="text-outline text-sm">{bytes(file.size)} Ã¢â‚¬Â¢ {file.mime_type}</p>
       </div>
-      <a
-        href={`${fileUrl(file).replace('?inline=1', '').replace('&inline=1', '')}`}
-        className="mt-2 flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-full hover:bg-primary/90 transition-colors text-sm"
+      <LinkButton
+        variant="primary"
+        size="pill"
+        href={fileUrl(file).replace('?inline=1', '').replace('&inline=1', '')}
+        download
+        leftIcon={<Download className="!text-base" />}
+        className="mt-2 !bg-primary !text-on-primary hover:!bg-primary/90 font-medium"
       >
-        <Download className="!text-base" /> {t('preview.downloadFile')}
-      </a>
+        {t('preview.downloadFile')}
+      </LinkButton>
     </div>
   );
 }
@@ -633,64 +652,71 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
             <DropdownMenu
               align="right"
               trigger={
-                <button
-                  className="w-10 h-10 flex items-center justify-center rounded-full text-outline hover:text-on-surface hover:bg-surface-container-highest transition-colors"
+                <IconButton
+                  bare
+                  shape="circle"
+                  size="lg"
                   title={t('files.actions.menu')}
                   aria-label={t('preview.menu')}
                 >
                   <span className="material-symbols-outlined !text-xl">more_vert</span>
-                </button>
+                </IconButton>
               }
               items={actions}
             />
           )}
-          <button
+          <IconButton
+            bare
+            shape="circle"
+            size="lg"
             onClick={onClose}
-            className="w-10 h-10 flex items-center justify-center rounded-full text-outline hover:text-on-surface hover:bg-surface-container-highest transition-colors"
             title={t('preview.close')}
             aria-label={t('preview.close')}
           >
             <Close className="!text-xl" />
-          </button>
+          </IconButton>
         </div>
       </div>
 
       {/* Main Viewer Body */}
       <div className="flex-1 flex items-center justify-center min-h-0 relative">
         {hasNav && currentIndex > 0 && category !== 'office' && (
-          <button
+          <IconButton
+            shape="circle"
+            size="xl"
             onClick={(e) => {
               e.stopPropagation();
               onNavigate?.(files![currentIndex - 1]);
             }}
-            className="absolute left-2 sm:left-4 z-10 w-11 h-11 rounded-full bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 text-on-surface hover:bg-surface-container-highest transition-colors flex items-center justify-center shadow-lg"
+            className="absolute left-2 sm:left-4 z-10 !bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest shadow-lg"
             title={t('preview.prev')}
             aria-label={t('preview.prev')}
           >
             <ChevronLeft />
-          </button>
+          </IconButton>
         )}
 
         {viewer}
 
         {hasNav && currentIndex < files!.length - 1 && category !== 'office' && (
-          <button
+          <IconButton
+            shape="circle"
+            size="xl"
             onClick={(e) => {
               e.stopPropagation();
               onNavigate?.(files![currentIndex + 1]);
             }}
-            className="absolute right-2 sm:right-4 z-10 w-11 h-11 rounded-full bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 text-on-surface hover:bg-surface-container-highest transition-colors flex items-center justify-center shadow-lg"
+            className="absolute right-2 sm:right-4 z-10 !bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest shadow-lg"
             title={t('preview.next')}
             aria-label={t('preview.next')}
           >
             <ChevronRight />
-          </button>
+          </IconButton>
         )}
       </div>
     </div>
   );
 }
-
 
 
 

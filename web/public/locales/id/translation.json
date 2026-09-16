@@ -319,7 +319,10 @@
     "revokeFailed": "Gagal menghapus.",
     "quotaNotSynced": "Quota belum disinkronkan",
     "lastSynced": "Sync terakhir",
-    "loadingLabel": "Memuat akun"
+    "loadingLabel": "Memuat akun",
+    "scanDrive": "Pindai Google Drive (1:1)",
+    "scanning": "Memindai...",
+    "quota": "Penggunaan kuota"
   },
   "starred": {
     "title": "Favorit",

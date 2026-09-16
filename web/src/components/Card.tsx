@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import type { ReactNode } from 'react';
+import type { ElementType, ReactNode } from 'react';
 
 type CardProps = {
   children: ReactNode;
@@ -7,11 +7,20 @@ type CardProps = {
   hover?: boolean;
   selected?: boolean;
   onClick?: () => void;
+  /** Render tag — keep `<section>`/`<article>` semantics where they matter. */
+  as?: ElementType;
 };
 
-export function Card({ children, className, hover, selected, onClick }: CardProps) {
+export function Card({
+  children,
+  className,
+  hover,
+  selected,
+  onClick,
+  as: Tag = 'div',
+}: CardProps) {
   return (
-    <div
+    <Tag
       onClick={onClick}
       className={clsx(
         'bg-surface p-inner-padding rounded-card shadow-inner-glow',
@@ -22,7 +31,7 @@ export function Card({ children, className, hover, selected, onClick }: CardProp
       )}
     >
       {children}
-    </div>
+    </Tag>
   );
 }
 

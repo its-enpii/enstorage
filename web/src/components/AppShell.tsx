@@ -6,6 +6,8 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/components/AuthProvider';
 import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
+import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
 import { Loading } from '@/components/Loading';
 
 export function AppShell({
@@ -97,7 +99,7 @@ function SessionRecovery() {
     <div className="flex min-h-screen bg-background">
       <Sidebar />
       <div className="flex-1 flex items-center justify-center p-8">
-        <div className="bg-surface p-inner-padding rounded-card shadow-inner-glow max-w-md w-full flex flex-col items-center gap-5 text-center">
+        <Card className="max-w-md w-full flex flex-col items-center gap-5 text-center">
           <div className="w-14 h-14 rounded-2xl bg-secondary-container/30 flex items-center justify-center text-secondary">
             <span className="material-symbols-outlined !text-3xl fill">cloud_off</span>
           </div>
@@ -110,28 +112,20 @@ function SessionRecovery() {
             </p>
           </div>
           <div className="flex flex-col gap-2 w-full">
-            <button
-              type="button"
-              onClick={retry}
+            <Button
+              fullWidth
+              loading={retrying}
               disabled={retrying}
-              className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl font-semibold bg-primary-container text-on-primary-container hover:bg-primary-container/80 transition-colors disabled:opacity-50"
+              onClick={retry}
+              leftIcon={<span className="material-symbols-outlined !text-lg">refresh</span>}
             >
-              {retrying ? (
-                <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
-              ) : (
-                <span className="material-symbols-outlined !text-lg">refresh</span>
-              )}
               {t('auth.retry')}
-            </button>
-            <button
-              type="button"
-              onClick={logoutAndLogin}
-              className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl font-semibold text-on-surface hover:bg-surface-container transition-colors"
-            >
+            </Button>
+            <Button variant="ghost" fullWidth onClick={logoutAndLogin}>
               {t('auth.reLogin')}
-            </button>
+            </Button>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

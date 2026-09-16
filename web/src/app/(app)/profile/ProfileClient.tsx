@@ -6,6 +6,8 @@ import { Cloud, Logout, Person, Star, Storage, Edit, Save, Cancel } from '@mui/i
 import { apiRequest, ApiError } from '@/lib/api';
 import { AppShell } from '@/components/AppShell';
 import { Button, IconButton } from '@/components/Button';
+import { Card } from '@/components/Card';
+import { Alert } from '@/components/Alert';
 import { Field, Input } from '@/components/Input';
 import { Chip } from '@/components/Chip';
 import { usePrompt } from '@/components/usePrompt';
@@ -128,7 +130,7 @@ function ProfileContent() {
       </nav>
 
       {/* Hero */}
-      <div className="bg-surface p-inner-padding rounded-card shadow-inner-glow flex items-center gap-6 mb-card-gap">
+      <Card className="flex items-center gap-6 mb-card-gap">
         <div className="w-20 h-20 rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container font-display text-3xl font-semibold shrink-0">
           {user.name?.[0]?.toUpperCase() ?? <Person className="!text-5xl" />}
         </div>
@@ -143,11 +145,11 @@ function ProfileContent() {
           </div>
           <p className="text-metadata text-outline mt-1 truncate">{user.email}</p>
         </div>
-      </div>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-card-gap">
         {/* Identitas + edit */}
-        <section className="bg-surface p-inner-padding rounded-card shadow-inner-glow flex flex-col gap-5">
+        <Card as="section" className="flex flex-col gap-5">
           <div className="flex items-center justify-between">
             <h2 className="font-body text-body-lg font-semibold text-on-surface">{t('profile.identity')}</h2>
             {!editing && (
@@ -180,9 +182,7 @@ function ProfileContent() {
                 />
               </Field>
               {error && (
-                <div className="rounded-xl bg-error-container/30 border border-error/30 px-3 py-2 text-metadata text-error">
-                  {error}
-                </div>
+                <Alert className="!text-metadata">{error}</Alert>
               )}
               <div className="flex justify-end gap-2">
                 <Button variant="secondary" onClick={cancelEdit} leftIcon={<Cancel />}>
@@ -211,10 +211,10 @@ function ProfileContent() {
               />
             </>
           )}
-        </section>
+        </Card>
 
         {/* Keamanan */}
-        <section className="bg-surface p-inner-padding rounded-card shadow-inner-glow flex flex-col gap-4">
+        <Card as="section" className="flex flex-col gap-4">
           <h2 className="font-body text-body-lg font-semibold text-on-surface">{t('profile.security')}</h2>
           <Field label={t('profile.currentPassword')}>
             <Input
@@ -241,9 +241,7 @@ function ProfileContent() {
             />
           </Field>
           {pwError && (
-            <div className="rounded-xl bg-error-container/30 border border-error/30 px-3 py-2 text-metadata text-error">
-              {pwError}
-            </div>
+            <Alert className="!text-metadata">{pwError}</Alert>
           )}
           <div className="flex justify-end">
             <Button
@@ -254,11 +252,11 @@ function ProfileContent() {
               {t('profile.changePassword')}
             </Button>
           </div>
-        </section>
+        </Card>
 
         {/* Statistik */}
         {user.counts && (
-          <section className="lg:col-span-2 bg-surface p-inner-padding rounded-card shadow-inner-glow">
+          <Card as="section" className="lg:col-span-2">
             <h2 className="font-body text-body-lg font-semibold text-on-surface mb-6">
               {t('profile.vaultStats')}
             </h2>
@@ -268,11 +266,11 @@ function ProfileContent() {
               <Stat label={t('profile.files')} value={user.counts.files} icon={<Star />} />
               <Stat label={t('profile.apiKeys')} value={user.counts.api_keys} icon={<Star />} />
             </div>
-          </section>
+          </Card>
         )}
 
         {/* Zona Berbahaya */}
-        <section className="lg:col-span-2 bg-surface p-inner-padding rounded-card shadow-inner-glow border border-error/20">
+        <Card as="section" className="lg:col-span-2 border border-error/20">
           <h2 className="font-body text-body-lg font-semibold text-error mb-2">
             {t('profile.dangerZone')}
           </h2>
@@ -282,7 +280,7 @@ function ProfileContent() {
           <Button variant="danger-soft" onClick={handleLogout} leftIcon={<Logout />}>
             {t('profile.logout')}
           </Button>
-        </section>
+        </Card>
       </div>
     </>
   );

@@ -13,6 +13,8 @@ import { FileViewer } from '@/components/FileViewer';
 import { ShareDialog } from '@/components/ShareDialog';
 import { ItemCard } from '@/components/ItemCard';
 import { Loading } from '@/components/Loading';
+import { Alert } from '@/components/Alert';
+import { EmptyState } from '@/components/EmptyState';
 import { Tabs } from '@/components/Tabs';
 import { usePrompt } from '@/components/usePrompt';
 import { bytes } from '@/lib/format';
@@ -234,24 +236,18 @@ function StarredContent() {
       </div>
 
       {error && (
-        <div className="mb-6 rounded-xl bg-error-container/30 border border-error/30 px-4 py-2 text-sm text-error">
-          {error}
-        </div>
+        <Alert className="mb-6">{error}</Alert>
       )}
 
       {loading ? (
         <Loading label={t('common.loadingLabel')} />
       ) : empty ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-card-gap">
-          <div className="col-span-full border-2 border-dashed border-outline-variant/20 rounded-card p-inner-padding flex flex-col items-center justify-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center text-outline">
-              <span className={`${IconSymbol} !text-4xl fill`}>star_border</span>
-            </div>
-            <p className="text-sm text-on-surface text-center">{t('starred.empty')}</p>
-            <p className="text-metadata text-outline text-center">
-              {t('starred.emptyDesc')}
-            </p>
-          </div>
+          <EmptyState
+            icon={<span className={`${IconSymbol} !text-4xl fill`}>star_border</span>}
+            title={t('starred.empty')}
+            description={t('starred.emptyDesc')}
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-card-gap">

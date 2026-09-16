@@ -7,7 +7,12 @@ import clsx from 'clsx';
 import { apiRequest, ApiError, type GoogleAccount } from '@/lib/api';
 import { AppShell } from '@/components/AppShell';
 import { Button, IconButton } from '@/components/Button';
+import { Card } from '@/components/Card';
+import { Alert } from '@/components/Alert';
+import { EmptyState } from '@/components/EmptyState';
+import { ProgressBar } from '@/components/ProgressBar';
 import { Loading } from '@/components/Loading';
+import { Spinner } from '@/components/Spinner';
 import { usePrompt } from '@/components/usePrompt';
 import { createViewStore } from '@/lib/viewStore';
 import { usePageTitle } from '@/lib/usePageTitle';
@@ -166,13 +171,9 @@ function AccountsContent() {
               onClick={() => scanDrive()}
               disabled={scanning}
               size="lg"
+              leftIcon={<RefreshIcon />}
             >
-              {scanning ? (
-                <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin mr-2" />
-              ) : (
-                <RefreshIcon />
-              )}
-              {scanning ? 'Scanning...' : 'Scan Google Drive (1:1)'}
+              {scanning ? t('accounts.scanning') : t('accounts.scanDrive')}
             </Button>
           )}
           <Button onClick={connect} leftIcon={<AddIcon />} size="lg">
@@ -182,24 +183,22 @@ function AccountsContent() {
       </div>
 
       {error && (
-        <div className="mb-6 rounded-xl bg-error-container/30 border border-error/30 px-4 py-2 text-sm text-error">
-          {error}
-        </div>
+        <Alert className="mb-6">{error}</Alert>
       )}
 
       {loading ? (
         <Loading label={t('accounts.loadingLabel')} />
       ) : accounts.length === 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-card-gap">
-          <div className="col-span-full border-2 border-dashed border-outline-variant/20 rounded-card p-inner-padding flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all">
-            <div className="w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center text-outline">
-              <CloudIcon className="!text-4xl" />
-            </div>
-            <span className="text-sm text-outline">{t('accounts.noAccounts')}</span>
-            <Button variant="ghost" size="sm" onClick={connect}>
-              {t('settings.hubungkanSekarang')}
-            </Button>
-          </div>
+          <EmptyState
+            icon={<CloudIcon className="!text-4xl" />}
+            title={t('accounts.noAccounts')}
+            action={
+              <Button variant="ghost" size="sm" onClick={connect}>
+                {t('settings.hubungkanSekarang')}
+              </Button>
+            }
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-card-gap">
@@ -208,9 +207,10 @@ function AccountsContent() {
             const total = acc.quota?.total ?? 0;
             const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
             return (
-              <div
+              <Card
                 key={acc.id}
-                className="bg-surface p-inner-padding rounded-card shadow-inner-glow flex items-start gap-5 group hover-lift relative"
+                hover
+                className="flex items-start gap-5 group relative"
               >
                 <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 flex items-center gap-1">
                   <IconButton
@@ -225,11 +225,7 @@ function AccountsContent() {
                     disabled={busy === acc.id}
                     title={t('accounts.syncQuota')}
                   >
-                    {busy === acc.id ? (
-                      <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                    ) : (
-                      <RefreshIcon />
-                    )}
+                    {busy === acc.id ? <Spinner size="xs" /> : <RefreshIcon />}
                   </IconButton>
                   <Button
                     variant="danger-soft"
@@ -264,15 +260,12 @@ function AccountsContent() {
                           {pct}%
                         </span>
                       </div>
-                      <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
-                        <div
-                          className={clsx(
-                            'h-full rounded-full transition-all',
-                            pct > 90 ? 'bg-error' : 'bg-secondary',
-                          )}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
+                      <ProgressBar
+                        value={pct}
+                        size="sm"
+                        tone={pct > 90 ? 'error' : 'secondary'}
+                        label={t('accounts.quota')}
+                      />
                     </div>
                   ) : (
                     <p className="text-metadata text-outline">{t('accounts.quotaNotSynced')}</p>
@@ -283,7 +276,7 @@ function AccountsContent() {
                     </p>
                   )}
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>

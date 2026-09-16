@@ -23,7 +23,7 @@ import {
 } from '@/lib/icons';
 import { AppShell } from '@/components/AppShell';
 import { Breadcrumb } from '@/components/Breadcrumb';
-import { Button, IconButton } from '@/components/Button';
+import { Button, IconButton, TextAction } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
 import { DropdownMenu, type MenuItem } from '@/components/DropdownMenu';
 import { FileViewer } from '@/components/FileViewer';
@@ -31,6 +31,9 @@ import { ItemCard } from '@/components/ItemCard';
 import { ShareDialog } from '@/components/ShareDialog';
 import { MoveDialog, type MovedFileResult } from '@/components/MoveDialog';
 import { DeleteFolderDialog } from '@/components/DeleteFolderDialog';
+import { Alert } from '@/components/Alert';
+import { SelectionIndicator } from '@/components/Checkbox';
+import { SegmentedControl } from '@/components/SegmentedControl';
 import { FilesStoreProvider, useFilesStore } from '@/lib/filesStore';;
 import { FilesStoreBinder, useRealtime } from '@/lib/realtime/realtimeProvider';
 import { UploadToolbar } from '@/components/UploadToolbar';
@@ -1020,26 +1023,27 @@ function FilesContent() {
         </h1>
         <div className="flex items-center gap-3">
           {folderId && (
-            <button
-              type="button"
+            <Button
+              variant="tonal"
+              size="toolbar"
               onClick={() => void downloadFolder(folderId)}
               aria-label={t('folders.downloadFolder')}
-              className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors text-sm font-medium"
+              leftIcon={<span className="material-symbols-outlined !text-lg">folder_zip</span>}
             >
-              <span className="material-symbols-outlined !text-lg">folder_zip</span>
               <span>{t('folders.downloadFolder')}</span>
-            </button>
+            </Button>
           )}
           <span className="text-metadata text-outline tabular-nums">
             {t('files.filter.summary', { folders: totalFolders, files: totalFiles })}
           </span>
-          <button
-            type="button"
+          <Button
+            variant="tonal"
+            size="toolbar"
             onClick={openFilter}
             aria-label={filterActive ? t('files.filter.activeBadge') : t('files.filter.button')}
-            className="relative h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors text-sm font-medium"
+            className="relative"
+            leftIcon={<Tune className="!text-lg" />}
           >
-            <Tune className="!text-lg" />
             <span>{t('files.filter.button')}</span>
             {filterActive && (
               <span
@@ -1047,7 +1051,7 @@ function FilesContent() {
                 className="absolute top-2 right-2 w-2 h-2 rounded-full bg-primary"
               />
             )}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -1070,83 +1074,57 @@ function FilesContent() {
         {/* Section: Tipe */}
         <div>
           <h3 className="text-label-sm text-outline mb-2">{t('files.filter.sectionType')}</h3>
-          <div className="flex w-full rounded-2xl bg-surface-container p-1 gap-1 text-sm flex-wrap">
-            {(
-              [
-                { v: '', label: t('files.typeFilter.all') },
-                { v: 'image', label: t('files.typeFilter.image') },
-                { v: 'pdf', label: t('files.typeFilter.pdf') },
-                { v: 'doc', label: t('files.typeFilter.doc') },
-              ] as { v: string; label: string }[]
-            ).map((opt) => {
-              const active = draftType === opt.v;
-              const disabled = opt.v !== '' && typeLocked;
-              return (
-                <button
-                  key={opt.v || 'all'}
-                  type="button"
-                  onClick={() => !disabled && setDraftType(opt.v)}
-                  disabled={disabled}
-                  aria-disabled={disabled || undefined}
-                  title={disabled ? t('files.filter.typeLockedHint') : undefined}
-                  className={
-                    'flex-1 basis-0 min-w-0 px-3 py-1.5 rounded-full transition-colors text-center whitespace-nowrap ' +
-                    (disabled
-                      ? 'opacity-40 cursor-not-allowed'
-                      : active
-                        ? 'bg-primary text-on-primary font-medium'
-                        : 'text-on-surface-variant hover:text-on-surface')
-                  }
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
+          <SegmentedControl
+            aria-label={t('files.filter.sectionType')}
+            value={draftType}
+            onChange={setDraftType}
+            options={[
+              { value: '', label: t('files.typeFilter.all') },
+              {
+                value: 'image',
+                label: t('files.typeFilter.image'),
+                disabled: typeLocked,
+                disabledHint: t('files.filter.typeLockedHint'),
+              },
+              {
+                value: 'pdf',
+                label: t('files.typeFilter.pdf'),
+                disabled: typeLocked,
+                disabledHint: t('files.filter.typeLockedHint'),
+              },
+              {
+                value: 'doc',
+                label: t('files.typeFilter.doc'),
+                disabled: typeLocked,
+                disabledHint: t('files.filter.typeLockedHint'),
+              },
+            ]}
+          />
         </div>
 
         {/* Section: Tampilkan */}
         <div className="mt-6">
           <h3 className="text-label-sm text-outline mb-2">{t('files.filter.sectionShow')}</h3>
-          <div className="flex w-full rounded-2xl bg-surface-container p-1 gap-1 text-sm flex-wrap">
-            {(
-              [
-                { v: 'all' as Tab, label: t('files.filter.showAll') },
-                { v: 'folders' as Tab, label: t('files.filter.showFolders') },
-                { v: 'files' as Tab, label: t('files.filter.showFiles') },
-              ]
-            ).map((opt) => {
-              const active = draftTab === opt.v;
-              const disabled = opt.v === 'folders' && showLocked;
-              return (
-                <button
-                  key={opt.v}
-                  type="button"
-                  onClick={() => !disabled && setDraftTab(opt.v)}
-                  disabled={disabled}
-                  aria-disabled={disabled || undefined}
-                  title={disabled ? t('files.filter.showLockedHint') : undefined}
-                  className={
-                    'flex-1 basis-0 min-w-0 px-3 py-1.5 rounded-full transition-colors text-center whitespace-nowrap ' +
-                    (disabled
-                      ? 'opacity-40 cursor-not-allowed'
-                      : active
-                        ? 'bg-primary text-on-primary font-medium'
-                        : 'text-on-surface-variant hover:text-on-surface')
-                  }
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
+          <SegmentedControl<Tab>
+            aria-label={t('files.filter.sectionShow')}
+            value={draftTab}
+            onChange={setDraftTab}
+            options={[
+              { value: 'all', label: t('files.filter.showAll') },
+              {
+                value: 'folders',
+                label: t('files.filter.showFolders'),
+                disabled: showLocked,
+                disabledHint: t('files.filter.showLockedHint'),
+              },
+              { value: 'files', label: t('files.filter.showFiles') },
+            ]}
+          />
         </div>
       </Dialog>
 
       {error && (
-        <div className="mb-6 rounded-xl bg-error-container/30 border border-error/30 px-4 py-2 text-sm text-error">
-          {error}
-        </div>
+        <Alert className="mb-6">{error}</Alert>
       )}
 
       {loading ? (
@@ -1255,17 +1233,7 @@ function FilesContent() {
               }
               right={
                 selectMode ? (
-                  <div
-                    className="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors shrink-0"
-                    style={{
-                      borderColor: selected.has(f.id) ? 'var(--color-primary)' : 'var(--color-outline)',
-                      backgroundColor: selected.has(f.id) ? 'var(--color-primary)' : 'transparent',
-                    }}
-                  >
-                    {selected.has(f.id) && (
-                      <span className="material-symbols-outlined !text-sm text-on-primary">check</span>
-                    )}
-                  </div>
+                  <SelectionIndicator selected={selected.has(f.id)} />
                 ) : (
                   <DropdownMenu
                     align="right"
@@ -1300,17 +1268,10 @@ function FilesContent() {
           <Button
             variant="secondary"
             size="md"
-            disabled={loadingMore}
+            loading={loadingMore}
             onClick={() => void loadMore()}
           >
-            {loadingMore ? (
-              <>
-                <div className="w-4 h-4 rounded-full border-2 border-outline-variant border-t-primary animate-spin" />
-                {t('common.memuatLagi')}
-              </>
-            ) : (
-              <>{t('common.muatLagi')}</>
-            )}
+            {loadingMore ? t('common.memuatLagi') : t('common.muatLagi')}
           </Button>
         </div>
       )}
@@ -1342,12 +1303,7 @@ function FilesContent() {
             >
               <CloudOffIcon /> {t('files.deleteAll')}
             </Button>
-            <button
-              onClick={clearSelection}
-              className="text-sm text-outline hover:text-on-surface transition-colors"
-            >
-              {t('common.cancel')}
-            </button>
+            <TextAction onClick={clearSelection}>{t('common.cancel')}</TextAction>
           </div>
         </div>
       ) : (

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button, IconButton } from '@/components/Button';
+import { BottomSheet, type SheetItem } from '@/components/BottomSheet';
+import { FileInput, type FileInputHandle } from '@/components/FileInput';
 import { useTranslation } from 'react-i18next';
 import {
   Add,
   Checklist,
-  Close,
   CreateNewFolder,
   UploadFile,
   DriveFolderUpload,
@@ -21,199 +22,140 @@ type Props = {
 
 export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSelectMode }: Props) {
   const { t } = useTranslation();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const folderRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<FileInputHandle>(null);
+  const folderRef = useRef<FileInputHandle>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-
-  // Body scroll lock + ESC to close (mirrors Dialog.tsx pattern)
-  useEffect(() => {
-    if (!sheetOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSheetOpen(false);
-    };
-    document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
-    };
-  }, [sheetOpen]);
+  const closeSheet = () => setSheetOpen(false);
 
   function triggerFile() {
-    setSheetOpen(false);
-    fileRef.current?.click();
+    closeSheet();
+    fileRef.current?.open();
   }
   function triggerFolder() {
-    setSheetOpen(false);
-    folderRef.current?.click();
+    closeSheet();
+    folderRef.current?.open();
   }
   function handleNewFolder() {
-    setSheetOpen(false);
+    closeSheet();
     if (onNewFolder) onNewFolder();
   }
   function handleSelectMode() {
-    setSheetOpen(false);
+    closeSheet();
     onSelectMode?.();
   }
 
+  const sheetItems: SheetItem[] = [
+    ...(onNewFolder
+      ? [
+          {
+            label: t('upload.newFolder'),
+            icon: <CreateNewFolder className="!text-xl shrink-0" />,
+            onClick: handleNewFolder,
+            tone: 'primary' as const,
+          },
+        ]
+      : []),
+    {
+      label: t('upload.uploadFile'),
+      icon: <UploadFile className="!text-xl shrink-0" />,
+      onClick: triggerFile,
+    },
+    ...(onUploadFolder
+      ? [
+          {
+            label: t('upload.uploadFolder'),
+            icon: <DriveFolderUpload className="!text-xl shrink-0" />,
+            onClick: triggerFolder,
+          },
+        ]
+      : []),
+    ...(onSelectMode
+      ? [
+          {
+            label: t('upload.selectMode'),
+            icon: <Checklist className="!text-xl shrink-0" />,
+            onClick: handleSelectMode,
+          },
+        ]
+      : []),
+  ];
+
   return (
     <>
-      {/* Hidden file inputs — always rendered so FAB and pill can both trigger them */}
-      <input
-        ref={fileRef}
-        type="file"
-        multiple
-        hidden
-        onChange={(e) => {
-          if (e.target.files?.length) onUploadFiles(e.target.files);
-          e.target.value = '';
-        }}
-      />
-      <input
-        ref={folderRef}
-        type="file"
-        hidden
-        // @ts-expect-error - webkitdirectory not in TS
-        webkitdirectory=""
-        directory=""
-        multiple
-        onChange={(e) => {
-          if (e.target.files?.length && onUploadFolder) onUploadFolder(e.target.files);
-          e.target.value = '';
-        }}
-      />
+      {/* Hidden pickers — always rendered so the FAB, pill and sheet can all trigger them */}
+      <FileInput ref={fileRef} multiple onSelect={onUploadFiles} />
+      <FileInput ref={folderRef} directory multiple onSelect={(files) => onUploadFolder?.(files)} />
 
       {/* Floating wrapper — mobile=FAB pojok, desktop=pill bottom-center */}
       <div className="fixed bottom-6 right-6 sm:bottom-10 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:max-w-[calc(100vw-2rem)] z-50">
         {/* FAB — mobile only */}
-        <button
+        <IconButton
           type="button"
           onClick={() => setSheetOpen(true)}
           aria-label={t('upload.newFolder')}
-          className="sm:hidden w-14 h-14 rounded-full bg-primary text-on-primary shadow-ambient flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+          size="xl"
+          shape="circle"
+          className="sm:hidden !w-14 !h-14 bg-primary text-on-primary shadow-ambient hover:bg-primary/90 hover:text-on-primary transition-transform hover:scale-105 active:scale-95"
         >
           <Add className="!text-2xl" />
-        </button>
+        </IconButton>
 
         {/* Pill toolbar — desktop only */}
         <div className="hidden sm:flex glass-toolbar rounded-full h-16 px-6 items-center gap-6 border border-outline-variant/30">
           {onNewFolder && (
-            <button
+            <Button
               onClick={onNewFolder}
-              className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-full hover:bg-primary/90 transition-colors"
+              size="pill"
+              leftIcon={<CreateNewFolder className="!text-lg" />}
+              className="bg-primary text-on-primary hover:bg-primary/90"
             >
-              <CreateNewFolder className="!text-lg" />
               <span className="text-label-sm">{t('upload.newFolder')}</span>
-            </button>
+            </Button>
           )}
-          <div className="h-6 w-px bg-outline-variant/30" />
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-2 text-on-surface hover:text-primary transition-colors"
+          <div className="h-6 w-px bg-outline-variant/30" aria-hidden />
+          <Button
+            variant="ghost"
+            size="pill"
+            onClick={() => fileRef.current?.open()}
+            leftIcon={<UploadFile className="!text-xl" />}
+            className="!px-2 font-medium text-on-surface hover:text-primary hover:bg-transparent"
           >
-            <UploadFile className="!text-xl" />
             <span className="text-label-sm">{t('upload.uploadFile')}</span>
-          </button>
+          </Button>
           {onUploadFolder && (
-            <button
-              onClick={() => folderRef.current?.click()}
-              className="flex items-center gap-2 text-on-surface hover:text-primary transition-colors"
+            <Button
+              variant="ghost"
+              size="pill"
+              onClick={() => folderRef.current?.open()}
+              leftIcon={<DriveFolderUpload className="!text-xl" />}
+              className="!px-2 font-medium text-on-surface hover:text-primary hover:bg-transparent"
             >
-              <DriveFolderUpload className="!text-xl" />
               <span className="text-label-sm">{t('upload.uploadFolder')}</span>
-            </button>
+            </Button>
           )}
           {onSelectMode && (
             <>
-              <div className="h-6 w-px bg-outline-variant/30" />
-              <button
+              <div className="h-6 w-px bg-outline-variant/30" aria-hidden />
+              <Button
+                variant="ghost"
+                size="pill"
                 onClick={onSelectMode}
-                className="flex items-center gap-2 text-on-surface hover:text-primary transition-colors"
+                leftIcon={<Checklist className="!text-xl" />}
+                className="!px-2 font-medium text-on-surface hover:text-primary hover:bg-transparent"
               >
-                <Checklist className="!text-xl" />
                 <span className="text-label-sm">{t('upload.selectMode')}</span>
-              </button>
+              </Button>
             </>
           )}
         </div>
       </div>
 
-      {/* Bottom sheet — mobile only, slide-up from bottom. Always mounted; visibility/opacity controlled via classes so the transition runs both ways. */}
-      <div
-        onClick={() => setSheetOpen(false)}
-        className={
-          'sm:hidden fixed inset-0 z-[90] flex items-end justify-center bg-background/80 backdrop-blur-sm transition-opacity duration-300 ease-out ' +
-          (sheetOpen ? 'opacity-100' : 'opacity-0 pointer-events-none')
-        }
-      >
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className={
-            'w-full bg-surface rounded-t-3xl shadow-ambient px-inner-padding pt-3 pb-[max(2rem,env(safe-area-inset-bottom))] transform transition-transform duration-300 ease-out will-change-transform ' +
-            (sheetOpen ? 'translate-y-0' : 'translate-y-full')
-          }
-        >
-            {/* Drag handle */}
-            <div className="w-12 h-1.5 rounded-full bg-outline-variant/40 mx-auto mb-4" />
-
-            {/* Close button */}
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display text-headline-lg-mobile text-on-surface">
-                {t('upload.newFolder')}
-              </h2>
-              <button
-                type="button"
-                onClick={() => setSheetOpen(false)}
-                aria-label="Close"
-                className="w-9 h-9 rounded-full flex items-center justify-center text-outline hover:bg-surface-container transition-colors"
-              >
-                <Close />
-              </button>
-            </div>
-
-            {/* Action list */}
-            <div className="flex flex-col gap-3">
-              {onNewFolder && (
-                <button
-                  type="button"
-                  onClick={handleNewFolder}
-                  className="h-12 flex items-center gap-3 px-4 rounded-2xl bg-primary-container/30 text-on-primary-container hover:bg-primary-container/50 transition-colors"
-                >
-                  <CreateNewFolder className="!text-xl shrink-0" />
-                  <span className="text-sm font-medium">{t('upload.newFolder')}</span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={triggerFile}
-                className="h-12 flex items-center gap-3 px-4 rounded-2xl text-on-surface hover:bg-surface-container transition-colors"
-              >
-                <UploadFile className="!text-xl shrink-0" />
-                <span className="text-sm font-medium">{t('upload.uploadFile')}</span>
-              </button>
-              {onUploadFolder && (
-                <button
-                  type="button"
-                  onClick={triggerFolder}
-                  className="h-12 flex items-center gap-3 px-4 rounded-2xl text-on-surface hover:bg-surface-container transition-colors"
-                >
-                  <DriveFolderUpload className="!text-xl shrink-0" />
-                  <span className="text-sm font-medium">{t('upload.uploadFolder')}</span>
-                </button>
-              )}
-              {onSelectMode && (
-                <button
-                  type="button"
-                  onClick={handleSelectMode}
-                  className="h-12 flex items-center gap-3 px-4 rounded-2xl text-on-surface hover:bg-surface-container transition-colors"
-                >
-                  <Checklist className="!text-xl shrink-0" />
-                  <span className="text-sm font-medium">{t('upload.selectMode')}</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+      <BottomSheet
+        open={sheetOpen}
+        onClose={closeSheet}
+        title={t('upload.newFolder')}
+        items={sheetItems}
+      />
     </>
   );
 }

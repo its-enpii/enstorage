@@ -319,7 +319,10 @@
     "revokeFailed": "Failed to disconnect.",
     "quotaNotSynced": "Quota not yet synced",
     "lastSynced": "Last synced",
-    "loadingLabel": "Loading accounts"
+    "loadingLabel": "Loading accounts",
+    "scanDrive": "Scan Google Drive (1:1)",
+    "scanning": "Scanning...",
+    "quota": "Quota usage"
   },
   "starred": {
     "title": "Starred",

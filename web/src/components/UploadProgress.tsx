@@ -1,6 +1,9 @@
 'use client';
 
 import { CheckCircle, Close, Description, ErrorOutlined } from '@mui/icons-material';
+import { IconButton } from '@/components/Button';
+import { Chip } from '@/components/Chip';
+import { ProgressBar } from '@/components/ProgressBar';
 
 export type UploadJob = {
   fileId: string;
@@ -43,39 +46,31 @@ export function UploadProgress({
                 )}
                 <p className="text-sm text-on-surface truncate">{j.name}</p>
               </div>
-              <button
+              <IconButton
                 type="button"
+                bare
                 onClick={() => onDismiss(j.name)}
-                className="text-outline hover:text-on-surface transition-colors shrink-0 ml-1"
+                className="shrink-0 ml-1"
                 aria-label="Dismiss"
+                title="Dismiss"
               >
                 <Close className="!text-base" />
-              </button>
+              </IconButton>
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex-1 bg-surface-container h-1.5 rounded-full overflow-hidden">
-                <div
-                  className={
-                    j.status === 'failed'
-                      ? 'h-full bg-error rounded-full'
-                      : j.status === 'done'
-                        ? 'h-full bg-primary rounded-full'
-                        : 'h-full bg-primary rounded-full transition-all duration-300 ease-out'
-                  }
-                  style={{ width: `${j.status === 'failed' || j.status === 'done' ? 100 : pct}%` }}
-                />
-              </div>
-              <span
-                className={
-                  j.status === 'failed'
-                    ? 'text-xs font-semibold text-error shrink-0'
-                    : j.status === 'done'
-                      ? 'text-xs font-semibold text-primary shrink-0'
-                      : 'text-xs font-semibold text-primary shrink-0'
-                }
+              <ProgressBar
+                value={j.status === 'failed' || j.status === 'done' ? 100 : pct}
+                tone={j.status === 'failed' ? 'error' : 'primary'}
+                size="xs"
+                trackClassName="flex-1 bg-surface-container"
+                label={j.name}
+              />
+              <Chip
+                variant={j.status === 'failed' ? 'danger' : 'primary'}
+                className="shrink-0"
               >
                 {j.status === 'failed' ? 'Gagal' : j.status === 'done' ? 'Selesai' : `${pct}%`}
-              </span>
+              </Chip>
             </div>
             {j.error && (
               <p className="mt-1.5 text-xs text-error truncate" title={j.error}>
