@@ -118,12 +118,14 @@ class RecentController extends Controller
         if (! is_array($obj) || ! isset($obj['u'], $obj['i']) || ! is_string($obj['u']) || ! is_string($obj['i'])) {
             return null;
         }
+
         return ['u' => $obj['u'], 'i' => $obj['i']];
     }
 
     private function encodeCursor(\DateTimeInterface|string $updatedAt, string $id): string
     {
         $u = $updatedAt instanceof \DateTimeInterface ? $updatedAt->format(\DateTimeInterface::ATOM) : (string) $updatedAt;
+
         return base64_encode(json_encode(['u' => $u, 'i' => $id], JSON_UNESCAPED_SLASHES));
     }
 }

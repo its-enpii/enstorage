@@ -25,6 +25,7 @@ class ApiKey extends Model
     use HasUuids;
 
     protected $keyType = 'string';
+
     public $incrementing = false;
 
     protected function casts(): array
@@ -38,8 +39,11 @@ class ApiKey extends Model
     }
 
     public const SCOPE_READ = 'read';
+
     public const SCOPE_WRITE = 'write';
+
     public const SCOPE_DELETE = 'delete';
+
     public const SCOPE_FULL = 'full';
 
     public function user(): BelongsTo
@@ -57,6 +61,7 @@ class ApiKey extends Model
         if (in_array(self::SCOPE_FULL, $this->scopes ?? [], true)) {
             return true;
         }
+
         return in_array($scope, $this->scopes ?? [], true);
     }
 

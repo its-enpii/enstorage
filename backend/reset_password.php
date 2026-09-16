@@ -1,16 +1,20 @@
 <?php
 
-require __DIR__ . '/vendor/autoload.php';
+use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
-$app = require_once __DIR__ . '/bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+require __DIR__.'/vendor/autoload.php';
+
+$app = require_once __DIR__.'/bootstrap/app.php';
+$kernel = $app->make(Kernel::class);
 $kernel->bootstrap();
 
 $email = $argv[1] ?? 'owner@enstorage.local';
 $plain = $argv[2] ?? 'password';
 
-$hash = Illuminate\Support\Facades\Hash::make($plain);
-$count = Illuminate\Support\Facades\DB::table('users')
+$hash = Hash::make($plain);
+$count = DB::table('users')
     ->where('email', $email)
     ->update(['password' => $hash]);
 

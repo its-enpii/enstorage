@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -18,7 +19,7 @@ class EnsureUserRole
         $user = $request->user();
 
         if (! $user) {
-            throw new \Illuminate\Auth\AuthenticationException('Unauthenticated.');
+            throw new AuthenticationException('Unauthenticated.');
         }
 
         if (! $user->is_active) {

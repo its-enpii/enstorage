@@ -1,9 +1,23 @@
 <?php
 
+use App\Http\Middleware\ActivityLogApiKey;
+use App\Http\Middleware\AuthApiKey;
+use App\Http\Middleware\CheckScope;
+use App\Http\Middleware\EnsureSanctum;
+use App\Http\Middleware\EnsureUserRole;
+use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\ThrottleApiKey;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Middleware\HandleCors;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -35,23 +49,23 @@ return Application::configure(basePath: dirname(__DIR__))
         // returns 403 and the browser blocks the /broadcasting/auth
         // request that Reverb's pusher-js needs to subscribe to private
         // channels. Allowed origins are read from config/cors.php.
-        $middleware->prepend(\Illuminate\Http\Middleware\HandleCors::class);
+        $middleware->prepend(HandleCors::class);
 
         // Alias middleware custom
         $middleware->alias([
-            'role' => \App\Http\Middleware\EnsureUserRole::class,
-            'auth.apikey' => \App\Http\Middleware\AuthApiKey::class,
-            'auth.sanctum.only' => \App\Http\Middleware\EnsureSanctum::class,
-            'check.scope' => \App\Http\Middleware\CheckScope::class,
-            'throttle.apikey' => \App\Http\Middleware\ThrottleApiKey::class,
-            'log.apikey' => \App\Http\Middleware\ActivityLogApiKey::class,
-            'set.locale' => \App\Http\Middleware\SetLocale::class,
+            'role' => EnsureUserRole::class,
+            'auth.apikey' => AuthApiKey::class,
+            'auth.sanctum.only' => EnsureSanctum::class,
+            'check.scope' => CheckScope::class,
+            'throttle.apikey' => ThrottleApiKey::class,
+            'log.apikey' => ActivityLogApiKey::class,
+            'set.locale' => SetLocale::class,
         ]);
 
         // Set locale early in the API group so response messages
         // (and the exception envelope) are localized.
         $middleware->api(prepend: [
-            \App\Http\Middleware\SetLocale::class,
+            SetLocale::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -61,18 +75,18 @@ return Application::configure(basePath: dirname(__DIR__))
         );
 
         // Bungkus semua response API dalam envelope { success, data, message, meta }
-        $exceptions->render(function (\Throwable $e, Request $request) {
+        $exceptions->render(function (Throwable $e, Request $request) {
             if (! ($request->is('api/*') || $request->expectsJson())) {
                 return null;
             }
 
             $status = match (true) {
-                $e instanceof \Illuminate\Validation\ValidationException => 422,
-                $e instanceof \Illuminate\Auth\AuthenticationException => 401,
-                $e instanceof \Illuminate\Auth\Access\AuthorizationException => 403,
-                $e instanceof \Symfony\Component\HttpKernel\Exception\NotFoundHttpException => 404,
-                $e instanceof \Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException => 405,
-                $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface => $e->getStatusCode(),
+                $e instanceof ValidationException => 422,
+                $e instanceof AuthenticationException => 401,
+                $e instanceof AuthorizationException => 403,
+                $e instanceof NotFoundHttpException => 404,
+                $e instanceof MethodNotAllowedHttpException => 405,
+                $e instanceof HttpExceptionInterface => $e->getStatusCode(),
                 default => 500,
             };
 
@@ -83,7 +97,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 'meta' => (object) [],
             ];
 
-            if ($e instanceof \Illuminate\Validation\ValidationException) {
+            if ($e instanceof ValidationException) {
                 $payload['data'] = ['errors' => $e->errors()];
                 $payload['message'] = __('Validasi gagal.');
             }

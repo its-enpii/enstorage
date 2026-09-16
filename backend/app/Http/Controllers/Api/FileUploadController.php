@@ -9,14 +9,15 @@ use App\Models\Folder;
 use App\Models\ShareLink;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class FileUploadController extends Controller
 {
     private const MAX_FILES = 10;
+
     private const MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
 
     /**
@@ -79,6 +80,7 @@ class FileUploadController extends Controller
             $existing = FileModel::where('user_id', $userId)
                 ->whereIn('client_key', array_values($collisions))
                 ->get(['id', 'client_key']);
+
             return $this->fail(
                 __('Satu atau lebih client_key sudah dipakai. Gunakan key lain atau kosongkan untuk auto-generate.'),
                 409,
@@ -154,10 +156,12 @@ class FileUploadController extends Controller
             try {
                 if (! $uploadedFile->isValid()) {
                     $rejected[] = ['name' => $uploadedFile->getClientOriginalName(), 'reason' => __('Upload tidak valid.')];
+
                     continue;
                 }
                 if ($uploadedFile->getSize() > self::MAX_FILE_SIZE_BYTES) {
                     $rejected[] = ['name' => $uploadedFile->getClientOriginalName(), 'reason' => __('File melebihi 1GB')];
+
                     continue;
                 }
 
@@ -293,6 +297,7 @@ class FileUploadController extends Controller
             $existing = FileModel::where('user_id', $userId)
                 ->where('client_key', $clientKey)
                 ->first(['id', 'client_key']);
+
             return $this->fail(
                 __('Satu atau lebih client_key sudah dipakai. Gunakan key lain atau kosongkan untuk auto-generate.'),
                 409,
@@ -448,6 +453,7 @@ class FileUploadController extends Controller
             if (! file_exists($chunkPath)) {
                 fclose($out);
                 @unlink($assembledPath);
+
                 return $this->fail(__('Chunk :index tidak ditemukan.', ['index' => $i]), 500);
             }
             $in = fopen($chunkPath, 'rb');
@@ -611,7 +617,7 @@ class FileUploadController extends Controller
         $tmpPath = tempnam(sys_get_temp_dir(), 'enurl_');
 
         try {
-            $response = \Illuminate\Support\Facades\Http::withOptions([
+            $response = Http::withOptions([
                 'timeout' => 300,
                 'connect_timeout' => 30,
                 'allow_redirects' => [
@@ -738,13 +744,14 @@ class FileUploadController extends Controller
                 'rejected' => [],
                 'count' => 1,
             ], __('File berhasil diupload.'));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             if (file_exists($tmpPath)) {
                 @unlink($tmpPath);
             }
             if ($e instanceof ValidationException) {
                 throw $e;
             }
+
             return $this->fail($e->getMessage(), 502);
         }
     }
@@ -755,14 +762,19 @@ class FileUploadController extends Controller
      */
     private function normalizeOptionalString(mixed $raw, int $maxLen): ?string
     {
-        if ($raw === null || $raw === '') return null;
+        if ($raw === null || $raw === '') {
+            return null;
+        }
         $s = trim((string) $raw);
-        if ($s === '') return null;
+        if ($s === '') {
+            return null;
+        }
         if (strlen($s) > $maxLen) {
             throw ValidationException::withMessages([
                 'original_path' => __('Melebihi panjang maksimum :max karakter.', ['max' => $maxLen]),
             ]);
         }
+
         return $s;
     }
 
@@ -772,10 +784,17 @@ class FileUploadController extends Controller
      */
     private function normalizeOptionalInt(mixed $raw, int $min, int $max): ?int
     {
-        if ($raw === null || $raw === '') return null;
-        if (! is_numeric($raw)) return null;
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        if (! is_numeric($raw)) {
+            return null;
+        }
         $i = (int) $raw;
-        if ($i < $min || $i > $max) return null;
+        if ($i < $min || $i > $max) {
+            return null;
+        }
+
         return $i;
     }
 
@@ -815,6 +834,7 @@ class FileUploadController extends Controller
                 'client_key' => __('client_key[] harus sepanjang jumlah file (:count).', ['count' => $fileCount]),
             ]);
         }
+
         return $values;
     }
 
@@ -830,10 +850,10 @@ class FileUploadController extends Controller
         if ($expiresAt !== null && $expiresAt !== '') {
             try {
                 $parsed = new \DateTimeImmutable((string) $expiresAt);
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 $errors['share_expires_at'] = __('Format share_expires_at tidak valid.');
             }
-            if (! isset($errors['share_expires_at']) && $parsed <= new \DateTimeImmutable()) {
+            if (! isset($errors['share_expires_at']) && $parsed <= new \DateTimeImmutable) {
                 $errors['share_expires_at'] = __('share_expires_at harus di masa depan.');
             }
         }
@@ -875,6 +895,7 @@ class FileUploadController extends Controller
         if (empty($ips)) {
             throw ValidationException::withMessages(['url' => __('Host URL tidak dapat di-resolve.')]);
         }
+
         return $ips;
     }
 
@@ -883,6 +904,7 @@ class FileUploadController extends Controller
         if (str_starts_with($ip, '::ffff:')) {
             $ip = substr($ip, 7);
         }
+
         return ! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
     }
 }

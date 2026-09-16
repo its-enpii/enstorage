@@ -20,9 +20,11 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, HasUuids, Notifiable;
 
     public const ROLE_OWNER = 'owner';
+
     public const ROLE_MEMBER = 'member';
 
     protected $keyType = 'string';
+
     public $incrementing = false;
 
     protected function casts(): array
@@ -49,6 +51,7 @@ class User extends Authenticatable
         if (is_array($roles)) {
             return in_array($this->role, $roles, true);
         }
+
         return $this->role === $roles;
     }
 

@@ -234,4 +234,3 @@ Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(funct
         Route::delete('folders/{id}', [FolderController::class, 'destroy']);
     });
 });
-

@@ -6,12 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\GoogleAccountResource;
 use App\Models\ActivityLog;
 use App\Models\GoogleAccount;
+use App\Models\User;
+use App\Services\ActivityLogService;
+use App\Services\Google\GoogleClientFactory;
+use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleTokenService;
 use App\Services\Google\QuotaManager;
-use Google\Service\Drive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -91,13 +95,14 @@ class GoogleAccountController extends Controller
 
         try {
             $token = $this->tokens->exchangeServerAuthCode($data['code']);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             // Log full error so we can debug without going through the
             // Flutter client. Production keeps the generic
             // client-facing message; this only adds server-side log.
-            \Illuminate\Support\Facades\Log::error('GoogleAccountController::exchange failed', [
+            Log::error('GoogleAccountController::exchange failed', [
                 'exception' => $e->getMessage(),
             ]);
+
             return $this->fail(__('OAuth gagal: ').$e->getMessage(), 422);
         }
 
@@ -125,7 +130,7 @@ class GoogleAccountController extends Controller
                     'is_active' => true,
                 ]);
             });
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return $this->fail(__('Gagal menyimpan akun: ').$e->getMessage(), 500);
         }
 
@@ -141,8 +146,8 @@ class GoogleAccountController extends Controller
         try {
             $this->quota->ensureRootFolder($account);
             $account->refresh();
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('ensureRootFolder failed after connect', [
+        } catch (Throwable $e) {
+            Log::warning('ensureRootFolder failed after connect', [
                 'account_id' => $account->id,
                 'error' => $e->getMessage(),
             ]);
@@ -150,14 +155,14 @@ class GoogleAccountController extends Controller
         try {
             $this->quota->getQuota($account, forceRefresh: true);
             $account->refresh();
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('getQuota failed after connect', [
+        } catch (Throwable $e) {
+            Log::warning('getQuota failed after connect', [
                 'account_id' => $account->id,
                 'error' => $e->getMessage(),
             ]);
         }
 
-        app(\App\Services\ActivityLogService::class)->log(
+        app(ActivityLogService::class)->log(
             ActivityLog::ACTION_GOOGLE_ACCOUNT_ADD,
             userId: $user->id,
             subject: $account,
@@ -239,6 +244,7 @@ class GoogleAccountController extends Controller
             if ($isBrowser) {
                 return $this->redirectToFrontend(connected: $account->id, warning: 'refresh_token kosong');
             }
+
             return $this->ok(new GoogleAccountResource($account), __('Akun terhubung. PERHATIAN: refresh_token kosong — cabut & hubungkan ulang untuk mendapatkannya.'));
         }
 
@@ -258,7 +264,7 @@ class GoogleAccountController extends Controller
             // Tidak fatal — user bisa klik Sync nanti
         }
 
-        app(\App\Services\ActivityLogService::class)->log(
+        app(ActivityLogService::class)->log(
             ActivityLog::ACTION_GOOGLE_ACCOUNT_ADD,
             userId: $user->id,
             subject: $account,
@@ -339,7 +345,7 @@ class GoogleAccountController extends Controller
             // Tidak fatal — user bisa sync quota nanti
         }
 
-        app(\App\Services\ActivityLogService::class)->log(
+        app(ActivityLogService::class)->log(
             ActivityLog::ACTION_GOOGLE_ACCOUNT_ADD,
             userId: $user->id,
             subject: $account,
@@ -373,7 +379,7 @@ class GoogleAccountController extends Controller
      * WebView has confirmed it received the code, so we don't burn
      * authorization codes for users who never finish the WebView flow.
      */
-    public function callbackWeb(Request $request): \Illuminate\Http\Response
+    public function callbackWeb(Request $request): Response
     {
         $code = $request->query('code');
         $state = $request->query('state');
@@ -444,12 +450,14 @@ HTML;
             } catch (Throwable $e) {
                 $result['error'] = __('Autentikasi tidak valid atau state kadaluarsa.');
                 $result['status'] = 401;
+
                 return $result;
             }
 
             if (! is_array($payload) || empty($payload['user_id'])) {
                 $result['error'] = __('Autentikasi tidak valid atau state kadaluarsa.');
                 $result['status'] = 401;
+
                 return $result;
             }
 
@@ -457,10 +465,11 @@ HTML;
             if (empty($payload['ts']) || (time() - (int) $payload['ts']) > 600) {
                 $result['error'] = __('Autentikasi tidak valid atau state kadaluarsa.');
                 $result['status'] = 401;
+
                 return $result;
             }
 
-            $user = \App\Models\User::find($payload['user_id']);
+            $user = User::find($payload['user_id']);
             $platform = ($payload['platform'] ?? 'web') === 'mobile' ? 'mobile' : 'web';
 
             if ($platform === 'mobile') {
@@ -473,6 +482,7 @@ HTML;
         if (! $user) {
             $result['error'] = __('Autentikasi diperlukan.');
             $result['status'] = 401;
+
             return $result;
         }
 
@@ -481,6 +491,7 @@ HTML;
         $result['redirect_uri'] = $redirectUri;
         $result['client_id'] = $clientId;
         $result['client_secret'] = $clientSecret;
+
         return $result;
     }
 
@@ -488,10 +499,17 @@ HTML;
     {
         $webUrl = rtrim((string) env('FRONTEND_URL', 'http://localhost:3000'), '/');
         $params = [];
-        if ($connected) $params['connected'] = $connected;
-        if ($error) $params['error'] = $error;
-        if ($warning) $params['warning'] = $warning;
+        if ($connected) {
+            $params['connected'] = $connected;
+        }
+        if ($error) {
+            $params['error'] = $error;
+        }
+        if ($warning) {
+            $params['warning'] = $warning;
+        }
         $qs = $params ? '?'.http_build_query($params) : '';
+
         return redirect($webUrl.'/google-accounts'.$qs);
     }
 
@@ -556,7 +574,7 @@ HTML;
 
         // Coba revoke token di Google
         try {
-            $client = app(\App\Services\Google\GoogleClientFactory::class)->makeFor($account);
+            $client = app(GoogleClientFactory::class)->makeFor($account);
             $client->revokeToken($account->access_token);
         } catch (Throwable $e) {
             // Lanjut saja — token revoke failure tidak boleh blokir delete
@@ -565,7 +583,7 @@ HTML;
         $this->quota->invalidate($account);
         $account->delete();
 
-        app(\App\Services\ActivityLogService::class)->log(
+        app(ActivityLogService::class)->log(
             ActivityLog::ACTION_GOOGLE_ACCOUNT_REMOVE,
             userId: $request->user()->id,
             metadata: ['account_id' => $id, 'email' => $account->email],
@@ -588,7 +606,7 @@ HTML;
             return $this->fail(__('Sinkronisasi quota gagal: ').$e->getMessage(), 502);
         }
 
-        app(\App\Services\ActivityLogService::class)->log(
+        app(ActivityLogService::class)->log(
             ActivityLog::ACTION_GOOGLE_ACCOUNT_QUOTA_SYNC,
             userId: $request->user()->id,
             subject: $account,
@@ -619,7 +637,7 @@ HTML;
             return $this->fail(__('Tidak ada akun Google aktif yang terhubung.'), 404);
         }
 
-        $folderService = app(\App\Services\Google\GoogleDriveFolderService::class);
+        $folderService = app(GoogleDriveFolderService::class);
         $totalStats = [
             'folders_created' => 0,
             'files_created' => 0,

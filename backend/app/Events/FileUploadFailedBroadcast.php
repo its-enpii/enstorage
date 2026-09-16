@@ -4,8 +4,8 @@ namespace App\Events;
 
 use App\Models\File as FileModel;
 use App\Support\ReverbChannel;
+use App\Support\WebhookPayload;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -33,7 +33,7 @@ class FileUploadFailedBroadcast implements ShouldBroadcastNow
     public function broadcastWith(): array
     {
         return array_merge(
-            \App\Support\WebhookPayload::fileUploadFailed($this->file, $this->reason),
+            WebhookPayload::fileUploadFailed($this->file, $this->reason),
             ['upload_status' => $this->file->upload_status],
         );
     }

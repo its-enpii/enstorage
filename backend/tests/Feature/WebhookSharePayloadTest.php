@@ -6,6 +6,7 @@ use App\Jobs\FireWebhookJob;
 use App\Models\File;
 use App\Models\Folder;
 use App\Models\GoogleAccount;
+use App\Models\ShareLink;
 use App\Models\User;
 use App\Models\Webhook;
 use App\Services\WebhookService;
@@ -230,7 +231,7 @@ class WebhookSharePayloadTest extends TestCase
         $file->mime_type = 'image/png';
         $file->save();
 
-        \App\Models\ShareLink::create([
+        ShareLink::create([
             'user_id' => $user->id,
             'shareable_type' => File::class,
             'shareable_id' => $file->id,

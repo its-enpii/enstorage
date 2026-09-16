@@ -18,7 +18,7 @@ class ThumbnailGenerator
 {
     public function generate(FileModel $file, string $sourcePath): void
     {
-        $manager = new ImageManager(new GdDriver());
+        $manager = new ImageManager(new GdDriver);
         $image = $manager->read($sourcePath);
         $image->scaleDown(width: 400, height: 400);
 
@@ -48,12 +48,14 @@ class ThumbnailGenerator
     {
         try {
             $this->generate($file, $sourcePath);
+
             return true;
         } catch (Throwable $e) {
             Log::warning('ThumbnailGenerator gagal', [
                 'file_id' => $file->id,
                 'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }

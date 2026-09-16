@@ -51,6 +51,7 @@ class BroadcastChannelAuthTest extends TestCase
         if (! $user) {
             return false;
         }
+
         return (string) $user->id === $userId;
     }
 }

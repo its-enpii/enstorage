@@ -34,6 +34,7 @@ trait ApiResponse
 
     /**
      * Bungkus response dengan envelope standar.
+     *
      * @param  array{page?:int, per_page?:int, total?:int, last_page?:int}  $meta
      */
     protected function paginated(LengthAwarePaginator $paginator, ?string $resourceClass = null, string $message = 'OK'): JsonResponse

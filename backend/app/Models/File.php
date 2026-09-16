@@ -38,11 +38,15 @@ class File extends Model
     use HasUuids;
 
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_UPLOADING = 'uploading';
+
     public const STATUS_DONE = 'done';
+
     public const STATUS_FAILED = 'failed';
 
     protected $keyType = 'string';
+
     public $incrementing = false;
 
     protected function casts(): array

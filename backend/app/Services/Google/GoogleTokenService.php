@@ -4,6 +4,7 @@ namespace App\Services\Google;
 
 use App\Models\GoogleAccount;
 use Google\Client as GoogleClient;
+use Google\Service\Oauth2;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -16,9 +17,9 @@ class GoogleTokenService
      * Generate URL authorize untuk OAuth flow (web). State berisi signed user identity
      * (di-encode oleh caller) untuk di-resolve di callback tanpa session.
      *
-     * @param  string|null  $redirectUri    Override redirect_uri.
-     * @param  string|null  $clientId       Override client_id.
-     * @param  string|null  $clientSecret   Override client_secret.
+     * @param  string|null  $redirectUri  Override redirect_uri.
+     * @param  string|null  $clientId  Override client_id.
+     * @param  string|null  $clientSecret  Override client_secret.
      */
     public function getAuthorizationUrl(
         ?string $state = null,
@@ -30,14 +31,15 @@ class GoogleTokenService
         if ($state) {
             $client->setState($state);
         }
+
         return $client->createAuthUrl();
     }
 
     /**
      * Tukar authorization code dengan access+refresh token (web flow).
      *
-     * @param  string|null  $redirectUri   Harus match dengan yang dipakai saat authorize.
-     * @param  string|null  $clientId      Harus match dengan yang dipakai saat authorize.
+     * @param  string|null  $redirectUri  Harus match dengan yang dipakai saat authorize.
+     * @param  string|null  $clientId  Harus match dengan yang dipakai saat authorize.
      * @param  string|null  $clientSecret  Biasanya null untuk Android.
      * @return array{access_token: string, refresh_token: ?string, expires_in: int, email: ?string}
      */
@@ -152,15 +154,18 @@ class GoogleTokenService
                     'status' => $response->status(),
                     'body' => $response->body(),
                 ]);
+
                 return ['email' => null, 'name' => null];
             }
             $data = $response->json();
+
             return [
                 'email' => $data['email'] ?? null,
                 'name' => $data['name'] ?? null,
             ];
         } catch (\Throwable $e) {
             Log::warning('Gagal mengambil info user Google', ['error' => $e->getMessage()]);
+
             return ['email' => null, 'name' => null];
         }
     }
@@ -209,11 +214,13 @@ class GoogleTokenService
     {
         try {
             $client->setAccessToken($accessToken);
-            $oauth = new \Google\Service\Oauth2($client);
+            $oauth = new Oauth2($client);
             $userinfo = $oauth->userinfo->get();
+
             return $userinfo->getEmail();
         } catch (\Throwable $e) {
             Log::warning('Gagal mengambil email user Google', ['error' => $e->getMessage()]);
+
             return null;
         }
     }

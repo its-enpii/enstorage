@@ -6,10 +6,8 @@ use App\Models\File as FileModel;
 use App\Models\Folder;
 use App\Models\GoogleAccount;
 use App\Services\Folder\FolderPathService;
-use Google\Client as GoogleClient;
 use Google\Service\Drive;
 use Google\Service\Drive\DriveFile;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -67,6 +65,7 @@ class GoogleDriveFolderService
             foreach ($list->getFiles() as $existing) {
                 $folder->gdrive_folder_id = $existing->getId();
                 $folder->save();
+
                 return $existing->getId();
             }
         } catch (\Throwable $e) {
@@ -97,7 +96,9 @@ class GoogleDriveFolderService
         string $newParentGDriveId
     ): void {
         $gdriveFolderId = $this->ensureFolderOnDrive($account, $folder);
-        if (! $gdriveFolderId) return;
+        if (! $gdriveFolderId) {
+            return;
+        }
 
         $this->tokens->ensureFreshToken($account);
         $client = $this->factory->makeFor($account);
@@ -112,7 +113,7 @@ class GoogleDriveFolderService
             if ($oldParents && $oldParents !== $newParentGDriveId) {
                 $optParams['removeParents'] = $oldParents;
             }
-            $drive->files->update($gdriveFolderId, new DriveFile(), $optParams);
+            $drive->files->update($gdriveFolderId, new DriveFile, $optParams);
         } catch (\Throwable $e) {
             Log::warning('GDrive moveFolderOnDrive failed: '.$e->getMessage(), [
                 'folder_id' => $folder->id,
@@ -129,7 +130,9 @@ class GoogleDriveFolderService
         FileModel $file,
         string $newParentGDriveId
     ): void {
-        if (! $file->gdrive_file_id) return;
+        if (! $file->gdrive_file_id) {
+            return;
+        }
 
         $this->tokens->ensureFreshToken($account);
         $client = $this->factory->makeFor($account);
@@ -146,7 +149,7 @@ class GoogleDriveFolderService
                 $optParams['removeParents'] = $oldParents;
             }
 
-            $drive->files->update($file->gdrive_file_id, new DriveFile(), $optParams);
+            $drive->files->update($file->gdrive_file_id, new DriveFile, $optParams);
         } catch (\Throwable $e) {
             Log::warning('GDrive moveFileOnDrive failed: '.$e->getMessage(), [
                 'file_id' => $file->id,

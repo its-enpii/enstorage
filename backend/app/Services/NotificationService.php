@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\DeviceToken;
+use App\Models\File;
 use App\Models\User;
 use Google\Auth\Credentials\ServiceAccountCredentials;
 use Illuminate\Support\Facades\Http;
@@ -16,7 +17,7 @@ class NotificationService
      * Send FCM notification to all active devices of a user.
      * Only sends to devices where the given setting type is enabled.
      *
-     * @param string $settingType 'upload' | 'quota' | 'security'
+     * @param  string  $settingType  'upload' | 'quota' | 'security'
      */
     public function sendToUser(
         User $user,
@@ -40,7 +41,7 @@ class NotificationService
      * Send FCM notification to a single device token.
      *
      * @param  array<string,mixed>  $androidNotification  Optional override for `android.notification`
-     *                                                       (tag, ongoing, notification_count, dll).
+     *                                                    (tag, ongoing, notification_count, dll).
      */
     public function sendToToken(
         string $fcmToken,
@@ -52,12 +53,14 @@ class NotificationService
         $projectId = config('services.firebase.project_id');
         if (! $projectId) {
             Log::warning('Firebase project_id not configured');
+
             return;
         }
 
         $accessToken = $this->getAccessToken();
         if (! $accessToken) {
             Log::warning('Failed to get Firebase access token');
+
             return;
         }
 
@@ -109,7 +112,7 @@ class NotificationService
     /**
      * FCM notification saat upload gagal.
      */
-    public function sendUploadFailed(\App\Models\File $file, string $reason): void
+    public function sendUploadFailed(File $file, string $reason): void
     {
         $this->sendToUser(
             $file->user,
@@ -138,6 +141,7 @@ class NotificationService
         $credentialsPath = config('services.firebase.credentials_path');
         if (! $credentialsPath || ! file_exists($credentialsPath)) {
             Log::warning('Firebase credentials file not found', ['path' => $credentialsPath]);
+
             return null;
         }
 
@@ -149,9 +153,11 @@ class NotificationService
             $token = $auth->fetchAuthToken();
 
             $this->accessToken = $token['access_token'] ?? null;
+
             return $this->accessToken;
         } catch (\Throwable $e) {
             Log::error('Firebase auth failed', ['error' => $e->getMessage()]);
+
             return null;
         }
     }

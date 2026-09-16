@@ -39,6 +39,7 @@ class FileUploadClientKeyTest extends TestCase
     {
         $user = User::factory()->create();
         Sanctum::actingAs($user);
+
         return $user;
     }
 

@@ -2,21 +2,31 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\FileDeletedBroadcast;
+use App\Events\FileMovedBroadcast;
+use App\Events\FolderCreatedBroadcast;
+use App\Events\FolderDeletedBroadcast;
+use App\Events\FolderMovedBroadcast;
+use App\Events\FolderRenamedBroadcast;
+use App\Events\FolderSharedBroadcast;
+use App\Events\FolderUnsharedBroadcast;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FolderResource;
 use App\Models\ActivityLog;
-use App\Models\Folder;
-use App\Models\ShareLink;
 use App\Models\File;
+use App\Models\Folder;
+use App\Models\GoogleAccount;
+use App\Models\ShareLink;
 use App\Services\ActivityLogService;
 use App\Services\Folder\FolderPathService;
-use App\Models\GoogleAccount;
 use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
+use App\Services\Google\QuotaManager;
 use App\Services\WebhookService;
 use Google\Service\Drive;
+use Google\Service\Drive\DriveFile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -86,7 +96,7 @@ class FolderController extends Controller
         }
 
         $subfoldersQ = Folder::where('parent_id', $folder->id)->orderBy('name');
-        $filesQ = \App\Models\File::where('folder_id', $folder->id)
+        $filesQ = File::where('folder_id', $folder->id)
             ->orderBy('created_at', 'desc');
 
         $perPage = min(100, max(1, (int) $request->query('per_page', 25)));
@@ -156,7 +166,7 @@ class FolderController extends Controller
             ]);
         }
 
-        $folder = new Folder();
+        $folder = new Folder;
         $folder->user_id = $userId;
         $folder->parent_id = $parentId;
         $folder->name = $data['name'];
@@ -181,7 +191,7 @@ class FolderController extends Controller
 
         // Realtime broadcast — subscriber di parent folder (atau root)
         // langsung melihat folder baru tanpa polling.
-        \App\Events\FolderCreatedBroadcast::dispatch($folder);
+        FolderCreatedBroadcast::dispatch($folder);
 
         return $this->created(new FolderResource($folder), __('Folder berhasil dibuat.'));
     }
@@ -241,10 +251,10 @@ class FolderController extends Controller
 
             // Sync rename folder di semua akun Google Drive yang memiliki folder ini
             try {
-                $accounts = \App\Models\GoogleAccount::where('user_id', $request->user()->id)->get();
-                $tokenSvc = app(\App\Services\Google\GoogleTokenService::class);
-                $clientFactory = app(\App\Services\Google\GoogleClientFactory::class);
-                $gdriveFolderService = app(\App\Services\Google\GoogleDriveFolderService::class);
+                $accounts = GoogleAccount::where('user_id', $request->user()->id)->get();
+                $tokenSvc = app(GoogleTokenService::class);
+                $clientFactory = app(GoogleClientFactory::class);
+                $gdriveFolderService = app(GoogleDriveFolderService::class);
 
                 foreach ($accounts as $acc) {
                     $gdriveFolderId = $gdriveFolderService->ensureFolderOnDrive($acc, $folder);
@@ -252,14 +262,14 @@ class FolderController extends Controller
                         $tokenSvc->ensureFreshToken($acc);
                         $client = $clientFactory->makeFor($acc);
                         $client->setAccessToken($acc->access_token);
-                        $drive = new \Google\Service\Drive($client);
+                        $drive = new Drive($client);
 
-                        $patchFile = new \Google\Service\Drive\DriveFile(['name' => $folder->name]);
+                        $patchFile = new DriveFile(['name' => $folder->name]);
                         $drive->files->update($gdriveFolderId, $patchFile);
                     }
                 }
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('GDrive rename folder sync failed: '.$e->getMessage());
+            } catch (Throwable $e) {
+                Log::warning('GDrive rename folder sync failed: '.$e->getMessage());
             }
 
             $this->activityLog->log(
@@ -271,7 +281,7 @@ class FolderController extends Controller
             );
 
             // Realtime broadcast — rename
-            \App\Events\FolderRenamedBroadcast::dispatch($folder, $previousName);
+            FolderRenamedBroadcast::dispatch($folder, $previousName);
         }
 
         return $this->ok(new FolderResource($folder), __('Folder berhasil diperbarui.'));
@@ -336,10 +346,10 @@ class FolderController extends Controller
 
         // Sync folder move di Google Drive
         try {
-            $accounts = \App\Models\GoogleAccount::where('user_id', $request->user()->id)->get();
-            $gdriveFolderService = app(\App\Services\Google\GoogleDriveFolderService::class);
+            $accounts = GoogleAccount::where('user_id', $request->user()->id)->get();
+            $gdriveFolderService = app(GoogleDriveFolderService::class);
             $targetParent = $newParentId ? Folder::find($newParentId) : null;
-            $quota = app(\App\Services\Google\QuotaManager::class);
+            $quota = app(QuotaManager::class);
 
             foreach ($accounts as $acc) {
                 $newParentGDriveId = $targetParent
@@ -347,8 +357,8 @@ class FolderController extends Controller
                     : $quota->ensureRootFolder($acc);
                 $gdriveFolderService->moveFolderOnDrive($acc, $folder, null, $newParentGDriveId);
             }
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('GDrive move folder sync failed: '.$e->getMessage());
+        } catch (Throwable $e) {
+            Log::warning('GDrive move folder sync failed: '.$e->getMessage());
         }
 
         $this->activityLog->log(
@@ -361,7 +371,7 @@ class FolderController extends Controller
 
         // Realtime broadcast — both source parent (remove) and destination
         // parent (append) subscribers hear this.
-        \App\Events\FolderMovedBroadcast::dispatch($folder, $previousParentId);
+        FolderMovedBroadcast::dispatch($folder, $previousParentId);
 
         return $this->ok(new FolderResource($folder->fresh()), __('Folder berhasil dipindahkan.'));
     }
@@ -574,7 +584,7 @@ class FolderController extends Controller
                     'size' => $fSize,
                 ]);
 
-                \App\Events\FileDeletedBroadcast::dispatch($fId, $clientKey, $fFolderId, $fUserId);
+                FileDeletedBroadcast::dispatch($fId, $clientKey, $fFolderId, $fUserId);
             }
 
             // Hapus folder utama (FK cascade akan menghapus subfolder-subfolder di DB)
@@ -597,7 +607,7 @@ class FolderController extends Controller
 
             // Per-file cascade: each file moved from (deleted folder) to null (root).
             foreach ($filesInFolder as $file) {
-                \App\Events\FileMovedBroadcast::dispatch(
+                FileMovedBroadcast::dispatch(
                     $file,
                     $folderId,        // previous_folder_id
                     $file->name,      // previous_name (no rename happened)
@@ -614,7 +624,7 @@ class FolderController extends Controller
         );
 
         // Realtime broadcast — folder gone from parent view.
-        \App\Events\FolderDeletedBroadcast::dispatch($folderId, $userId, $parentId);
+        FolderDeletedBroadcast::dispatch($folderId, $userId, $parentId);
 
         return $this->ok(null, $deleteFiles ? __('Folder beserta seluruh isinya berhasil dihapus.') : __('Folder berhasil dihapus.'));
     }
@@ -670,7 +680,7 @@ class FolderController extends Controller
         ]);
 
         // Realtime broadcast
-        \App\Events\FolderSharedBroadcast::dispatch($folder, $link->token);
+        FolderSharedBroadcast::dispatch($folder, $link->token);
 
         return $this->ok([
             'share_token' => $link->token,
@@ -717,7 +727,7 @@ class FolderController extends Controller
         ]);
 
         // Realtime broadcast
-        \App\Events\FolderUnsharedBroadcast::dispatch($folder);
+        FolderUnsharedBroadcast::dispatch($folder);
 
         return $this->ok(null, __('Share link berhasil dicabut.'));
     }
@@ -760,7 +770,7 @@ class FolderController extends Controller
         $zipName = $safeName.'.zip';
 
         return response()->stream(function () use ($files, $subfolders, $factory, $tokenSvc, &$clients, $safeName) {
-            $zip = new ZipArchive();
+            $zip = new ZipArchive;
             $zip->open('php://output', ZipArchive::CREATE | ZipArchive::OVERWRITE);
 
             // Subfolder → direktori kosong di zip (placeholder struktur).
@@ -775,7 +785,9 @@ class FolderController extends Controller
             try {
                 foreach ($files as $file) {
                     $account = $file->googleAccount;
-                    if (! $account || ! $file->gdrive_file_id) continue;
+                    if (! $account || ! $file->gdrive_file_id) {
+                        continue;
+                    }
 
                     if (! isset($clients[$account->id])) {
                         $tokenSvc->ensureFreshToken($account);
@@ -801,7 +813,9 @@ class FolderController extends Controller
                 $zip->close();
             } finally {
                 foreach ($tmpFiles as $tmp) {
-                    if (file_exists($tmp)) @unlink($tmp);
+                    if (file_exists($tmp)) {
+                        @unlink($tmp);
+                    }
                 }
             }
         }, 200, [

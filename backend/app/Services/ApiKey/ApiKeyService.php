@@ -3,8 +3,6 @@
 namespace App\Services\ApiKey;
 
 use App\Models\ApiKey;
-use App\Models\ActivityLog;
-use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class ApiKeyService

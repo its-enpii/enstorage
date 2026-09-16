@@ -2,6 +2,7 @@
 
 namespace App\Services\Google;
 
+use App\Models\GoogleAccount;
 use Google\Client as GoogleClient;
 use Google\Service\Drive;
 
@@ -11,17 +12,17 @@ class GoogleClientFactory
      * Bangun Google Client baru (belum diautentikasi).
      *
      * @param  string|null  $overrideRedirectUri  Paksa redirect_uri tertentu.
-     *         Dipakai oleh flow mobile (custom URL scheme) supaya URI yang
-     *         di-pass ke Google saat authorize dan saat tukar code konsisten.
-     * @param  string|null  $overrideClientId     Paksa client_id (Android/iOS client).
-     * @param  string|null  $overrideClientSecret Paksa client_secret.
+     *                                            Dipakai oleh flow mobile (custom URL scheme) supaya URI yang
+     *                                            di-pass ke Google saat authorize dan saat tukar code konsisten.
+     * @param  string|null  $overrideClientId  Paksa client_id (Android/iOS client).
+     * @param  string|null  $overrideClientSecret  Paksa client_secret.
      */
     public function make(
         ?string $overrideRedirectUri = null,
         ?string $overrideClientId = null,
         ?string $overrideClientSecret = null,
     ): GoogleClient {
-        $client = new GoogleClient();
+        $client = new GoogleClient;
         $client->setClientId((string) ($overrideClientId ?? config('services.google.client_id')));
         $client->setClientSecret((string) ($overrideClientSecret ?? config('services.google.client_secret')));
         $uri = $overrideRedirectUri ?? (string) config('services.google.redirect_uri');
@@ -47,7 +48,7 @@ class GoogleClientFactory
      * ditolak Google ("invalid_token" / "Token used in the wrong
      * context").
      */
-    public function makeFor(\App\Models\GoogleAccount $account): GoogleClient
+    public function makeFor(GoogleAccount $account): GoogleClient
     {
         $client = $this->make(
             overrideClientId: (string) config('services.google.client_id_mobile'),

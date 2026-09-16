@@ -26,6 +26,7 @@ class SetLocale
         $userLocale = $request->user()?->locale;
         if (is_string($userLocale) && in_array($userLocale, self::SUPPORTED, true)) {
             app()->setLocale($userLocale);
+
             return $next($request);
         }
 
@@ -37,6 +38,7 @@ class SetLocale
                 $short = substr($code, 0, 2);
                 if (in_array($short, self::SUPPORTED, true)) {
                     app()->setLocale($short);
+
                     return $next($request);
                 }
             }

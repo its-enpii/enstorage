@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\FileDeletedBroadcast;
+use App\Events\FileMovedBroadcast;
+use App\Events\FileUpdatedBroadcast;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FileResource;
 use App\Http\Resources\FolderResource;
@@ -11,8 +14,10 @@ use App\Models\Folder;
 use App\Models\ShareLink;
 use App\Services\ActivityLogService;
 use App\Services\Google\GoogleClientFactory;
+use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
+use App\Services\Google\QuotaManager;
 use App\Services\WebhookService;
 use Google\Service\Drive;
 use Illuminate\Http\JsonResponse;
@@ -22,6 +27,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
@@ -225,7 +231,9 @@ class FileController extends Controller
                 continue;
             }
             $key = "{$file->original_path}\x00{$file->original_mtime_ms}\x00{$file->original_size}";
-            if (! isset($compositeKeys[$key])) continue;
+            if (! isset($compositeKeys[$key])) {
+                continue;
+            }
 
             $matched[] = [
                 'original_path' => $file->original_path,
@@ -404,7 +412,7 @@ class FileController extends Controller
         $file->save();
 
         // Broadcast update ke WebSocket subscribers (UI upsert row in place).
-        \App\Events\FileUpdatedBroadcast::dispatch($file);
+        FileUpdatedBroadcast::dispatch($file);
 
         if (array_key_exists('name', $data)) {
             $this->activityLog->log(
@@ -506,7 +514,7 @@ class FileController extends Controller
         // Sync GDrive file move (1:1 folder hierarchy)
         try {
             if ($file->google_account_id && $file->googleAccount && $file->googleAccount->is_active) {
-                $folderService = app(\App\Services\Google\GoogleDriveFolderService::class);
+                $folderService = app(GoogleDriveFolderService::class);
                 $newGDriveParentId = null;
                 if ($newFolderId) {
                     $targetFolder = Folder::find($newFolderId);
@@ -515,12 +523,12 @@ class FileController extends Controller
                     }
                 }
                 if (! $newGDriveParentId) {
-                    $newGDriveParentId = app(\App\Services\Google\QuotaManager::class)->ensureRootFolder($file->googleAccount);
+                    $newGDriveParentId = app(QuotaManager::class)->ensureRootFolder($file->googleAccount);
                 }
                 $folderService->moveFileOnDrive($file->googleAccount, $file, $newGDriveParentId);
             }
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('GDrive move file sync failed: '.$e->getMessage());
+        } catch (Throwable $e) {
+            Log::warning('GDrive move file sync failed: '.$e->getMessage());
         }
 
         // Broadcast event ke webhook subscriber.
@@ -539,7 +547,7 @@ class FileController extends Controller
 
         // Realtime broadcast — both source folder subscribers (remove)
         // and destination folder subscribers (append) hear this.
-        \App\Events\FileMovedBroadcast::dispatch(
+        FileMovedBroadcast::dispatch(
             $file,
             $previousFolderId,
             $originalName,
@@ -609,7 +617,7 @@ class FileController extends Controller
         $this->deleteOne($file, $request->user()->id);
 
         // Realtime broadcast — subscribers remove the file from view.
-        \App\Events\FileDeletedBroadcast::dispatch($fileId, $clientKey, $folderId, $userId);
+        FileDeletedBroadcast::dispatch($fileId, $clientKey, $folderId, $userId);
 
         return $this->ok(null, __('File berhasil dihapus.'));
     }
@@ -644,7 +652,7 @@ class FileController extends Controller
 
             // Per-file realtime broadcast. Multiple subscribers across
             // folders each receive their copy via their own channel auth.
-            \App\Events\FileDeletedBroadcast::dispatch($fileId, $clientKey, $folderId, $fileUserId);
+            FileDeletedBroadcast::dispatch($fileId, $clientKey, $folderId, $fileUserId);
         }
 
         return $this->ok([
@@ -700,7 +708,7 @@ class FileController extends Controller
         $shareUrl = WebhookService::shareUrlFor($file->share_token);
 
         // Realtime broadcast — UI shows the share button as "active".
-        \App\Events\FileUpdatedBroadcast::dispatch($file);
+        FileUpdatedBroadcast::dispatch($file);
 
         $this->webhooks->dispatch($request->user()->id, 'file.shared', [
             'file_id' => $file->id,
@@ -744,7 +752,7 @@ class FileController extends Controller
             ->delete();
 
         // Realtime broadcast — UI shows the share button as "inactive".
-        \App\Events\FileUpdatedBroadcast::dispatch($file);
+        FileUpdatedBroadcast::dispatch($file);
 
         return $this->ok(null, __('Link share dihapus.'));
     }
@@ -761,10 +769,10 @@ class FileController extends Controller
         if ($expiresAt !== null && $expiresAt !== '') {
             try {
                 $parsed = new \DateTimeImmutable((string) $expiresAt);
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 $errors['expires_at'] = __('Format expires_at tidak valid.');
             }
-            if (! isset($errors['expires_at']) && $parsed <= new \DateTimeImmutable()) {
+            if (! isset($errors['expires_at']) && $parsed <= new \DateTimeImmutable) {
                 $errors['expires_at'] = __('expires_at harus di masa depan.');
             }
         }
@@ -776,7 +784,7 @@ class FileController extends Controller
         }
 
         if (! empty($errors)) {
-            throw \Illuminate\Validation\ValidationException::withMessages($errors);
+            throw ValidationException::withMessages($errors);
         }
     }
 
@@ -1162,12 +1170,13 @@ class FileController extends Controller
             ->where('user_id', $request->user()->id)
             ->first();
     }
+
     private function makeContentDisposition(string $disposition, FileModel $file): string
     {
         $name = $file->name ?: $file->original_name;
         $safe = str_replace(['"', "\r", "\n"], '', $name);
         $encoded = rawurlencode($name);
-        return $disposition . '; filename="' . $safe . '"; filename*=UTF-8\'\'' . $encoded;
-    }
 
+        return $disposition.'; filename="'.$safe.'"; filename*=UTF-8\'\''.$encoded;
+    }
 }

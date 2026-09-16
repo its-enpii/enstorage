@@ -5,11 +5,10 @@ namespace App\Services\Google;
 use App\Models\File as FileModel;
 use App\Models\Folder;
 use App\Models\GoogleAccount;
-use Google\Client as GoogleClient;
+use Google\Http\MediaFileUpload;
 use Google\Service\Drive;
 use Google\Service\Drive\DriveFile;
 use Google\Service\Drive\Permission;
-use Google\Http\MediaFileUpload;
 use Illuminate\Support\Facades\Log;
 
 class GoogleDriveUploader

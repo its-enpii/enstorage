@@ -24,6 +24,7 @@ class Webhook extends Model
     use HasUuids;
 
     protected $keyType = 'string';
+
     public $incrementing = false;
 
     public const EVENTS = [
@@ -55,7 +56,10 @@ class Webhook extends Model
 
     public function subscribesTo(string $event): bool
     {
-        if (! $this->is_active) return false;
+        if (! $this->is_active) {
+            return false;
+        }
+
         return in_array($event, $this->events ?? [], true);
     }
 }

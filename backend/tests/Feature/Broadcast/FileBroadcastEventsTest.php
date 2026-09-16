@@ -5,8 +5,8 @@ namespace Tests\Feature\Broadcast;
 use App\Events\FileDeletedBroadcast;
 use App\Events\FileMovedBroadcast;
 use App\Events\FileUpdatedBroadcast;
-use App\Events\FileUploadFailedBroadcast;
 use App\Events\FileUploadedBroadcast;
+use App\Events\FileUploadFailedBroadcast;
 use App\Jobs\UploadFileJob;
 use App\Models\File;
 use App\Models\Folder;
@@ -14,10 +14,10 @@ use App\Models\GoogleAccount;
 use App\Models\User;
 use App\Services\Google\GoogleDriveUploader;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
-use Mockery;
 use Tests\TestCase;
 
 /**
@@ -87,7 +87,7 @@ class FileBroadcastEventsTest extends TestCase
         // against a running Reverb server.
         $user = $this->actingUser();
 
-        \Illuminate\Support\Facades\Bus::fake([UploadFileJob::class]);
+        Bus::fake([UploadFileJob::class]);
 
         // Simulate the controller's dispatch path: create a pending
         // file row, then schedule the job (this is what
@@ -95,7 +95,7 @@ class FileBroadcastEventsTest extends TestCase
         $file = $this->makeFile($user, status: File::STATUS_PENDING);
         UploadFileJob::dispatch($file->id);
 
-        \Illuminate\Support\Facades\Bus::assertDispatched(UploadFileJob::class, function ($job) use ($file) {
+        Bus::assertDispatched(UploadFileJob::class, function ($job) use ($file) {
             return $job->fileId === $file->id;
         });
     }

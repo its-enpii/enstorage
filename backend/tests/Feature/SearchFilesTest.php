@@ -6,7 +6,9 @@ use App\Models\File;
 use App\Models\Folder;
 use App\Models\GoogleAccount;
 use App\Models\User;
+use App\Services\Folder\FolderPathService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -25,7 +27,7 @@ class SearchFilesTest extends TestCase
     {
         parent::setUp();
 
-        \Illuminate\Support\Facades\DB::statement('CREATE EXTENSION IF NOT EXISTS pg_trgm');
+        DB::statement('CREATE EXTENSION IF NOT EXISTS pg_trgm');
     }
 
     private function makeUser(): User
@@ -62,7 +64,7 @@ class SearchFilesTest extends TestCase
             'name' => $name,
             'path' => '/', // di-refresh di afterCreating
         ]);
-        $folder->path = app(\App\Services\Folder\FolderPathService::class)->computePath($folder);
+        $folder->path = app(FolderPathService::class)->computePath($folder);
         $folder->save();
 
         return $folder;
@@ -191,7 +193,7 @@ class SearchFilesTest extends TestCase
         $this->makeFile($user, 'b.pdf', $sub);
         $this->makeFile($user, 'c.pdf', $deep);
 
-        $response = $this->getJson("/api/v1/search/files?q=pdf&folder_path=/Laporan&recursive=1");
+        $response = $this->getJson('/api/v1/search/files?q=pdf&folder_path=/Laporan&recursive=1');
 
         $response->assertOk()->assertJsonCount(3, 'data');
     }

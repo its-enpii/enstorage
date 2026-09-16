@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Models\File;
 use App\Models\File as FileModel;
 use App\Models\GoogleAccount;
 use App\Models\User;
@@ -13,11 +14,14 @@ use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleTokenService;
 use App\Services\Google\QuotaManager;
 use App\Services\NotificationService;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Throwable;
@@ -129,10 +133,11 @@ class AuthController extends Controller
 
         try {
             $token = $this->googleTokens->exchangeServerAuthCode($data['code']);
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('AuthController::googleAuth exchange failed', [
+        } catch (Throwable $e) {
+            Log::error('AuthController::googleAuth exchange failed', [
                 'exception' => $e->getMessage(),
             ]);
+
             return $this->fail(__('OAuth gagal: ').$e->getMessage(), 422);
         }
 
@@ -230,8 +235,8 @@ class AuthController extends Controller
                 try {
                     $this->quota->ensureRootFolder($account);
                     $account->refresh();
-                } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::warning('ensureRootFolder failed after googleAuth register', [
+                } catch (Throwable $e) {
+                    Log::warning('ensureRootFolder failed after googleAuth register', [
                         'account_id' => $account->id,
                         'error' => $e->getMessage(),
                     ]);
@@ -239,8 +244,8 @@ class AuthController extends Controller
                 try {
                     $this->quota->getQuota($account, forceRefresh: true);
                     $account->refresh();
-                } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::warning('getQuota failed after googleAuth register', [
+                } catch (Throwable $e) {
+                    Log::warning('getQuota failed after googleAuth register', [
                         'account_id' => $account->id,
                         'error' => $e->getMessage(),
                     ]);
@@ -248,10 +253,11 @@ class AuthController extends Controller
 
                 return $user;
             });
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('AuthController::googleAuth register failed', [
+        } catch (Throwable $e) {
+            Log::error('AuthController::googleAuth register failed', [
                 'exception' => $e->getMessage(),
             ]);
+
             return $this->fail(__('Gagal membuat akun: ').$e->getMessage(), 500);
         }
 
@@ -283,7 +289,7 @@ class AuthController extends Controller
             return $this->fail(__('Google OAuth belum dikonfigurasi.'), 503);
         }
 
-        $state = \Illuminate\Support\Facades\Crypt::encryptString(json_encode([
+        $state = Crypt::encryptString(json_encode([
             'ts' => time(),
             'nonce' => Str::random(16),
         ]));
@@ -301,7 +307,7 @@ class AuthController extends Controller
      * Mirrors the logic of googleAuth() but uses the web redirect
      * flow (authorization code with standard redirect_uri).
      */
-    public function googleCallback(Request $request): \Illuminate\Http\RedirectResponse
+    public function googleCallback(Request $request): RedirectResponse
     {
         $frontendUrl = rtrim((string) env('FRONTEND_URL', 'http://localhost:3000'), '/');
 
@@ -320,7 +326,7 @@ class AuthController extends Controller
         $state = $request->query('state');
         if ($state) {
             try {
-                $payload = json_decode(\Illuminate\Support\Facades\Crypt::decryptString($state), true);
+                $payload = json_decode(Crypt::decryptString($state), true);
                 if (! is_array($payload) || empty($payload['ts'])) {
                     return redirect($frontendUrl.'/auth/callback?error='.urlencode(__('State tidak valid.')));
                 }
@@ -328,7 +334,7 @@ class AuthController extends Controller
                 if ((time() - (int) $payload['ts']) > 600) {
                     return redirect($frontendUrl.'/auth/callback?error='.urlencode(__('State kadaluarsa.')));
                 }
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 return redirect($frontendUrl.'/auth/callback?error='.urlencode(__('State tidak valid.')));
             }
         }
@@ -336,10 +342,11 @@ class AuthController extends Controller
         // Exchange authorization code for tokens (web flow)
         try {
             $token = $this->googleTokens->exchangeCode($code);
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('AuthController::googleCallback exchange failed', [
+        } catch (Throwable $e) {
+            Log::error('AuthController::googleCallback exchange failed', [
                 'exception' => $e->getMessage(),
             ]);
+
             return redirect($frontendUrl.'/auth/callback?error='.urlencode(__('OAuth gagal: ').$e->getMessage()));
         }
 
@@ -412,8 +419,8 @@ class AuthController extends Controller
                 try {
                     $this->quota->ensureRootFolder($account);
                     $account->refresh();
-                } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::warning('ensureRootFolder failed after googleCallback register', [
+                } catch (Throwable $e) {
+                    Log::warning('ensureRootFolder failed after googleCallback register', [
                         'account_id' => $account->id,
                         'error' => $e->getMessage(),
                     ]);
@@ -421,8 +428,8 @@ class AuthController extends Controller
                 try {
                     $this->quota->getQuota($account, forceRefresh: true);
                     $account->refresh();
-                } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::warning('getQuota failed after googleCallback register', [
+                } catch (Throwable $e) {
+                    Log::warning('getQuota failed after googleCallback register', [
                         'account_id' => $account->id,
                         'error' => $e->getMessage(),
                     ]);
@@ -430,10 +437,11 @@ class AuthController extends Controller
 
                 return $user;
             });
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('AuthController::googleCallback register failed', [
+        } catch (Throwable $e) {
+            Log::error('AuthController::googleCallback register failed', [
                 'exception' => $e->getMessage(),
             ]);
+
             return redirect($frontendUrl.'/auth/callback?error='.urlencode(__('Gagal membuat akun: ').$e->getMessage()));
         }
 
@@ -571,8 +579,12 @@ class AuthController extends Controller
         ]);
 
         $changes = [];
-        if ($user->name !== $data['name']) $changes['name'] = ['old' => $user->name, 'new' => $data['name']];
-        if ($user->email !== $data['email']) $changes['email'] = ['old' => $user->email, 'new' => $data['email']];
+        if ($user->name !== $data['name']) {
+            $changes['name'] = ['old' => $user->name, 'new' => $data['name']];
+        }
+        if ($user->email !== $data['email']) {
+            $changes['email'] = ['old' => $user->email, 'new' => $data['email']];
+        }
 
         $user->name = $data['name'];
         $user->email = $data['email'];
@@ -598,7 +610,7 @@ class AuthController extends Controller
             'new_password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        if (! \Illuminate\Support\Facades\Hash::check($data['current_password'], $user->password)) {
+        if (! Hash::check($data['current_password'], $user->password)) {
             return $this->fail(__('Kata sandi saat ini salah.'), 422);
         }
 
@@ -657,7 +669,7 @@ class AuthController extends Controller
             // uses this list to know which `client.*` Reverb channel to
             // subscribe to for that device's optimistic self-update path.
             // The `user.*` catch-all channel is subscribed independently.
-            $payload['client_keys'] = \App\Models\File::query()
+            $payload['client_keys'] = File::query()
                 ->where('user_id', $user->id)
                 ->where('client_key_origin', 'client')
                 ->distinct()

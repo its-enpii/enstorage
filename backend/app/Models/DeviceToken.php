@@ -21,6 +21,7 @@ class DeviceToken extends Model
     use HasUuids;
 
     protected $keyType = 'string';
+
     public $incrementing = false;
 
     protected function casts(): array

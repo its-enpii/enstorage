@@ -3,7 +3,10 @@
 namespace App\Jobs;
 
 use App\Models\File as FileModel;
+use App\Services\Google\GoogleClientFactory;
+use App\Services\Google\GoogleTokenService;
 use App\Services\ThumbnailGenerator;
+use Google\Service\Drive;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -23,6 +26,7 @@ class GenerateThumbnailJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 2;
+
     public int $timeout = 300;
 
     public function __construct(public string $fileId) {}
@@ -64,22 +68,24 @@ class GenerateThumbnailJob implements ShouldQueue
                 return null;
             }
 
-            $client = app(\App\Services\Google\GoogleClientFactory::class)->makeFor($account);
-            app(\App\Services\Google\GoogleTokenService::class)->ensureFreshToken($account);
+            $client = app(GoogleClientFactory::class)->makeFor($account);
+            app(GoogleTokenService::class)->ensureFreshToken($account);
             $client->setAccessToken($account->access_token);
 
-            $drive = new \Google\Service\Drive($client);
+            $drive = new Drive($client);
             $response = $drive->files->get($file->gdrive_file_id, ['alt' => 'media']);
             $content = $response->getBody()->getContents();
 
             $tmpPath = Storage::disk('local')->path('temp/'.$file->id.'.thumb_src');
             file_put_contents($tmpPath, $content);
+
             return $tmpPath;
         } catch (Throwable $e) {
             Log::warning('downloadFromDrive gagal', [
                 'file_id' => $file->id,
                 'error' => $e->getMessage(),
             ]);
+
             return null;
         }
     }

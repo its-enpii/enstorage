@@ -14,6 +14,7 @@ class Folder extends Model
     use HasUuids;
 
     protected $keyType = 'string';
+
     public $incrementing = false;
 
     public function user(): BelongsTo

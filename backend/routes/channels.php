@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\Log;
 
 /*
 |--------------------------------------------------------------------------
@@ -22,12 +23,13 @@ use Illuminate\Support\Facades\Broadcast;
 */
 
 Broadcast::channel('user-{userId}', function ($user, string $userId) {
-    \Illuminate\Support\Facades\Log::debug('broadcast.user.auth', [
+    Log::debug('broadcast.user.auth', [
         'user_id' => $user?->id,
         'url_user_id' => $userId,
     ]);
     if (! $user) {
         return false;
     }
+
     return (string) $user->id === $userId;
 });

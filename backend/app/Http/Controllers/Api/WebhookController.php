@@ -99,6 +99,7 @@ class WebhookController extends Controller
         }
 
         $webhook->delete();
+
         return $this->ok(null, __('Webhook dihapus.'));
     }
 }

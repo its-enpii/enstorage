@@ -15,6 +15,7 @@ use Symfony\Component\HttpFoundation\Response;
 class ThrottleApiKey
 {
     private const PER_MINUTE = 60;
+
     private const CHUNK_PER_MINUTE = 1200;
 
     public function handle(Request $request, Closure $next): Response
@@ -30,14 +31,14 @@ class ThrottleApiKey
         $isChunkRoute = str_contains($path, 'files/upload') && (str_contains($path, '/chunk/') || str_ends_with($path, '/init') || str_ends_with($path, '/complete'));
 
         $maxAttempts = $isChunkRoute ? self::CHUNK_PER_MINUTE : self::PER_MINUTE;
-        $limiterKey = 'apikey:' . ($isChunkRoute ? 'chunk:' : '') . $apiKey->id;
+        $limiterKey = 'apikey:'.($isChunkRoute ? 'chunk:' : '').$apiKey->id;
         $hitCount = RateLimiter::hit($limiterKey, 60);
 
         if ($hitCount > $maxAttempts) {
             return response()->json([
                 'success' => false,
                 'data' => null,
-                'message' => 'Rate limit tercapai. Maksimal ' . $maxAttempts . ' request per menit.',
+                'message' => 'Rate limit tercapai. Maksimal '.$maxAttempts.' request per menit.',
             ], 429);
         }
 

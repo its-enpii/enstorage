@@ -4,7 +4,7 @@ namespace App\Services\Google;
 
 use App\Models\GoogleAccount;
 use App\Models\User;
-use Google\Client as GoogleClient;
+use App\Services\NotificationService;
 use Google\Service\Drive;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -13,6 +13,7 @@ use RuntimeException;
 class QuotaManager
 {
     private const CACHE_TTL_SECONDS = 300; // 5 menit
+
     private const ROOT_FOLDER_NAME = 'EnStorage';
 
     public function __construct(
@@ -61,7 +62,7 @@ class QuotaManager
 
         // Push notification when storage > 90%.
         if ($total > 0 && ($used / $total) > 0.9) {
-            $notifications = app(\App\Services\NotificationService::class);
+            $notifications = app(NotificationService::class);
             $notifications->sendToUser(
                 $account->user,
                 __('Storage Hampir Penuh'),
@@ -103,6 +104,7 @@ class QuotaManager
                     'account_id' => $account->id,
                     'error' => $e->getMessage(),
                 ]);
+
                 continue;
             }
 
@@ -157,6 +159,7 @@ class QuotaManager
         foreach ($list->getFiles() as $folder) {
             $account->gdrive_root_folder_id = $folder->getId();
             $account->save();
+
             return $folder->getId();
         }
 

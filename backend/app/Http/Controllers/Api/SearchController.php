@@ -101,7 +101,7 @@ class SearchController extends Controller
             'created_at' => "created_at {$dir}",
             'uploaded_at' => "uploaded_at {$dir}",
             'score' => "score {$dir}, created_at DESC",
-            default => "score DESC, created_at DESC",
+            default => 'score DESC, created_at DESC',
         };
 
         // Query builder — pakai pg_trgm + ILIKE baseline untuk recall
@@ -159,7 +159,7 @@ class SearchController extends Controller
         // Pencocokan: pakai trgm `%` (typo-tolerant) ATAU ILIKE normalized (recall untuk kata pendek)
         $query->where(function ($q) use ($normalized, $rawQuery) {
             $q->whereRaw('files.name % ?', [$rawQuery])
-              ->orWhere('files.name', 'ilike', '%'.$normalized.'%');
+                ->orWhere('files.name', 'ilike', '%'.$normalized.'%');
         });
 
         $perPage = (int) ($data['per_page'] ?? 25);

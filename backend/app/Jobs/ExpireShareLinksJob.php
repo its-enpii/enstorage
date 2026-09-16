@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Events\ShareLinksUpdatedBroadcast;
 use App\Models\File as FileModel;
 use App\Models\Folder;
 use App\Models\ShareLink;
@@ -36,6 +37,7 @@ class ExpireShareLinksJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 1;
+
     public int $timeout = 60;
 
     public function handle(): void
@@ -79,7 +81,7 @@ class ExpireShareLinksJob implements ShouldQueue
         // 4) Broadcast per-row untuk frontend realtime update.
         foreach ($expired as $link) {
             try {
-                \App\Events\ShareLinksUpdatedBroadcast::dispatch($link, 'revoked', 'expired');
+                ShareLinksUpdatedBroadcast::dispatch($link, 'revoked', 'expired');
             } catch (\Throwable $e) {
                 Log::warning('ExpireShareLinksJob: broadcast gagal', [
                     'share_link_id' => $link->id,

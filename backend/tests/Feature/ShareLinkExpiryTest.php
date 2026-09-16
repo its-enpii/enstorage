@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Jobs\ExpireShareLinksJob;
+use App\Jobs\FireWebhookJob;
 use App\Models\File;
 use App\Models\Folder;
 use App\Models\GoogleAccount;
@@ -399,7 +400,7 @@ class ShareLinkExpiryTest extends TestCase
 
         $this->postJson("/api/v1/files/{$file->id}/share-links")->assertCreated();
 
-        Bus::assertDispatched(\App\Jobs\FireWebhookJob::class, function ($job) {
+        Bus::assertDispatched(FireWebhookJob::class, function ($job) {
             return $job->event === 'file.share_link.created'
                 && ! empty($job->payload['token'])
                 && str_starts_with($job->payload['share_url'] ?? '', 'https://enstorage.test/s/');
@@ -424,7 +425,7 @@ class ShareLinkExpiryTest extends TestCase
 
         $this->deleteJson("/api/v1/share-links/{$link->id}")->assertOk();
 
-        Bus::assertDispatched(\App\Jobs\FireWebhookJob::class, function ($job) use ($link) {
+        Bus::assertDispatched(FireWebhookJob::class, function ($job) use ($link) {
             return $job->event === 'file.share_link.revoked'
                 && ($job->payload['share_link_id'] ?? null) === $link->id
                 && ($job->payload['reason'] ?? null) === 'manual';

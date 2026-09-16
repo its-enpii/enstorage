@@ -26,9 +26,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Hidden(['access_token', 'refresh_token'])]
 class GoogleAccount extends Model
 {
-    use HasUuids, HasFactory;
+    use HasFactory, HasUuids;
 
     protected $keyType = 'string';
+
     public $incrementing = false;
 
     protected function casts(): array

@@ -2,6 +2,8 @@
 
 namespace App\Jobs;
 
+use App\Events\FileUploadedBroadcast;
+use App\Events\FileUploadFailedBroadcast;
 use App\Models\ActivityLog;
 use App\Models\File as FileModel;
 use App\Services\ActivityLogService;
@@ -10,6 +12,7 @@ use App\Services\Google\QuotaManager;
 use App\Services\NotificationService;
 use App\Services\ThumbnailGenerator;
 use App\Services\WebhookService;
+use App\Support\WebhookPayload;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -22,7 +25,9 @@ class UploadFileJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
+
     public int $timeout = 1800;       // 30 menit untuk file 1GB
+
     public int $backoff = 30;
 
     public function __construct(public string $fileId) {}
@@ -41,6 +46,7 @@ class UploadFileJob implements ShouldQueue
         $file = FileModel::find($this->fileId);
         if (! $file) {
             Log::warning("UploadFileJob: file {$this->fileId} tidak ditemukan.");
+
             return;
         }
 
@@ -51,6 +57,7 @@ class UploadFileJob implements ShouldQueue
         $localPath = storage_path('app/temp/'.$file->id);
         if (! file_exists($localPath)) {
             $this->markFailed($file, $log, $webhooks, $notifications, 'File temp tidak ditemukan (kemungkinan dihapus atau gagal di awal).');
+
             return;
         }
 
@@ -98,10 +105,10 @@ class UploadFileJob implements ShouldQueue
                 ],
             );
 
-            $webhooks->dispatch($file->user_id, 'file.upload.completed', \App\Support\WebhookPayload::fileUploaded($file));
+            $webhooks->dispatch($file->user_id, 'file.upload.completed', WebhookPayload::fileUploaded($file));
 
             // Broadcast ke WebSocket subscribers (web/mobile UI realtime).
-            \App\Events\FileUploadedBroadcast::dispatch($file);
+            FileUploadedBroadcast::dispatch($file);
 
             // Push notification — upload complete. data.type = 'upload.complete'
             // agar mobile append file baru ke list (gak refresh seluruh halaman).
@@ -149,10 +156,10 @@ class UploadFileJob implements ShouldQueue
             ],
         );
 
-        $webhooks->dispatch($file->user_id, 'file.upload.failed', \App\Support\WebhookPayload::fileUploadFailed($file, $reason));
+        $webhooks->dispatch($file->user_id, 'file.upload.failed', WebhookPayload::fileUploadFailed($file, $reason));
 
         // Broadcast failure ke WebSocket subscribers (ganti pending row jadi failed di UI).
-        \App\Events\FileUploadFailedBroadcast::dispatch($file, $reason);
+        FileUploadFailedBroadcast::dispatch($file, $reason);
 
         // Push notification — upload gagal. Mobile ganti ongoing progress jadi failed.
         $notifications->sendUploadFailed($file, $reason);

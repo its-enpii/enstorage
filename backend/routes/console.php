@@ -12,10 +12,10 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 // Sync quota semua akun Google tiap jam (via worker)
-Schedule::job(new SyncAllQuotasJob())->hourly()->name('sync-all-quotas')->withoutOverlapping();
+Schedule::job(new SyncAllQuotasJob)->hourly()->name('sync-all-quotas')->withoutOverlapping();
 
 // Hapus file gagal yang lebih dari 30 menit, tiap 15 menit
-Schedule::job(new CleanupFailedFilesJob())->everyFifteenMinutes()->name('cleanup-failed-files')->withoutOverlapping();
+Schedule::job(new CleanupFailedFilesJob)->everyFifteenMinutes()->name('cleanup-failed-files')->withoutOverlapping();
 
 // Auto-revoke share links yang sudah lewat expires_at, tiap jam
-Schedule::job(new ExpireShareLinksJob())->hourly()->name('expire-share-links')->withoutOverlapping();
+Schedule::job(new ExpireShareLinksJob)->hourly()->name('expire-share-links')->withoutOverlapping();

@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use Illuminate\Broadcasting\BroadcastController;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -46,7 +47,7 @@ class BroadcastServiceProvider extends ServiceProvider
         //    BroadcastController@authenticate, which evaluates the
         //    closure and returns the Pusher HMAC signature.
         Route::post('/api/v1/broadcasting/auth', [
-            \Illuminate\Broadcasting\BroadcastController::class,
+            BroadcastController::class,
             'authenticate',
         ])->middleware([
             'auth.apikey',

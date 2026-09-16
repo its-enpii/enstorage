@@ -6,6 +6,7 @@ use App\Services\ApiKey\ApiKeyService;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Laravel\Sanctum\PersonalAccessToken;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -37,6 +38,7 @@ class AuthApiKey
                 return $this->unauthorized('API key tidak valid atau sudah dicabut.');
             }
             $this->attach($request, $apiKey);
+
             return $next($request);
         }
 
@@ -47,12 +49,13 @@ class AuthApiKey
                 return $this->unauthorized('API key tidak valid atau sudah dicabut.');
             }
             $this->attach($request, $apiKey);
+
             return $next($request);
         }
 
         // 3. Sanctum token via Bearer
         if ($bearer) {
-            $tokenModel = \Laravel\Sanctum\PersonalAccessToken::findToken($bearer);
+            $tokenModel = PersonalAccessToken::findToken($bearer);
             if (! $tokenModel) {
                 return $this->unauthorized('Token tidak valid.');
             }
@@ -61,6 +64,7 @@ class AuthApiKey
                 return $this->unauthorized('User untuk token ini tidak ditemukan.');
             }
             $request->setUserResolver(fn () => $user);
+
             return $next($request);
         }
 

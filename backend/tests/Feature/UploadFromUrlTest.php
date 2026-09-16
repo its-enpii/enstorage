@@ -26,6 +26,7 @@ class UploadFromUrlTest extends TestCase
     {
         $user = User::factory()->create();
         Sanctum::actingAs($user);
+
         return $user;
     }
 
@@ -107,7 +108,7 @@ class UploadFromUrlTest extends TestCase
         });
 
         // Ensure temp file exists under storage/app/temp/{id}
-        $tempPath = storage_path('app/temp/' . $accepted['file_id']);
+        $tempPath = storage_path('app/temp/'.$accepted['file_id']);
         $this->assertFileExists($tempPath);
         $this->assertStringEqualsFile($tempPath, 'mock content');
 

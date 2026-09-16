@@ -6,7 +6,6 @@ use App\Models\File as FileModel;
 use App\Support\ReverbChannel;
 use App\Support\WebhookPayload;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;

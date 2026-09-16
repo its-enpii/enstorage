@@ -16,7 +16,9 @@ class FireWebhookJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 5;
+
     public int $timeout = 30;
+
     public int $backoff = 60; // seconds — exponential via Laravel job retry
 
     public function __construct(
