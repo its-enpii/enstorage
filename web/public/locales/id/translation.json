@@ -659,7 +659,7 @@
         "noSplit": "Satu file selalu disimpan utuh di satu akun, tidak pernah dipecah lintas akun.",
         "nodes": {
           "user": "User",
-          "userHint": "Web dashboard & mobile",
+          "userHint": "Web dashboard",
           "script": "Skrip & integrasi",
           "scriptHint": "REST API + API key",
           "apps": "Client apps",
@@ -698,7 +698,12 @@
           "stream": "Pemutaran dialirkan langsung dari {{account}} melalui proxy EnStorage, tanpa unduh dulu.",
           "delete": "Penghapusan dieksekusi di {{account}} — berkas hilang permanen dari Google Drive."
         },
-        "none": "Ukuran {{size}} melebihi sisa ruang akun paling longgar — upload seperti ini ditolak lebih awal, tidak dipecah."
+        "none": "Ukuran {{size}} melebihi sisa ruang akun paling longgar — upload seperti ini ditolak lebih awal, tidak dipecah.",
+        "capacity": {
+          "one": "15 GB kosong",
+          "two": "1 TB kosong",
+          "three": "15 GB kosong"
+        }
       }
     },
     "features": {

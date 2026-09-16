@@ -194,9 +194,17 @@
 /* === ROOT + BODY === */
 :root {
   color-scheme: dark;
+  /* Soft light bleed under the architecture hub squircle. Hand-written rather
+     than a @theme shadow token because Tailwind inlines theme shadows into the
+     utility, which would freeze the dark-theme glow in light mode. */
+  --hub-shadow: 0 0 40px rgba(198, 192, 255, 0.25), 0 18px 40px rgba(0, 0, 0, 0.35);
 }
 :root:not(.dark) {
   color-scheme: light;
+  --hub-shadow: 0 0 40px rgba(91, 83, 170, 0.22), 0 12px 28px rgba(0, 0, 0, 0.08);
+}
+.hub-glow {
+  box-shadow: var(--hub-shadow);
 }
 
 html, body {

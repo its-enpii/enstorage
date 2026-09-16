@@ -659,7 +659,7 @@
         "noSplit": "One file is always stored whole in one account, never split across accounts.",
         "nodes": {
           "user": "User",
-          "userHint": "Web dashboard & mobile",
+          "userHint": "Web dashboard",
           "script": "Scripts & integrations",
           "scriptHint": "REST API + API key",
           "apps": "Client apps",
@@ -698,7 +698,12 @@
           "stream": "Playback streams straight from {{account}} through the EnStorage proxy, no download first.",
           "delete": "Deletion runs against {{account}} — the object is removed from Google Drive for good."
         },
-        "none": "{{size}} is larger than the roomiest account has free — uploads like this are rejected early, never split."
+        "none": "{{size}} is larger than the roomiest account has free — uploads like this are rejected early, never split.",
+        "capacity": {
+          "one": "15 GB free",
+          "two": "1 TB free",
+          "three": "15 GB free"
+        }
       }
     },
     "features": {
