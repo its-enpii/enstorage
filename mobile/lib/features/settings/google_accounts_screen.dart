@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:dio/dio.dart';
 
+import '../../config/google_oauth.dart';
 import '../../data/models/google_account.dart';
 import '../../data/repositories/google_accounts_repository.dart';
 import '../../l10n/gen/app_localizations.dart';
@@ -21,14 +22,6 @@ import '../../widgets/app_dialog.dart';
 import '../../widgets/etheric_button.dart';
 import '../../widgets/list_menu_sheet.dart';
 import '../../widgets/nav_aware_sheet.dart';
-
-/// Scopes that EnStorage requests when connecting a Google account.
-/// `drive.file` gives read/write access to files the app creates in
-/// Drive — sufficient for the vault use case without claiming the
-/// full Drive scope.
-const List<String> _kScopes = <String>[
-  'https://www.googleapis.com/auth/drive.file',
-];
 
 /// Web OAuth client ID used as `serverClientId` for the
 /// `GoogleSignIn` constructor (v6.x).
@@ -77,7 +70,7 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
   // Lihat komentar di login_screen.dart — `forceCodeForRefreshToken`
   // wajib agar serverAuthCode bisa ditukar backend menjadi refresh_token.
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: _kScopes,
+    scopes: kGoogleOAuthScopes,
     serverClientId: _kWebClientId,
     forceCodeForRefreshToken: true,
   );
@@ -239,9 +232,10 @@ class _GoogleAccountsScreenState extends ConsumerState<GoogleAccountsScreen> {
       // Backend balikin 502 dengan `{ success:false, message:"Sinkronisasi
       // quota gagal: <reason>" }` — ekstrak reason-nya agar user bisa
       // diagnosis. Deteksi Drive API permission error (403 / "insufficient
-      // authentication scopes") — terjadi bila akun di-connect dengan
-      // scope `drive.file` lama, dan user perlu Cabut & Hubungkan ulang
-      // agar Google re-issue token dengan scope `drive` (full).
+      // authentication scopes") — terjadi bila akun masih memakai token
+      // lama yang di-grant sebelum scope dinaikkan ke `drive` (full).
+      // User perlu Cabut & Hubungkan ulang agar Google me-reissue token
+      // dengan scope yang berlaku sekarang (lihat kGoogleOAuthScopes).
       final raw = e.response?.data;
       String reason = e.message ?? 'unknown error';
       if (raw is Map && raw['message'] is String) {
