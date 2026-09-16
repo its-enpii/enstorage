@@ -185,13 +185,13 @@ function Hero() {
 
   return (
     <section className="border-b border-outline-variant/20">
-      <div className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-12 lg:py-20">
+      <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-4 py-14 sm:px-6 lg:gap-12 lg:px-8 lg:py-20">
         <Reveal>
-          <div className="min-w-0">
-            <h1 className="max-w-[16ch] font-display text-display-xl leading-[1.05] text-on-surface">
+          <div>
+            <h1 className="font-display text-display-xl text-on-surface">
               {t('landing.hero.title')}
             </h1>
-            <p className="mt-5 max-w-md text-body-lg leading-relaxed text-on-surface-variant">
+            <p className="mt-5 max-w-xl text-body-lg leading-relaxed text-on-surface-variant">
               {t('landing.hero.subtitle')}
             </p>
 
