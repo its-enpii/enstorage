@@ -194,14 +194,20 @@
 /* === ROOT + BODY === */
 :root {
   color-scheme: dark;
-  /* Soft light bleed under the architecture hub squircle. Hand-written rather
-     than a @theme shadow token because Tailwind inlines theme shadows into the
-     utility, which would freeze the dark-theme glow in light mode. */
-  --hub-shadow: 0 0 40px rgba(198, 192, 255, 0.25), 0 18px 40px rgba(0, 0, 0, 0.35);
+  /* Refined hub aura: softer, layered glow with hairline ring tint — premium
+     glass rather than harsh bloom. Kept outside @theme so dark/light each get
+     its own soft bleed via plain CSS vars. */
+  --hub-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-primary) 14%, transparent),
+    0 0 28px rgba(198, 192, 255, 0.18),
+    0 16px 36px rgba(0, 0, 0, 0.38);
 }
 :root:not(.dark) {
   color-scheme: light;
-  --hub-shadow: 0 0 40px rgba(91, 83, 170, 0.22), 0 12px 28px rgba(0, 0, 0, 0.08);
+  --hub-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-primary) 12%, transparent),
+    0 0 24px rgba(198, 192, 255, 0.16),
+    0 10px 28px rgba(0, 0, 0, 0.08);
 }
 .hub-glow {
   box-shadow: var(--hub-shadow);

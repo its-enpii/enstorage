@@ -5,7 +5,6 @@ import { ArrowDownward, Cloud, Code, Person, Storage } from '@mui/icons-material
 import { useTranslation } from 'react-i18next';
 import { prefersReducedMotion } from '@/lib/site';
 
-/** Flow endpoints registered by their DOM nodes, keyed by node id. */
 type Box = { left: number; right: number; top: number; bottom: number };
 type Lane = {
   id: string;
@@ -17,25 +16,11 @@ type Lane = {
   dur: string;
 };
 
-/** Icon chip tint per source card, resolved from the active theme tokens. */
-const TINT = {
-  primary: {
-    color: 'color-mix(in srgb, var(--color-primary) 90%, transparent)',
-    background: 'color-mix(in srgb, var(--color-primary) 12%, transparent)',
-    border: 'color-mix(in srgb, var(--color-primary) 24%, transparent)',
-  },
-  secondary: {
-    color: 'color-mix(in srgb, var(--color-secondary) 90%, transparent)',
-    background: 'color-mix(in srgb, var(--color-secondary) 14%, transparent)',
-    border: 'color-mix(in srgb, var(--color-secondary) 26%, transparent)',
-  },
-} as const;
-
 const SOURCES = [
   {
     id: 'user',
     icon: Person,
-    tone: 'primary',
+    tone: 'primary' as const,
     dotColor: 'var(--color-primary)',
     labelKey: 'landing.hero.flow.nodes.user',
     hintKey: 'landing.hero.flow.nodes.userHint',
@@ -44,7 +29,7 @@ const SOURCES = [
   {
     id: 'api',
     icon: Code,
-    tone: 'secondary',
+    tone: 'secondary' as const,
     dotColor: 'var(--color-secondary)',
     labelKey: 'landing.hero.flow.nodes.script',
     hintKey: 'landing.hero.flow.nodes.scriptHint',
@@ -59,6 +44,7 @@ const TARGETS = [
     emailKey: 'landing.hero.flow.emails.one',
     capacityKey: 'landing.hero.flow.capacity.one',
     dur: '2.2s',
+    accent: false,
   },
   {
     id: 'two',
@@ -66,6 +52,7 @@ const TARGETS = [
     emailKey: 'landing.hero.flow.emails.two',
     capacityKey: 'landing.hero.flow.capacity.two',
     dur: '1.8s',
+    accent: true,
   },
   {
     id: 'three',
@@ -73,17 +60,12 @@ const TARGETS = [
     emailKey: 'landing.hero.flow.emails.three',
     capacityKey: 'landing.hero.flow.capacity.three',
     dur: '2.5s',
+    accent: false,
   },
 ] as const;
 
-/** Curves shorter than this would double back on themselves on tight layouts. */
 const MIN_RUN = 20;
 
-/**
- * Cubic bezier with horizontal tangents at both ends, so a wire leaves a card
- * edge and enters the hub edge perpendicularly and the pair reads as one calm,
- * mirror-symmetric sweep.
- */
 function curve(x1: number, y1: number, x2: number, y2: number) {
   const bend = Math.max(MIN_RUN * 0.5, (x2 - x1) * 0.5);
   return `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
@@ -101,11 +83,6 @@ export function ArchitectureFlowHero() {
     setAnimate(!prefersReducedMotion());
   }, []);
 
-  /**
-   * Lanes are measured, not guessed: every curve starts and ends on the real
-   * vertical centre of its node's facing edge, so the animated dots ride the
-   * visible wire end to end and the anchor pins sit dead on the card midline.
-   */
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
@@ -154,13 +131,14 @@ export function ArchitectureFlowHero() {
         const from = { x: hub.right, y: hubCy };
         const to = { x: node.left, y: (node.top + node.bottom) / 2 };
         if (to.x - from.x < MIN_RUN) continue;
+        const isActive = target.accent;
         next.push({
           id: `hub-to-${target.id}`,
           d: curve(from.x, from.y, to.x, to.y),
           from,
           to,
           dot: { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 },
-          color: 'var(--color-primary)',
+          color: isActive ? 'var(--color-secondary)' : 'var(--color-primary)',
           dur: target.dur,
         });
       }
@@ -175,7 +153,6 @@ export function ArchitectureFlowHero() {
     observer.observe(frame);
     for (const el of Object.values(nodeRefs.current)) if (el) observer.observe(el);
     window.addEventListener('resize', measure);
-    // Webfonts land after first paint and change node heights.
     if (document.fonts?.ready) void document.fonts.ready.then(measure).catch(() => {});
 
     return () => {
@@ -190,21 +167,14 @@ export function ArchitectureFlowHero() {
 
   return (
     <div className="relative w-full overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container/40 p-4 backdrop-blur-xs sm:p-5 lg:p-6">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" aria-hidden="true" />
+      <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-b from-white/[0.03] via-transparent to-transparent" aria-hidden="true" />
       <h2 className="sr-only">{t('landing.hero.flow.title')}</h2>
 
-      {/*
-        Symmetric grid: two equal `1fr` columns flank an `auto` hub column, so
-        the squircle lands on the exact horizontal midpoint of the canvas, and
-        `items-center` lands it on the vertical midpoint too — no matter that
-        the left column holds 2 cards and the right one holds 3. Only the
-        squircle itself is in flow; its caption is absolutely positioned, so a
-        longer label can never nudge the hub off centre.
-      */}
       <div
         ref={frameRef}
         className="relative grid grid-cols-1 items-center gap-x-6 gap-y-5 md:grid-cols-[1fr_auto_1fr] md:gap-x-8 lg:gap-x-12"
       >
-        {/* Wires + pulses: 2 inbound lanes into the hub, 3 outbound lanes to the Drives. */}
         <svg
           className="pointer-events-none absolute inset-0 hidden size-full md:block"
           viewBox={`0 0 ${canvas.width || 1} ${canvas.height || 1}`}
@@ -214,38 +184,55 @@ export function ArchitectureFlowHero() {
         >
           <defs>
             <linearGradient id="archLineIn" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.18" />
-              <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.78" />
+              <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.14" />
+              <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.62" />
+            </linearGradient>
+            <linearGradient id="archLineInSecondary" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="var(--color-secondary)" stopOpacity="0.16" />
+              <stop offset="100%" stopColor="var(--color-secondary)" stopOpacity="0.55" />
             </linearGradient>
             <linearGradient id="archLineOut" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.78" />
-              <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.18" />
+              <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.62" />
+              <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.14" />
+            </linearGradient>
+            <linearGradient id="archLineOutSecondary" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="var(--color-secondary)" stopOpacity="0.62" />
+              <stop offset="100%" stopColor="var(--color-secondary)" stopOpacity="0.16" />
             </linearGradient>
             <filter id="archDotGlow" x="-150%" y="-150%" width="400%" height="400%">
-              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feGaussianBlur stdDeviation="2.5" result="blur" />
               <feComposite in="SourceGraphic" in2="blur" operator="over" />
             </filter>
           </defs>
 
-          {lanes.map((lane) => (
-            <g key={lane.id}>
-              <path
-                id={`arch-${lane.id}`}
-                d={lane.d}
-                stroke={lane.id.endsWith('-to-hub') ? 'url(#archLineIn)' : 'url(#archLineOut)'}
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-              {/* Anchor pins, one on each facing edge, centred on the node midline. */}
-              <circle cx={lane.from.x} cy={lane.from.y} r="2.5" fill={lane.color} opacity="0.85" />
-              <circle cx={lane.to.x} cy={lane.to.y} r="2.5" fill="var(--color-primary)" opacity="0.85" />
-            </g>
-          ))}
+          {lanes.map((lane) => {
+            const strokeId =
+              lane.id === 'api-to-hub'
+                ? 'url(#archLineInSecondary)'
+                : lane.id === 'hub-to-two'
+                  ? 'url(#archLineOutSecondary)'
+                  : lane.id.endsWith('-to-hub')
+                    ? 'url(#archLineIn)'
+                    : 'url(#archLineOut)';
+            return (
+              <g key={lane.id}>
+                <path
+                  id={`arch-${lane.id}`}
+                  d={lane.d}
+                  stroke={strokeId}
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                />
+                <circle cx={lane.from.x} cy={lane.from.y} r="2.4" fill={lane.color} opacity="0.9" />
+                <circle cx={lane.to.x} cy={lane.to.y} r="2.4" fill={lane.color} opacity="0.9" />
+              </g>
+            );
+          })}
 
           {lanes.map((lane) => (
             <circle
               key={`${lane.id}-dot`}
-              r="3.5"
+              r="3.4"
               cx={animate ? undefined : lane.dot.x}
               cy={animate ? undefined : lane.dot.y}
               fill={lane.color}
@@ -253,25 +240,26 @@ export function ArchitectureFlowHero() {
             >
               {animate && (
                 <animateMotion dur={lane.dur} repeatCount="indefinite">
-                  {/* href for SVG2 engines, xlinkHref for older WebKit. */}
-                  <mpath href={`#arch-${lane.id}`} xlinkHref={`#arch-${lane.id}`} />
+                  <mpath href={`#arch-${lane.id}`} />
                 </animateMotion>
               )}
             </circle>
           ))}
         </svg>
 
-        {/* Inbound sources */}
         <div className="relative z-10 flex min-w-0 flex-col gap-3">
           {SOURCES.map(({ id, icon: Icon, tone, labelKey, hintKey }) => (
             <div
               key={id}
               ref={register(id)}
-              className="flex w-full items-center gap-3 rounded-xl border border-outline-variant/30 bg-surface px-3.5 py-2.5 shadow-inner-glow transition duration-200 hover:-translate-y-0.5 hover:border-primary/30"
+              className="flex w-full items-center gap-3 rounded-xl border border-outline-variant/25 bg-surface px-4 py-3 shadow-inner-glow transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/35 hover:bg-surface-container-high/60"
             >
               <span
-                className="flex size-9 shrink-0 items-center justify-center rounded-xl border"
-                style={TINT[tone]}
+                className={
+                  tone === 'secondary'
+                    ? 'flex size-9 shrink-0 items-center justify-center rounded-xl border border-secondary/20 bg-secondary/10 text-secondary'
+                    : 'flex size-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary'
+                }
               >
                 <Icon className="!text-lg" />
               </span>
@@ -281,57 +269,66 @@ export function ArchitectureFlowHero() {
               </span>
             </div>
           ))}
-          <ArrowDownward className="!text-lg mx-auto text-outline md:!hidden" aria-hidden="true" />
+          <ArrowDownward className="!text-lg mx-auto text-outline/60 md:!hidden" aria-hidden="true" />
         </div>
 
-        {/* The hub */}
         <div className="relative z-10 justify-self-center">
           <div
             ref={register('hub')}
-            className="flex size-32 flex-col items-center justify-center gap-1.5 rounded-[26px] border border-primary/40 bg-surface-container hub-glow lg:size-36"
+            className="relative flex size-32 flex-col items-center justify-center gap-1.5 overflow-hidden rounded-[26px] border border-primary/35 bg-surface-container ring-1 ring-primary/15 hub-glow lg:size-36"
           >
-            <span
-              className="flex size-10 items-center justify-center rounded-2xl border border-primary/25"
-              style={{
-                background:
-                  'linear-gradient(160deg, color-mix(in srgb, var(--color-primary) 26%, transparent), color-mix(in srgb, var(--color-primary) 7%, transparent))',
-              }}
-            >
+            <span className="pointer-events-none absolute inset-0 rounded-[26px] bg-gradient-to-br from-primary/[0.09] via-transparent to-transparent" aria-hidden="true" />
+            <span className="pointer-events-none absolute inset-0 rounded-[26px] border border-white/5" aria-hidden="true" />
+            <span className="relative flex size-10 items-center justify-center rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/15 to-primary/5">
               <Cloud className="!text-xl text-primary lg:!text-2xl" />
             </span>
-            <span className="font-display text-metadata font-semibold tracking-tight text-on-surface lg:text-body-md">
+            <span className="relative font-display text-metadata font-semibold tracking-tight text-on-surface lg:text-body-md">
               EnStorage
             </span>
           </div>
           <p className="absolute left-1/2 top-full hidden -translate-x-1/2 whitespace-nowrap pt-3 text-metadata text-outline md:block">
             {t('landing.hero.flow.hubHint')}
           </p>
-          <ArrowDownward className="!text-lg mx-auto mt-1 text-outline md:!hidden" aria-hidden="true" />
+          <ArrowDownward className="!text-lg mx-auto mt-1 text-outline/60 md:!hidden" aria-hidden="true" />
         </div>
 
-        {/* Outbound Drive accounts */}
         <div className="relative z-10 flex min-w-0 flex-col gap-3">
-          {TARGETS.map(({ id, labelKey, emailKey, capacityKey }) => (
+          {TARGETS.map(({ id, labelKey, emailKey, capacityKey, accent }) => (
             <div
               key={id}
               ref={register(id)}
-              className="flex w-full items-center gap-3 rounded-xl border border-outline-variant/30 bg-surface px-3.5 py-2 shadow-inner-glow transition duration-200 hover:-translate-y-0.5 hover:border-primary/30"
+              className={
+                accent
+                  ? 'flex w-full items-center gap-3 rounded-xl border border-secondary/30 bg-surface px-4 py-3 shadow-inner-glow ring-1 ring-secondary/10 transition-all duration-300 hover:-translate-y-0.5 hover:border-secondary/40 hover:bg-surface-container-high/60'
+                  : 'flex w-full items-center gap-3 rounded-xl border border-outline-variant/25 bg-surface px-4 py-3 shadow-inner-glow transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-surface-container-high/60'
+              }
             >
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <span
+                className={
+                  accent
+                    ? 'flex size-8 shrink-0 items-center justify-center rounded-lg border border-secondary/20 bg-secondary/10 text-secondary'
+                    : 'flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary'
+                }
+              >
                 <Storage className="!text-base" />
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-body-md font-medium text-on-surface">{t(labelKey)}</span>
                 <span className="hidden truncate text-metadata text-outline lg:block">{t(emailKey)}</span>
               </span>
-              <span className="shrink-0 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-label-sm tabular-nums text-primary">
+              <span
+                className={
+                  accent
+                    ? 'shrink-0 rounded-full border border-secondary/20 bg-secondary/10 px-2.5 py-0.5 text-label-sm font-medium tabular-nums text-secondary'
+                    : 'shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-label-sm font-medium tabular-nums text-primary'
+                }
+              >
                 {t(capacityKey)}
               </span>
             </div>
           ))}
         </div>
       </div>
-
     </div>
   );
 }
