@@ -185,7 +185,7 @@ function Hero() {
 
   return (
     <section className="border-b border-outline-variant/20">
-      <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 lg:gap-16 lg:py-24">
+      <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-4 py-14 sm:px-6 lg:gap-12 lg:px-8 lg:py-20">
         <Reveal>
           <div>
             <h1 className="font-display text-display-xl text-on-surface">

@@ -661,8 +661,6 @@
       "flow": {
         "title": "Architecture flow diagram",
         "subtitle": "Users, apps, and scripts talk to one hub — EnStorage picks the destination Drive",
-        "inbound": "User side",
-        "outbound": "Your Google Drives",
         "hub": "EnStorage Core Engine",
         "hubHint": "Runs on your own server",
         "simulate": "Run flow",
@@ -674,7 +672,6 @@
         "target": "Target",
         "trunkAria": "Request flowing into EnStorage",
         "branchAria": "Write flowing from EnStorage into a Google Drive account",
-        "noSplit": "One file is always stored whole in one account, never split across accounts.",
         "nodes": {
           "user": "User",
           "userHint": "Web dashboard",
