@@ -90,7 +90,7 @@ export function CodeBlock({ code, lang, file, labelKey, maxHeightClass, classNam
     <div
       role="region"
       aria-label={t(labelKey ?? 'docs.consoleAria')}
-      className={clsx('shadow-ambient', className)}
+      className={clsx('min-w-0 shadow-ambient', className)}
     >
       <Card className="overflow-hidden !bg-surface-container-lowest !p-0">
         <div className="flex flex-wrap items-center gap-2 border-b border-outline-variant/20 bg-surface-container-high px-3 py-2 sm:px-4">

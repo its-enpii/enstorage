@@ -349,7 +349,7 @@ function ApiSection() {
           subtitleKey="landing.api.subtitle"
         />
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <Reveal>
             <Card hover className="flex h-full flex-col !p-6 sm:!p-7">
               <div className="flex items-center gap-3">
@@ -410,9 +410,10 @@ function ApiSection() {
             </Card>
           </Reveal>
 
-          <Reveal delay={90}>
+          <Reveal delay={90} className="min-w-0">
             {sample && (
               <CodeBlock
+                className="min-w-0"
                 code={snippetCode(sample)}
                 file={sample.file}
                 labelKey="landing.teaser.ctaHint"
