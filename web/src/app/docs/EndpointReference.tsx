@@ -159,35 +159,34 @@ function EndpointCard({
         aria-controls={`card-${entry.id}-body`}
         aria-label={`${entry.method} ${entry.path} — ${title}`}
         className={clsx(
-          '!h-auto w-full !justify-start gap-3 !px-4 !py-3.5 text-left transition-colors hover:bg-surface-container/30 sm:!px-5',
+          '!h-auto w-full !justify-between items-center gap-3 !px-4 !py-2.5 text-left transition-colors hover:bg-surface-container/30 sm:!px-5',
           isFirst && 'rounded-t-2xl',
           isLast && !open && 'rounded-b-2xl',
         )}
       >
-        <span className="min-w-0 flex-1 text-left">
-          <span className="block font-display text-body-md font-semibold text-on-surface">
+        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
+          <code
+            className={clsx(
+              'shrink-0 rounded-md px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-wider',
+              METHOD_BADGE_CLASS[entry.method],
+            )}
+          >
+            {entry.method}
+          </code>
+          <code className="break-all font-mono text-metadata font-semibold text-on-surface">
+            {API_PREFIX}
+            {entry.path}
+          </code>
+          <Chip variant={SCOPE_CHIP[entry.scope]}>{t(`docs.scopes.short.${entry.scope}`)}</Chip>
+          {entry.flag === 'ownerOnly' && <Chip variant="warning">{t('docs.ownerOnly')}</Chip>}
+        </span>
+        <span className="flex shrink-0 items-center gap-2 text-right">
+          <span className="font-display text-body-md font-semibold text-on-surface">
             {title}
           </span>
-          <span className="mt-1 flex flex-wrap items-center gap-2">
-            <code
-              className={clsx(
-                'shrink-0 rounded-md px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-wider',
-                METHOD_BADGE_CLASS[entry.method],
-              )}
-            >
-              {entry.method}
-            </code>
-            <code className="break-all font-mono text-metadata font-semibold text-on-surface-variant">
-              {API_PREFIX}
-              {entry.path}
-            </code>
-            <Chip variant={SCOPE_CHIP[entry.scope]}>{t(`docs.scopes.short.${entry.scope}`)}</Chip>
-            {entry.flag === 'ownerOnly' && <Chip variant="warning">{t('docs.ownerOnly')}</Chip>}
+          <span className="flex items-center text-outline">
+            {open ? <ExpandLess className="!text-lg" /> : <ExpandMore className="!text-lg" />}
           </span>
-        </span>
-        <span className="flex shrink-0 items-center text-primary">
-          <span className="sr-only">{open ? t('docs.collapse') : t('docs.expand')}</span>
-          {open ? <ExpandLess className="!text-lg" /> : <ExpandMore className="!text-lg" />}
         </span>
       </Button>
 
@@ -349,16 +348,18 @@ export function EndpointReference({
         const Icon = GROUP_ICONS[section.key] ?? InsertDriveFile;
         return (
           <section key={section.id} id={`ref-${section.id}`} className="scroll-mt-24">
-            <div className="mb-2.5 flex items-center gap-2.5">
+            <div className="mb-3 flex items-center gap-3">
               <CardIconBox variant="primary" size="md">
-                <Icon className="!text-xl" />
+                <Icon className="!text-2xl" />
               </CardIconBox>
-              <h3 className="font-display text-body-md font-semibold text-on-surface">
-                {t(`docs.ref.groups.${section.key}.title`)}
-                <span className="ml-2 font-mono font-normal tabular-nums text-outline">
-                  {t('docs.views.count', { count: items.length })}
-                </span>
-              </h3>
+              <div>
+                <h3 className="font-display text-body-lg font-semibold text-on-surface">
+                  {t(`docs.ref.groups.${section.key}.title`)}
+                </h3>
+                <p className="text-metadata text-on-surface-variant">
+                  <InlineMarkdown text={t(`docs.ref.groups.${section.key}.hint`)} />
+                </p>
+              </div>
             </div>
             <div className="overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-lowest shadow-ambient divide-y divide-outline-variant/15">
               {items.map((entry, index) => (
