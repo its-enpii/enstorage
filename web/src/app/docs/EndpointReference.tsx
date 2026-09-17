@@ -28,7 +28,6 @@ import {
   type ApiScope,
   type ParamRow,
   type ReferenceEntry,
-  type ReferenceGroup,
 } from '@/lib/apiCatalog';
 
 const SCOPE_CHIP: Record<ApiScope, 'success' | 'primary' | 'danger' | 'warning' | 'default'> = {
@@ -50,21 +49,6 @@ const GROUP_ICONS: Record<string, typeof InsertDriveFile> = {
   webhooks: Notifications,
   notifications: Notifications,
 };
-
-/** Category filter pills shown above the explorer. */
-type CategoryId = ReferenceGroup['id'] | 'all';
-
-const CATEGORY_TABS: { id: CategoryId; labelKey: string }[] = [
-  { id: 'all', labelKey: 'docs.filter.all' },
-  { id: 'files', labelKey: 'docs.filter.files' },
-  { id: 'folders', labelKey: 'docs.filter.folders' },
-  { id: 'storage', labelKey: 'docs.filter.storage' },
-  { id: 'auth', labelKey: 'docs.filter.auth' },
-  { id: 'share', labelKey: 'docs.filter.share' },
-  { id: 'discovery', labelKey: 'docs.filter.discovery' },
-  { id: 'webhooks', labelKey: 'docs.filter.webhooks' },
-  { id: 'notifications', labelKey: 'docs.filter.notifications' },
-];
 
 const METHOD_BADGE_CLASS: Record<ReferenceEntry['method'], string> = {
   GET: 'bg-sky-500/15 text-sky-400 border border-sky-500/30',
@@ -159,24 +143,14 @@ function EndpointCard({
   onLangChange: (value: SnippetLang) => void;
   open: boolean;
   onToggle: () => void;
-  /** First row of the list: keeps the container's top corners. */
   isFirst: boolean;
-  /** Last row of the list: keeps the container's bottom corners. */
   isLast: boolean;
 }) {
   const { t } = useTranslation();
   const title = t(`docs.ref.items.${entry.key}.title`);
 
   return (
-    <div
-      id={`card-${entry.id}`}
-      className={clsx(
-        'scroll-mt-24',
-        isFirst ? 'rounded-t-2xl' : 'rounded-none',
-        !isFirst && !isLast && 'rounded-none',
-        isLast && !open && 'rounded-b-2xl',
-      )}
-    >
+    <div id={`card-${entry.id}`} className="scroll-mt-24">
       <Button
         type="button"
         variant="ghost"
@@ -185,34 +159,31 @@ function EndpointCard({
         aria-controls={`card-${entry.id}-body`}
         aria-label={`${entry.method} ${entry.path} — ${title}`}
         className={clsx(
-          '!h-auto w-full !justify-start gap-2.5 !px-4 !py-2.5 text-left transition-colors hover:bg-surface-container/30 sm:!px-5',
+          '!h-auto w-full !justify-start gap-3 !px-4 !py-3.5 text-left transition-colors hover:bg-surface-container/30 sm:!px-5',
           isFirst && 'rounded-t-2xl',
           isLast && !open && 'rounded-b-2xl',
         )}
       >
-        <code
-          className={clsx(
-            'shrink-0 rounded-md px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-wider',
-            METHOD_BADGE_CLASS[entry.method],
-          )}
-        >
-          {entry.method}
-        </code>
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          <code className="truncate font-mono text-metadata font-semibold text-on-surface-variant">
-            {API_PREFIX}
-            {entry.path}
-          </code>
-          <span className="hidden shrink-0 items-center gap-1.5 sm:flex">
+        <span className="min-w-0 flex-1 text-left">
+          <span className="block font-display text-body-md font-semibold text-on-surface">
+            {title}
+          </span>
+          <span className="mt-1 flex flex-wrap items-center gap-2">
+            <code
+              className={clsx(
+                'shrink-0 rounded-md px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-wider',
+                METHOD_BADGE_CLASS[entry.method],
+              )}
+            >
+              {entry.method}
+            </code>
+            <code className="break-all font-mono text-metadata font-semibold text-on-surface-variant">
+              {API_PREFIX}
+              {entry.path}
+            </code>
             <Chip variant={SCOPE_CHIP[entry.scope]}>{t(`docs.scopes.short.${entry.scope}`)}</Chip>
             {entry.flag === 'ownerOnly' && <Chip variant="warning">{t('docs.ownerOnly')}</Chip>}
           </span>
-        </span>
-        <span
-          className="hidden min-w-0 shrink-0 font-display text-metadata font-semibold text-on-surface-variant xl:inline"
-          title={title}
-        >
-          {title}
         </span>
         <span className="flex shrink-0 items-center text-primary">
           <span className="sr-only">{open ? t('docs.collapse') : t('docs.expand')}</span>
@@ -311,7 +282,6 @@ export function EndpointReference({
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [category, setCategory] = useState<CategoryId>('all');
   const needle = query.trim().toLowerCase();
 
   const matching = useMemo(
@@ -330,20 +300,9 @@ export function EndpointReference({
   );
 
   const sections = useMemo(
-    () =>
-      (category === 'all'
-        ? matching
-        : matching.filter((group) => group.section.id === category)
-      ).filter((group) => group.items.length > 0),
-    [matching, category],
+    () => matching.filter((group) => group.items.length > 0),
+    [matching],
   );
-
-  const counts = useMemo(() => {
-    const byGroup = new Map<ReferenceGroup['id'], number>();
-    for (const { section, items } of matching) byGroup.set(section.id, items.length);
-    const total = [...byGroup.values()].reduce((sum, value) => sum + value, 0);
-    return { all: total, ...Object.fromEntries(byGroup) } as Record<CategoryId, number>;
-  }, [matching]);
 
   const ids = sections.flatMap((entry) => entry.items.map((item) => item.id));
   const matchCount = ids.length;
@@ -369,36 +328,7 @@ export function EndpointReference({
   }
 
   return (
-    <div className="space-y-8">
-      <div
-        role="tablist"
-        aria-label={t('docs.filter.aria')}
-        className="flex flex-wrap items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-3"
-      >
-        {CATEGORY_TABS.map((tab) => {
-          const active = category === tab.id;
-          const count = counts[tab.id] ?? 0;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setCategory(tab.id)}
-              className={clsx(
-                'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-metadata font-semibold transition-colors',
-                active
-                  ? 'bg-primary text-on-primary shadow-xs'
-                  : 'bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high',
-              )}
-            >
-              {t(tab.labelKey)}
-              <span className="tabular-nums opacity-80">{t('docs.filter.count', { count })}</span>
-            </button>
-          );
-        })}
-      </div>
-
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-container px-4 py-3">
         <p className="text-metadata text-on-surface-variant">
           <InlineMarkdown text={t('docs.ref.legend', { count: matchCount })} />
@@ -419,18 +349,16 @@ export function EndpointReference({
         const Icon = GROUP_ICONS[section.key] ?? InsertDriveFile;
         return (
           <section key={section.id} id={`ref-${section.id}`} className="scroll-mt-24">
-            <div className="mb-3 flex items-center gap-3">
+            <div className="mb-2.5 flex items-center gap-2.5">
               <CardIconBox variant="primary" size="md">
-                <Icon className="!text-2xl" />
+                <Icon className="!text-xl" />
               </CardIconBox>
-              <div className="min-w-0">
-                <h3 className="font-display text-body-lg font-semibold text-on-surface">
-                  {t(`docs.ref.groups.${section.key}.title`)}
-                </h3>
-                <p className="text-metadata leading-relaxed text-on-surface-variant">
-                  <InlineMarkdown text={t(`docs.ref.groups.${section.key}.hint`)} />
-                </p>
-              </div>
+              <h3 className="font-display text-body-md font-semibold text-on-surface">
+                {t(`docs.ref.groups.${section.key}.title`)}
+                <span className="ml-2 font-mono font-normal tabular-nums text-outline">
+                  {t('docs.views.count', { count: items.length })}
+                </span>
+              </h3>
             </div>
             <div className="overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-lowest shadow-ambient divide-y divide-outline-variant/15">
               {items.map((entry, index) => (
