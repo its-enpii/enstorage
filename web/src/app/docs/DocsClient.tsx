@@ -998,7 +998,7 @@ export default function DocsClient() {
         </header>
 
         <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="space-y-4 lg:sticky lg:top-28">
+          <aside className="space-y-4 lg:sticky lg:top-28 lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
             <DocsToc
               activeId={activeId}
               query={query}
