@@ -17,7 +17,7 @@ import {
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/Button';
-import { Card, CardIconBox } from '@/components/Card';
+import { CardIconBox } from '@/components/Card';
 import { Chip } from '@/components/Chip';
 import { CodeBlock } from '@/components/CodeBlock';
 import { InlineMarkdown } from '@/components/InlineMarkdown';
@@ -145,11 +145,6 @@ function FieldLabel({ text }: { text: string }) {
   );
 }
 
-function ModuleIcon({ entry }: { entry: ReferenceEntry }) {
-  const Icon = GROUP_ICONS[entry.group] ?? InsertDriveFile;
-  return <Icon className="!text-2xl" />;
-}
-
 function EndpointCard({
   entry,
   lang,
@@ -167,52 +162,49 @@ function EndpointCard({
   const title = t(`docs.ref.items.${entry.key}.title`);
 
   return (
-    <Card className="!p-0">
-      <div
-        id={`card-${entry.id}`}
-        className="scroll-mt-24 border-b border-outline-variant/20 last:border-b-0"
+    <div id={`card-${entry.id}`} className="scroll-mt-24">
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={`card-${entry.id}-body`}
+        aria-label={`${entry.method} ${entry.path} — ${title}`}
+        className="!h-auto w-full !justify-start gap-3 rounded-none !px-4 !py-3.5 text-left transition-colors hover:bg-surface-container/30 sm:!px-5"
       >
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={onToggle}
-          aria-expanded={open}
-          aria-label={`${entry.method} ${entry.path} — ${title}`}
-          className="!h-auto w-full !justify-start gap-3 rounded-none !px-4 !py-4 text-left sm:!px-5"
-        >
-          <CardIconBox variant="muted" size="md">
-            <ModuleIcon entry={entry} />
-          </CardIconBox>
-          <span className="min-w-0 flex-1">
-            <span className="flex flex-wrap items-center gap-2">
-              <code
-                className={clsx(
-                  'px-2 py-0.5 rounded-md font-mono text-xs font-bold uppercase tracking-wider',
-                  METHOD_BADGE_CLASS[entry.method],
-                )}
-              >
-                {entry.method}
-              </code>
-              <code className="break-all font-mono text-metadata font-semibold text-on-surface">
-                {API_PREFIX}
-                {entry.path}
-              </code>
-              <Chip variant={SCOPE_CHIP[entry.scope]}>{t(`docs.scopes.short.${entry.scope}`)}</Chip>
-              {entry.flag === 'ownerOnly' && <Chip variant="warning">{t('docs.ownerOnly')}</Chip>}
-            </span>
-            <span className="mt-1.5 block font-display text-body-md font-semibold text-on-surface">
-              {title}
-            </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <code
+              className={clsx(
+                'shrink-0 rounded-md px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-wider',
+                METHOD_BADGE_CLASS[entry.method],
+              )}
+            >
+              {entry.method}
+            </code>
+            <code className="break-all font-mono text-metadata font-semibold text-on-surface">
+              {API_PREFIX}
+              {entry.path}
+            </code>
+            <Chip variant={SCOPE_CHIP[entry.scope]}>{t(`docs.scopes.short.${entry.scope}`)}</Chip>
+            {entry.flag === 'ownerOnly' && <Chip variant="warning">{t('docs.ownerOnly')}</Chip>}
           </span>
-          <span className="flex shrink-0 items-center gap-1 text-metadata font-semibold uppercase tracking-wider text-primary">
-            {open ? <ExpandLess className="!text-lg" /> : <ExpandMore className="!text-lg" />}
-            {open ? t('docs.collapse') : t('docs.expand')}
+          <span className="mt-1.5 block font-display text-body-md font-semibold text-on-surface">
+            {title}
           </span>
-        </Button>
-      </div>
+        </span>
+        <span className="flex shrink-0 items-center gap-1 text-metadata font-semibold uppercase tracking-wider text-primary">
+          {open ? <ExpandLess className="!text-lg" /> : <ExpandMore className="!text-lg" />}
+          <span className="sr-only">{open ? t('docs.collapse') : t('docs.expand')}</span>
+          {open ? t('docs.collapse') : t('docs.expand')}
+        </span>
+      </Button>
 
       {open && (
-        <div className="space-y-4 px-4 pb-5 pt-4 sm:px-5">
+        <div
+          id={`card-${entry.id}-body`}
+          className="space-y-6 border-t border-outline-variant/15 bg-surface-container-low/30 p-5 sm:p-6"
+        >
           <p className="text-metadata leading-relaxed text-on-surface-variant">
             <InlineMarkdown text={t(`docs.ref.items.${entry.key}.body`)} />
           </p>
@@ -275,7 +267,7 @@ function EndpointCard({
           )}
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -287,13 +279,15 @@ export function EndpointReference({
   lang,
   onLangChange,
   query,
+  onResetQuery,
 }: {
   lang: SnippetLang;
   onLangChange: (value: SnippetLang) => void;
   query: string;
+  onResetQuery: () => void;
 }) {
   const { t } = useTranslation();
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [category, setCategory] = useState<CategoryId>('all');
   const needle = query.trim().toLowerCase();
 
@@ -330,24 +324,24 @@ export function EndpointReference({
 
   const ids = sections.flatMap((entry) => entry.items.map((item) => item.id));
   const matchCount = ids.length;
-  const allOpen = ids.every((id) => !collapsed[id]);
+  const allOpen = ids.length > 0 && ids.every((id) => Boolean(expanded[id]));
 
   function toggle(id: string) {
-    setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }));
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
   function setAll(open: boolean) {
-    setCollapsed(Object.fromEntries(ids.map((id) => [id, !open])));
+    setExpanded(Object.fromEntries(ids.map((id) => [id, open])));
   }
 
   if (matchCount === 0) {
     return (
-      <Card className="!p-6">
+      <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6 shadow-ambient">
         <p className="text-body-md text-on-surface-variant">{t('docs.searchEmpty')}</p>
-        <Button type="button" variant="secondary" size="sm" className="mt-3" onClick={() => setAll(true)}>
+        <Button type="button" variant="secondary" size="sm" className="mt-3" onClick={onResetQuery}>
           {t('docs.searchReset')}
         </Button>
-      </Card>
+      </div>
     );
   }
 
@@ -415,14 +409,14 @@ export function EndpointReference({
                 </p>
               </div>
             </div>
-            <div className="space-y-4">
+            <div className="overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-lowest shadow-ambient divide-y divide-outline-variant/15">
               {items.map((entry) => (
                 <EndpointCard
                   key={entry.id}
                   entry={entry}
                   lang={lang}
                   onLangChange={onLangChange}
-                  open={!collapsed[entry.id]}
+                  open={Boolean(expanded[entry.id])}
                   onToggle={() => toggle(entry.id)}
                 />
               ))}

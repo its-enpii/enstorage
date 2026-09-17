@@ -3,8 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
+  Api,
   ArrowForward,
+  AutoStories,
   Bolt,
+  Build,
   DataObject,
   Hub,
   InsertDriveFile,
@@ -60,6 +63,31 @@ const SECTION_IDS = [
 ] as const;
 
 type SectionId = (typeof SECTION_IDS)[number];
+
+type DocView = 'guide' | 'reference' | 'spec';
+
+const SECTION_VIEWS: Record<SectionId, DocView> = {
+  start: 'guide',
+  auth: 'guide',
+  scopes: 'guide',
+  envelope: 'guide',
+  errors: 'guide',
+  reference: 'reference',
+  'rate-limit': 'spec',
+  openapi: 'spec',
+};
+
+const VIEW_SECTIONS: Record<DocView, SectionId[]> = {
+  guide: ['start', 'auth', 'scopes', 'envelope', 'errors'],
+  reference: ['reference'],
+  spec: ['rate-limit', 'openapi'],
+};
+
+const VIEWS: Array<{ id: DocView; icon: typeof Terminal }> = [
+  { id: 'reference', icon: Api },
+  { id: 'guide', icon: AutoStories },
+  { id: 'spec', icon: Build },
+];
 
 const SECTIONS: Array<{ id: SectionId; icon: typeof Terminal }> = [
   { id: 'start', icon: Terminal },
@@ -178,21 +206,26 @@ function ScopeChip({ scope }: { scope: ApiScope }) {
 /* ================================== sidebar ================================= */
 
 function DocsToc({
+  view,
   activeId,
   query,
   onQueryChange,
   onClear,
   lang,
   onLangChange,
+  onNavigate,
 }: {
+  view: DocView;
   activeId: string;
   query: string;
   onQueryChange: (value: string) => void;
   onClear: () => void;
   lang: SnippetLang;
   onLangChange: (value: SnippetLang) => void;
+  onNavigate: (id: string) => void;
 }) {
   const { t } = useTranslation();
+  const visible = VIEW_SECTIONS[view];
 
   /** The sidebar search box drives the reference explorer, so it reports its own matches. */
   const matchCount = useMemo(() => {
@@ -246,13 +279,17 @@ function DocsToc({
 
       <nav aria-label={t('docs.tocAria')} className="mt-4">
         <ol className="space-y-1">
-          {SECTIONS.map((section) => {
+          {SECTIONS.filter((section) => visible.includes(section.id)).map((section) => {
             const Icon = section.icon;
             const active = activeId === section.id;
             return (
               <li key={section.id}>
                 <a
                   href={`#${section.id}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    onNavigate(section.id);
+                  }}
                   aria-current={active ? 'true' : undefined}
                   className={clsx(
                     'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-metadata font-semibold leading-snug no-underline transition-colors',
@@ -270,6 +307,10 @@ function DocsToc({
                       <li key={group.id}>
                         <a
                           href={`#ref-${group.id}`}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            onNavigate(`ref-${group.id}`);
+                          }}
                           className="block truncate rounded-md px-2 py-1 text-metadata text-on-surface-variant no-underline transition-colors hover:bg-surface-container hover:text-on-surface"
                         >
                           {t(`docs.ref.groups.${group.key}.title`)}
@@ -582,7 +623,17 @@ function Scopes() {
   );
 }
 
-function Reference({ lang, onLangChange, query }: { lang: SnippetLang; onLangChange: (value: SnippetLang) => void; query: string }) {
+function Reference({
+  lang,
+  onLangChange,
+  query,
+  onResetQuery,
+}: {
+  lang: SnippetLang;
+  onLangChange: (value: SnippetLang) => void;
+  query: string;
+  onResetQuery: () => void;
+}) {
   const { t } = useTranslation();
 
   return (
@@ -592,7 +643,12 @@ function Reference({ lang, onLangChange, query }: { lang: SnippetLang; onLangCha
       titleKey="docs.ref.title"
       subtitleKey="docs.ref.subtitle"
     >
-      <EndpointReference lang={lang} onLangChange={onLangChange} query={query} />
+      <EndpointReference
+        lang={lang}
+        onLangChange={onLangChange}
+        query={query}
+        onResetQuery={onResetQuery}
+      />
     </DocsSection>
   );
 }
@@ -771,9 +827,21 @@ function OpenApi() {
 
 /* =================================== page ================================== */
 
+/** Resolves an anchor from the URL hash to a view + target pair. */
+function hashToTarget(hash: string): { view: DocView; id: string } | null {
+  const id = decodeURIComponent(hash.replace(/^#/, ''));
+  if (!id) return null;
+  if (id.startsWith('ref-')) return { view: 'reference', id };
+  if ((SECTION_IDS as readonly string[]).includes(id)) {
+    return { view: SECTION_VIEWS[id as SectionId], id };
+  }
+  return null;
+}
+
 export default function DocsClient() {
   usePageTitle('docs.pageTitle');
   const { t } = useTranslation();
+  const [view, setView] = useState<DocView>('reference');
   const activeId = useActiveSection(SECTION_IDS);
   const [query, setQuery] = useState('');
   const [lang, setLang] = useState<SnippetLang>('curl');
@@ -787,6 +855,16 @@ export default function DocsClient() {
     if (typeof window !== 'undefined') window.localStorage.setItem(LANG_STORAGE_KEY, value);
   }
 
+  function changeQuery(value: string) {
+    setQuery(value);
+    // The search box only searches the endpoint explorer, so follow it there.
+    if (value.trim() && view !== 'reference') setView('reference');
+  }
+
+  function clearQuery() {
+    setQuery('');
+  }
+
   useEffect(() => {
     const root = document.documentElement;
     const previous = root.style.scrollBehavior;
@@ -796,13 +874,36 @@ export default function DocsClient() {
     };
   }, []);
 
-  // Deep links like /#api-style section jumps from the header nav.
-  useEffect(() => {
-    const hash = decodeURIComponent(window.location.hash.replace('#', ''));
-    if (hash && (SECTION_IDS as readonly string[]).includes(hash)) {
-      window.setTimeout(() => scrollToId(hash), 60);
+  /** Jump to any anchor, switching mode first when the target lives elsewhere. */
+  function navigateTo(rawId: string) {
+    const target = rawId.startsWith('ref-')
+      ? { view: 'reference' as const, id: rawId }
+      : hashToTarget(rawId);
+    if (!target) return;
+    if (target.view !== view) setView(target.view);
+    const delay = target.view === view ? 0 : 60;
+    window.setTimeout(() => scrollToId(target.id), delay);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', `#${target.id}`);
     }
+  }
+
+  // Deep links like /docs#reference: open the right mode, then scroll.
+  useEffect(() => {
+    const target = hashToTarget(window.location.hash);
+    if (!target) return;
+    setView(target.view);
+    window.setTimeout(() => scrollToId(target.id), 80);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep the URL hash in step with the visible mode.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const current = hashToTarget(window.location.hash);
+    if (current && current.view === view) return;
+    window.history.replaceState(null, '', view === 'reference' ? '#reference' : `#${VIEW_SECTIONS[view][0]}`);
+  }, [view]);
 
   return (
     <PublicShell>
@@ -825,24 +926,79 @@ export default function DocsClient() {
         <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="space-y-4 lg:sticky lg:top-28 lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
             <DocsToc
+              view={view}
               activeId={activeId}
               query={query}
-              onQueryChange={setQuery}
-              onClear={() => setQuery('')}
+              onQueryChange={changeQuery}
+              onClear={clearQuery}
               lang={lang}
               onLangChange={changeLang}
+              onNavigate={navigateTo}
             />
           </aside>
 
-          <div className="min-w-0 space-y-12">
-            <QuickStart lang={lang} onLangChange={changeLang} />
-            <Authentication />
-            <Scopes />
-            <ResponseFormat />
-            <ErrorCodes />
-            <Reference lang={lang} onLangChange={changeLang} query={query} />
-            <RateLimiting />
-            <OpenApi />
+          <div className="min-w-0">
+            <div
+              role="tablist"
+              aria-label={t('docs.views.aria')}
+              className="mb-10 flex flex-wrap items-center gap-1.5 rounded-full border border-outline-variant/20 bg-surface-container-low p-1.5 shadow-ambient"
+            >
+              {VIEWS.map((entry) => {
+                const active = view === entry.id;
+                const Icon = entry.icon;
+                return (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setView(entry.id)}
+                    className={clsx(
+                      'inline-flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-body-md font-semibold transition-colors sm:flex-none',
+                      active
+                        ? 'bg-surface-container-lowest text-on-surface shadow-ambient'
+                        : 'text-on-surface-variant hover:bg-surface-container/60 hover:text-on-surface',
+                    )}
+                  >
+                    <Icon className="!text-lg shrink-0" />
+                    {t(`docs.views.${entry.id}`)}
+                    {entry.id === 'reference' && (
+                      <span className="tabular-nums text-metadata text-outline">
+                        {t('docs.views.count', { count: REFERENCE_COUNT })}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {view === 'guide' && (
+              <div className="space-y-12">
+                <QuickStart lang={lang} onLangChange={changeLang} />
+                <Authentication />
+                <Scopes />
+                <ResponseFormat />
+                <ErrorCodes />
+              </div>
+            )}
+
+            {view === 'reference' && (
+              <div className="space-y-12">
+                <Reference
+                  lang={lang}
+                  onLangChange={changeLang}
+                  query={query}
+                  onResetQuery={clearQuery}
+                />
+              </div>
+            )}
+
+            {view === 'spec' && (
+              <div className="space-y-12">
+                <RateLimiting />
+                <OpenApi />
+              </div>
+            )}
           </div>
         </div>
       </div>

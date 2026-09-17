@@ -923,6 +923,13 @@
       "openapi": "OpenAPI & links",
       "reference": "Endpoint reference"
     },
+    "views": {
+      "aria": "Documentation mode",
+      "reference": "API Explorer",
+      "guide": "Guide & Auth",
+      "spec": "OpenAPI & Tools",
+      "count": "({{count}})"
+    },
     "start": {
       "eyebrow": "Start here",
       "title": "Four steps to your first upload",

@@ -923,6 +923,13 @@
       "openapi": "OpenAPI & Tautan",
       "reference": "Referensi endpoint"
     },
+    "views": {
+      "aria": "Mode dokumentasi",
+      "reference": "API Explorer",
+      "guide": "Panduan & Autentikasi",
+      "spec": "OpenAPI & Alat Bantu",
+      "count": "({{count}})"
+    },
     "start": {
       "eyebrow": "Mulai",
       "title": "Empat langkah ke upload pertama",
