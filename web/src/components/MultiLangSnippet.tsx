@@ -3,7 +3,6 @@
 import { useMemo } from 'react';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/components/Button';
 import { CodeBlock } from '@/components/CodeBlock';
 import { buildSnippets, type SnippetCall, type SnippetSet } from '@/lib/apiSnippets';
 import type { CodeLang } from '@/lib/highlight';
@@ -60,26 +59,26 @@ export function MultiLangSnippet({
         <div
           role="tablist"
           aria-label={label}
-          className="flex shrink-0 flex-wrap items-center gap-1 rounded-full bg-surface-container-lowest p-1"
+          className="flex shrink-0 flex-wrap items-center gap-1 rounded-lg bg-surface-container-lowest p-0.5 border border-outline-variant/20"
         >
           {SNIPPET_LANGS.map((option) => {
             const selected = option === active;
             return (
-              <Button
+              <button
                 key={option}
                 type="button"
                 role="tab"
                 aria-selected={selected}
-                size="sm"
-                variant={selected ? 'primary' : 'ghost'}
                 onClick={() => onLangChange(option)}
                 className={clsx(
-                  '!h-7 rounded-full px-2.5 !text-metadata',
-                  !selected && '!text-on-surface-variant hover:!text-on-surface',
+                  'rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-150',
+                  selected
+                    ? 'bg-surface-container-high text-primary font-semibold shadow-xs'
+                    : 'text-on-surface-variant hover:text-on-surface hover:bg-white/[0.04]',
                 )}
               >
                 {t(`docs.lang.${option}`)}
-              </Button>
+              </button>
             );
           })}
         </div>

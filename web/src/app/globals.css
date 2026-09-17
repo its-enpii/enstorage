@@ -123,6 +123,18 @@
   --shadow-selected-glow: 0 0 0 2px #3d348b, 0px 0px 20px rgba(61, 52, 139, 0.4);
 }
 
+  /* === SYNTAX HIGHLIGHTING === */
+  --color-syntax-comment: #8b8e9b;
+  --color-syntax-keyword: #c6c0ff;
+  --color-syntax-string: #7ee787;
+  --color-syntax-variable: #5eead4;
+  --color-syntax-header: #79c0ff;
+  --color-syntax-method: #e6af2e;
+  --color-syntax-flag: #d2a8ff;
+  --color-syntax-number: #f0883e;
+  --color-syntax-punct: #6e7681;
+  --color-syntax-url: #38bdf8;
+
 /* === SOURCE DETECTION === */
 @source "../**/*.{ts,tsx}";
 

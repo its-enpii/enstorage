@@ -9,19 +9,19 @@ import { Card } from '@/components/Card';
 import { detectLang, tokenizeCode, type CodeLang, type CodeToken, type TokenKind } from '@/lib/highlight';
 
 const TOKEN_CLASS: Record<TokenKind, string> = {
-  comment: 'text-outline italic',
-  status: 'text-primary font-semibold',
-  string: 'text-secondary',
+  comment: 'text-syntax-comment italic',
+  status: 'text-syntax-method font-semibold',
+  string: 'text-syntax-string',
   property: 'text-on-surface font-semibold',
-  header: 'text-primary',
-  url: 'text-on-surface-variant underline decoration-outline-variant/40 underline-offset-2',
-  secret: 'text-secondary font-semibold',
-  keyword: 'text-primary font-semibold',
-  method: 'text-primary font-bold',
-  variable: 'text-on-surface',
-  flag: 'text-primary font-semibold',
-  number: 'text-on-surface-variant tabular-nums',
-  punct: 'text-outline',
+  header: 'text-syntax-header font-medium',
+  url: 'text-syntax-url underline decoration-syntax-url/30 underline-offset-2',
+  secret: 'text-secondary font-mono font-medium',
+  keyword: 'text-syntax-keyword font-semibold',
+  method: 'text-syntax-method font-bold',
+  variable: 'text-syntax-variable font-medium',
+  flag: 'text-syntax-flag font-medium',
+  number: 'text-syntax-number tabular-nums',
+  punct: 'text-syntax-punct',
   plain: 'text-on-surface',
 };
 
@@ -38,14 +38,54 @@ export function HighlightedCode({
     () => tokenizeCode(code, lang ?? detectLang(code)),
     [code, lang],
   );
+
+  const lines = useMemo<CodeToken[][]>(() => {
+    const result: CodeToken[][] = [];
+    let current: CodeToken[] = [];
+    for (const token of tokens) {
+      const parts = token.text.split('\n');
+      for (let i = 0; i < parts.length; i++) {
+        if (parts[i] !== '') current.push({ text: parts[i], kind: token.kind });
+        if (i < parts.length - 1) {
+          result.push(current);
+          current = [];
+        }
+      }
+    }
+    result.push(current);
+    return result;
+  }, [tokens]);
+
+  const multiLine = lines.length > 1;
+
   return (
     <pre className={clsx('max-h-[420px] overflow-auto p-4 text-metadata leading-relaxed', className)}>
       <code className="font-mono whitespace-pre">
-        {tokens.map((token, index) => (
-          <span key={`${index}-${token.kind}`} className={TOKEN_CLASS[token.kind]}>
-            {token.text}
-          </span>
-        ))}
+        {multiLine ? (
+          lines.map((lineTokens, lineIndex) => (
+            <span key={lineIndex} className="flex">
+              <span
+                aria-hidden="true"
+                className="select-none w-8 pr-3 text-right text-outline/30 font-mono text-xs tabular-nums shrink-0"
+              >
+                {lineIndex + 1}
+              </span>
+              <span>
+                {lineTokens.map((token, tokenIndex) => (
+                  <span key={`${lineIndex}-${tokenIndex}-${token.kind}`} className={TOKEN_CLASS[token.kind]}>
+                    {token.text}
+                  </span>
+                ))}
+              </span>
+            </span>
+          ))
+        ) : (
+          tokens.map((token, index) => (
+            <span key={`${index}-${token.kind}`} className={TOKEN_CLASS[token.kind]}>
+              {token.text}
+            </span>
+          ))
+        )}
       </code>
     </pre>
   );
@@ -86,6 +126,8 @@ export function CodeBlock({ code, lang, file, labelKey, maxHeightClass, classNam
     }
   }
 
+  const filename = file ?? 'call.sh';
+
   return (
     <div
       role="region"
@@ -93,29 +135,69 @@ export function CodeBlock({ code, lang, file, labelKey, maxHeightClass, classNam
       className={clsx('min-w-0 shadow-ambient', className)}
     >
       <Card className="overflow-hidden !bg-surface-container-lowest !p-0">
-        <div className="flex flex-wrap items-center gap-2 border-b border-outline-variant/20 bg-surface-container-high px-3 py-2 sm:px-4">
-          {toolbar}
-          <p className="min-w-0 flex-1 truncate font-mono text-metadata text-on-surface-variant">
-            {file ? `${t('docs.consolePrompt')} ${file}` : `${t('docs.consolePrompt')} ./call.sh`}
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={copy}
-            leftIcon={copied ? <CheckCircle className="!text-lg" /> : <CopyAll className="!text-lg" />}
-            aria-live="polite"
-            className={clsx('!h-8 shrink-0 !text-on-surface-variant', copied && '!text-primary')}
-          >
-            {failed
-              ? t('landing.api.copyFailed')
-              : copied
-                ? t('landing.api.copied')
-                : t('landing.api.copy')}
-          </Button>
+        <div className="flex items-center gap-2 border-b border-outline-variant/20 bg-surface-container-high px-3 py-2 sm:px-4">
+          {toolbar ? (
+            <>
+              {/* Left: language tabs */}
+              <div className="min-w-0 flex-1">{toolbar}</div>
+              {/* Right: file badge + copy button */}
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="hidden rounded border border-outline-variant/30 bg-surface-container px-1.5 py-0.5 font-mono text-xs text-on-surface-variant sm:inline">
+                  {filename}
+                </span>
+                <CopyButton copied={copied} failed={failed} onCopy={copy} t={t} />
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Left: terminal window dots + filename */}
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="flex shrink-0 items-center gap-1" aria-hidden="true">
+                  <span className="size-2 rounded-full bg-outline-variant/40" />
+                  <span className="size-2 rounded-full bg-outline-variant/40" />
+                  <span className="size-2 rounded-full bg-outline-variant/40" />
+                </span>
+                <span className="min-w-0 truncate font-mono text-metadata text-on-surface-variant">
+                  {filename}
+                </span>
+              </div>
+              {/* Right: copy button */}
+              <CopyButton copied={copied} failed={failed} onCopy={copy} t={t} />
+            </>
+          )}
         </div>
         <HighlightedCode code={code} lang={lang} className={maxHeightClass} />
       </Card>
     </div>
+  );
+}
+
+function CopyButton({
+  copied,
+  failed,
+  onCopy,
+  t,
+}: {
+  copied: boolean;
+  failed: boolean;
+  onCopy: () => void;
+  t: (key: string) => string;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="ghost"
+      onClick={onCopy}
+      leftIcon={copied ? <CheckCircle className="!text-lg" /> : <CopyAll className="!text-lg" />}
+      aria-live="polite"
+      className={clsx('!h-8 shrink-0 !text-on-surface-variant', copied && '!text-primary')}
+    >
+      {failed
+        ? t('landing.api.copyFailed')
+        : copied
+          ? t('landing.api.copied')
+          : t('landing.api.copy')}
+    </Button>
   );
 }

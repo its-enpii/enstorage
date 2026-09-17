@@ -232,18 +232,7 @@ function tokenizeRest(value: string): CodeToken[] {
 
 /** Inside comments, HTTP status lines deserve their own colour. */
 function tokenizeComment(text: string): CodeToken[] {
-  const status = new RegExp(STATUS_LINE_SOURCE, 'g');
-  const tokens: CodeToken[] = [];
-  let last = 0;
-  let match: RegExpExecArray | null;
-  while ((match = status.exec(text)) !== null) {
-    if (match.index > last) tokens.push({ text: text.slice(last, match.index), kind: 'comment' });
-    tokens.push({ text: match[0], kind: 'status' });
-    last = match.index + match[0].length;
-  }
-  if (tokens.length === 0) return [{ text, kind: 'comment' }];
-  if (last < text.length) tokens.push({ text: text.slice(last), kind: 'comment' });
-  return tokens;
+  return [{ text, kind: 'comment' }];
 }
 
 function ruleIndexFor(groups: Array<string | undefined>, count: number) {
