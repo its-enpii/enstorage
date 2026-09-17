@@ -59,7 +59,7 @@ export function MultiLangSnippet({
         <div
           role="tablist"
           aria-label={label}
-          className="flex shrink-0 flex-wrap items-center gap-1 rounded-lg bg-surface-container-lowest p-0.5 border border-outline-variant/20"
+          className="inline-flex w-fit items-center gap-0.5 rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-0.5"
         >
           {SNIPPET_LANGS.map((option) => {
             const selected = option === active;
@@ -77,7 +77,7 @@ export function MultiLangSnippet({
                     : 'text-on-surface-variant hover:text-on-surface hover:bg-white/[0.04]',
                 )}
               >
-                {t(`docs.lang.${option}`)}
+                {t(`docs.lang.short.${option}`)}
               </button>
             );
           })}
