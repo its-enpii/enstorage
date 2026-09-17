@@ -3,11 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  Api,
   ArrowForward,
-  AutoStories,
   Bolt,
-  Build,
   DataObject,
   Folder,
   Hub,
@@ -67,31 +64,6 @@ const SECTION_IDS = [
 ] as const;
 
 type SectionId = (typeof SECTION_IDS)[number];
-
-type DocView = 'guide' | 'reference' | 'spec';
-
-const SECTION_VIEWS: Record<SectionId, DocView> = {
-  start: 'guide',
-  auth: 'guide',
-  scopes: 'guide',
-  envelope: 'guide',
-  errors: 'guide',
-  reference: 'reference',
-  'rate-limit': 'spec',
-  openapi: 'spec',
-};
-
-const VIEW_SECTIONS: Record<DocView, SectionId[]> = {
-  guide: ['start', 'auth', 'scopes', 'envelope', 'errors'],
-  reference: ['reference'],
-  spec: ['rate-limit', 'openapi'],
-};
-
-const VIEWS: Array<{ id: DocView; icon: typeof Terminal }> = [
-  { id: 'reference', icon: Api },
-  { id: 'guide', icon: AutoStories },
-  { id: 'spec', icon: Build },
-];
 
 const SECTIONS: Array<{ id: SectionId; icon: typeof Terminal }> = [
   { id: 'start', icon: Terminal },
@@ -222,26 +194,21 @@ function ScopeChip({ scope }: { scope: ApiScope }) {
 /* ================================== sidebar ================================= */
 
 function DocsToc({
-  view,
   activeId,
   query,
   onQueryChange,
   onClear,
   lang,
   onLangChange,
-  onNavigate,
 }: {
-  view: DocView;
   activeId: string;
   query: string;
   onQueryChange: (value: string) => void;
   onClear: () => void;
   lang: SnippetLang;
   onLangChange: (value: SnippetLang) => void;
-  onNavigate: (id: string) => void;
 }) {
   const { t } = useTranslation();
-  const visible = VIEW_SECTIONS[view];
 
   /** Live endpoint count per module, so the badges track the active search. */
   const moduleCount = useMemo(() => {
@@ -315,17 +282,13 @@ function DocsToc({
 
       <nav aria-label={t('docs.tocAria')} className="mt-4">
         <ol className="space-y-1">
-          {SECTIONS.filter((section) => visible.includes(section.id)).map((section) => {
+          {SECTIONS.map((section) => {
             const Icon = section.icon;
             const active = activeId === section.id;
             return (
               <li key={section.id}>
                 <a
                   href={`#${section.id}`}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    onNavigate(section.id);
-                  }}
                   aria-current={active ? 'true' : undefined}
                   className={clsx(
                     'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-metadata font-semibold leading-snug no-underline transition-colors',
@@ -338,27 +301,21 @@ function DocsToc({
                   {t(`docs.nav.${section.id}`)}
                 </a>
                 {section.id === 'reference' && (
-                  <ul className="mt-1.5 space-y-0.5">
+                  <ul className="mb-1 ml-6 space-y-0.5 border-l border-outline-variant/20 pl-2">
                     {REFERENCE_GROUPS.map((group) => {
-                      const ModuleIcon = MODULE_ICONS[group.id] ?? InsertDriveFile;
                       const count = moduleCount(group.id);
                       return (
                         <li key={group.id}>
                           <a
                             href={`#ref-${group.id}`}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              onNavigate(`ref-${group.id}`);
-                            }}
-                            className="group flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-metadata font-medium no-underline transition-colors hover:bg-surface-container-high/60 hover:text-on-surface"
+                            className="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-metadata text-on-surface-variant no-underline transition-colors hover:bg-surface-container hover:text-on-surface"
                           >
-                            <ModuleIcon className="!text-base shrink-0 text-on-surface-variant transition-colors group-hover:text-primary" />
-                            <span className="min-w-0 flex-1 truncate">
-                              {t(`docs.ref.groups.${group.key}.title`)}
-                            </span>
-                            <span className="shrink-0 rounded-full bg-surface-container-high/50 px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums text-on-surface-variant transition-colors group-hover:bg-primary-container/40 group-hover:text-primary">
-                              {count}
-                            </span>
+                            <span className="truncate">{t(`docs.ref.groups.${group.key}.title`)}</span>
+                            {count > 0 && (
+                              <span className="rounded-full bg-surface-container px-1.5 py-0.2 font-mono text-[10px] tabular-nums text-outline">
+                                {count}
+                              </span>
+                            )}
                           </a>
                         </li>
                       );
@@ -375,22 +332,18 @@ function DocsToc({
         <p className="text-metadata font-semibold uppercase tracking-wider text-outline">
           {t('docs.lang.label')}
         </p>
-        <div
-          role="group"
-          aria-label={t('docs.lang.aria')}
-          className="mt-2 flex rounded-xl border border-outline-variant/20 bg-surface-container-high/40 p-1"
-        >
+        <div className="mt-2 flex rounded-xl border border-outline-variant/20 bg-surface-container-high/30 p-1" role="group" aria-label={t('docs.lang.aria')}>
           {SNIPPET_LANGS.map((option) => (
             <button
               key={option}
               type="button"
-              aria-pressed={lang === option}
               onClick={() => onLangChange(option)}
+              aria-pressed={lang === option}
               className={clsx(
                 'flex-1 rounded-lg py-1 text-center font-mono text-xs font-semibold transition-all',
                 lang === option
                   ? 'bg-primary text-on-primary shadow-xs'
-                  : 'text-on-surface-variant hover:bg-white/[0.04] hover:text-on-surface',
+                  : 'text-on-surface-variant hover:text-on-surface hover:bg-white/[0.04]',
               )}
             >
               {t(`docs.lang.short.${option}`)}
@@ -399,17 +352,23 @@ function DocsToc({
         </div>
       </div>
 
-      <div className="mt-5 space-y-3 border-t border-outline-variant/20 pt-4">
+      <div className="mt-5 border-t border-outline-variant/20 pt-4">
         <div className="flex items-center gap-2">
-          <span className="size-2 shrink-0 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-metadata font-semibold text-on-surface">{t('docs.meta.status')}</span>
-          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-surface-container-high/60 px-2 py-0.5 font-mono text-xs font-semibold text-on-surface-variant tabular-nums">
-            {t('docs.meta.endpointsValue', { count: TOTAL_ENDPOINTS })}
+          <span className="size-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
+          <span className="text-metadata font-semibold text-emerald-400">
+            {t('docs.meta.status')}
           </span>
         </div>
-        <code className="block w-full rounded-lg bg-surface-container-lowest/60 px-2.5 py-1.5 text-center font-mono text-xs font-semibold text-on-surface-variant">
-          {t('docs.meta.prefix')} <span className="text-primary">{API_PREFIX}</span>
-        </code>
+        <dl className="mt-2.5 space-y-2 text-metadata">
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-outline">{t('docs.meta.endpoints')}</dt>
+            <dd className="font-semibold text-on-surface tabular-nums">{TOTAL_ENDPOINTS}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-outline">{t('docs.meta.prefix')}</dt>
+            <dd className="font-mono font-semibold text-on-surface">{API_PREFIX}</dd>
+          </div>
+        </dl>
       </div>
     </Card>
   );
@@ -870,21 +829,9 @@ function OpenApi() {
 
 /* =================================== page ================================== */
 
-/** Resolves an anchor from the URL hash to a view + target pair. */
-function hashToTarget(hash: string): { view: DocView; id: string } | null {
-  const id = decodeURIComponent(hash.replace(/^#/, ''));
-  if (!id) return null;
-  if (id.startsWith('ref-')) return { view: 'reference', id };
-  if ((SECTION_IDS as readonly string[]).includes(id)) {
-    return { view: SECTION_VIEWS[id as SectionId], id };
-  }
-  return null;
-}
-
 export default function DocsClient() {
   usePageTitle('docs.pageTitle');
   const { t } = useTranslation();
-  const [view, setView] = useState<DocView>('reference');
   const activeId = useActiveSection(SECTION_IDS);
   const [query, setQuery] = useState('');
   const [lang, setLang] = useState<SnippetLang>('curl');
@@ -898,16 +845,6 @@ export default function DocsClient() {
     if (typeof window !== 'undefined') window.localStorage.setItem(LANG_STORAGE_KEY, value);
   }
 
-  function changeQuery(value: string) {
-    setQuery(value);
-    // The search box only searches the endpoint explorer, so follow it there.
-    if (value.trim() && view !== 'reference') setView('reference');
-  }
-
-  function clearQuery() {
-    setQuery('');
-  }
-
   useEffect(() => {
     const root = document.documentElement;
     const previous = root.style.scrollBehavior;
@@ -917,36 +854,12 @@ export default function DocsClient() {
     };
   }, []);
 
-  /** Jump to any anchor, switching mode first when the target lives elsewhere. */
-  function navigateTo(rawId: string) {
-    const target = rawId.startsWith('ref-')
-      ? { view: 'reference' as const, id: rawId }
-      : hashToTarget(rawId);
-    if (!target) return;
-    if (target.view !== view) setView(target.view);
-    const delay = target.view === view ? 0 : 60;
-    window.setTimeout(() => scrollToId(target.id), delay);
-    if (typeof window !== 'undefined') {
-      window.history.replaceState(null, '', `#${target.id}`);
+  useEffect(() => {
+    const hash = decodeURIComponent(window.location.hash.replace(/^#/, ''));
+    if (hash && ((SECTION_IDS as readonly string[]).includes(hash) || hash.startsWith('ref-'))) {
+      window.setTimeout(() => scrollToId(hash), 60);
     }
-  }
-
-  // Deep links like /docs#reference: open the right mode, then scroll.
-  useEffect(() => {
-    const target = hashToTarget(window.location.hash);
-    if (!target) return;
-    setView(target.view);
-    window.setTimeout(() => scrollToId(target.id), 80);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Keep the URL hash in step with the visible mode.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const current = hashToTarget(window.location.hash);
-    if (current && current.view === view) return;
-    window.history.replaceState(null, '', view === 'reference' ? '#reference' : `#${VIEW_SECTIONS[view][0]}`);
-  }, [view]);
 
   return (
     <PublicShell>
@@ -969,79 +882,29 @@ export default function DocsClient() {
         <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="space-y-4 lg:sticky lg:top-28 lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
             <DocsToc
-              view={view}
               activeId={activeId}
               query={query}
-              onQueryChange={changeQuery}
-              onClear={clearQuery}
+              onQueryChange={setQuery}
+              onClear={() => setQuery('')}
               lang={lang}
               onLangChange={changeLang}
-              onNavigate={navigateTo}
             />
           </aside>
 
-          <div className="min-w-0">
-            <div
-              role="tablist"
-              aria-label={t('docs.views.aria')}
-              className="mb-10 flex flex-wrap items-center gap-1.5 rounded-full border border-outline-variant/20 bg-surface-container-low p-1.5 shadow-ambient"
-            >
-              {VIEWS.map((entry) => {
-                const active = view === entry.id;
-                const Icon = entry.icon;
-                return (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => setView(entry.id)}
-                    className={clsx(
-                      'inline-flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-body-md font-semibold transition-colors sm:flex-none',
-                      active
-                        ? 'bg-surface-container-lowest text-on-surface shadow-ambient'
-                        : 'text-on-surface-variant hover:bg-surface-container/60 hover:text-on-surface',
-                    )}
-                  >
-                    <Icon className="!text-lg shrink-0" />
-                    {t(`docs.views.${entry.id}`)}
-                    {entry.id === 'reference' && (
-                      <span className="tabular-nums text-metadata text-outline">
-                        {t('docs.views.count', { count: REFERENCE_COUNT })}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {view === 'guide' && (
-              <div className="space-y-12">
-                <QuickStart lang={lang} onLangChange={changeLang} />
-                <Authentication />
-                <Scopes />
-                <ResponseFormat />
-                <ErrorCodes />
-              </div>
-            )}
-
-            {view === 'reference' && (
-              <div className="space-y-12">
-                <Reference
-                  lang={lang}
-                  onLangChange={changeLang}
-                  query={query}
-                  onResetQuery={clearQuery}
-                />
-              </div>
-            )}
-
-            {view === 'spec' && (
-              <div className="space-y-12">
-                <RateLimiting />
-                <OpenApi />
-              </div>
-            )}
+          <div className="min-w-0 space-y-12">
+            <QuickStart lang={lang} onLangChange={changeLang} />
+            <Authentication />
+            <Scopes />
+            <ResponseFormat />
+            <ErrorCodes />
+            <Reference
+              lang={lang}
+              onLangChange={changeLang}
+              query={query}
+              onResetQuery={() => setQuery('')}
+            />
+            <RateLimiting />
+            <OpenApi />
           </div>
         </div>
       </div>

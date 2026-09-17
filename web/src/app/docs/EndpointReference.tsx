@@ -159,35 +159,44 @@ function EndpointCard({
         aria-controls={`card-${entry.id}-body`}
         aria-label={`${entry.method} ${entry.path} — ${title}`}
         className={clsx(
-          '!h-auto w-full !justify-between items-center gap-3 !px-4 !py-2.5 text-left transition-colors hover:bg-surface-container/30 sm:!px-5',
+          '!h-auto w-full !justify-between items-center gap-3 !px-4 !py-3 text-left transition-colors hover:bg-surface-container/30 sm:!px-5',
           isFirst && 'rounded-t-2xl',
           isLast && !open && 'rounded-b-2xl',
         )}
       >
-        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
-          <code
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
+          <span
             className={clsx(
-              'shrink-0 rounded-md px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-wider',
+              'inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 font-mono text-[11px] font-bold uppercase tracking-wider',
               METHOD_BADGE_CLASS[entry.method],
             )}
           >
             {entry.method}
-          </code>
-          <code className="break-all font-mono text-metadata font-semibold text-on-surface">
+          </span>
+          <code className="break-all font-mono text-metadata font-medium text-on-surface">
             {API_PREFIX}
             {entry.path}
           </code>
-          <Chip variant={SCOPE_CHIP[entry.scope]}>{t(`docs.scopes.short.${entry.scope}`)}</Chip>
-          {entry.flag === 'ownerOnly' && <Chip variant="warning">{t('docs.ownerOnly')}</Chip>}
-        </span>
-        <span className="flex shrink-0 items-center gap-2 text-right">
-          <span className="font-display text-body-md font-semibold text-on-surface">
+          <span className="inline-flex shrink-0 items-center rounded-full bg-surface-container-high/70 px-2.5 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-outline">
+            {t(`docs.scopes.short.${entry.scope}`)}
+          </span>
+          {entry.flag === 'ownerOnly' && (
+            <span className="inline-flex shrink-0 items-center rounded-full bg-warning-container/40 px-2 py-0.5 font-mono text-[11px] font-semibold text-warning">
+              {t('docs.ownerOnly')}
+            </span>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2 text-right">
+          <span className="text-sm font-semibold text-on-surface-variant transition-colors group-hover:text-on-surface">
             {title}
           </span>
-          <span className="flex items-center text-outline">
-            {open ? <ExpandLess className="!text-lg" /> : <ExpandMore className="!text-lg" />}
-          </span>
-        </span>
+          <ExpandMore
+            className={clsx(
+              '!text-base text-outline transition-transform duration-200',
+              open && 'rotate-180 text-primary',
+            )}
+          />
+        </div>
       </Button>
 
       {open && (
