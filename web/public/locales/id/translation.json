@@ -1261,6 +1261,10 @@
         "webhooks": {
           "title": "Webhooks",
           "hint": "Kirim event ke sistem Anda sendiri."
+        },
+        "notifications": {
+          "title": "Notifikasi",
+          "hint": "Preferensi notifikasi dan token perangkat push."
         }
       },
       "notes": {
@@ -1288,9 +1292,90 @@
         "starredNote": "Bintang tersimpan di indeks EnStorage, bukan sebagai property Google Drive.",
         "cursorNote": "Teruskan `next_cursor` apa adanya; formatnya opaque dan bisa berubah kapan saja.",
         "webhookSanctumNote": "Sama seperti API keys: hanya lewat sesi Sanctum.",
-        "signatureNote": "Verifikasi header `X-Webhook-Signature` dengan secret tersebut sebelum memproses payload."
+        "signatureNote": "Verifikasi header `X-Webhook-Signature` dengan secret tersebut sebelum memproses payload.",
+        "oauthCallbackWebNote": "Custom URI scheme ditolak Google, jadi endpoint publik ini harus jadi `redirect_uri`: HTML-nya lalu melompat ke `enstorage://oauth-callback?code=...&state=...` untuk diintercept WebView aplikasi."
       },
       "items": {
+        "bulkDelete": {
+          "title": "Hapus massal",
+          "body": "Hapus hingga 50 berkas sekaligus."
+        },
+        "byHashes": {
+          "title": "Cek duplikat via hash",
+          "body": "Tanyakan hash SHA-256 sebelum upload."
+        },
+        "createFileShareLink": {
+          "title": "Tambah tautan",
+          "body": "Buat tautan tambahan dengan batas sendiri."
+        },
+        "createFolder": {
+          "title": "Buat folder",
+          "body": "Buat folder baru di root atau di bawah parent."
+        },
+        "createFolderShareLink": {
+          "title": "Buat link folder",
+          "body": "Tambah link kedua di folder yang sama, dengan batas view-nya sendiri."
+        },
+        "createKey": {
+          "title": "Buat API key",
+          "body": "Balasan memuat `plaintext` sekali seumur hidup kunci."
+        },
+        "createWebhook": {
+          "title": "Buat webhook",
+          "body": "Daftar endpoint penerima event."
+        },
+        "deleteFile": {
+          "title": "Hapus permanen",
+          "body": "Berkas hilang dari Google Drive."
+        },
+        "deleteFolder": {
+          "title": "Hapus folder",
+          "body": "Hapus folder dan isinya."
+        },
+        "destroyAccount": {
+          "title": "Cabut akun Google",
+          "body": "Lepas akun dan revoke token Google (best-effort)."
+        },
+        "downloadFile": {
+          "title": "Unduh berkas",
+          "body": "Stream byte dari Drive melalui proxy."
+        },
+        "downloadFolder": {
+          "title": "Unduh folder",
+          "body": "Semua isi dipaket jadi ZIP."
+        },
+        "fileStatus": {
+          "title": "Status upload",
+          "body": "Pantau progres penulisan ke Google Drive."
+        },
+        "listAccounts": {
+          "title": "Daftar akun Google",
+          "body": "Akun Drive yang terhubung beserta kuota per akun."
+        },
+        "listFileShareLinks": {
+          "title": "Daftar tautan",
+          "body": "Semua tautan aktif pada satu berkas."
+        },
+        "listFiles": {
+          "title": "Daftar berkas",
+          "body": "Filter, sort, dan paginasi dalam satu panggilan."
+        },
+        "listFolderShareLinks": {
+          "title": "Daftar link folder",
+          "body": "Link folder yang masih aktif."
+        },
+        "listFolders": {
+          "title": "Daftar folder",
+          "body": "Anak langsung dari satu folder."
+        },
+        "listKeys": {
+          "title": "Daftar API key",
+          "body": "Semua kunci milik akun ini."
+        },
+        "listWebhooks": {
+          "title": "Daftar webhook",
+          "body": "Semua webhook yang terdaftar."
+        },
         "login": {
           "title": "Masuk dengan email",
           "body": "Tukar email + kata sandi dengan sesi Sanctum."
@@ -1299,133 +1384,33 @@
           "title": "Profil sesi",
           "body": "Data user yang sedang login."
         },
-        "listKeys": {
-          "title": "Daftar API key",
-          "body": "Semua kunci milik akun ini."
-        },
-        "createKey": {
-          "title": "Buat API key",
-          "body": "Balasan memuat `plaintext` sekali seumur hidup kunci."
-        },
-        "revokeKey": {
-          "title": "Cabut API key",
-          "body": "Matikan kunci sebelum masa pakainya habis."
-        },
-        "upload": {
-          "title": "Upload berkas",
-          "body": "Multipart dengan smart routing ke akun tersisa terbesar."
-        },
-        "listFiles": {
-          "title": "Daftar berkas",
-          "body": "Filter, sort, dan paginasi dalam satu panggilan."
-        },
-        "showFile": {
-          "title": "Detail berkas",
-          "body": "Metadata lengkap satu berkas."
-        },
-        "fileStatus": {
-          "title": "Status upload",
-          "body": "Pantau progres penulisan ke Google Drive."
-        },
-        "downloadFile": {
-          "title": "Unduh berkas",
-          "body": "Stream byte dari Drive melalui proxy."
-        },
-        "streamFile": {
-          "title": "Stream media",
-          "body": "Putar audio, video, atau dokumen tanpa unduh."
-        },
-        "thumbnail": {
-          "title": "Ambil thumbnail",
-          "body": "Pratinjau WebP hasil generate."
-        },
-        "updateFile": {
-          "title": "Ubah berkas",
-          "body": "Ganti nama atau bintangi."
-        },
         "moveFile": {
           "title": "Pindah berkas",
           "body": "Pindahkan ke folder lain atau ke root."
-        },
-        "deleteFile": {
-          "title": "Hapus permanen",
-          "body": "Berkas hilang dari Google Drive."
-        },
-        "bulkDelete": {
-          "title": "Hapus massal",
-          "body": "Hapus hingga 50 berkas sekaligus."
-        },
-        "uploadFromUrl": {
-          "title": "Upload dari URL",
-          "body": "Server menarik URL publik menjadi berkas."
-        },
-        "uploadInit": {
-          "title": "Mulai chunked upload",
-          "body": "Buka sesi upload lintas-chunk."
-        },
-        "uploadChunk": {
-          "title": "Kirim satu chunk",
-          "body": "Kirim potongan per index."
-        },
-        "uploadComplete": {
-          "title": "Rampungkan chunk",
-          "body": "Rakit semua chunk lalu upload."
-        },
-        "createFolder": {
-          "title": "Buat folder",
-          "body": "Buat folder baru di root atau di bawah parent."
-        },
-        "listFolders": {
-          "title": "Daftar folder",
-          "body": "Anak langsung dari satu folder."
-        },
-        "showFolder": {
-          "title": "Isi folder",
-          "body": "Subfolder dan berkas dalam satu folder."
-        },
-        "updateFolder": {
-          "title": "Ubah folder",
-          "body": "Ganti nama atau bintangi folder."
         },
         "moveFolder": {
           "title": "Pindah folder",
           "body": "Pindahkan seluruh subtree."
         },
-        "downloadFolder": {
-          "title": "Unduh folder",
-          "body": "Semua isi dipaket jadi ZIP."
+        "notificationSettings": {
+          "title": "Baca pengaturan notifikasi",
+          "body": "Lihat preferensi jenis notifikasi yang diizinkan."
         },
-        "deleteFolder": {
-          "title": "Hapus folder",
-          "body": "Hapus folder dan isinya."
+        "oauthCallback": {
+          "title": "Callback OAuth mobile",
+          "body": "WebView flow: POST `code` + `state` yang diintercept."
         },
-        "summary": {
-          "title": "Ringkasan kuota",
-          "body": "Total, terpakai, dan sisa dari semua akun."
+        "oauthCallbackWeb": {
+          "title": "Callback OAuth web",
+          "body": "Halaman publik yang meneruskan `code` ke aplikasi mobile."
         },
-        "listAccounts": {
-          "title": "Daftar akun Google",
-          "body": "Akun Drive yang terhubung beserta kuota per akun."
+        "oauthExchange": {
+          "title": "Tukar kode OAuth",
+          "body": "Mobile: tukar `server_auth_code` dari SDK native."
         },
-        "syncQuota": {
-          "title": "Sinkronkan kuota",
-          "body": "Paksa baca ulang kuota satu akun."
-        },
-        "shareFile": {
-          "title": "Buat tautan berbagi",
-          "body": "Buat token publik dengan expiry dan limit view."
-        },
-        "listFileShareLinks": {
-          "title": "Daftar tautan",
-          "body": "Semua tautan aktif pada satu berkas."
-        },
-        "createFileShareLink": {
-          "title": "Tambah tautan",
-          "body": "Buat tautan tambahan dengan batas sendiri."
-        },
-        "revokeShareLink": {
-          "title": "Cabut tautan",
-          "body": "Hentikan satu tautan tanpa menyentuh yang lain."
+        "oauthRedirect": {
+          "title": "URL OAuth",
+          "body": "Buat URL otorisasi; `state` ditandatangani untuk user ini."
         },
         "publicShare": {
           "title": "Akses publik",
@@ -1435,29 +1420,121 @@
           "title": "Halaman tautan",
           "body": "Redirect ke viewer untuk satu token."
         },
+        "recent": {
+          "title": "Terbaru",
+          "body": "Berkas dan folder root terbaru."
+        },
+        "registerToken": {
+          "title": "Daftarkan token perangkat",
+          "body": "Simpan token FCM perangkat untuk menerima notifikasi push."
+        },
+        "removeToken": {
+          "title": "Cabut token perangkat",
+          "body": "Hapus token perangkat saat user keluar."
+        },
+        "revokeKey": {
+          "title": "Cabut API key",
+          "body": "Matikan kunci sebelum masa pakainya habis."
+        },
+        "revokeShareLink": {
+          "title": "Cabut tautan",
+          "body": "Hentikan satu tautan tanpa menyentuh yang lain."
+        },
+        "scan": {
+          "title": "Pindai seluruh akun",
+          "body": "Indeks ulang isi Drive untuk semua akun aktif."
+        },
+        "scanAccount": {
+          "title": "Pindai satu akun",
+          "body": "Indeks ulang isi Drive untuk akun ini saja."
+        },
         "searchFiles": {
           "title": "Cari berkas",
           "body": "Pencarian tahan salah ketik dengan highlight."
+        },
+        "shareFile": {
+          "title": "Buat tautan berbagi",
+          "body": "Buat token publik dengan expiry dan limit view."
+        },
+        "shareFolder": {
+          "title": "Bagikan folder",
+          "body": "Buat token publik folder dengan expiry opsional."
+        },
+        "showAccount": {
+          "title": "Detail akun Google",
+          "body": "Metadata satu akun Drive beserta kuota real-time."
+        },
+        "showFile": {
+          "title": "Detail berkas",
+          "body": "Metadata lengkap satu berkas."
+        },
+        "showFolder": {
+          "title": "Isi folder",
+          "body": "Subfolder dan berkas dalam satu folder."
         },
         "starredFiles": {
           "title": "Berkas berbintang",
           "body": "Semua berkas yang diberi bintang."
         },
-        "recent": {
-          "title": "Terbaru",
-          "body": "Berkas dan folder root terbaru."
+        "streamFile": {
+          "title": "Stream media",
+          "body": "Putar audio, video, atau dokumen tanpa unduh."
         },
-        "byHashes": {
-          "title": "Cek duplikat via hash",
-          "body": "Tanyakan hash SHA-256 sebelum upload."
+        "summary": {
+          "title": "Ringkasan kuota",
+          "body": "Total, terpakai, dan sisa dari semua akun."
         },
-        "listWebhooks": {
-          "title": "Daftar webhook",
-          "body": "Semua webhook yang terdaftar."
+        "syncQuota": {
+          "title": "Sinkronkan kuota",
+          "body": "Paksa baca ulang kuota satu akun."
         },
-        "createWebhook": {
-          "title": "Buat webhook",
-          "body": "Daftar endpoint penerima event."
+        "thumbnail": {
+          "title": "Ambil thumbnail",
+          "body": "Pratinjau WebP hasil generate."
+        },
+        "unshareFile": {
+          "title": "Cabut berbagi file",
+          "body": "Hapus token legacy dan seluruh share link file ini."
+        },
+        "unshareFolder": {
+          "title": "Cabut berbagi folder",
+          "body": "Revoke semua link aktif folder dan hapus token legacy."
+        },
+        "updateAccount": {
+          "title": "Perbarui label akun",
+          "body": "Ubah label akun; hanya label yang disimpan."
+        },
+        "updateFile": {
+          "title": "Ubah berkas",
+          "body": "Ganti nama atau bintangi."
+        },
+        "updateFolder": {
+          "title": "Ubah folder",
+          "body": "Ganti nama atau bintangi folder."
+        },
+        "updateNotificationSettings": {
+          "title": "Perbarui pengaturan notifikasi",
+          "body": "Ubah preferensi notifikasi user."
+        },
+        "upload": {
+          "title": "Upload berkas",
+          "body": "Multipart dengan smart routing ke akun tersisa terbesar."
+        },
+        "uploadChunk": {
+          "title": "Kirim satu chunk",
+          "body": "Kirim potongan per index."
+        },
+        "uploadComplete": {
+          "title": "Rampungkan chunk",
+          "body": "Rakit semua chunk lalu upload."
+        },
+        "uploadFromUrl": {
+          "title": "Upload dari URL",
+          "body": "Server menarik URL publik menjadi berkas."
+        },
+        "uploadInit": {
+          "title": "Mulai chunked upload",
+          "body": "Buka sesi upload lintas-chunk."
         }
       }
     },
@@ -1530,7 +1607,51 @@
       "webhookLabel": "Label pengingat.",
       "webhookUrl": "HTTPS endpoint penerima.",
       "webhookEvents": "Mis. `file.uploaded`, `file.deleted`.",
-      "webhookActive": "Awasi sementara tanpa menghapus konfigurasi."
+      "webhookActive": "Awasi sementara tanpa menghapus konfigurasi.",
+      "accountLabel": "Label tampilan akun (maks 255).",
+      "accountActive": "Status akun: akun nonaktif tidak dipakai routing upload.",
+      "authCode": "Kode otorisasi dari Google (`server_auth_code` atau `code` callback).",
+      "authState": "State terenkripsi dari `/oauth/redirect`; kedaluwarsa dalam 10 menit.",
+      "shareLabel": "Label agar link ini mudah dikenali."
+    },
+    "filter": {
+      "all": "Semua",
+      "files": "Berkas & Upload",
+      "folders": "Folder",
+      "storage": "Akun Drive & Kuota",
+      "auth": "Autentikasi",
+      "share": "Tautan Berbagi",
+      "discovery": "Pencarian & Recent",
+      "webhooks": "Webhooks",
+      "notifications": "Notifikasi",
+      "count": "({{count}})",
+      "aria": "Filter endpoint menurut modul"
+    }
+  },
+  "ref": {
+    "groups": {
+      "notifications": {
+        "title": "Notifikasi",
+        "hint": "Preferensi notifikasi dan token perangkat push."
+      }
+    },
+    "items": {
+      "registerToken": {
+        "title": "Daftarkan token perangkat",
+        "body": "Simpan token FCM perangkat untuk menerima notifikasi push."
+      },
+      "removeToken": {
+        "title": "Cabut token perangkat",
+        "body": "Hapus token perangkat saat user keluar."
+      },
+      "notificationSettings": {
+        "title": "Baca pengaturan notifikasi",
+        "body": "Lihat preferensi jenis notifikasi yang diizinkan."
+      },
+      "updateNotificationSettings": {
+        "title": "Perbarui pengaturan notifikasi",
+        "body": "Ubah preferensi notifikasi user."
+      }
     }
   }
 }

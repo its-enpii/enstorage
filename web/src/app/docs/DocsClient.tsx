@@ -3,17 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  Api,
   ArrowForward,
   Bolt,
-  Cloud,
   DataObject,
-  Folder,
   Hub,
   InsertDriveFile,
   Layers,
   Link as LinkIcon,
-  Notifications,
   Search,
   Shield,
   Speed,
@@ -36,17 +32,16 @@ import {
   API_PREFIX,
   AUTH_SAMPLES,
   BASE_URLS,
-  ENDPOINT_GROUPS,
   ENVELOPE_SAMPLES,
   ERROR_CODES,
   OPENAPI_URLS,
+  REFERENCE,
   REFERENCE_COUNT,
   REFERENCE_GROUPS,
   SCOPE_ORDER,
   SNIPPETS,
   TOTAL_ENDPOINTS,
   type ApiScope,
-  type Endpoint,
 } from '@/lib/apiCatalog';
 import { EndpointReference } from './EndpointReference';
 
@@ -57,40 +52,25 @@ const SECTION_IDS = [
   'start',
   'auth',
   'scopes',
-  'reference',
-  'endpoints',
   'envelope',
   'errors',
+  'reference',
   'rate-limit',
   'openapi',
 ] as const;
 
 type SectionId = (typeof SECTION_IDS)[number];
 
-const SECTIONS: Array<{ id: SectionId; icon: typeof Cloud }> = [
+const SECTIONS: Array<{ id: SectionId; icon: typeof Terminal }> = [
   { id: 'start', icon: Terminal },
   { id: 'auth', icon: VpnKey },
   { id: 'scopes', icon: Shield },
-  { id: 'reference', icon: InsertDriveFile },
-  { id: 'endpoints', icon: Api },
   { id: 'envelope', icon: DataObject },
   { id: 'errors', icon: Bolt },
+  { id: 'reference', icon: InsertDriveFile },
   { id: 'rate-limit', icon: Speed },
   { id: 'openapi', icon: Hub },
 ];
-
-const GROUP_ICONS: Record<string, typeof Cloud> = {
-  auth: VpnKey,
-  'google-accounts': Cloud,
-  storage: Layers,
-  folders: Folder,
-  files: InsertDriveFile,
-  'share-links': LinkIcon,
-  discovery: Search,
-  'api-keys': Api,
-  webhooks: Notifications,
-  admin: Shield,
-};
 
 const SCOPE_CHIP: Record<ApiScope, 'success' | 'primary' | 'danger' | 'warning' | 'default'> = {
   read: 'success',
@@ -109,14 +89,6 @@ function readStoredLang(): SnippetLang {
   const stored = window.localStorage.getItem(LANG_STORAGE_KEY);
   return SNIPPET_LANGS.includes(stored as SnippetLang) ? (stored as SnippetLang) : 'curl';
 }
-
-const METHOD_CLASS: Record<Endpoint['method'], string> = {
-  GET: 'text-primary',
-  POST: 'text-secondary',
-  PUT: 'text-secondary',
-  PATCH: 'text-secondary',
-  DELETE: 'text-error',
-};
 
 /** Highlights the TOC entry whose section is closest to the top of the view. */
 function useActiveSection(ids: readonly string[]) {
@@ -209,7 +181,6 @@ function DocsToc({
   activeId,
   query,
   onQueryChange,
-  matchCount,
   onClear,
   lang,
   onLangChange,
@@ -217,12 +188,24 @@ function DocsToc({
   activeId: string;
   query: string;
   onQueryChange: (value: string) => void;
-  matchCount: number;
   onClear: () => void;
   lang: SnippetLang;
   onLangChange: (value: SnippetLang) => void;
 }) {
   const { t } = useTranslation();
+
+  /** The sidebar search box drives the reference explorer, so it reports its own matches. */
+  const matchCount = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return REFERENCE_COUNT;
+    return REFERENCE.filter((entry) =>
+      `${entry.group} ${entry.method} ${entry.path} ${entry.key} ${t(
+        `docs.ref.items.${entry.key}.title`,
+      )} ${t(`docs.ref.items.${entry.key}.body`)}`
+        .toLowerCase()
+        .includes(needle),
+    ).length;
+  }, [query, t]);
 
   return (
     <Card className="!p-5">
@@ -599,31 +582,6 @@ function Scopes() {
   );
 }
 
-function EndpointRow({ endpoint }: { endpoint: Endpoint }) {
-  const { t } = useTranslation();
-  return (
-    <tr className="border-t border-outline-variant/20 align-top">
-      <td className={clsx('px-4 py-2.5 font-mono text-metadata font-bold', METHOD_CLASS[endpoint.method])}>
-        {endpoint.method}
-      </td>
-      <td className="px-4 py-2.5 font-mono text-metadata text-on-surface">
-        <span className="break-all">{endpoint.path}</span>
-      </td>
-      <td className="px-4 py-2.5">
-        <ScopeChip scope={endpoint.scope} />
-      </td>
-      <td className="px-4 py-2.5 text-metadata leading-relaxed text-on-surface-variant">
-        <InlineMarkdown text={t(`docs.endpoints.${endpoint.key}`)} />
-        {endpoint.flag === 'ownerOnly' && (
-          <span className="ml-1.5 inline-flex items-center rounded-full bg-secondary-container/20 px-1.5 py-0.5 text-metadata font-semibold uppercase tracking-wider text-secondary">
-            {t('docs.ownerOnly')}
-          </span>
-        )}
-      </td>
-    </tr>
-  );
-}
-
 function Reference({ lang, onLangChange, query }: { lang: SnippetLang; onLangChange: (value: SnippetLang) => void; query: string }) {
   const { t } = useTranslation();
 
@@ -635,138 +593,6 @@ function Reference({ lang, onLangChange, query }: { lang: SnippetLang; onLangCha
       subtitleKey="docs.ref.subtitle"
     >
       <EndpointReference lang={lang} onLangChange={onLangChange} query={query} />
-    </DocsSection>
-  );
-}
-
-function Endpoints({
-  query,
-  onQueryChange,
-  onMatchesChange,
-}: {
-  query: string;
-  onQueryChange: (value: string) => void;
-  onMatchesChange: (count: number) => void;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(ENDPOINT_GROUPS.map((group) => [group.id, true])),
-  );
-
-  const normalized = query.trim().toLowerCase();
-
-  const filtered = useMemo(() => {
-    if (!normalized) return ENDPOINT_GROUPS;
-    return ENDPOINT_GROUPS.map((group) => ({
-      ...group,
-      endpoints: group.endpoints.filter((endpoint) => {
-        const haystack = `${group.key} ${endpoint.method} ${endpoint.path} ${t(
-          `docs.endpoints.${endpoint.key}`,
-        )}`.toLowerCase();
-        return haystack.includes(normalized);
-      }),
-    })).filter((group) => group.endpoints.length > 0);
-  }, [normalized, t]);
-
-  const matchCount = filtered.reduce((sum, group) => sum + group.endpoints.length, 0);
-
-  useEffect(() => {
-    onMatchesChange(matchCount);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchCount]);
-
-  return (
-    <DocsSection
-      id="endpoints"
-      eyebrowKey="docs.endpoints.eyebrow"
-      titleKey="docs.endpoints.title"
-      subtitleKey="docs.endpoints.subtitle"
-    >
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {SCOPE_ORDER.map((scope) => (
-          <span key={scope} className="inline-flex items-center gap-1.5">
-            <ScopeChip scope={scope} />
-            <span className="text-metadata text-outline">{t(`docs.scopes.hint.${scope}`)}</span>
-          </span>
-        ))}
-      </div>
-
-      {matchCount === 0 ? (
-        <Card className="!p-6">
-          <p className="text-body-md text-on-surface-variant">{t('docs.searchEmpty')}</p>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="mt-3"
-            onClick={() => onQueryChange('')}
-          >
-            {t('docs.searchReset')}
-          </Button>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {filtered.map((group) => {
-            const Icon = GROUP_ICONS[group.key] ?? Cloud;
-            const isOpen = open[group.id] ?? true;
-            return (
-              <Card key={group.id} className="!p-0">
-                <button
-                  type="button"
-                  onClick={() => setOpen((prev) => ({ ...prev, [group.id]: !isOpen }))}
-                  aria-expanded={isOpen}
-                  className="flex w-full items-center gap-3 border-b border-outline-variant/20 px-5 py-4 text-left"
-                >
-                  <CardIconBox variant="muted" size="md">
-                    <Icon className="!text-2xl" />
-                  </CardIconBox>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-display text-body-lg font-semibold text-on-surface">
-                      {t(`docs.groups.${group.key}`)}
-                    </span>
-                    <span className="block text-metadata text-outline tabular-nums">
-                      {t('docs.groupCount', { count: group.endpoints.length })}
-                    </span>
-                  </span>
-                  <span
-                    className={clsx(
-                      'shrink-0 text-metadata font-semibold uppercase tracking-wider text-primary transition-transform',
-                      !isOpen && 'rotate-180',
-                    )}
-                  >
-                    {isOpen ? t('docs.collapse') : t('docs.expand')}
-                  </span>
-                </button>
-                {isOpen && (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[680px] border-collapse text-left">
-                      <caption className="sr-only">{t(`docs.groups.${group.key}`)}</caption>
-                      <thead>
-                        <tr className="bg-surface-container/60">
-                          {['method', 'path', 'scope', 'description'].map((col) => (
-                            <th
-                              key={col}
-                              scope="col"
-                              className="px-4 py-2 text-metadata font-semibold uppercase tracking-wider text-outline"
-                            >
-                              {t(`docs.endpointColumns.${col}`)}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {group.endpoints.map((endpoint) => (
-                          <EndpointRow key={`${endpoint.method}${endpoint.path}`} endpoint={endpoint} />
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </Card>
-            );
-          })}
-        </div>
-      )}
     </DocsSection>
   );
 }
@@ -950,7 +776,6 @@ export default function DocsClient() {
   const { t } = useTranslation();
   const activeId = useActiveSection(SECTION_IDS);
   const [query, setQuery] = useState('');
-  const [matchCount, setMatchCount] = useState(TOTAL_ENDPOINTS);
   const [lang, setLang] = useState<SnippetLang>('curl');
 
   useEffect(() => {
@@ -1003,21 +828,19 @@ export default function DocsClient() {
               activeId={activeId}
               query={query}
               onQueryChange={setQuery}
-              matchCount={matchCount}
               onClear={() => setQuery('')}
               lang={lang}
               onLangChange={changeLang}
             />
           </aside>
 
-          <div className="min-w-0">
+          <div className="min-w-0 space-y-12">
             <QuickStart lang={lang} onLangChange={changeLang} />
             <Authentication />
             <Scopes />
-            <Reference lang={lang} onLangChange={changeLang} query={query} />
-            <Endpoints query={query} onQueryChange={setQuery} onMatchesChange={setMatchCount} />
             <ResponseFormat />
             <ErrorCodes />
+            <Reference lang={lang} onLangChange={changeLang} query={query} />
             <RateLimiting />
             <OpenApi />
           </div>

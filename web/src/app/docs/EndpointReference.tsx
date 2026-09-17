@@ -22,7 +22,14 @@ import { Chip } from '@/components/Chip';
 import { CodeBlock } from '@/components/CodeBlock';
 import { InlineMarkdown } from '@/components/InlineMarkdown';
 import { MultiLangSnippet, type SnippetLang } from '@/components/MultiLangSnippet';
-import { API_PREFIX, REFERENCE_SECTIONS, type ApiScope, type ParamRow, type ReferenceEntry } from '@/lib/apiCatalog';
+import {
+  API_PREFIX,
+  REFERENCE_SECTIONS,
+  type ApiScope,
+  type ParamRow,
+  type ReferenceEntry,
+  type ReferenceGroup,
+} from '@/lib/apiCatalog';
 
 const SCOPE_CHIP: Record<ApiScope, 'success' | 'primary' | 'danger' | 'warning' | 'default'> = {
   read: 'success',
@@ -33,14 +40,6 @@ const SCOPE_CHIP: Record<ApiScope, 'success' | 'primary' | 'danger' | 'warning' 
   public: 'default',
 };
 
-const METHOD_CLASS: Record<ReferenceEntry['method'], string> = {
-  GET: 'text-primary',
-  POST: 'text-secondary',
-  PUT: 'text-secondary',
-  PATCH: 'text-secondary',
-  DELETE: 'text-error',
-};
-
 const GROUP_ICONS: Record<string, typeof InsertDriveFile> = {
   auth: VpnKey,
   files: InsertDriveFile,
@@ -49,6 +48,30 @@ const GROUP_ICONS: Record<string, typeof InsertDriveFile> = {
   share: LinkIcon,
   discovery: Search,
   webhooks: Notifications,
+  notifications: Notifications,
+};
+
+/** Category filter pills shown above the explorer. */
+type CategoryId = ReferenceGroup['id'] | 'all';
+
+const CATEGORY_TABS: { id: CategoryId; labelKey: string }[] = [
+  { id: 'all', labelKey: 'docs.filter.all' },
+  { id: 'files', labelKey: 'docs.filter.files' },
+  { id: 'folders', labelKey: 'docs.filter.folders' },
+  { id: 'storage', labelKey: 'docs.filter.storage' },
+  { id: 'auth', labelKey: 'docs.filter.auth' },
+  { id: 'share', labelKey: 'docs.filter.share' },
+  { id: 'discovery', labelKey: 'docs.filter.discovery' },
+  { id: 'webhooks', labelKey: 'docs.filter.webhooks' },
+  { id: 'notifications', labelKey: 'docs.filter.notifications' },
+];
+
+const METHOD_BADGE_CLASS: Record<ReferenceEntry['method'], string> = {
+  GET: 'bg-sky-500/15 text-sky-400 border border-sky-500/30',
+  POST: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30',
+  PUT: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
+  PATCH: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
+  DELETE: 'bg-rose-500/15 text-rose-400 border border-rose-500/30',
 };
 
 /** Which parameter tables a card renders, in reading order. */
@@ -122,6 +145,11 @@ function FieldLabel({ text }: { text: string }) {
   );
 }
 
+function ModuleIcon({ entry }: { entry: ReferenceEntry }) {
+  const Icon = GROUP_ICONS[entry.group] ?? InsertDriveFile;
+  return <Icon className="!text-2xl" />;
+}
+
 function EndpointCard({
   entry,
   lang,
@@ -153,14 +181,14 @@ function EndpointCard({
           className="!h-auto w-full !justify-start gap-3 rounded-none !px-4 !py-4 text-left sm:!px-5"
         >
           <CardIconBox variant="muted" size="md">
-            <InsertDriveFile className="!text-2xl" />
+            <ModuleIcon entry={entry} />
           </CardIconBox>
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-2">
               <code
                 className={clsx(
-                  'font-mono text-label-sm font-bold uppercase tracking-wider',
-                  METHOD_CLASS[entry.method],
+                  'px-2 py-0.5 rounded-md font-mono text-xs font-bold uppercase tracking-wider',
+                  METHOD_BADGE_CLASS[entry.method],
                 )}
               >
                 {entry.method}
@@ -170,6 +198,7 @@ function EndpointCard({
                 {entry.path}
               </code>
               <Chip variant={SCOPE_CHIP[entry.scope]}>{t(`docs.scopes.short.${entry.scope}`)}</Chip>
+              {entry.flag === 'ownerOnly' && <Chip variant="warning">{t('docs.ownerOnly')}</Chip>}
             </span>
             <span className="mt-1.5 block font-display text-body-md font-semibold text-on-surface">
               {title}
@@ -265,21 +294,39 @@ export function EndpointReference({
 }) {
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [category, setCategory] = useState<CategoryId>('all');
   const needle = query.trim().toLowerCase();
 
-  const sections = useMemo(() => {
-    if (!needle) return REFERENCE_SECTIONS.map((section) => ({ section, items: section.items }));
-    return REFERENCE_SECTIONS.map((section) => ({
-      section,
-      items: section.items.filter((entry) =>
-        `${entry.group} ${entry.method} ${entry.path} ${entry.key} ${t(
-          `docs.ref.items.${entry.key}.title`,
-        )} ${t(`docs.ref.items.${entry.key}.body`)}`
-          .toLowerCase()
-          .includes(needle),
-      ),
-    })).filter((entry) => entry.items.length > 0);
-  }, [needle, t]);
+  const matching = useMemo(
+    () =>
+      REFERENCE_SECTIONS.map((section) => ({
+        section,
+        items: section.items.filter((entry) =>
+          `${entry.group} ${entry.method} ${entry.path} ${entry.key} ${t(
+            `docs.ref.items.${entry.key}.title`,
+          )} ${t(`docs.ref.items.${entry.key}.body`)}`
+            .toLowerCase()
+            .includes(needle),
+        ),
+      })),
+    [needle, t],
+  );
+
+  const sections = useMemo(
+    () =>
+      (category === 'all'
+        ? matching
+        : matching.filter((group) => group.section.id === category)
+      ).filter((group) => group.items.length > 0),
+    [matching, category],
+  );
+
+  const counts = useMemo(() => {
+    const byGroup = new Map<ReferenceGroup['id'], number>();
+    for (const { section, items } of matching) byGroup.set(section.id, items.length);
+    const total = [...byGroup.values()].reduce((sum, value) => sum + value, 0);
+    return { all: total, ...Object.fromEntries(byGroup) } as Record<CategoryId, number>;
+  }, [matching]);
 
   const ids = sections.flatMap((entry) => entry.items.map((item) => item.id));
   const matchCount = ids.length;
@@ -306,6 +353,35 @@ export function EndpointReference({
 
   return (
     <div className="space-y-8">
+      <div
+        role="tablist"
+        aria-label={t('docs.filter.aria')}
+        className="flex flex-wrap items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-3"
+      >
+        {CATEGORY_TABS.map((tab) => {
+          const active = category === tab.id;
+          const count = counts[tab.id] ?? 0;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setCategory(tab.id)}
+              className={clsx(
+                'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-metadata font-semibold transition-colors',
+                active
+                  ? 'bg-primary text-on-primary shadow-xs'
+                  : 'bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high',
+              )}
+            >
+              {t(tab.labelKey)}
+              <span className="tabular-nums opacity-80">{t('docs.filter.count', { count })}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-container px-4 py-3">
         <p className="text-metadata text-on-surface-variant">
           <InlineMarkdown text={t('docs.ref.legend', { count: matchCount })} />

@@ -1261,6 +1261,10 @@
         "webhooks": {
           "title": "Webhooks",
           "hint": "Push events into your own systems."
+        },
+        "notifications": {
+          "title": "Notifications",
+          "hint": "Notification preferences and push device tokens."
         }
       },
       "notes": {
@@ -1288,9 +1292,90 @@
         "starredNote": "Stars live in the EnStorage index, not as a Google Drive property.",
         "cursorNote": "Pass `next_cursor` back unchanged; the format is opaque and can change.",
         "webhookSanctumNote": "Like API keys: session auth only.",
-        "signatureNote": "Verify the `X-Webhook-Signature` header with that secret before trusting a payload."
+        "signatureNote": "Verify the `X-Webhook-Signature` header with that secret before trusting a payload.",
+        "oauthCallbackWebNote": "Google rejects custom URI schemes, so this public endpoint must be the `redirect_uri`: its HTML then bounces to `enstorage://oauth-callback?code=...&state=...` for the app WebView to intercept."
       },
       "items": {
+        "bulkDelete": {
+          "title": "Batch delete",
+          "body": "Remove up to 50 files in one request."
+        },
+        "byHashes": {
+          "title": "Duplicate check by hash",
+          "body": "Ask which SHA-256 hashes already exist."
+        },
+        "createFileShareLink": {
+          "title": "Add a share link",
+          "body": "Create another link with its own limits."
+        },
+        "createFolder": {
+          "title": "Create a folder",
+          "body": "Add a folder in the root or under a parent."
+        },
+        "createFolderShareLink": {
+          "title": "Create a folder link",
+          "body": "Add a second link to the same folder, with its own view budget."
+        },
+        "createKey": {
+          "title": "Create an API key",
+          "body": "The response carries `plaintext` exactly once."
+        },
+        "createWebhook": {
+          "title": "Create a webhook",
+          "body": "Register an endpoint to receive events."
+        },
+        "deleteFile": {
+          "title": "Delete permanently",
+          "body": "The object disappears from Google Drive."
+        },
+        "deleteFolder": {
+          "title": "Delete a folder",
+          "body": "Remove the folder and its contents."
+        },
+        "destroyAccount": {
+          "title": "Revoke Google account",
+          "body": "Detach the account and revoke its Google token (best effort)."
+        },
+        "downloadFile": {
+          "title": "Download a file",
+          "body": "Byte stream proxied from Drive."
+        },
+        "downloadFolder": {
+          "title": "Download a folder",
+          "body": "Everything arrives as one ZIP."
+        },
+        "fileStatus": {
+          "title": "Upload status",
+          "body": "Follow the write to Google Drive."
+        },
+        "listAccounts": {
+          "title": "List Google accounts",
+          "body": "Connected Drive accounts with per-account quota."
+        },
+        "listFileShareLinks": {
+          "title": "List share links",
+          "body": "Every active link on one file."
+        },
+        "listFiles": {
+          "title": "List files",
+          "body": "Filters, sorting, and pagination in one call."
+        },
+        "listFolderShareLinks": {
+          "title": "List folder links",
+          "body": "Folder links that are still active."
+        },
+        "listFolders": {
+          "title": "List folders",
+          "body": "Direct children of one folder."
+        },
+        "listKeys": {
+          "title": "List API keys",
+          "body": "Every key owned by this account."
+        },
+        "listWebhooks": {
+          "title": "List webhooks",
+          "body": "Every registered webhook."
+        },
         "login": {
           "title": "Sign in with email",
           "body": "Exchange an email and password for a Sanctum session."
@@ -1299,133 +1384,33 @@
           "title": "Current session",
           "body": "The signed-in user record."
         },
-        "listKeys": {
-          "title": "List API keys",
-          "body": "Every key owned by this account."
-        },
-        "createKey": {
-          "title": "Create an API key",
-          "body": "The response carries `plaintext` exactly once."
-        },
-        "revokeKey": {
-          "title": "Revoke an API key",
-          "body": "Retire a key before its expiry date."
-        },
-        "upload": {
-          "title": "Upload files",
-          "body": "Multipart upload with smart routing to the roomiest account."
-        },
-        "listFiles": {
-          "title": "List files",
-          "body": "Filters, sorting, and pagination in one call."
-        },
-        "showFile": {
-          "title": "File details",
-          "body": "Full metadata for one file."
-        },
-        "fileStatus": {
-          "title": "Upload status",
-          "body": "Follow the write to Google Drive."
-        },
-        "downloadFile": {
-          "title": "Download a file",
-          "body": "Byte stream proxied from Drive."
-        },
-        "streamFile": {
-          "title": "Stream media",
-          "body": "Play audio, video, or documents without downloading first."
-        },
-        "thumbnail": {
-          "title": "Fetch thumbnail",
-          "body": "Generated WebP preview."
-        },
-        "updateFile": {
-          "title": "Update a file",
-          "body": "Rename or star it."
-        },
         "moveFile": {
           "title": "Move a file",
           "body": "Relocate it to another folder or the root."
-        },
-        "deleteFile": {
-          "title": "Delete permanently",
-          "body": "The object disappears from Google Drive."
-        },
-        "bulkDelete": {
-          "title": "Batch delete",
-          "body": "Remove up to 50 files in one request."
-        },
-        "uploadFromUrl": {
-          "title": "Upload from URL",
-          "body": "The server pulls a public URL into a file."
-        },
-        "uploadInit": {
-          "title": "Start a chunked upload",
-          "body": "Open a multi-chunk upload session."
-        },
-        "uploadChunk": {
-          "title": "Send one chunk",
-          "body": "Upload a single part by index."
-        },
-        "uploadComplete": {
-          "title": "Finish chunked upload",
-          "body": "Assemble the parts and store the file."
-        },
-        "createFolder": {
-          "title": "Create a folder",
-          "body": "Add a folder in the root or under a parent."
-        },
-        "listFolders": {
-          "title": "List folders",
-          "body": "Direct children of one folder."
-        },
-        "showFolder": {
-          "title": "Folder contents",
-          "body": "Subfolders and files inside one folder."
-        },
-        "updateFolder": {
-          "title": "Update a folder",
-          "body": "Rename or star it."
         },
         "moveFolder": {
           "title": "Move a folder",
           "body": "Relocate a whole subtree."
         },
-        "downloadFolder": {
-          "title": "Download a folder",
-          "body": "Everything arrives as one ZIP."
+        "notificationSettings": {
+          "title": "Read notification settings",
+          "body": "View which notification types the user allows."
         },
-        "deleteFolder": {
-          "title": "Delete a folder",
-          "body": "Remove the folder and its contents."
+        "oauthCallback": {
+          "title": "Mobile OAuth callback",
+          "body": "WebView flow: post the intercepted `code` + `state`."
         },
-        "summary": {
-          "title": "Storage summary",
-          "body": "Total, used, and free across every account."
+        "oauthCallbackWeb": {
+          "title": "Web OAuth callback",
+          "body": "Public page that forwards the `code` to the mobile app."
         },
-        "listAccounts": {
-          "title": "List Google accounts",
-          "body": "Connected Drive accounts with per-account quota."
+        "oauthExchange": {
+          "title": "Exchange OAuth code",
+          "body": "Mobile: swap a `server_auth_code` from the native SDK."
         },
-        "syncQuota": {
-          "title": "Sync quota",
-          "body": "Force one account to re-read its quota."
-        },
-        "shareFile": {
-          "title": "Create a share link",
-          "body": "Issue a public token with expiry and view limits."
-        },
-        "listFileShareLinks": {
-          "title": "List share links",
-          "body": "Every active link on one file."
-        },
-        "createFileShareLink": {
-          "title": "Add a share link",
-          "body": "Create another link with its own limits."
-        },
-        "revokeShareLink": {
-          "title": "Revoke a link",
-          "body": "Kill one link without touching the rest."
+        "oauthRedirect": {
+          "title": "OAuth URL",
+          "body": "Build the authorization URL; `state` is signed for this user."
         },
         "publicShare": {
           "title": "Public access",
@@ -1435,29 +1420,121 @@
           "title": "Link page",
           "body": "Redirect to the viewer for one token."
         },
+        "recent": {
+          "title": "Recent items",
+          "body": "Newest root-level files and folders."
+        },
+        "registerToken": {
+          "title": "Register device token",
+          "body": "Store a device FCM token to receive push notifications."
+        },
+        "removeToken": {
+          "title": "Remove device token",
+          "body": "Delete the device token when the user signs out."
+        },
+        "revokeKey": {
+          "title": "Revoke an API key",
+          "body": "Retire a key before its expiry date."
+        },
+        "revokeShareLink": {
+          "title": "Revoke a link",
+          "body": "Kill one link without touching the rest."
+        },
+        "scan": {
+          "title": "Scan every account",
+          "body": "Re-index Drive contents for all active accounts."
+        },
+        "scanAccount": {
+          "title": "Scan one account",
+          "body": "Re-index Drive contents for this account only."
+        },
         "searchFiles": {
           "title": "Search files",
           "body": "Typo-tolerant search with highlighted matches."
+        },
+        "shareFile": {
+          "title": "Create a share link",
+          "body": "Issue a public token with expiry and view limits."
+        },
+        "shareFolder": {
+          "title": "Share a folder",
+          "body": "Issue a public folder token with optional expiry."
+        },
+        "showAccount": {
+          "title": "Google account details",
+          "body": "One Drive account with its live quota snapshot."
+        },
+        "showFile": {
+          "title": "File details",
+          "body": "Full metadata for one file."
+        },
+        "showFolder": {
+          "title": "Folder contents",
+          "body": "Subfolders and files inside one folder."
         },
         "starredFiles": {
           "title": "Starred files",
           "body": "Every file you starred."
         },
-        "recent": {
-          "title": "Recent items",
-          "body": "Newest root-level files and folders."
+        "streamFile": {
+          "title": "Stream media",
+          "body": "Play audio, video, or documents without downloading first."
         },
-        "byHashes": {
-          "title": "Duplicate check by hash",
-          "body": "Ask which SHA-256 hashes already exist."
+        "summary": {
+          "title": "Storage summary",
+          "body": "Total, used, and free across every account."
         },
-        "listWebhooks": {
-          "title": "List webhooks",
-          "body": "Every registered webhook."
+        "syncQuota": {
+          "title": "Sync quota",
+          "body": "Force one account to re-read its quota."
         },
-        "createWebhook": {
-          "title": "Create a webhook",
-          "body": "Register an endpoint to receive events."
+        "thumbnail": {
+          "title": "Fetch thumbnail",
+          "body": "Generated WebP preview."
+        },
+        "unshareFile": {
+          "title": "Revoke file sharing",
+          "body": "Delete the legacy token and every share link on this file."
+        },
+        "unshareFolder": {
+          "title": "Revoke folder sharing",
+          "body": "Revoke every active link on the folder and clear the token."
+        },
+        "updateAccount": {
+          "title": "Update account label",
+          "body": "Rename the account; only the label is stored."
+        },
+        "updateFile": {
+          "title": "Update a file",
+          "body": "Rename or star it."
+        },
+        "updateFolder": {
+          "title": "Update a folder",
+          "body": "Rename or star it."
+        },
+        "updateNotificationSettings": {
+          "title": "Update notification settings",
+          "body": "Change the user notification preferences."
+        },
+        "upload": {
+          "title": "Upload files",
+          "body": "Multipart upload with smart routing to the roomiest account."
+        },
+        "uploadChunk": {
+          "title": "Send one chunk",
+          "body": "Upload a single part by index."
+        },
+        "uploadComplete": {
+          "title": "Finish chunked upload",
+          "body": "Assemble the parts and store the file."
+        },
+        "uploadFromUrl": {
+          "title": "Upload from URL",
+          "body": "The server pulls a public URL into a file."
+        },
+        "uploadInit": {
+          "title": "Start a chunked upload",
+          "body": "Open a multi-chunk upload session."
         }
       }
     },
@@ -1530,7 +1607,51 @@
       "webhookLabel": "Reminder label.",
       "webhookUrl": "HTTPS receiving endpoint.",
       "webhookEvents": "For example `file.uploaded`, `file.deleted`.",
-      "webhookActive": "Pause watching without deleting the configuration."
+      "webhookActive": "Pause watching without deleting the configuration.",
+      "accountLabel": "Display label for the account (max 255).",
+      "accountActive": "Account status: inactive accounts are skipped by upload routing.",
+      "authCode": "Authorization code from Google (`server_auth_code` or the callback `code`).",
+      "authState": "Encrypted state from `/oauth/redirect`; expires after 10 minutes.",
+      "shareLabel": "Label to make this link easy to recognize."
+    },
+    "filter": {
+      "all": "All",
+      "files": "Files & Upload",
+      "folders": "Folders",
+      "storage": "Drive Accounts & Quota",
+      "auth": "Authentication",
+      "share": "Share Links",
+      "discovery": "Search & Recent",
+      "webhooks": "Webhooks",
+      "notifications": "Notifications",
+      "count": "({{count}})",
+      "aria": "Filter endpoints by module"
+    }
+  },
+  "ref": {
+    "groups": {
+      "notifications": {
+        "title": "Notifications",
+        "hint": "Notification preferences and push device tokens."
+      }
+    },
+    "items": {
+      "registerToken": {
+        "title": "Register device token",
+        "body": "Store a device FCM token to receive push notifications."
+      },
+      "removeToken": {
+        "title": "Remove device token",
+        "body": "Delete the device token when the user signs out."
+      },
+      "notificationSettings": {
+        "title": "Read notification settings",
+        "body": "View which notification types the user allows."
+      },
+      "updateNotificationSettings": {
+        "title": "Update notification settings",
+        "body": "Change the user notification preferences."
+      }
     }
   }
 }

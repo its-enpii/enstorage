@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "docs:verify": "node scripts/verify-api-docs.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

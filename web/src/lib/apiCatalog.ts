@@ -39,6 +39,7 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
       { method: 'POST', path: '/auth/register', scope: 'public', key: 'register' },
       { method: 'POST', path: '/auth/login', scope: 'public', key: 'login' },
       { method: 'POST', path: '/auth/logout', scope: 'sanctum', key: 'logout' },
+      { method: 'DELETE', path: '/auth/account', scope: 'sanctum', key: 'deleteAccount' },
       { method: 'GET', path: '/auth/me', scope: 'sanctum', key: 'me' },
       { method: 'PATCH', path: '/auth/me', scope: 'sanctum', key: 'updateMe' },
       { method: 'POST', path: '/auth/change-password', scope: 'sanctum', key: 'changePassword' },
@@ -58,6 +59,7 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
       { method: 'DELETE', path: '/google-accounts/{id}', scope: 'delete', key: 'destroyAccount' },
       { method: 'POST', path: '/google-accounts/{id}/sync-quota', scope: 'write', key: 'syncQuota' },
       { method: 'POST', path: '/google-accounts/scan', scope: 'write', key: 'scan' },
+      { method: 'POST', path: '/google-accounts/{id}/scan', scope: 'write', key: 'scanAccount' },
       { method: 'GET', path: '/google-accounts/oauth/redirect', scope: 'sanctum', key: 'oauthRedirect' },
       { method: 'POST', path: '/google-accounts/oauth/exchange', scope: 'sanctum', key: 'oauthExchange' },
       { method: 'POST', path: '/google-accounts/oauth/callback', scope: 'sanctum', key: 'oauthCallback' },
@@ -364,6 +366,8 @@ export type ReferenceEntry = {
   scope: ApiScope;
   /** i18n suffix under `docs.ref.items.*`. */
   key: string;
+  /** Extra badge, e.g. owner-only. */
+  flag?: Endpoint['flag'];
   /** Route exists in the mirror table above; kept in sync by `docs` tests. */
   route?: Endpoint;
   /** Request shape used to generate the multi-language samples. */
@@ -389,6 +393,7 @@ export const REFERENCE_GROUPS: ReferenceGroup[] = [
   { id: 'share', key: 'share', hintKey: 'shareHint' },
   { id: 'discovery', key: 'discovery', hintKey: 'discoveryHint' },
   { id: 'webhooks', key: 'webhooks', hintKey: 'webhooksHint' },
+  { id: 'notifications', key: 'notifications', hintKey: 'notificationsHint' },
 ];
 
 const AUTH_ROW: ParamRow = { name: 'Authorization', type: 'string', required: true, key: 'bearerHeader' };
@@ -436,6 +441,29 @@ const PAGINATION_ROWS: ParamRow[] = [
 ];
 
 export const REFERENCE: ReferenceEntry[] = [
+  {
+    id: 'auth-delete-account',
+    group: 'auth',
+    method: 'DELETE',
+    path: '/auth/account',
+    scope: 'sanctum',
+    key: 'deleteAccount',
+    call: { method: 'DELETE', path: '/auth/account', expect: '200 OK' },
+    headerRows: [AUTH_ROW],
+    pathRows: [],
+    queryRows: [],
+    bodyRows: [],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": null,
+  "message": "Akun berhasil dihapus.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '403'],
+  },
   /* ------------------------------ auth & keys ------------------------------ */
   {
     id: 'auth-login',
@@ -604,6 +632,246 @@ export const REFERENCE: ReferenceEntry[] = [
 }`,
     },
     errors: ['401', '404'],
+  },
+  {
+    id: 'auth-register',
+    group: 'auth',
+    method: 'POST',
+    path: '/auth/register',
+    scope: 'public',
+    key: 'register',
+    call: {
+      method: 'POST',
+      path: '/auth/register',
+      public: true,
+      body: { name: 'Arafi', email: 'arafi@example.com', password: 'password123', password_confirmation: 'password123' },
+      expect: '201 Created',
+      notes: ['Create an account. Throttled to slow down scripted sign-up floods.'],
+    },
+    bodyRows: [
+      { name: 'name', type: 'string', required: true, key: 'name' },
+      { name: 'email', type: 'string', required: true, key: 'email' },
+      { name: 'password', type: 'string', required: true, key: 'password' },
+      { name: 'password_confirmation', type: 'string', required: true, key: 'passwordConfirmation' },
+    ],
+    response: {
+      status: '201',
+      code: `{
+  "success": true,
+  "data": {
+    "user": { "id": "01j9zq8h4m", "name": "Arafi", "email": "arafi@example.com", "role": "owner", "locale": "id" },
+    "token": "2|sd9f8sd9f8sd9f..."
+  },
+  "message": "Registrasi berhasil.",
+  "meta": {}
+}`,
+    },
+    errors: ['422'],
+  },
+  {
+    id: 'auth-logout',
+    group: 'auth',
+    method: 'POST',
+    path: '/auth/logout',
+    scope: 'sanctum',
+    key: 'logout',
+    call: {
+      method: 'POST',
+      path: '/auth/logout',
+      expect: '200 OK',
+      notes: ['Revoke the token sent in this request. The session cookie is cleared too.'],
+    },
+    headerRows: [AUTH_ROW],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": null,
+  "message": "Logout berhasil.",
+  "meta": {}
+}`,
+    },
+    errors: ['401'],
+  },
+  {
+    id: 'auth-update-me',
+    group: 'auth',
+    method: 'PATCH',
+    path: '/auth/me',
+    scope: 'sanctum',
+    key: 'updateMe',
+    call: {
+      method: 'PATCH',
+      path: '/auth/me',
+      body: { name: 'Arafi Arta', email: 'arafi@example.com' },
+      expect: '200 OK',
+      notes: ['Send only the fields you want to change; omitted fields are left alone.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    bodyRows: [
+      { name: 'name', type: 'string', key: 'name' },
+      { name: 'email', type: 'string', key: 'email' },
+    ],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "user": { "id": "01j9zq8h4m", "name": "Arafi Arta", "email": "arafi@example.com", "role": "owner", "locale": "id" }
+  },
+  "message": "Profil berhasil diperbarui.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '422'],
+  },
+  {
+    id: 'auth-change-password',
+    group: 'auth',
+    method: 'POST',
+    path: '/auth/change-password',
+    scope: 'sanctum',
+    key: 'changePassword',
+    call: {
+      method: 'POST',
+      path: '/auth/change-password',
+      body: { current_password: 'oldpassword123', password: 'newpassword123', password_confirmation: 'newpassword123' },
+      expect: '200 OK',
+      notes: ['The new password must differ from the current one. Other sessions keep working.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    bodyRows: [
+      { name: 'current_password', type: 'string', required: true, key: 'currentPassword' },
+      { name: 'password', type: 'string', required: true, key: 'newPassword' },
+      { name: 'password_confirmation', type: 'string', required: true, key: 'passwordConfirmation' },
+    ],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": null,
+  "message": "Kata sandi berhasil diperbarui.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '422'],
+  },
+  {
+    id: 'auth-locale',
+    group: 'auth',
+    method: 'PATCH',
+    path: '/auth/locale',
+    scope: 'sanctum',
+    key: 'locale',
+    call: {
+      method: 'PATCH',
+      path: '/auth/locale',
+      body: { locale: 'en' },
+      expect: '200 OK',
+      notes: ['Persists the UI language; the next request serves that locale.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    bodyRows: [{ name: 'locale', type: 'string', required: true, key: 'locale', default: 'id' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": { "locale": "en" },
+  "message": "Locale berhasil diperbarui.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '422'],
+  },
+  {
+    id: 'auth-google',
+    group: 'auth',
+    method: 'POST',
+    path: '/auth/google',
+    scope: 'public',
+    key: 'googleAuth',
+    call: {
+      method: 'POST',
+      path: '/auth/google',
+      public: true,
+      body: { id_token: 'eyJhbGciOiJSUzI1NiIs...' },
+      expect: '200 OK',
+      notes: ['Native Google Sign-In flow: exchange the ID token for a Sanctum token.'],
+    },
+    bodyRows: [{ name: 'id_token', type: 'string', required: true, key: 'idToken' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "user": { "id": "01j9zq8h4m", "name": "Arafi", "email": "arafi@example.com", "role": "owner" },
+    "token": "3|9sdf8sd7f6s5..."
+  },
+  "message": "Autentikasi Google berhasil.",
+  "meta": {}
+}`,
+    },
+    errors: ['422'],
+  },
+  {
+    id: 'auth-google-redirect',
+    group: 'auth',
+    method: 'GET',
+    path: '/auth/google/redirect',
+    scope: 'sanctum',
+    key: 'googleRedirect',
+    call: {
+      method: 'GET',
+      path: '/auth/google/redirect',
+      expect: '200 OK',
+      notes: ['Open the returned URL in a browser; the callback closes the loop.'],
+    },
+    headerRows: [AUTH_ROW],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "url": "https://accounts.google.com/o/oauth2/v2/auth?client_id=...&redirect_uri=...&response_type=code&scope=..."
+  },
+  "message": "URL redirect Google berhasil dibuat.",
+  "meta": {}
+}`,
+    },
+    errors: ['401'],
+  },
+  {
+    id: 'auth-google-callback',
+    group: 'auth',
+    method: 'GET',
+    path: '/auth/google/callback',
+    scope: 'public',
+    key: 'googleCallback',
+    call: {
+      method: 'GET',
+      path: '/auth/google/callback',
+      public: true,
+      query: { code: '4/0AVMBs8...', state: 'csrf_state_token' },
+      expect: '302 Redirect',
+      notes: ['Google sends the browser here. The state must match the one from the redirect.'],
+    },
+    queryRows: [
+      { name: 'code', type: 'string', required: true, key: 'authCode' },
+      { name: 'state', type: 'string', required: true, key: 'authState' },
+    ],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "token": "4|k2j3h4k2j3h4...",
+    "redirect_url": "https://enstorage.enpiistudio.com/auth/callback"
+  },
+  "message": "Login Google callback berhasil diproses.",
+  "meta": {}
+}`,
+    },
+    errors: ['422'],
   },
 
   /* --------------------------------- files -------------------------------- */
@@ -1444,7 +1712,263 @@ Content-Disposition: attachment; filename="Laporan-2026.zip"
     errors: ['404', '502'],
   },
 
+  {
+    id: 'accounts-show',
+    group: 'storage',
+    method: 'GET',
+    path: '/google-accounts/{id}',
+    scope: 'read',
+    key: 'showAccount',
+    call: {
+      method: 'GET',
+      path: '/google-accounts/01j9zq8h4m',
+      expect: '200 OK',
+      notes: ['One connected account, always with a live quota snapshot.'],
+    },
+    headerRows: [AUTH_ROW],
+    pathRows: [{ name: 'id', type: 'string', required: true, key: 'accountId' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "account": {
+      "id": "01j9zq8h4m",
+      "email": "work@example.com",
+      "label": "Akun Kerja",
+      "total_space": 107374182400,
+      "used_space": 34359738368,
+      "is_active": true
+    }
+  },
+  "message": "Detail akun.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '404'],
+  },
+  {
+    id: 'accounts-update',
+    group: 'storage',
+    method: 'PATCH',
+    path: '/google-accounts/{id}',
+    scope: 'write',
+    key: 'updateAccount',
+    call: {
+      method: 'PATCH',
+      path: '/google-accounts/01j9zq8h4m',
+      body: { label: 'Akun Tim Desain', is_active: true },
+      expect: '200 OK',
+      notes: ['Rename the account label; only `label` is persisted.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    pathRows: [{ name: 'id', type: 'string', required: true, key: 'accountId' }],
+    bodyRows: [
+      { name: 'label', type: 'string', required: false, key: 'accountLabel' },
+      { name: 'is_active', type: 'boolean', required: false, key: 'accountActive' },
+    ],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "account": { "id": "01j9zq8h4m", "label": "Akun Tim Desain", "is_active": true }
+  },
+  "message": "Akun berhasil diperbarui.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '404', '422'],
+  },
+  {
+    id: 'accounts-destroy',
+    group: 'storage',
+    method: 'DELETE',
+    path: '/google-accounts/{id}',
+    scope: 'delete',
+    key: 'destroyAccount',
+    call: {
+      method: 'DELETE',
+      path: '/google-accounts/01j9zq8h4m',
+      expect: '200 OK',
+      notes: ['Detaches the account and revokes its Google token (best effort).'],
+    },
+    headerRows: [AUTH_ROW],
+    pathRows: [{ name: 'id', type: 'string', required: true, key: 'accountId' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": null,
+  "message": "Akun Google berhasil dihapus.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '404'],
+  },
+  {
+    id: 'accounts-scan-global',
+    group: 'storage',
+    method: 'POST',
+    path: '/google-accounts/scan',
+    scope: 'write',
+    key: 'scan',
+    call: {
+      method: 'POST',
+      path: '/google-accounts/scan',
+      expect: '200 OK',
+      notes: ['Re-index Drive for every active account at once.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": { "scanned_accounts": 3, "indexed_files": 128 },
+  "message": "Pemindaian seluruh akun selesai.",
+  "meta": {}
+}`,
+    },
+    errors: ['401'],
+  },
+  {
+    id: 'accounts-scan-single',
+    group: 'storage',
+    method: 'POST',
+    path: '/google-accounts/{id}/scan',
+    scope: 'write',
+    key: 'scanAccount',
+    call: {
+      method: 'POST',
+      path: '/google-accounts/01j9zq8h4m/scan',
+      expect: '200 OK',
+      notes: ['Re-index Drive for one account only.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    pathRows: [{ name: 'id', type: 'string', required: true, key: 'accountId' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": { "account_id": "01j9zq8h4m", "indexed_files": 42 },
+  "message": "Pemindaian akun selesai.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '404'],
+  },
+  {
+    id: 'accounts-oauth-redirect',
+    group: 'storage',
+    method: 'GET',
+    path: '/google-accounts/oauth/redirect',
+    scope: 'sanctum',
+    key: 'oauthRedirect',
+    call: {
+      method: 'GET',
+      path: '/google-accounts/oauth/redirect',
+      expect: '200 OK',
+      notes: ['Signed `state` ties the callback back to this user.'],
+    },
+    headerRows: [AUTH_ROW],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": { "url": "https://accounts.google.com/o/oauth2/v2/auth?..." },
+  "message": "URL OAuth dibuat.",
+  "meta": {}
+}`,
+    },
+    errors: ['401'],
+  },
+  {
+    id: 'accounts-oauth-exchange',
+    group: 'storage',
+    method: 'POST',
+    path: '/google-accounts/oauth/exchange',
+    scope: 'sanctum',
+    key: 'oauthExchange',
+    call: {
+      method: 'POST',
+      path: '/google-accounts/oauth/exchange',
+      body: { code: '4/0AVMB...' },
+      expect: '200 OK',
+      notes: ['Mobile flow: swap a `server_auth_code` from the native SDK.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    bodyRows: [{ name: 'code', type: 'string', required: true, key: 'authCode' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": { "account": { "id": "01j9zq8h4m", "email": "new@example.com" } },
+  "message": "Akun berhasil dihubungkan.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '422'],
+  },
+  {
+    id: 'accounts-oauth-callback',
+    group: 'storage',
+    method: 'POST',
+    path: '/google-accounts/oauth/callback',
+    scope: 'sanctum',
+    key: 'oauthCallback',
+    call: {
+      method: 'POST',
+      path: '/google-accounts/oauth/callback',
+      body: { code: '4/0AVMB...', state: 'xyz' },
+      expect: '200 OK',
+      notes: ['In-app WebView flow: post the intercepted `code` + signed `state`.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    bodyRows: [
+      { name: 'code', type: 'string', required: true, key: 'authCode' },
+      { name: 'state', type: 'string', required: true, key: 'authState' },
+    ],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": { "account": { "id": "01j9zq8h4m", "email": "mobile@example.com" } },
+  "message": "Akun mobile berhasil dihubungkan.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '422'],
+  },
   /* ------------------------------ share links ----------------------------- */
+  {
+    id: 'files-unshare',
+    group: 'share',
+    method: 'DELETE',
+    path: '/files/{id}/share',
+    scope: 'delete',
+    key: 'unshareFile',
+    call: {
+      method: 'DELETE',
+      path: '/files/8b64e5a3-0a58-4c6f-9d2b-7f1e4d0cbe31/share',
+      expect: '200 OK',
+      notes: [
+        'Revoke the legacy share token and every share-link row for this file.',
+        'Old URLs hard-fail with 404 — this deletes the token rather than soft-revoking it.',
+      ],
+    },
+    headerRows: [AUTH_ROW],
+    pathRows: [{ name: 'id', type: 'uuid', required: true, key: 'fileId' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": null,
+  "message": "Tautan berbagi berhasil dicabut.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '404'],
+  },
   {
     id: 'share-create',
     group: 'share',
@@ -1566,6 +2090,117 @@ Content-Disposition: attachment; filename="Laporan-2026.zip"
     errors: ['404', '422'],
   },
   {
+    id: 'folders-share',
+    group: 'share',
+    method: 'POST',
+    path: '/folders/{id}/share',
+    scope: 'write',
+    key: 'shareFolder',
+    call: {
+      method: 'POST',
+      path: '/folders/4d0cbe31-0a58-4c6f-9d2b-7f1e5a3c8b64/share',
+      body: { expires_at: '2026-12-31T23:59:59Z' },
+      expect: '200 OK',
+      notes: ['Legacy folder share: one token mirrored to the `share_links` pivot.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    pathRows: [{ name: 'id', type: 'uuid', required: true, key: 'folderId' }],
+    bodyRows: [{ name: 'expires_at', type: 'ISO-8601', required: false, key: 'shareExpires' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": { "share_token": "fld_9sd8f7s6d5f..." },
+  "message": "Tautan folder dibuat.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '404', '422'],
+  },
+  {
+    id: 'folders-unshare',
+    group: 'share',
+    method: 'DELETE',
+    path: '/folders/{id}/share',
+    scope: 'delete',
+    key: 'unshareFolder',
+    call: {
+      method: 'DELETE',
+      path: '/folders/4d0cbe31-0a58-4c6f-9d2b-7f1e5a3c8b64/share',
+      expect: '200 OK',
+      notes: ['Revoke every active link on this folder and clear the legacy token.'],
+    },
+    headerRows: [AUTH_ROW],
+    pathRows: [{ name: 'id', type: 'uuid', required: true, key: 'folderId' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": null,
+  "message": "Tautan folder dicabut.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '404'],
+  },
+  {
+    id: 'folders-share-links-list',
+    group: 'share',
+    method: 'GET',
+    path: '/folders/{id}/share-links',
+    scope: 'read',
+    key: 'listFolderShareLinks',
+    call: {
+      method: 'GET',
+      path: '/folders/4d0cbe31-0a58-4c6f-9d2b-7f1e5a3c8b64/share-links',
+      expect: '200 OK',
+      notes: ['Active links only: expired, exhausted, and revoked ones are filtered out.'],
+    },
+    headerRows: [AUTH_ROW],
+    pathRows: [{ name: 'id', type: 'uuid', required: true, key: 'folderId' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": { "share_links": [] },
+  "message": "Daftar tautan folder.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '404'],
+  },
+  {
+    id: 'folders-share-link-create',
+    group: 'share',
+    method: 'POST',
+    path: '/folders/{id}/share-links',
+    scope: 'write',
+    key: 'createFolderShareLink',
+    call: {
+      method: 'POST',
+      path: '/folders/4d0cbe31-0a58-4c6f-9d2b-7f1e5a3c8b64/share-links',
+      body: { label: 'Untuk Klien', max_views: 100 },
+      expect: '201 Created',
+      notes: ['Second independent link on the same folder, with its own budget.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    pathRows: [{ name: 'id', type: 'uuid', required: true, key: 'folderId' }],
+    bodyRows: [
+      { name: 'label', type: 'string', required: false, key: 'shareLabel' },
+      { name: 'max_views', type: 'integer', required: false, key: 'shareMaxViews' },
+    ],
+    response: {
+      status: '201',
+      code: `{
+  "success": true,
+  "data": { "share_link": { "id": "sh_123", "token": "tok_xyz" } },
+  "message": "Tautan folder berhasil dibuat.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '404', '422'],
+  },
+  {
     id: 'share-link-revoke',
     group: 'share',
     method: 'DELETE',
@@ -1636,6 +2271,39 @@ Content-Disposition: attachment; filename="Laporan-2026.zip"
     },
     errors: ['404', '410'],
     noteKey: 'streamNote',
+  },
+  {
+    id: 'accounts-oauth-callback-web',
+    group: 'storage',
+    method: 'GET',
+    path: '/google-accounts/oauth/callback-web',
+    scope: 'public',
+    key: 'oauthCallbackWeb',
+    call: {
+      method: 'GET',
+      path: '/google-accounts/oauth/callback-web',
+      public: true,
+      query: { code: '4/0AV...', state: 'xyz' },
+      expect: '200 OK',
+      notes: [
+        'Google-side HTTPS destination, no auth. Google rejects custom URI schemes,',
+        'so this HTML hands the code back to the mobile app via enstorage://oauth-callback.',
+      ],
+    },
+    queryRows: [
+      { name: 'code', type: 'string', required: true, key: 'authCode' },
+      { name: 'state', type: 'string', required: true, key: 'authState' },
+    ],
+    response: {
+      status: '200',
+      lang: 'http',
+      code: `HTTP/1.1 200 OK
+Content-Type: text/html; charset=utf-8
+
+<!-- HTML page with JS redirect to enstorage://oauth-callback?code=... -->`,
+    },
+    errors: ['422'],
+    noteKey: 'oauthCallbackWebNote',
   },
   {
     id: 'share-view',
@@ -1907,6 +2575,181 @@ Location: https://vault.example.com/s/3f9a1c7e5b2d48af90c6e1d7a3b5c8f0
     errors: ['401', '422'],
     noteKey: 'signatureNote',
   },
+  {
+    id: 'files-by-metadata',
+    group: 'discovery',
+    method: 'POST',
+    path: '/files/by-metadata',
+    scope: 'read',
+    key: 'byMetadata',
+    call: {
+      method: 'POST',
+      path: '/files/by-metadata',
+      body: { conditions: [{ key: 'category', value: 'finance', operator: '=' }] },
+      expect: '200 OK',
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    bodyRows: [{ name: 'conditions', type: 'array', required: true, key: 'metaConditions' }],
+    response: {
+      status: '200',
+      code: `{\n  "success": true,\n  "data": { "files": [] },\n  "message": "Hasil filter metadata.",\n  "meta": {}\n}`,
+    },
+    errors: ['401', '422'],
+  },
+  {
+    id: 'webhooks-update',
+    group: 'webhooks',
+    method: 'PATCH',
+    path: '/webhooks/{id}',
+    scope: 'sanctum',
+    key: 'updateWebhook',
+    call: {
+      method: 'PATCH',
+      path: '/webhooks/8a2f5c90-1d74-4b6e-9c3a-5f0d8e2b7146',
+      body: { url: 'https://myserver.com/hook', is_active: true },
+      expect: '200 OK',
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    pathRows: [{ name: 'id', type: 'string', required: true, key: 'webhookId' }],
+    bodyRows: [
+      { name: 'url', type: 'string', required: false, key: 'webhookUrl' },
+      { name: 'is_active', type: 'boolean', required: false, key: 'webhookActive' },
+    ],
+    response: {
+      status: '200',
+      code: `{\n  "success": true,\n  "data": { "webhook": { "id": "8a2f5c90-1d74-4b6e-9c3a-5f0d8e2b7146", "url": "https://myserver.com/hook", "is_active": true } },\n  "message": "Webhook diperbarui.",\n  "meta": {}\n}`,
+    },
+    errors: ['401', '404', '422'],
+  },
+  {
+    id: 'webhooks-delete',
+    group: 'webhooks',
+    method: 'DELETE',
+    path: '/webhooks/{id}',
+    scope: 'sanctum',
+    key: 'deleteWebhook',
+    call: {
+      method: 'DELETE',
+      path: '/webhooks/8a2f5c90-1d74-4b6e-9c3a-5f0d8e2b7146',
+      expect: '200 OK',
+    },
+    headerRows: [AUTH_ROW],
+    pathRows: [{ name: 'id', type: 'string', required: true, key: 'webhookId' }],
+    response: {
+      status: '200',
+      code: `{\n  "success": true,\n  "data": null,\n  "message": "Webhook berhasil dihapus.",\n  "meta": {}\n}`,
+    },
+    errors: ['401', '404'],
+  },
+  {
+    id: 'notifications-get-settings',
+    group: 'notifications',
+    method: 'GET',
+    path: '/notifications/settings',
+    scope: 'sanctum',
+    key: 'notificationSettings',
+    call: {
+      method: 'GET',
+      path: '/notifications/settings',
+      expect: '200 OK',
+    },
+    headerRows: [AUTH_ROW],
+    response: {
+      status: '200',
+      code: `{\n  "success": true,\n  "data": { "settings": { "email_upload_failed": true, "push_quota_warning": true } },\n  "message": "Pengaturan notifikasi.",\n  "meta": {}\n}`,
+    },
+    errors: ['401'],
+  },
+  {
+    id: 'notifications-update-settings',
+    group: 'notifications',
+    method: 'PATCH',
+    path: '/notifications/settings',
+    scope: 'sanctum',
+    key: 'updateNotificationSettings',
+    call: {
+      method: 'PATCH',
+      path: '/notifications/settings',
+      body: { email_upload_failed: true, push_quota_warning: false },
+      expect: '200 OK',
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    bodyRows: [
+      { name: 'email_upload_failed', type: 'boolean', required: false, key: 'emailFailed' },
+      { name: 'push_quota_warning', type: 'boolean', required: false, key: 'pushWarning' },
+    ],
+    response: {
+      status: '200',
+      code: `{\n  "success": true,\n  "data": { "settings": { "email_upload_failed": true, "push_quota_warning": false } },\n  "message": "Pengaturan notifikasi disimpan.",\n  "meta": {}\n}`,
+    },
+    errors: ['401', '422'],
+  },
+  {
+    id: 'notifications-register-token',
+    group: 'notifications',
+    method: 'POST',
+    path: '/notifications/token',
+    scope: 'sanctum',
+    key: 'registerToken',
+    call: {
+      method: 'POST',
+      path: '/notifications/token',
+      body: { token: 'fcm_device_token_xyz', platform: 'android' },
+      expect: '200 OK',
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    bodyRows: [
+      { name: 'token', type: 'string', required: true, key: 'fcmToken' },
+      { name: 'platform', type: 'string', required: true, key: 'fcmPlatform' },
+    ],
+    response: {
+      status: '200',
+      code: `{\n  "success": true,\n  "data": null,\n  "message": "Token berhasil didaftarkan.",\n  "meta": {}\n}`,
+    },
+    errors: ['401', '422'],
+  },
+  {
+    id: 'notifications-remove-token',
+    group: 'notifications',
+    method: 'DELETE',
+    path: '/notifications/token',
+    scope: 'sanctum',
+    key: 'removeToken',
+    call: {
+      method: 'DELETE',
+      path: '/notifications/token',
+      body: { token: 'fcm_device_token_xyz' },
+      expect: '200 OK',
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    bodyRows: [{ name: 'token', type: 'string', required: true, key: 'fcmToken' }],
+    response: {
+      status: '200',
+      code: `{\n  "success": true,\n  "data": null,\n  "message": "Token berhasil dihapus.",\n  "meta": {}\n}`,
+    },
+    errors: ['401', '422'],
+  },
+  {
+    id: 'admin-ping',
+    group: 'auth',
+    method: 'GET',
+    path: '/admin/ping',
+    scope: 'sanctum',
+    key: 'adminPing',
+    flag: 'ownerOnly',
+    call: {
+      method: 'GET',
+      path: '/admin/ping',
+      expect: '200 OK',
+    },
+    headerRows: [AUTH_ROW],
+    response: {
+      status: '200',
+      code: `{\n  "success": true,\n  "data": { "status": "ok", "timestamp": "2026-09-17T01:00:00Z" },\n  "message": "pong",\n  "meta": {}\n}`,
+    },
+    errors: ['401', '403'],
+  },
+
 ];
 
 /** Groups in display order, with their reference cards attached. */
