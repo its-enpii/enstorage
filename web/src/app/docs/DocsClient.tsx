@@ -9,10 +9,13 @@ import {
   Bolt,
   Build,
   DataObject,
+  Folder,
   Hub,
   InsertDriveFile,
   Layers,
   Link as LinkIcon,
+  Notifications,
+  PhoneAndroid,
   Search,
   Shield,
   Speed,
@@ -40,6 +43,7 @@ import {
   OPENAPI_URLS,
   REFERENCE,
   REFERENCE_COUNT,
+  type ReferenceGroup,
   REFERENCE_GROUPS,
   SCOPE_ORDER,
   SNIPPETS,
@@ -117,6 +121,18 @@ function readStoredLang(): SnippetLang {
   const stored = window.localStorage.getItem(LANG_STORAGE_KEY);
   return SNIPPET_LANGS.includes(stored as SnippetLang) ? (stored as SnippetLang) : 'curl';
 }
+
+/** Icon per reference module, mirrored from `REFERENCE_GROUPS`. */
+const MODULE_ICONS: Record<ReferenceGroup['id'], typeof VpnKey> = {
+  auth: VpnKey,
+  files: InsertDriveFile,
+  folders: Folder,
+  storage: Layers,
+  share: LinkIcon,
+  discovery: Search,
+  webhooks: Notifications,
+  notifications: PhoneAndroid,
+};
 
 /** Highlights the TOC entry whose section is closest to the top of the view. */
 function useActiveSection(ids: readonly string[]) {
@@ -227,6 +243,26 @@ function DocsToc({
   const { t } = useTranslation();
   const visible = VIEW_SECTIONS[view];
 
+  /** Live endpoint count per module, so the badges track the active search. */
+  const moduleCount = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const byGroup = new Map<string, number>();
+    for (const entry of REFERENCE) {
+      if (
+        needle &&
+        !`${entry.group} ${entry.method} ${entry.path} ${entry.key} ${t(
+          `docs.ref.items.${entry.key}.title`,
+        )} ${t(`docs.ref.items.${entry.key}.body`)}`
+          .toLowerCase()
+          .includes(needle)
+      ) {
+        continue;
+      }
+      byGroup.set(entry.group, (byGroup.get(entry.group) ?? 0) + 1);
+    }
+    return (id: string) => byGroup.get(id) ?? 0;
+  }, [query, t]);
+
   /** The sidebar search box drives the reference explorer, so it reports its own matches. */
   const matchCount = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -302,21 +338,31 @@ function DocsToc({
                   {t(`docs.nav.${section.id}`)}
                 </a>
                 {section.id === 'reference' && (
-                  <ul className="mb-1 ml-6 space-y-0.5 border-l border-outline-variant/20 pl-2">
-                    {REFERENCE_GROUPS.map((group) => (
-                      <li key={group.id}>
-                        <a
-                          href={`#ref-${group.id}`}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            onNavigate(`ref-${group.id}`);
-                          }}
-                          className="block truncate rounded-md px-2 py-1 text-metadata text-on-surface-variant no-underline transition-colors hover:bg-surface-container hover:text-on-surface"
-                        >
-                          {t(`docs.ref.groups.${group.key}.title`)}
-                        </a>
-                      </li>
-                    ))}
+                  <ul className="mt-1.5 space-y-0.5">
+                    {REFERENCE_GROUPS.map((group) => {
+                      const ModuleIcon = MODULE_ICONS[group.id] ?? InsertDriveFile;
+                      const count = moduleCount(group.id);
+                      return (
+                        <li key={group.id}>
+                          <a
+                            href={`#ref-${group.id}`}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              onNavigate(`ref-${group.id}`);
+                            }}
+                            className="group flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-metadata font-medium no-underline transition-colors hover:bg-surface-container-high/60 hover:text-on-surface"
+                          >
+                            <ModuleIcon className="!text-base shrink-0 text-on-surface-variant transition-colors group-hover:text-primary" />
+                            <span className="min-w-0 flex-1 truncate">
+                              {t(`docs.ref.groups.${group.key}.title`)}
+                            </span>
+                            <span className="shrink-0 rounded-full bg-surface-container-high/50 px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums text-on-surface-variant transition-colors group-hover:bg-primary-container/40 group-hover:text-primary">
+                              {count}
+                            </span>
+                          </a>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </li>
@@ -329,44 +375,41 @@ function DocsToc({
         <p className="text-metadata font-semibold uppercase tracking-wider text-outline">
           {t('docs.lang.label')}
         </p>
-        <div className="mt-2 flex flex-wrap gap-1" role="group" aria-label={t('docs.lang.aria')}>
+        <div
+          role="group"
+          aria-label={t('docs.lang.aria')}
+          className="mt-2 flex rounded-xl border border-outline-variant/20 bg-surface-container-high/40 p-1"
+        >
           {SNIPPET_LANGS.map((option) => (
-            <Button
+            <button
               key={option}
               type="button"
-              size="sm"
-              variant={lang === option ? 'primary' : 'secondary'}
               aria-pressed={lang === option}
               onClick={() => onLangChange(option)}
-              className="!h-7 rounded-full !px-2.5 !text-metadata"
+              className={clsx(
+                'flex-1 rounded-lg py-1 text-center font-mono text-xs font-semibold transition-all',
+                lang === option
+                  ? 'bg-primary text-on-primary shadow-xs'
+                  : 'text-on-surface-variant hover:bg-white/[0.04] hover:text-on-surface',
+              )}
             >
               {t(`docs.lang.short.${option}`)}
-            </Button>
+            </button>
           ))}
         </div>
       </div>
 
-      <div className="mt-5 border-t border-outline-variant/20 pt-4">
-        <dl className="space-y-2 text-metadata">
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-outline">{t('docs.meta.version')}</dt>
-            <dd>
-              <Chip variant="primary">{t('docs.meta.versionValue')}</Chip>
-            </dd>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-outline">{t('docs.meta.endpoints')}</dt>
-            <dd className="font-semibold text-on-surface tabular-nums">{TOTAL_ENDPOINTS}</dd>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-outline">{t('docs.meta.reference')}</dt>
-            <dd className="font-semibold text-on-surface tabular-nums">{REFERENCE_COUNT}</dd>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-outline">{t('docs.meta.prefix')}</dt>
-            <dd className="font-mono font-semibold text-on-surface">{API_PREFIX}</dd>
-          </div>
-        </dl>
+      <div className="mt-5 space-y-3 border-t border-outline-variant/20 pt-4">
+        <div className="flex items-center gap-2">
+          <span className="size-2 shrink-0 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-metadata font-semibold text-on-surface">{t('docs.meta.status')}</span>
+          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-surface-container-high/60 px-2 py-0.5 font-mono text-xs font-semibold text-on-surface-variant tabular-nums">
+            {t('docs.meta.endpointsValue', { count: TOTAL_ENDPOINTS })}
+          </span>
+        </div>
+        <code className="block w-full rounded-lg bg-surface-container-lowest/60 px-2.5 py-1.5 text-center font-mono text-xs font-semibold text-on-surface-variant">
+          {t('docs.meta.prefix')} <span className="text-primary">{API_PREFIX}</span>
+        </code>
       </div>
     </Card>
   );

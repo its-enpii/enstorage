@@ -910,7 +910,9 @@
       "versionValue": "v1",
       "endpoints": "Total endpoint",
       "prefix": "Prefix",
-      "reference": "Kartu referensi"
+      "reference": "Kartu referensi",
+      "status": "API v1 Online",
+      "endpointsValue": "{{count}} Endpoint"
     },
     "nav": {
       "start": "Mulai Cepat",
@@ -1542,6 +1544,58 @@
         "uploadInit": {
           "title": "Mulai chunked upload",
           "body": "Buka sesi upload lintas-chunk."
+        },
+        "deleteAccount": {
+          "title": "Hapus akun",
+          "body": "Menghapus akun secara permanen beserta semua berkas dan foldernya."
+        },
+        "register": {
+          "title": "Daftar akun baru",
+          "body": "Membuat akun pengguna baru dan mengembalikan token Sanctum."
+        },
+        "logout": {
+          "title": "Keluar (logout)",
+          "body": "Mencabut token permintaan ini dan membersihkan sesi cookie."
+        },
+        "updateMe": {
+          "title": "Perbarui profil",
+          "body": "Mengubah nama atau email pengguna yang sedang login."
+        },
+        "changePassword": {
+          "title": "Ganti kata sandi",
+          "body": "Mengatur kata sandi baru tanpa memutuskan sesi lain."
+        },
+        "locale": {
+          "title": "Ubah bahasa",
+          "body": "Menyimpan bahasa UI yang dipakai pada permintaan berikutnya."
+        },
+        "googleAuth": {
+          "title": "Login dengan Google",
+          "body": "Tukarkan ID token Google dengan token Sanctum."
+        },
+        "googleRedirect": {
+          "title": "URL redirect Google",
+          "body": "Membuat URL otorisasi OAuth Google untuk aliran web."
+        },
+        "googleCallback": {
+          "title": "Callback Google",
+          "body": "Menyelesaikan login OAuth setelah Google mengarahkan kembali."
+        },
+        "byMetadata": {
+          "title": "Cari berkas per metadata",
+          "body": "Menyaring berkas berdasarkan kondisi metadata kustom."
+        },
+        "updateWebhook": {
+          "title": "Perbarui webhook",
+          "body": "Mengubah URL webhook dan status aktifnya."
+        },
+        "deleteWebhook": {
+          "title": "Hapus webhook",
+          "body": "Menghapus langganan webhook secara permanen."
+        },
+        "adminPing": {
+          "title": "Cek status admin",
+          "body": "Pemeriksaan kesehatan internal khusus pemilik (owner)."
         }
       }
     },

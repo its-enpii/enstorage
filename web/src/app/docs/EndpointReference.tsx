@@ -151,18 +151,32 @@ function EndpointCard({
   onLangChange,
   open,
   onToggle,
+  isFirst,
+  isLast,
 }: {
   entry: ReferenceEntry;
   lang: SnippetLang;
   onLangChange: (value: SnippetLang) => void;
   open: boolean;
   onToggle: () => void;
+  /** First row of the list: keeps the container's top corners. */
+  isFirst: boolean;
+  /** Last row of the list: keeps the container's bottom corners. */
+  isLast: boolean;
 }) {
   const { t } = useTranslation();
   const title = t(`docs.ref.items.${entry.key}.title`);
 
   return (
-    <div id={`card-${entry.id}`} className="scroll-mt-24">
+    <div
+      id={`card-${entry.id}`}
+      className={clsx(
+        'scroll-mt-24',
+        isFirst ? 'rounded-t-2xl' : 'rounded-none',
+        !isFirst && !isLast && 'rounded-none',
+        isLast && !open && 'rounded-b-2xl',
+      )}
+    >
       <Button
         type="button"
         variant="ghost"
@@ -170,40 +184,49 @@ function EndpointCard({
         aria-expanded={open}
         aria-controls={`card-${entry.id}-body`}
         aria-label={`${entry.method} ${entry.path} — ${title}`}
-        className="!h-auto w-full !justify-start gap-3 rounded-none !px-4 !py-3.5 text-left transition-colors hover:bg-surface-container/30 sm:!px-5"
+        className={clsx(
+          '!h-auto w-full !justify-start gap-2.5 !px-4 !py-2.5 text-left transition-colors hover:bg-surface-container/30 sm:!px-5',
+          isFirst && 'rounded-t-2xl',
+          isLast && !open && 'rounded-b-2xl',
+        )}
       >
-        <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-2">
-            <code
-              className={clsx(
-                'shrink-0 rounded-md px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-wider',
-                METHOD_BADGE_CLASS[entry.method],
-              )}
-            >
-              {entry.method}
-            </code>
-            <code className="break-all font-mono text-metadata font-semibold text-on-surface">
-              {API_PREFIX}
-              {entry.path}
-            </code>
+        <code
+          className={clsx(
+            'shrink-0 rounded-md px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-wider',
+            METHOD_BADGE_CLASS[entry.method],
+          )}
+        >
+          {entry.method}
+        </code>
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <code className="truncate font-mono text-metadata font-semibold text-on-surface-variant">
+            {API_PREFIX}
+            {entry.path}
+          </code>
+          <span className="hidden shrink-0 items-center gap-1.5 sm:flex">
             <Chip variant={SCOPE_CHIP[entry.scope]}>{t(`docs.scopes.short.${entry.scope}`)}</Chip>
             {entry.flag === 'ownerOnly' && <Chip variant="warning">{t('docs.ownerOnly')}</Chip>}
           </span>
-          <span className="mt-1.5 block font-display text-body-md font-semibold text-on-surface">
-            {title}
-          </span>
         </span>
-        <span className="flex shrink-0 items-center gap-1 text-metadata font-semibold uppercase tracking-wider text-primary">
-          {open ? <ExpandLess className="!text-lg" /> : <ExpandMore className="!text-lg" />}
+        <span
+          className="hidden min-w-0 shrink-0 font-display text-metadata font-semibold text-on-surface-variant xl:inline"
+          title={title}
+        >
+          {title}
+        </span>
+        <span className="flex shrink-0 items-center text-primary">
           <span className="sr-only">{open ? t('docs.collapse') : t('docs.expand')}</span>
-          {open ? t('docs.collapse') : t('docs.expand')}
+          {open ? <ExpandLess className="!text-lg" /> : <ExpandMore className="!text-lg" />}
         </span>
       </Button>
 
       {open && (
         <div
           id={`card-${entry.id}-body`}
-          className="space-y-6 border-t border-outline-variant/15 bg-surface-container-low/30 p-5 sm:p-6"
+          className={clsx(
+            'space-y-6 border-t border-outline-variant/15 bg-surface-container-low/30 p-5 sm:p-6',
+            isLast && 'rounded-b-2xl',
+          )}
         >
           <p className="text-metadata leading-relaxed text-on-surface-variant">
             <InlineMarkdown text={t(`docs.ref.items.${entry.key}.body`)} />
@@ -410,7 +433,7 @@ export function EndpointReference({
               </div>
             </div>
             <div className="overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-lowest shadow-ambient divide-y divide-outline-variant/15">
-              {items.map((entry) => (
+              {items.map((entry, index) => (
                 <EndpointCard
                   key={entry.id}
                   entry={entry}
@@ -418,6 +441,8 @@ export function EndpointReference({
                   onLangChange={onLangChange}
                   open={Boolean(expanded[entry.id])}
                   onToggle={() => toggle(entry.id)}
+                  isFirst={index === 0}
+                  isLast={index === items.length - 1}
                 />
               ))}
             </div>

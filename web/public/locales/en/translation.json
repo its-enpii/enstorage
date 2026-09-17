@@ -910,7 +910,9 @@
       "versionValue": "v1",
       "endpoints": "Total endpoints",
       "prefix": "Prefix",
-      "reference": "Reference cards"
+      "reference": "Reference cards",
+      "status": "API v1 Online",
+      "endpointsValue": "{{count}} Endpoint"
     },
     "nav": {
       "start": "Quick start",
@@ -1542,6 +1544,58 @@
         "uploadInit": {
           "title": "Start a chunked upload",
           "body": "Open a multi-chunk upload session."
+        },
+        "deleteAccount": {
+          "title": "Delete account",
+          "body": "Permanently removes the account together with its files and folders."
+        },
+        "register": {
+          "title": "Register a new account",
+          "body": "Creates a new user account and returns a Sanctum token."
+        },
+        "logout": {
+          "title": "Log out",
+          "body": "Revokes the token sent with this request and clears the session cookie."
+        },
+        "updateMe": {
+          "title": "Update profile",
+          "body": "Changes the name or email of the signed-in user."
+        },
+        "changePassword": {
+          "title": "Change password",
+          "body": "Sets a new password without ending other sessions."
+        },
+        "locale": {
+          "title": "Change language",
+          "body": "Persists the UI language used by the next request."
+        },
+        "googleAuth": {
+          "title": "Sign in with Google",
+          "body": "Exchanges a Google ID token for a Sanctum token."
+        },
+        "googleRedirect": {
+          "title": "Google redirect URL",
+          "body": "Builds the Google OAuth authorization URL for the web flow."
+        },
+        "googleCallback": {
+          "title": "Google callback",
+          "body": "Completes the OAuth login after Google redirects back."
+        },
+        "byMetadata": {
+          "title": "Find files by metadata",
+          "body": "Filters files by custom metadata conditions."
+        },
+        "updateWebhook": {
+          "title": "Update webhook",
+          "body": "Changes the webhook URL and its active status."
+        },
+        "deleteWebhook": {
+          "title": "Delete webhook",
+          "body": "Permanently removes a webhook subscription."
+        },
+        "adminPing": {
+          "title": "Admin health check",
+          "body": "Owner-only internal health probe."
         }
       }
     },

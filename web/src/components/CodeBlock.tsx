@@ -5,7 +5,6 @@ import { CheckCircle, CopyAll } from '@mui/icons-material';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/Button';
-import { Card } from '@/components/Card';
 import { detectLang, tokenizeCode, type CodeLang, type CodeToken, type TokenKind } from '@/lib/highlight';
 
 const TOKEN_CLASS: Record<TokenKind, string> = {
@@ -132,10 +131,12 @@ export function CodeBlock({ code, lang, file, labelKey, maxHeightClass, classNam
     <div
       role="region"
       aria-label={t(labelKey ?? 'docs.consoleAria')}
-      className={clsx('min-w-0 shadow-ambient', className)}
+      className={clsx(
+        'min-w-0 overflow-hidden rounded-xl border border-outline-variant/30 bg-[#0a0c10] shadow-ambient',
+        className,
+      )}
     >
-      <Card className="overflow-hidden !bg-surface-container-lowest !p-0">
-        <div className="flex items-center gap-2 border-b border-outline-variant/20 bg-surface-container-high px-3 py-2 sm:px-4">
+      <div className="flex items-center gap-2 border-b border-outline-variant/20 bg-surface-container-high/40 px-3 py-2 sm:px-4">
           {toolbar ? (
             <>
               {/* Left: language tabs */}
@@ -166,8 +167,7 @@ export function CodeBlock({ code, lang, file, labelKey, maxHeightClass, classNam
             </>
           )}
         </div>
-        <HighlightedCode code={code} lang={lang} className={maxHeightClass} />
-      </Card>
+      <HighlightedCode code={code} lang={lang} className={maxHeightClass} />
     </div>
   );
 }
