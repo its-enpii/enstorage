@@ -295,7 +295,9 @@ class S3GatewayTest extends TestCase
         $body = 'signed payload';
         $host = $this->s3Host();
 
-        $headers = $this->signV4('PUT', $accessKey, $secret, $host, $uri, $body);
+        // Klien AWS SDK menandatangani URI relatif terhadap endpoint, yaitu
+        // tanpa prefix rute `/api/v1` — persis seperti perilaku produksi.
+        $headers = $this->signV4('PUT', $accessKey, $secret, $host, '/s3/sigbucket/signed.txt', $body);
         $headers['X-API-Key'] = null; // ensure only SigV4 is used
 
         $response = $this->call('PUT', $uri, [], [], [], [

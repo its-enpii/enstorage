@@ -464,9 +464,31 @@ class S3GatewayController extends Controller
             ?: (string) $request->attributes->get('s3_payload_hash', 'UNSIGNED-PAYLOAD');
 
         // 1) Canonical request.
-        $canonicalUri = '/'.ltrim($request->path(), '/');
+        //
+        // AWS SDK memakai URI relatif terhadap endpoint (tanpa prefix domain),
+        // sehingga signature yang dikirim hanya mencakup `/s3/{bucket}/{path}`.
+        // Gateway ini dipasang di belakang proxy (atau langsung) pada prefix
+        // `/api/v1`, jadi prefix itu harus dibuang dari canonical URI — kalau
+        // tidak, hash canonical request tidak akan pernah cocok.
+        $signingPrefix = (string) config('enstorage.s3_signing_prefix', '/api/v1');
+        $requestPath = '/'.ltrim($request->path(), '/');
+        if ($signingPrefix !== '' && str_starts_with($requestPath, $signingPrefix.'/')) {
+            $requestPath = substr($requestPath, strlen($signingPrefix));
+        }
+        $canonicalUri = $requestPath;
+
         $canonicalQuery = $this->canonicalQueryString($request);
         $headerList = array_map('trim', explode(';', $signedHeaders));
+
+        if (config('app.debug')) {
+            $missing = $this->missingSignedHeaders($headerList);
+            if ($missing !== []) {
+                Log::warning('S3 Gateway: header yang ditandatangani tidak sampai ke aplikasi', [
+                    'missing' => $missing,
+                    'uri' => $canonicalUri,
+                ]);
+            }
+        }
 
         $canonicalHeaders = '';
         foreach ($headerList as $headerName) {
@@ -505,6 +527,29 @@ class S3GatewayController extends Controller
         $expected = hash_hmac('sha256', $stringToSign, $kSigning);
 
         return hash_equals($expected, $providedSignature);
+    }
+
+    /**
+     * Nama header yang ditandatangani klien tapi tidak terkirim ke Laravel.
+     * Berguna untuk diagnosa 403 saat verifikasi SigV4 gagal — biasanya
+     * penyebabnya proxy memfilter header (mis. content-type).
+     *
+     * @param  list<string>  $headerList
+     * @return list<string>
+     */
+    private function missingSignedHeaders(array $headerList): array
+    {
+        $missing = [];
+        foreach ($headerList as $headerName) {
+            if ($headerName === 'host') {
+                continue;
+            }
+            if (! $request_header = request()->headers->get($headerName)) {
+                $missing[] = $headerName;
+            }
+        }
+
+        return $missing;
     }
 
     private function parseCredentialAccessKey(string $authorization): ?string
