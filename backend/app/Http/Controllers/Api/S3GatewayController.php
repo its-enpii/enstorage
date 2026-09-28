@@ -263,17 +263,44 @@ class S3GatewayController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    public function headObject(Request $request, string $bucket, string $path): Response
+    public function headObject(Request $request, string $bucket, ?string $path = ''): Response
     {
-        [$authorized, $file] = $this->resolveReadableFile($request, $bucket, $path);
+        $path = (string) ($path ?? '');
+        $cleanPath = trim($path, '/');
+
+        [$authorized, $file] = $this->resolveReadableFile($request, $bucket, $cleanPath);
         if (! $authorized) {
             return $this->xmlError(403, 'AccessDenied', 'Access Denied');
         }
-        if (! $file) {
-            return $this->xmlError(404, 'NoSuchKey', 'The specified key does not exist.');
+
+        if ($file) {
+            return response('', 200, $this->metadataHeaders($file));
         }
 
-        return response('', 200, $this->metadataHeaders($file));
+        // HEAD ke root bucket (`/s3/{bucket}` atau path kosong) diperlakukan
+        // sebagai headBucket: caller berhak akses dan bucket ada.
+        if ($cleanPath === '') {
+            return response('', 200, ['x-amz-request-id' => $this->requestId()]);
+        }
+
+        // HEAD ke prefix yang punya anak diperlakukan sebagai "direktori ada".
+        // Flysystem (Laravel Storage) memakai HEAD untuk `exists()` dan
+        // `directoryExists()`, dan S3 tidak menyimpan direktori sebagai objek.
+        // Tanpa ini, pemeriksaan seperti `Storage::disk(...)->exists($dir)`
+        // melempar UnableToCheckDirectoryExistence dan memutus alur upload.
+        $prefix = "{$bucket}/{$cleanPath}/";
+        $owner = $this->authenticateRequest($request, $bucket, isRead: true);
+
+        $hasChildren = FileModel::query()
+            ->where('original_path', 'like', $prefix.'%')
+            ->when($owner instanceof User, fn ($q) => $q->where('user_id', $owner->id))
+            ->exists();
+
+        if ($hasChildren) {
+            return response('', 200, ['x-amz-request-id' => $this->requestId()]);
+        }
+
+        return $this->xmlError(404, 'NoSuchKey', 'The specified key does not exist.');
     }
 
     /*

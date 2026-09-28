@@ -44,9 +44,9 @@ Route::get('s/{token}/view', [FileController::class, 'view']);
 // Bearer en_..., atau ?api_key=) — bukan via middleware auth.apikey —
 // karena format error harus XML S3, bukan envelope JSON.
 Route::prefix('s3/{bucket}')->group(function () {
+    Route::match(['head'], '{path?}', [S3GatewayController::class, 'headObject'])->where('path', '.*');
     Route::put('{path}', [S3GatewayController::class, 'putObject'])->where('path', '.*');
     Route::get('{path}', [S3GatewayController::class, 'getObject'])->where('path', '.*');
-    Route::match(['head'], '{path}', [S3GatewayController::class, 'headObject'])->where('path', '.*');
     Route::delete('{path}', [S3GatewayController::class, 'deleteObject'])->where('path', '.*');
 });
 
