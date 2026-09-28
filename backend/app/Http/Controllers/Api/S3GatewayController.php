@@ -323,6 +323,13 @@ class S3GatewayController extends Controller
         }
 
         // 2) AWS Signature V4.
+        //
+        // Saat verifikasi gagal kita TIDAK langsung menolak: klien Flysystem
+        // (Laravel Storage) sudah mengirim API key yang sah pada header
+        // `X-API-Key` lewat konfigurasi disk, jadi request yang signature-nya
+        // tidak cocok (mis. proxy membuang header yang ikut ditandatangani)
+        // tetap dapat dilayani lewat jalur API key. Signature yang gagal tidak
+        // pernah menaikkan hak akses — ia hanya turun ke pemeriksaan berikutnya.
         $authorization = (string) $request->header('Authorization', '');
         if (str_contains($authorization, 'AWS4-HMAC-SHA256')) {
             $user = $this->authenticateSigV4($request, $authorization);
@@ -330,7 +337,10 @@ class S3GatewayController extends Controller
                 return $user;
             }
 
-            return null;
+            Log::warning('S3 Gateway: verifikasi SigV4 gagal, mencoba jalur API key', [
+                'uri' => '/'.ltrim((string) $request->path(), '/'),
+                'has_api_key' => (bool) $request->header('X-API-Key'),
+            ]);
         }
 
         // 3) X-API-Key header.
