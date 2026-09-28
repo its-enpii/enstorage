@@ -57,8 +57,8 @@ class S3GatewayHeadDirectoryTest extends TestCase
             'CONTENT_TYPE' => 'image/png',
         ], 'png-bytes')->assertStatus(200);
 
-        $this->call('HEAD', '/api/v1/s3/sidbm/logo', [], [], [], $this->headers())
-            ->assertStatus(200);
+        $res = $this->call('HEAD', '/api/v1/s3/sidbm/logo', [], [], [], $this->headers());
+        $res->assertStatus(200);
     }
 
     public function test_head_on_missing_key_returns_404(): void

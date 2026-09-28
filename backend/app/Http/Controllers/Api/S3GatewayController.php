@@ -226,12 +226,23 @@ class S3GatewayController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | GET /s3/{bucket}/{path}
+    | GET /s3/{bucket}/{path} & ListObjectsV2
     |--------------------------------------------------------------------------
     */
 
-    public function getObject(Request $request, string $bucket, string $path): StreamedResponse|Response
+    public function getObject(Request $request, string $bucket, ?string $path = ''): StreamedResponse|Response
     {
+        $path = (string) ($path ?? '');
+
+        if ($request->isMethod('HEAD')) {
+            return $this->headObject($request, $bucket, $path);
+        }
+
+        // ListObjectsV2: GET /{bucket}?list-type=2 atau path kosong dengan parameter list
+        if ($request->has('list-type') || $path === '') {
+            return $this->listObjectsV2($request, $bucket);
+        }
+
         [$authorized, $file] = $this->resolveReadableFile($request, $bucket, $path);
         if (! $authorized) {
             return $this->xmlError(403, 'AccessDenied', 'Access Denied');
@@ -255,6 +266,52 @@ class S3GatewayController extends Controller
 
         // File sudah `done` → stream dari Google Drive.
         return $this->streamFromDrive($file);
+    }
+
+    /**
+     * S3 ListObjectsV2: dipanggil oleh Flysystem directoryExists() dan listContents().
+     */
+    public function listObjectsV2(Request $request, string $bucket): Response
+    {
+        $user = $this->authenticateRequest($request, $bucket, isRead: true);
+        if ($bucket !== self::PUBLIC_BUCKET && ! $user instanceof User) {
+            return $this->xmlError(403, 'AccessDenied', 'Access Denied');
+        }
+
+        $prefix = (string) $request->query('prefix', '');
+        $maxKeys = min((int) ($request->query('max-keys') ?: 1000), 1000);
+        $cleanPrefix = ltrim($prefix, '/');
+        $dbPrefix = "{$bucket}/{$cleanPrefix}";
+
+        $query = FileModel::query()
+            ->where('original_path', 'like', $dbPrefix.'%')
+            ->when($user instanceof User, fn ($q) => $q->where('user_id', $user->id));
+
+        $files = $query->limit($maxKeys)->get();
+
+        $xml = new \SimpleXMLElement('<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"/>');
+        $xml->addChild('Name', htmlspecialchars($bucket));
+        $xml->addChild('Prefix', htmlspecialchars($prefix));
+        $xml->addChild('KeyCount', (string) $files->count());
+        $xml->addChild('MaxKeys', (string) $maxKeys);
+        $xml->addChild('IsTruncated', 'false');
+
+        foreach ($files as $file) {
+            $contents = $xml->addChild('Contents');
+            $key = str_starts_with((string) $file->original_path, "{$bucket}/")
+                ? substr((string) $file->original_path, strlen("{$bucket}/"))
+                : (string) $file->original_path;
+            $contents->addChild('Key', htmlspecialchars($key));
+            $contents->addChild('LastModified', $file->updated_at?->toIso8601ZuluString() ?? now()->toIso8601ZuluString());
+            $contents->addChild('ETag', '"'.($file->content_hash ?: md5((string) $file->id)).'"');
+            $contents->addChild('Size', (string) $file->size);
+            $contents->addChild('StorageClass', 'STANDARD');
+        }
+
+        return response($xml->asXML(), 200, [
+            'Content-Type' => 'application/xml',
+            'x-amz-request-id' => $this->requestId(),
+        ]);
     }
 
     /*
@@ -291,10 +348,11 @@ class S3GatewayController extends Controller
         $prefix = "{$bucket}/{$cleanPath}/";
         $owner = $this->authenticateRequest($request, $bucket, isRead: true);
 
-        $hasChildren = FileModel::query()
+        $query = FileModel::query()
             ->where('original_path', 'like', $prefix.'%')
-            ->when($owner instanceof User, fn ($q) => $q->where('user_id', $owner->id))
-            ->exists();
+            ->when($owner instanceof User, fn ($q) => $q->where('user_id', $owner->id));
+
+        $hasChildren = $query->exists();
 
         if ($hasChildren) {
             return response('', 200, ['x-amz-request-id' => $this->requestId()]);
