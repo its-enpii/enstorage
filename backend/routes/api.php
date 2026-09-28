@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\FolderController;
 use App\Http\Controllers\Api\GoogleAccountController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\RecentController;
+use App\Http\Controllers\Api\S3GatewayController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\ShareLinkController;
 use App\Http\Controllers\Api\StorageController;
@@ -37,6 +38,17 @@ Route::get('docs/openapi.yaml', [DocsController::class, 'spec']);
 // Public share link (tanpa auth)
 Route::get('s/{token}', [FileController::class, 'viewByToken']);
 Route::get('s/{token}/view', [FileController::class, 'view']);
+
+// S3-Compatible Gateway (drop-in replacement untuk S3 SDK / Laravel
+// `s3` driver). Autentikasi dilakukan di controller (AWS SigV4, X-API-Key,
+// Bearer en_..., atau ?api_key=) — bukan via middleware auth.apikey —
+// karena format error harus XML S3, bukan envelope JSON.
+Route::prefix('s3/{bucket}')->group(function () {
+    Route::put('{path}', [S3GatewayController::class, 'putObject'])->where('path', '.*');
+    Route::get('{path}', [S3GatewayController::class, 'getObject'])->where('path', '.*');
+    Route::match(['head'], '{path}', [S3GatewayController::class, 'headObject'])->where('path', '.*');
+    Route::delete('{path}', [S3GatewayController::class, 'deleteObject'])->where('path', '.*');
+});
 
 // Google OAuth bridge — public, no auth. Google's redirect_uri MUST
 // be a valid HTTPS public domain (custom URI schemes are rejected

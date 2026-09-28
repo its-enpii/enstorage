@@ -3,6 +3,7 @@
 namespace App\Services\ApiKey;
 
 use App\Models\ApiKey;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Str;
 
 class ApiKeyService
@@ -26,6 +27,10 @@ class ApiKeyService
             'user_id' => $userId,
             'label' => $label,
             'key_hash' => password_hash($plaintext, PASSWORD_BCRYPT),
+            // Secret disimpan terenkripsi (reversible) untuk mendukung
+            // verifikasi AWS Signature V4 di S3 Gateway. key_hash bcrypt
+            // tetap dipakai untuk verifikasi API key biasa.
+            'encrypted_secret' => Crypt::encryptString($secret),
             'key_prefix' => $prefix,
             'scopes' => $scopes,
             'expires_at' => $expiresAt,

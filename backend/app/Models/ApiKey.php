@@ -14,12 +14,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'label',
     'key_hash',
     'key_prefix',
+    'encrypted_secret',
     'scopes',
     'last_used_at',
     'expires_at',
     'is_active',
 ])]
-#[Hidden(['key_hash'])]
+#[Hidden(['key_hash', 'encrypted_secret'])]
 class ApiKey extends Model
 {
     use HasUuids;

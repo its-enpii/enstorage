@@ -26,6 +26,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -320,8 +321,31 @@ class FileController extends Controller
         if (! $file) {
             return $this->fail(__('File tidak ditemukan.'), 404);
         }
+
+        // Read-after-write: file yang baru di-upload (S3 gateway atau
+        // multipart) masih berstatus pending/uploading saat queue job
+        // berjalan. Kalau berkas temp-nya masih ada, stream dari temp
+        // supaya client tidak menerima 409 padahal data sudah diterima.
         if (! $file->isDone()) {
+            $tempPath = storage_path('app/temp/'.$file->id);
+            if (is_file($tempPath)) {
+                return $this->streamLocalTempFile($request, $file, $tempPath);
+            }
+
             return $this->fail(__('File belum selesai di-upload.'), 409);
+        }
+
+        $disposition = $request->boolean('inline')
+            ? 'inline'
+            : 'attachment';
+
+        // Multi-driver: S3 / local disk stream langsung dari disk backend.
+        if ($file->storage_driver === 's3' || $file->storage_driver === 'local') {
+            try {
+                return $this->streamFromDisk($file, $file->storage_driver, $disposition);
+            } catch (Throwable $e) {
+                return $this->fail(__('Download gagal: ').$e->getMessage(), 502);
+            }
         }
 
         try {
@@ -337,10 +361,6 @@ class FileController extends Controller
             $drive = new Drive($client);
             $response = $drive->files->get($file->gdrive_file_id, ['alt' => 'media']);
             $body = $response->getBody();
-
-            $disposition = $request->boolean('inline')
-                ? 'inline'
-                : 'attachment';
 
             return response()->stream(function () use ($body) {
                 while (! $body->eof()) {
@@ -887,7 +907,25 @@ class FileController extends Controller
     private function streamSharedFile(Request $request, FileModel $file): StreamedResponse|JsonResponse
     {
         if (! $file->isDone()) {
+            // Read-after-write: stream dari temp lokal kalau berkas masih
+            // ada (file baru di-upload, queue job belum selesai).
+            $tempPath = storage_path('app/temp/'.$file->id);
+            if (is_file($tempPath)) {
+                return $this->streamLocalTempFile($request, $file, $tempPath);
+            }
+
             return $this->fail(__('File tidak ditemukan atau belum siap.'), 404);
+        }
+
+        $disposition = $request->boolean('download') ? 'attachment' : 'inline';
+
+        // Multi-driver: S3 / local disk stream langsung dari disk backend.
+        if ($file->storage_driver === 's3' || $file->storage_driver === 'local') {
+            try {
+                return $this->streamFromDisk($file, $file->storage_driver, $disposition);
+            } catch (Throwable $e) {
+                return $this->fail(__('Gagal memuat file: ').$e->getMessage(), 502);
+            }
         }
 
         try {
@@ -903,8 +941,6 @@ class FileController extends Controller
             $drive = new Drive($client);
             $response = $drive->files->get($file->gdrive_file_id, ['alt' => 'media']);
             $body = $response->getBody();
-
-            $disposition = $request->boolean('download') ? 'attachment' : 'inline';
 
             return response()->stream(function () use ($body) {
                 while (! $body->eof()) {
@@ -1136,15 +1172,38 @@ class FileController extends Controller
             @unlink(storage_path('app/'.$file->thumbnail->path));
         }
 
+        $driver = $file->storage_driver;
+        $storagePath = $file->storage_path;
+
         $file->delete();
 
-        // Hapus di GDrive (best-effort)
-        if ($account && $gdriveFileId && ! str_starts_with($gdriveFileId, 'pending-')) {
+        // Hapus di backend storage sesuai driver (best-effort).
+        if ($driver === 's3' && $storagePath) {
+            try {
+                Storage::disk('s3')->delete($storagePath);
+            } catch (Throwable $e) {
+                Log::warning('S3 delete gagal saat destroy file', [
+                    'file_id' => $fileId,
+                    'storage_path' => $storagePath,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        } elseif ($driver === 'local' && $storagePath) {
+            try {
+                Storage::disk('local')->delete($storagePath);
+            } catch (Throwable $e) {
+                Log::warning('Local delete gagal saat destroy file', [
+                    'file_id' => $fileId,
+                    'storage_path' => $storagePath,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        } elseif ($account && $gdriveFileId && ! str_starts_with($gdriveFileId, 'pending-')) {
             try {
                 $this->uploader->deleteFile($account, $gdriveFileId);
             } catch (Throwable $e) {
                 Log::warning('GDrive delete gagal saat destroy file', [
-                    'file_id' => $file->id,
+                    'file_id' => $fileId,
                     'gdrive_file_id' => $gdriveFileId,
                     'error' => $e->getMessage(),
                 ]);
@@ -1169,6 +1228,63 @@ class FileController extends Controller
         return FileModel::where('id', $id)
             ->where('user_id', $request->user()->id)
             ->first();
+    }
+
+    /**
+     * Stream berkas temp lokal (read-after-write buffer).
+     *
+     * Dipakai oleh download() & streamSharedFile() ketika file belum
+     * selesai di-upload tapi berkas temp masih tersedia di disk. Ini
+     * menghindari 404/409 pada window antara request PUT dan selesainya
+     * UploadFileJob.
+     */
+    private function streamLocalTempFile(Request $request, FileModel $file, string $tempPath): StreamedResponse
+    {
+        $disposition = $request->boolean('download')
+            ? 'attachment'
+            : ($request->boolean('inline') ? 'inline' : 'inline');
+
+        $size = (int) (@filesize($tempPath) ?: $file->size);
+
+        return response()->stream(function () use ($tempPath) {
+            $out = fopen('php://output', 'wb');
+            $in = fopen($tempPath, 'rb');
+            if ($in !== false) {
+                stream_copy_to_stream($in, $out);
+                fclose($in);
+            }
+            fclose($out);
+        }, 200, [
+            'Content-Type' => $file->mime_type,
+            'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
+            'Content-Length' => (string) $size,
+        ]);
+    }
+
+    /**
+     * Stream berkas dari disk backend non-GDrive ('s3' | 'local').
+     */
+    private function streamFromDisk(FileModel $file, string $disk, string $disposition): StreamedResponse
+    {
+        $stream = Storage::disk($disk)->readStream($file->storage_path);
+        if ($stream === false || $stream === null) {
+            throw new \RuntimeException('Berkas tidak ditemukan di storage backend.');
+        }
+
+        $size = (int) ($file->size ?: 0);
+
+        return response()->stream(function () use ($stream) {
+            $out = fopen('php://output', 'wb');
+            if (is_resource($stream)) {
+                stream_copy_to_stream($stream, $out);
+                fclose($stream);
+            }
+            fclose($out);
+        }, 200, [
+            'Content-Type' => $file->mime_type,
+            'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
+            'Content-Length' => (string) $size,
+        ]);
     }
 
     private function makeContentDisposition(string $disposition, FileModel $file): string

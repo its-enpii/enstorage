@@ -16,9 +16,11 @@ use App\Support\WebhookPayload;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Http\File;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class UploadFileJob implements ShouldQueue
 {
@@ -65,16 +67,49 @@ class UploadFileJob implements ShouldQueue
             $file->upload_status = FileModel::STATUS_UPLOADING;
             $file->save();
 
-            $account = $quota->getAvailableAccount($file->user, $file->size);
-            $file->google_account_id = $account->id;
+            // Multi-driver: utamakan Google Drive kalau ada akun yang
+            // terhubung & punya kuota. Kalau tidak ada, fallback ke S3 (bila
+            // disk terkonfigurasi) atau persistent local disk.
+            $account = null;
+            try {
+                $account = $quota->getAvailableAccount($file->user, $file->size);
+            } catch (\Throwable $e) {
+                // Tidak ada akun Google yang terhubung atau kuota habis.
+                $account = null;
+            }
 
-            $result = $uploader->uploadFile($account, $file, $localPath);
+            if ($account) {
+                $file->google_account_id = $account->id;
 
-            $file->gdrive_file_id = $result['gdrive_file_id'];
-            $file->shareable_link = $result['shareable_link'];
-            $file->upload_status = FileModel::STATUS_DONE;
-            $file->uploaded_at = now();
-            $file->save();
+                $result = $uploader->uploadFile($account, $file, $localPath);
+
+                $file->gdrive_file_id = $result['gdrive_file_id'];
+                $file->shareable_link = $result['shareable_link'];
+                $file->storage_driver = 'gdrive';
+                $file->upload_status = FileModel::STATUS_DONE;
+                $file->uploaded_at = now();
+                $file->save();
+            } else {
+                // Tidak ada akun Google → simpan ke S3 (kalau terkonfigurasi)
+                // atau persistent local disk sebagai fallback.
+                $useS3 = ! empty(config('filesystems.disks.s3.key'))
+                    && ! empty(config('filesystems.disks.s3.bucket'));
+
+                $disk = $useS3 ? 's3' : 'local';
+
+                $storedPath = Storage::disk($disk)->putFileAs(
+                    'files/'.$file->user_id,
+                    new File($localPath),
+                    $file->id.'_'.$file->name
+                );
+
+                $file->storage_driver = $disk;
+                $file->storage_path = $storedPath;
+                $file->google_account_id = null;
+                $file->upload_status = FileModel::STATUS_DONE;
+                $file->uploaded_at = now();
+                $file->save();
+            }
 
             // Generate thumbnail INLINE untuk image (skip round-trip kedua ke GDrive).
             // Pakai local file yang baru di-upload. Fallback ke background job kalau gagal.
@@ -91,8 +126,10 @@ class UploadFileJob implements ShouldQueue
             // Hapus file temp setelah thumbnail selesai di-generate.
             @unlink($localPath);
 
-            // Invalidate cache quota
-            $quota->invalidate($account);
+            // Invalidate cache quota (hanya relevan untuk driver gdrive).
+            if ($account) {
+                $quota->invalidate($account);
+            }
 
             $log->log(
                 ActivityLog::ACTION_FILE_UPLOAD,
@@ -101,7 +138,8 @@ class UploadFileJob implements ShouldQueue
                 metadata: [
                     'name' => $file->name,
                     'size' => $file->size,
-                    'google_account_id' => $account->id,
+                    'storage_driver' => $file->storage_driver,
+                    'google_account_id' => $account?->id,
                 ],
             );
 

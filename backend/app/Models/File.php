@@ -28,6 +28,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'original_size',
     'upload_status',
     'uploaded_at',
+    'storage_driver',
+    'storage_path',
     'is_chunked',
     'total_chunks',
     'received_chunks',
