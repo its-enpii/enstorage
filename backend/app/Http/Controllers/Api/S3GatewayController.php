@@ -79,7 +79,23 @@ class S3GatewayController extends Controller
         $dirPath = trim(dirname($path), '.');
         $dirPath = trim($dirPath, '/');
 
+        /*
+        | Idempotent overwrite: S3 semantics allow PUT on an existing key to
+        | replace the object. Flysystem (Laravel Storage::put) reuses the same
+        | key on every save, so we must reuse the existing File row instead of
+        | inserting a duplicate (uniq_files_user_client_key).
+        */
+        $existing = FileModel::where('user_id', $user->id)
+            ->where('client_key', "s3:{$bucket}/{$path}")
+            ->first();
+
+        if ($existing instanceof FileModel) {
+            return $this->overwriteObject($request, $existing, $filename, $bucket, $path);
+        }
+
         $fileId = (string) Str::uuid();
+
+        [$md5, $sha256, $size] = [null, null, null];
 
         $targetFolder = $this->resolveFolder(
             userId: $user->id,
@@ -87,27 +103,7 @@ class S3GatewayController extends Controller
             directory: $dirPath,
         );
 
-        // Baca stream body → tulis ke lokasi temp yang dipakai UploadFileJob.
-        $tempDir = storage_path('app/temp');
-        if (! is_dir($tempDir)) {
-            mkdir($tempDir, 0775, true);
-        }
-        $tempPath = $tempDir.DIRECTORY_SEPARATOR.$fileId;
-
-        $in = $request->getContent(true);
-        $out = fopen($tempPath, 'wb');
-        if ($out === false) {
-            return $this->xmlError(500, 'InternalError', 'Unable to open temp file.');
-        }
-        stream_copy_to_stream($in, $out);
-        fclose($out);
-        if (is_resource($in)) {
-            fclose($in);
-        }
-
-        $size = (int) (@filesize($tempPath) ?: 0);
-        $md5 = (string) (@md5_file($tempPath) ?: '');
-        $sha256 = (string) (@hash_file('sha256', $tempPath) ?: '');
+        $this->streamBodyToTemp($request, $fileId, $md5, $sha256, $size);
 
         $mimeType = $request->header('Content-Type') ?: 'application/octet-stream';
         $shareToken = bin2hex(random_bytes(16));
@@ -143,6 +139,83 @@ class S3GatewayController extends Controller
         ]);
 
         UploadFileJob::dispatch($file->id);
+
+        return response('', 200, [
+            'ETag' => '"'.$md5.'"',
+            'Content-Length' => '0',
+            'x-amz-request-id' => $this->requestId(),
+        ]);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | PUT /s3/{bucket}/{path} — overwrite existing key
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * Tulis body request ke file temp yang dipakai `UploadFileJob`, lalu isi
+     * $md5/$sha256/$size dengan hasil hitung. Dipakai baik oleh PUT baru
+     * maupun PUT overwrite agar perilakunya identik.
+     */
+    protected function streamBodyToTemp(
+        Request $request,
+        string $fileId,
+        ?string &$md5,
+        ?string &$sha256,
+        ?int &$size,
+    ): bool {
+        $tempDir = storage_path('app/temp');
+        if (! is_dir($tempDir)) {
+            mkdir($tempDir, 0775, true);
+        }
+        $tempPath = $tempDir.DIRECTORY_SEPARATOR.$fileId;
+
+        $in = $request->getContent(true);
+        $out = fopen($tempPath, 'wb');
+        if ($out === false) {
+            return false;
+        }
+        stream_copy_to_stream($in, $out);
+        fclose($out);
+        if (is_resource($in)) {
+            fclose($in);
+        }
+
+        $size = (int) (@filesize($tempPath) ?: 0);
+        $md5 = (string) (@md5_file($tempPath) ?: '');
+        $sha256 = (string) (@hash_file('sha256', $tempPath) ?: '');
+
+        return true;
+    }
+
+    /**
+     * Ganti isi object yang sudah ada (idiomatik S3: PUT ke key yang sama
+     * = replace). Baris File dipertahankan agar share_token & folder tidak
+     * berubah, hanya metadata + isi yang diperbarui.
+     */
+    protected function overwriteObject(
+        Request $request,
+        FileModel $existing,
+        string $filename,
+        string $bucket,
+        string $path,
+    ): Response {
+        $fileId = (string) $existing->id;
+        $md5 = '';
+        $sha256 = '';
+        $size = 0;
+
+        $this->streamBodyToTemp($request, $fileId, $md5, $sha256, $size);
+
+        $existing->mime_type = $request->header('Content-Type') ?: 'application/octet-stream';
+        $existing->size = $size;
+        $existing->content_hash = $sha256;
+        $existing->upload_status = FileModel::STATUS_PENDING;
+        $existing->gdrive_file_id = $fileId;
+        $existing->save();
+
+        UploadFileJob::dispatch($existing->id);
 
         return response('', 200, [
             'ETag' => '"'.$md5.'"',
