@@ -16,4 +16,17 @@ return [
     */
 
     's3_signing_prefix' => env('ENSTORAGE_S3_SIGNING_PREFIX', '/api/v1'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | S3 Public Buckets
+    |--------------------------------------------------------------------------
+    |
+    | Bucket yang mengizinkan operasi baca (GET dan HEAD) tanpa autentikasi.
+    | Browser (tag <img>, <video>, tautan unduh) tidak mengirim header S3/API key,
+    | sehingga URL publik yang dihasilkan oleh Flysystem `Storage::url()` harus
+    | dapat diakses secara terbuka. Default: 'public,sidbm,new_sidbm'.
+    |
+    */
+    'public_buckets' => env('ENSTORAGE_PUBLIC_BUCKETS', 'public,sidbm,new_sidbm'),
 ];

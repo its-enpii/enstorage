@@ -274,7 +274,7 @@ class S3GatewayController extends Controller
     public function listObjectsV2(Request $request, string $bucket): Response
     {
         $user = $this->authenticateRequest($request, $bucket, isRead: true);
-        if ($bucket !== self::PUBLIC_BUCKET && ! $user instanceof User) {
+        if (! $this->isBucketPublic($bucket) && ! $user instanceof User) {
             return $this->xmlError(403, 'AccessDenied', 'Access Denied');
         }
 
@@ -401,7 +401,7 @@ class S3GatewayController extends Controller
         // 1) Bucket publik → GET/HEAD diizinkan tanpa autentikasi.
         //    Owner (kalau ada) bersifat best-effort; resolveReadableFile
         //    menangani fallback lintas-user ketika null dikembalikan.
-        if ($isRead && $bucket === self::PUBLIC_BUCKET) {
+        if ($isRead && $this->isBucketPublic($bucket)) {
             $path = ltrim((string) $request->route('path'), '/');
 
             return $this->locateFileGlobally($bucket, $path)?->user;
@@ -895,13 +895,34 @@ class S3GatewayController extends Controller
             return [true, $this->locateFile($user->id, $bucket, $path)];
         }
 
-        // Autentikasi gagal. Bucket publik tetap boleh dibaca (tanpa
-        // owner) → cari file secara global; selain itu → tolak.
-        if ($bucket === self::PUBLIC_BUCKET) {
+        // Autentikasi gagal atau tidak ada auth (mis. browser <img>).
+        // Bucket publik tetap boleh dibaca secara terbuka → cari file
+        // secara global; selain itu → tolak.
+        if ($this->isBucketPublic($bucket)) {
             return [true, $this->locateFileGlobally($bucket, $path)];
         }
 
         return [false, null];
+    }
+
+    /**
+     * Cek apakah bucket mengizinkan operasi baca (GET dan HEAD) tanpa autentikasi.
+     */
+    public function isBucketPublic(string $bucket): bool
+    {
+        if ($bucket === self::PUBLIC_BUCKET) {
+            return true;
+        }
+
+        $publicBuckets = config('enstorage.public_buckets', 'public,sidbm,new_sidbm');
+        if ($publicBuckets === '*' || $publicBuckets === ['*']) {
+            return true;
+        }
+
+        $list = is_array($publicBuckets) ? $publicBuckets : explode(',', (string) $publicBuckets);
+        $list = array_map('trim', $list);
+
+        return in_array('*', $list, true) || in_array($bucket, $list, true);
     }
 
     /**
