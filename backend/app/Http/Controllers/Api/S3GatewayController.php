@@ -468,9 +468,19 @@ class S3GatewayController extends Controller
         $region = $this->parseCredentialField($authorization, 'Region') ?: 'us-east-1';
         $service = $this->parseCredentialField($authorization, 'Service') ?: 's3';
 
-        // Payload hash: pakai header X-Amz-Content-Sha256 kalau ada, jika
-        // tidak fallback ke UNSIGNED-PAYLOAD / hash body.
-        $payloadHash = $request->header('X-Amz-Content-Sha256')
+        // Payload hash: AWS SDK baru (>= 3.337) memakai UNSIGNED-PAYLOAD dan
+        // mengirim integritas lewat `x-amz-checksum-crc32`. Header itu TIDAK
+        // dikirim sebagai X-Amz-Content-Sha256, jadi nilainya harus
+        // direkonstruksi dari makna sebenarnya, bukan dari daftar header.
+        //
+        // Ketika header tersebut absen sama sekali, SDK (atau proxy) juga
+        // tidak menyertakannya di SignedHeaders. Untuk kasus itu, hash yang
+        // dipakai adalah hash body sebenarnya, jadi kita pakai
+        // `s3_payload_hash` (diisi middleware dari body) sebagai dugaan
+        // pertama, dengan UNSIGNED-PAYLOAD sebagai varian cadangan — lihat
+        // daftar `$candidates` di bawah.
+        $declaredPayloadHash = $request->header('X-Amz-Content-Sha256');
+        $payloadHash = $declaredPayloadHash
             ?: (string) $request->attributes->get('s3_payload_hash', 'UNSIGNED-PAYLOAD');
 
         // 1) Canonical request.
@@ -548,6 +558,75 @@ class S3GatewayController extends Controller
                 implode(';', $presentOnly),
                 $payloadHash,
             ]);
+        }
+
+        // Varian tambahan: payload hash alternatif. AWS SDK baru memakai
+        // `UNSIGNED-PAYLOAD` pada header X-Amz-Content-Sha256 (kalau dikirim),
+        // sementara sebagian versi menaruh hash body sebenarnya. Menerima
+        // keduanya membuat gateway kompatibel dengan rentang versi SDK yang
+        // luas tanpa melemahkan verifikasi signature itu sendiri.
+        $bodyHash = (string) $request->attributes->get('s3_payload_hash', '');
+        $payloadAlternates = [];
+        if ($declaredPayloadHash) {
+            // Header dikirim: varian lain adalah makna sebaliknya.
+            $payloadAlternates = [
+                $declaredPayloadHash,
+                $declaredPayloadHash === 'UNSIGNED-PAYLOAD' ? $bodyHash : 'UNSIGNED-PAYLOAD',
+            ];
+        } elseif ($bodyHash !== '') {
+            // Header tidak dikirim: coba hash body, lalu UNSIGNED-PAYLOAD.
+            $payloadAlternates = [$bodyHash, 'UNSIGNED-PAYLOAD'];
+        }
+        $payloadAlternates = array_values(array_unique(array_filter(
+            $payloadAlternates,
+            static fn (string $v): bool => $v !== '',
+        )));
+
+        if ($payloadAlternates !== []) {
+            $seed = $candidates[0];
+            foreach ($payloadAlternates as $alt) {
+                $variant = preg_replace(
+                    '/\n'.preg_quote($payloadHash, '/').'$/',
+                    "\n".$alt,
+                    $seed,
+                );
+                if ($variant !== null && $variant !== $seed && ! in_array($variant, $candidates, true)) {
+                    $candidates[] = $variant;
+                }
+            }
+        }
+
+        // Varian terakhir: klien menandatangani `x-amz-content-sha256` di
+        // SignedHeaders tapi TIDAK mengirim headernya (kasus nyata AWS SDK +
+        // proxy). Dalam kondisi itu header tersebut harus dibuang seluruhnya
+        // dari canonical request, dan payload hash yang dipakai klien bisa
+        // `UNSIGNED-PAYLOAD` maupun hash body — keduanya dicoba.
+        if (! $declaredPayloadHash && in_array('x-amz-content-sha256', $headerList, true)) {
+            $without = array_values(array_filter(
+                $headerList,
+                static fn (string $h): bool => $h !== 'x-amz-content-sha256',
+            ));
+
+            $headers = '';
+            foreach ($without as $headerName) {
+                if ($headerName === 'host') {
+                    $value = $request->getHost().($this->nonDefaultPort($request) ? ':'.$request->getPort() : '');
+                } else {
+                    $value = (string) $request->header($headerName, '');
+                }
+                $headers .= $headerName.':'.$this->normalizeHeaderValue($value)."\n";
+            }
+
+            foreach (array_unique([$payloadHash, 'UNSIGNED-PAYLOAD']) as $hashVariant) {
+                $candidates[] = implode("\n", [
+                    $request->getMethod(),
+                    $canonicalUri,
+                    $canonicalQuery,
+                    $headers,
+                    implode(';', $without),
+                    $hashVariant,
+                ]);
+            }
         }
 
         // 2) String to sign.

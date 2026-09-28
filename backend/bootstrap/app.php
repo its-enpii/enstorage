@@ -3,6 +3,7 @@
 use App\Http\Middleware\ActivityLogApiKey;
 use App\Http\Middleware\AuthApiKey;
 use App\Http\Middleware\CheckScope;
+use App\Http\Middleware\ComputeS3PayloadHash;
 use App\Http\Middleware\EnsureSanctum;
 use App\Http\Middleware\EnsureUserRole;
 use App\Http\Middleware\SetLocale;
@@ -64,8 +65,13 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Set locale early in the API group so response messages
         // (and the exception envelope) are localized.
+        //
+        // ComputeS3PayloadHash menghitung hash body untuk request tulis ke
+        // gateway S3 yang tidak menyertakan X-Amz-Content-Sha256, sehingga
+        // verifikasi SigV4 tetap bisa merekonstruksi canonical request.
         $middleware->api(prepend: [
             SetLocale::class,
+            ComputeS3PayloadHash::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
