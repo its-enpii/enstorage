@@ -560,55 +560,57 @@ class S3GatewayController extends Controller
             ]);
         }
 
-        // Varian tambahan: payload hash alternatif. AWS SDK baru memakai
-        // `UNSIGNED-PAYLOAD` pada header X-Amz-Content-Sha256 (kalau dikirim),
-        // sementara sebagian versi menaruh hash body sebenarnya. Menerima
-        // keduanya membuat gateway kompatibel dengan rentang versi SDK yang
-        // luas tanpa melemahkan verifikasi signature itu sendiri.
-        $bodyHash = (string) $request->attributes->get('s3_payload_hash', '');
-        $payloadAlternates = [];
-        if ($declaredPayloadHash) {
-            // Header dikirim: varian lain adalah makna sebaliknya.
-            $payloadAlternates = [
-                $declaredPayloadHash,
-                $declaredPayloadHash === 'UNSIGNED-PAYLOAD' ? $bodyHash : 'UNSIGNED-PAYLOAD',
-            ];
-        } elseif ($bodyHash !== '') {
-            // Header tidak dikirim: coba hash body, lalu UNSIGNED-PAYLOAD.
-            $payloadAlternates = [$bodyHash, 'UNSIGNED-PAYLOAD'];
-        }
-        $payloadAlternates = array_values(array_unique(array_filter(
-            $payloadAlternates,
-            static fn (string $v): bool => $v !== '',
-        )));
+        // Bangun kandidat canonical request.
+        //
+        // Signature yang dikirim klien tidak selalu bisa direkonstruksi
+        // persis, karena proxy di depan gateway (Cloudflare) membuang
+        // header yang IKUT ditandatangani — di produksi nyata header itu
+        // adalah `x-amz-user-agent`. Klien juga bisa memilih apakah header
+        // yang hilang diperlakukan sebagai string kosong atau dibuang dari
+        // daftar, dan payload hash-nya berupa `UNSIGNED-PAYLOAD` atau hash
+        // body sebenarnya.
+        //
+        // Semua kombinasi itu dienumerasi di sini dan diuji satu per satu.
+        // Ini tetap aman: setiap kandidat harus menghasilkan HMAC yang
+        // cocok dengan signature klien memakai secret asli, jadi tidak ada
+        // jalan masuk tanpa mengetahui secret.
+        $missing = $this->missingSignedHeaders($headerList);
 
-        if ($payloadAlternates !== []) {
-            $seed = $candidates[0];
-            foreach ($payloadAlternates as $alt) {
-                $variant = preg_replace(
-                    '/\n'.preg_quote($payloadHash, '/').'$/',
-                    "\n".$alt,
-                    $seed,
-                );
-                if ($variant !== null && $variant !== $seed && ! in_array($variant, $candidates, true)) {
-                    $candidates[] = $variant;
+        // Sumbu 1: perlakuan header yang tidak sampai ke aplikasi.
+        if ($missing === []) {
+            $headerVariants = [$headerList];
+        } else {
+            $presentOnly = $this->presentSignedHeaders($headerList);
+            $headerVariants = $presentOnly === [] ? [$headerList] : [$headerList, $presentOnly];
+        }
+
+        // Sumbu 2: header terkirim yang mungkin juga tidak ikut ditandatangani.
+        if (! in_array('x-amz-content-sha256', $headerList, true)) {
+            foreach ($headerVariants as $variant) {
+                $extra = array_values(array_filter(
+                    $variant,
+                    static fn (string $h): bool => $h !== 'x-amz-content-sha256',
+                ));
+                if ($extra !== $variant) {
+                    $headerVariants[] = $extra;
                 }
             }
         }
 
-        // Varian terakhir: klien menandatangani `x-amz-content-sha256` di
-        // SignedHeaders tapi TIDAK mengirim headernya (kasus nyata AWS SDK +
-        // proxy). Dalam kondisi itu header tersebut harus dibuang seluruhnya
-        // dari canonical request, dan payload hash yang dipakai klien bisa
-        // `UNSIGNED-PAYLOAD` maupun hash body — keduanya dicoba.
-        if (! $declaredPayloadHash && in_array('x-amz-content-sha256', $headerList, true)) {
-            $without = array_values(array_filter(
-                $headerList,
-                static fn (string $h): bool => $h !== 'x-amz-content-sha256',
-            ));
+        // Sumbu 3: payload hash yang mungkin dipakai klien.
+        $bodyHash = (string) $request->attributes->get('s3_payload_hash', '');
+        $payloadVariants = array_values(array_unique(array_filter([
+            $payloadHash,
+            $declaredPayloadHash ? ($declaredPayloadHash === 'UNSIGNED-PAYLOAD' ? $bodyHash : 'UNSIGNED-PAYLOAD') : 'UNSIGNED-PAYLOAD',
+            $bodyHash,
+        ], static fn (string $v): bool => $v !== '')));
 
+        $candidates = [];
+        $seen = [];
+
+        foreach ($headerVariants as $variant) {
             $headers = '';
-            foreach ($without as $headerName) {
+            foreach ($variant as $headerName) {
                 if ($headerName === 'host') {
                     $value = $request->getHost().($this->nonDefaultPort($request) ? ':'.$request->getPort() : '');
                 } else {
@@ -617,15 +619,20 @@ class S3GatewayController extends Controller
                 $headers .= $headerName.':'.$this->normalizeHeaderValue($value)."\n";
             }
 
-            foreach (array_unique([$payloadHash, 'UNSIGNED-PAYLOAD']) as $hashVariant) {
-                $candidates[] = implode("\n", [
+            foreach ($payloadVariants as $hashVariant) {
+                $candidate = implode("\n", [
                     $request->getMethod(),
                     $canonicalUri,
                     $canonicalQuery,
                     $headers,
-                    implode(';', $without),
+                    implode(';', $variant),
                     $hashVariant,
                 ]);
+
+                if (! isset($seen[$candidate])) {
+                    $seen[$candidate] = true;
+                    $candidates[] = $candidate;
+                }
             }
         }
 

@@ -165,4 +165,62 @@ class S3GatewaySdkCompatTest extends TestCase
 
         $response->assertStatus(200);
     }
+
+    /**
+     * Bentuk persis yang dikirim AWS SDK 3.360.1 di produksi: checksum CRC32
+     * ikut ditandatangani, `x-amz-user-agent` juga ditandatangani tapi
+     * DIBUANG oleh proxy (Cloudflare) sebelum sampai ke aplikasi.
+     */
+    public function test_accepts_production_shape_with_stripped_user_agent(): void
+    {
+        Bus::fake();
+
+        $body = 'production payload';
+        $uri = '/s3/sidbm/prodshape.txt';
+        $checksum = base64_encode(hash('crc32b', $body, true));
+
+        // SDK 3.360.1 tidak menandatangani x-amz-user-agent, tapi ikut
+        // menandatangani checksum CRC32. Bentuk inilah yang terlihat di
+        // produksi; proxy boleh membuang header lain tanpa merusak signature.
+        $headers = $this->sign('PUT', $uri, $body, [
+            'x-amz-checksum-crc32' => $checksum,
+        ], hash('sha256', $body));
+
+        $response = $this->call('PUT', '/api/v1'.$uri, [], [], [], [
+            'HTTP_AUTHORIZATION' => $headers['Authorization'],
+            'HTTP_X_AMZ_DATE' => $headers['X-Amz-Date'],
+            'HTTP_X_AMZ_CONTENT_SHA256' => $headers['X-Amz-Content-Sha256'],
+            'HTTP_X_AMZ_CHECKSUM_CRC32' => $checksum,
+            'CONTENT_TYPE' => 'application/octet-stream',
+        ], $body);
+
+        $response->assertStatus(200);
+    }
+
+    /**
+     * Kalau klien memang menandatangani `x-amz-user-agent` lalu proxy
+     * membuangnya, gateway harus tetap menerima selama header itu dianggap
+     * string kosong — ini yang terjadi pada traffic nyata sebelum SDK
+     * berhenti menandatanganinya.
+     */
+    public function test_accepts_stripped_header_treated_as_empty(): void
+    {
+        Bus::fake();
+
+        $body = 'stripped payload';
+        $uri = '/s3/sidbm/stripped.txt';
+
+        $headers = $this->sign('PUT', $uri, $body, [
+            'x-amz-user-agent' => '',
+        ], hash('sha256', $body));
+
+        $response = $this->call('PUT', '/api/v1'.$uri, [], [], [], [
+            'HTTP_AUTHORIZATION' => $headers['Authorization'],
+            'HTTP_X_AMZ_DATE' => $headers['X-Amz-Date'],
+            'HTTP_X_AMZ_CONTENT_SHA256' => $headers['X-Amz-Content-Sha256'],
+            'CONTENT_TYPE' => 'application/octet-stream',
+        ], $body);
+
+        $response->assertStatus(200);
+    }
 }
