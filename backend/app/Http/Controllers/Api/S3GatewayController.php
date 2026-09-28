@@ -500,6 +500,11 @@ class S3GatewayController extends Controller
             $canonicalHeaders .= $headerName.':'.$this->normalizeHeaderValue($value)."\n";
         }
 
+        // Header yang ditandatangani klien tapi tidak sampai ke aplikasi
+        // (mis. `x-amz-user-agent` yang dibuang proxy) diperlakukan sebagai
+        // string kosong, BUKAN dihapus dari daftar: menghapus entri akan
+        // mengubah SignedHeaders dan membuat signature tidak cocok dengan
+        // bentuk apa pun yang mungkin dikirim klien.
         $canonicalRequest = implode("\n", [
             $request->getMethod(),
             $canonicalUri,
@@ -509,24 +514,57 @@ class S3GatewayController extends Controller
             $payloadHash,
         ]);
 
+        $candidates = [$canonicalRequest];
+
+        if ($this->missingSignedHeaders($headerList) !== []) {
+            // Varian kedua: header yang tidak sampai dihilangkan dari daftar.
+            // Beberapa proxy (Cloudflare) membuang `x-amz-user-agent`, dan
+            // sebagian klien tidak menyertakannya di SignedHeaders.
+            $presentOnly = $this->presentSignedHeaders($headerList);
+            $reducedHeaders = '';
+            foreach ($presentOnly as $headerName) {
+                if ($headerName === 'host') {
+                    $value = $request->getHost().($this->nonDefaultPort($request) ? ':'.$request->getPort() : '');
+                } else {
+                    $value = (string) $request->header($headerName, '');
+                }
+                $reducedHeaders .= $headerName.':'.$this->normalizeHeaderValue($value)."\n";
+            }
+            $candidates[] = implode("\n", [
+                $request->getMethod(),
+                $canonicalUri,
+                $canonicalQuery,
+                $reducedHeaders,
+                implode(';', $presentOnly),
+                $payloadHash,
+            ]);
+        }
+
         // 2) String to sign.
         $algorithm = 'AWS4-HMAC-SHA256';
         $credentialScope = "{$dateStamp}/{$region}/{$service}/aws4_request";
-        $stringToSign = implode("\n", [
-            $algorithm,
-            $amzDate,
-            $credentialScope,
-            hash('sha256', $canonicalRequest),
-        ]);
 
         // 3) Signing key.
         $kDate = hash_hmac('sha256', $dateStamp, 'AWS4'.$secret, true);
         $kRegion = hash_hmac('sha256', $region, $kDate, true);
         $kService = hash_hmac('sha256', $service, $kRegion, true);
         $kSigning = hash_hmac('sha256', 'aws4_request', $kService, true);
-        $expected = hash_hmac('sha256', $stringToSign, $kSigning);
 
-        return hash_equals($expected, $providedSignature);
+        foreach ($candidates as $candidate) {
+            $stringToSign = implode("\n", [
+                $algorithm,
+                $amzDate,
+                $credentialScope,
+                hash('sha256', $candidate),
+            ]);
+            $expected = hash_hmac('sha256', $stringToSign, $kSigning);
+
+            if (hash_equals($expected, $providedSignature)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -544,12 +582,30 @@ class S3GatewayController extends Controller
             if ($headerName === 'host') {
                 continue;
             }
-            if (! $request_header = request()->headers->get($headerName)) {
+            if (! request()->headers->has($headerName)) {
                 $missing[] = $headerName;
             }
         }
 
         return $missing;
+    }
+
+    /**
+     * Nama header yang ditandatangani klien DAN sampai ke aplikasi.
+     *
+     * @param  list<string>  $headerList
+     * @return list<string>
+     */
+    private function presentSignedHeaders(array $headerList): array
+    {
+        $present = [];
+        foreach ($headerList as $headerName) {
+            if ($headerName === 'host' || request()->headers->has($headerName)) {
+                $present[] = $headerName;
+            }
+        }
+
+        return $present;
     }
 
     private function parseCredentialAccessKey(string $authorization): ?string
