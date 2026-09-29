@@ -20,8 +20,8 @@ class FolderResource extends JsonResource
             'parent_id' => $this->parent_id,
             'user_id' => $this->user_id,
             'files_count' => (int) ($this->files_count ?? 0),
-            'folders_count' => (int) ($this->folders_count ?? 0),
-            'total_size' => (int) ($this->total_size ?? 0),
+            'folders_count' => (int) ($this->folders_count ?? $this->children_count ?? 0),
+            'total_size' => (int) ($this->total_size ?? $this->files_sum_size ?? 0),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

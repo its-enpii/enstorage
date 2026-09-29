@@ -30,8 +30,8 @@ class RecentResource extends JsonResource
                 'path' => $model->path,
                 'parent_id' => $model->parent_id,
                 'files_count' => (int) ($model->files_count ?? 0),
-                'folders_count' => (int) ($model->folders_count ?? 0),
-                'total_size' => (int) ($model->total_size ?? 0),
+                'folders_count' => (int) ($model->folders_count ?? $model->children_count ?? 0),
+                'total_size' => (int) ($model->total_size ?? $model->files_sum_size ?? 0),
                 'created_at' => $model->created_at?->toIso8601String(),
                 'updated_at' => $model->updated_at?->toIso8601String(),
             ];

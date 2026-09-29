@@ -33,7 +33,7 @@ class RecentController extends Controller
         $foldersQuery = Folder::query()
             ->where('user_id', $userId)
             ->whereNull('parent_id')
-            ->withCount(['files', 'children'])
+            ->withCount(['files', 'children as folders_count'])
             ->withSum('files', 'size')
             ->orderByDesc('updated_at')
             ->orderByDesc('id');

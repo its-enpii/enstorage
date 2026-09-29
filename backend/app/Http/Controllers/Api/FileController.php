@@ -1133,6 +1133,8 @@ class FileController extends Controller
 
         $subfolders = Folder::where('parent_id', $targetFolder->id)
             ->where('user_id', $folder->user_id)
+            ->withCount(['files', 'children as folders_count'])
+            ->withSum('files', 'size')
             ->orderBy('name')
             ->get();
 

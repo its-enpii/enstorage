@@ -68,7 +68,7 @@ class FolderController extends Controller
         }
 
         $folders = $query
-            ->withCount(['files', 'children'])
+            ->withCount(['files', 'children as folders_count'])
             ->withSum('files', 'size');
 
         if ($request->boolean('starred')) {
@@ -95,7 +95,10 @@ class FolderController extends Controller
             return $this->fail(__('Folder tidak ditemukan.'), 404);
         }
 
-        $subfoldersQ = Folder::where('parent_id', $folder->id)->orderBy('name');
+        $subfoldersQ = Folder::where('parent_id', $folder->id)
+            ->withCount(['files', 'children as folders_count'])
+            ->withSum('files', 'size')
+            ->orderBy('name');
         $filesQ = File::where('folder_id', $folder->id)
             ->orderBy('created_at', 'desc');
 
@@ -872,6 +875,8 @@ class FolderController extends Controller
     {
         return Folder::where('id', $id)
             ->where('user_id', $request->user()->id)
+            ->withCount(['files', 'children as folders_count'])
+            ->withSum('files', 'size')
             ->first();
     }
 
