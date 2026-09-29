@@ -432,7 +432,7 @@ function FoldersContent() {
                 ) : undefined
               }
               right={
-                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1">
+                <div className="hover-actions flex items-center gap-1">
                   {editing === f.id ? (
                     <>
                       <IconButton

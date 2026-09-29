@@ -217,7 +217,7 @@ function AccountsContent() {
                 hover
                 className="flex items-start gap-5 group relative"
               >
-                <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 flex items-center gap-1">
+                <div className="absolute top-6 right-6 hover-actions flex items-center gap-1">
                   <IconButton
                     onClick={() => scanDrive(acc.id)}
                     disabled={scanning || busy === acc.id}

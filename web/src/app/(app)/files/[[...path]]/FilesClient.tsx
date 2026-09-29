@@ -1311,7 +1311,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
                 subtitle={size > 0 ? t('folders.itemsSize', { count: items, size: bytes(size) }) : t('folders.items', { count: items })}
                 onClick={() => navigateToFolder(f.path)}
                 right={
-                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1">
+                  <div className="hover-actions flex items-center gap-1">
                     <DropdownMenu
                       align="right"
                       trigger={

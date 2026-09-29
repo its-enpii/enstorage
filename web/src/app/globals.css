@@ -562,3 +562,22 @@ body {
   color: var(--color-on-surface);
   font-weight: 700;
 }
+
+/* === Hover-only actions === */
+/* Reveal actions on hover for mouse/pointer devices, but keep them always
+   visible on touch/mobile devices where hover is unavailable. */
+.hover-actions {
+  opacity: 1;
+  transition: opacity 150ms ease-in-out;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hover-actions {
+    opacity: 0;
+  }
+  .group:hover .hover-actions,
+  .group:focus-within .hover-actions,
+  .hover-actions:hover {
+    opacity: 1;
+  }
+}

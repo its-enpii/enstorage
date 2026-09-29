@@ -175,7 +175,7 @@ function ApiKeysContent() {
               hover
               className="flex flex-col gap-4 group relative"
             >
-              <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100">
+              <div className="absolute top-6 right-6 hover-actions">
                 <Button variant="danger-soft" size="sm" onClick={() => revoke(k.id)}>
                   {t('apikeys.revoke')}
                 </Button>

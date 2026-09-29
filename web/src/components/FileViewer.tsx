@@ -380,7 +380,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
           shape="circle"
           size="lg"
           onClick={toggleFullscreen}
-          className="absolute top-4 right-4 z-30 !bg-media-backdrop/60 !text-on-media opacity-0 hover:!opacity-100 hover:!bg-media-backdrop/80 transition-opacity duration-300 backdrop-blur"
+          className="absolute top-4 right-4 z-30 !bg-media-backdrop/60 !text-on-media opacity-100 sm:opacity-0 sm:hover:!opacity-100 hover:!bg-media-backdrop/80 transition-opacity duration-300 backdrop-blur"
           title="Keluar Fullscreen (Esc)"
           aria-label="Keluar Fullscreen (Esc)"
         >
