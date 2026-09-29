@@ -169,6 +169,11 @@ class FileUploadController extends Controller
                 $mimeType = $uploadedFile->getMimeType() ?? 'application/octet-stream';
                 $size = $uploadedFile->getSize();
 
+                // Nama unik per direktori: kalau sudah ada file dengan nama
+                // sama di folder (atau root) milik user ini, auto-suffix
+                // " (1)", " (2)", ... sebelum ekstensi.
+                $storedName = $this->uniqueFileName($userId, $folderId, $originalName);
+
                 // Stream upload ke local storage
                 // share_token legacy di-set dulu agar response shape
                 // tidak berubah untuk client existing; pivot row dibuat
@@ -179,8 +184,8 @@ class FileUploadController extends Controller
                     'user_id' => $userId,
                     'folder_id' => $folderId,
                     'google_account_id' => null, // di-set saat UploadJob memilih akun
-                    'name' => $originalName,
-                    'original_name' => $originalName,
+                    'name' => $storedName,
+                    'original_name' => $storedName,
                     'mime_type' => $mimeType,
                     'size' => $size,
                     'gdrive_file_id' => 'pending-'.Str::uuid(),
@@ -310,6 +315,9 @@ class FileUploadController extends Controller
                 ],
             );
         }
+
+        // Nama unik per direktori (sama seperti upload biasa).
+        $fileName = $this->uniqueFileName($userId, $folderId, $fileName);
 
         $file = FileModel::create([
             'user_id' => $userId,
@@ -867,6 +875,46 @@ class FileUploadController extends Controller
         if (! empty($errors)) {
             throw ValidationException::withMessages($errors);
         }
+    }
+
+    /**
+     * Hasilkan nama file unik di dalam folder (atau root) milik user.
+     * Kalau nama belum dipakai → kembalikan apa adanya. Kalau sudah ada,
+     * tambahkan suffix penomoran sebelum ekstensi:
+     *   "laporan.pdf"     -> "laporan (1).pdf"
+     *   "foto.tar.gz"     -> "foto (1).tar.gz"  (ekstensi = ".gz", bukan ".tar.gz")
+     *
+     * Catatan: ".gz" dipilih agar konsisten dengan pola "file (1).ext"
+     * yang dipakai untuk menggantikan seluruh stem; compound extension
+     * treatment tidak diperlukan untuk uniqueness.
+     */
+    private function uniqueFileName(string $userId, ?string $folderId, string $originalName): string
+    {
+        $exists = fn (string $name): bool => FileModel::where('user_id', $userId)
+            ->where('folder_id', $folderId)
+            ->where('name', $name)
+            ->exists();
+
+        if (! $exists($originalName)) {
+            return $originalName;
+        }
+
+        // Pisahkan stem + ekstensi (dot terakhir, kecuali dot di posisi awal).
+        $dotPos = strrpos($originalName, '.');
+        if ($dotPos === false || $dotPos === 0) {
+            $stem = $originalName;
+            $ext = '';
+        } else {
+            $stem = substr($originalName, 0, $dotPos);
+            $ext = substr($originalName, $dotPos);
+        }
+
+        $i = 1;
+        while ($exists($stem.' ('.$i.')'.$ext)) {
+            $i++;
+        }
+
+        return $stem.' ('.$i.')'.$ext;
     }
 
     private function resolveHost(string $host): array

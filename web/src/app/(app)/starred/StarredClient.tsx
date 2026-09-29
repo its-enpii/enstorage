@@ -265,7 +265,7 @@ function StarredContent() {
                     ? (size > 0 ? t('folders.itemsSize', { count: items, size: bytes(size) }) : t('folders.items', { count: items }))
                     : t('folders.items', { count: 0 })
                 }
-                onClick={() => router.push(`/files/${f.id}`)}
+                onClick={() => router.push(`/files${f.path}`)}
                 right={
                   <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1">
                     <IconButton

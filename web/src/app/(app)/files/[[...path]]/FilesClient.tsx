@@ -2,12 +2,12 @@
 
 import { triggerBlobDownload } from '@/lib/download';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { Tune, Link as LinkIcon } from '@mui/icons-material';
-import { apiRequest, ApiError, getToken, type FileItem, type Folder, type Folder as FolderType } from '@/lib/api';
-import { cacheGet, cacheInvalidatePrefix, cacheSet } from '@/lib/cache';
+import { apiRequest, ApiError, getToken, isUuid, type FileItem, type Folder, type Folder as FolderType, type ResolvedFolder } from '@/lib/api';
+import { cacheInvalidatePrefix } from '@/lib/cache';
 import { getLocalUserId } from '@/lib/filesStore';
 import {
   CloudDoneIcon,
@@ -70,38 +70,174 @@ function folderIcon() {
 export default function FilesClient() {
   return (
     <AppShell>
-      <FilesStoreGate>
-        <FilesContent />
-      </FilesStoreGate>
+      <FilesRoute />
     </AppShell>
   );
 }
 
-function FilesStoreGate({ children }: { children: React.ReactNode }) {
+type ResolvedRoute = {
+  /** Resolved folder UUID, or null for the root directory. */
+  folderId: string | null;
+  /** Canonical materialized path, e.g. "/sidbm/logo" (or "/" for root). */
+  currentPath: string;
+  /** Root → current breadcrumb (includes the current folder as last item). */
+  crumbs: { id: string; name: string; path: string }[];
+};
+
+/**
+ * Slug/path-aware routing layer.
+ *
+ * URL `/files/sidbm/logo` → materialized path `/sidbm/logo` → resolved to a
+ * folder UUID via `GET /folders/resolve`. Backward compatible with the old
+ * `/files/<uuid>` URLs: when the first segment is a UUID we look it up via
+ * `GET /folders/{id}` and `router.replace` to its canonical path.
+ */
+function FilesRoute() {
   const params = useParams();
+  const router = useRouter();
   const searchParams = useSearchParams();
-  // Catch-all: path can be ['abc'] or ['abc', 'def'] etc. We use the deepest id.
-  const path = (params.path as string[] | undefined) ?? [];
-  const folderId = path[path.length - 1] ?? null;
+
+  const rawPath = (params.path as string[] | undefined) ?? [];
+  const segments = rawPath.map((s) => {
+    try {
+      return decodeURIComponent(s);
+    } catch {
+      return s;
+    }
+  });
+  const currentPath = segments.length > 0 ? '/' + segments.join('/') : '/';
+  const legacyId = segments.length === 1 && isUuid(segments[0]) ? segments[0] : null;
+
   const search = searchParams.get('q') ?? '';
   const typeFilter = searchParams.get('type') ?? '';
+
+  const [resolved, setResolved] = useState<ResolvedRoute | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    // Root directory — no lookup needed.
+    if (!legacyId && currentPath === '/') {
+      setResolved({ folderId: null, currentPath: '/', crumbs: [] });
+      setError(null);
+      return;
+    }
+
+    setResolved(null);
+    setError(null);
+
+    const request = legacyId
+      ? apiRequest<{ folder: Folder; breadcrumb: { id: string; name: string }[] }>(`/folders/${legacyId}`)
+          .then((f) => {
+            if (cancelled) return null;
+            // Rewrite the URL to the canonical slug-based URL.
+            router.replace(`/files${f.folder.path}`);
+            return null;
+          })
+      : apiRequest<ResolvedFolder>(`/folders/resolve`, { query: { path: currentPath } })
+          .then((r) => {
+            if (cancelled || !r.folder) return null;
+            let acc = '';
+            const crumbs = r.breadcrumb.map((c) => {
+              acc = `${acc}/${c.name}`;
+              return { id: c.id, name: c.name, path: acc };
+            });
+            return { folderId: r.folder.id, currentPath, crumbs } satisfies ResolvedRoute;
+          });
+
+    request
+      .then((value) => {
+        if (cancelled) return;
+        if (value) setResolved(value);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof ApiError ? e.message : 'Folder tidak ditemukan.');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPath, legacyId, router]);
+
+  if (error) {
+    // Fall back to the root view; surface via the store error banner instead
+    // of a dead-end screen.
+    return (
+      <FilesStoreGate folderId={null} currentPath="/" crumbs={[]} search={search} typeFilter={typeFilter}>
+        <FilesContent currentPath="/" />
+      </FilesStoreGate>
+    );
+  }
+
+  if (!resolved) {
+    return <Loading label="Memuat folder…" />;
+  }
+
+  return (
+    <FilesStoreGate
+      folderId={resolved.folderId}
+      currentPath={resolved.currentPath}
+      crumbs={resolved.crumbs}
+      search={search}
+      typeFilter={typeFilter}
+    >
+      <FilesContent currentPath={resolved.currentPath} />
+    </FilesStoreGate>
+  );
+}
+
+function FilesStoreGate({
+  children,
+  folderId,
+  currentPath,
+  crumbs,
+  search,
+  typeFilter,
+}: {
+  children: React.ReactNode;
+  folderId: string | null;
+  currentPath: string;
+  crumbs: { id: string; name: string; path: string }[];
+  search: string;
+  typeFilter: string;
+}) {
   // Force a fresh provider mount on every view change so the store reads
   // the right cache key and renders instantly with no stale-data flash.
-  const viewKey = `${folderId ?? 'root'}|${search || ''}|${typeFilter || ''}`;
+  const viewKey = `${currentPath}|${search || ''}|${typeFilter || ''}`;
   return (
     <FilesStoreProvider key={viewKey} folderId={folderId} search={search} typeFilter={typeFilter}>
-      <FilesStoreBinderHost>
-        {children}
+      <FilesStoreBinderHost folderId={folderId}>
+        <FilesRouteContext.Provider value={{ folderId, crumbs }}>
+          {children}
+        </FilesRouteContext.Provider>
       </FilesStoreBinderHost>
     </FilesStoreProvider>
   );
 }
 
+type FilesRouteCtx = {
+  folderId: string | null;
+  crumbs: { id: string; name: string; path: string }[];
+};
+
+const FilesRouteContext = createContext<FilesRouteCtx>({
+  folderId: null,
+  crumbs: [],
+});
+
 /**
  * Inner consumer of FilesStoreProvider so FilesStoreBinder can wire
  * the current store into RealtimeProvider. Renders nothing.
  */
-function FilesStoreBinderHost({ children }: { children: React.ReactNode }) {
+function FilesStoreBinderHost({
+  children,
+  folderId,
+}: {
+  children: React.ReactNode;
+  folderId: string | null;
+}) {
   const store = useFilesStore();
   // Build a Set of folder ids currently visible as cards so
   // updateFolderCounts can skip non-visible folders (no-op is a no-op
@@ -119,21 +255,20 @@ function FilesStoreBinderHost({ children }: { children: React.ReactNode }) {
           revalidate: store.revalidate,
         }}
         visibleFolderIds={visibleFolderIds}
+        folderId={folderId}
       />
       {children}
     </>
   );
 }
 
-function FilesContent() {
+function FilesContent({ currentPath }: { currentPath: string }) {
   const { t } = useTranslation();
-  const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
   const { alert, confirm, prompt } = usePrompt();
   const { state: wsState } = useRealtime();
-  const path = (params.path as string[] | undefined) ?? [];
-  const folderId = path[path.length - 1] ?? null;
+  const { folderId, crumbs: folderCrumbs } = useContext(FilesRouteContext);
   const search = searchParams.get('q') ?? '';
   const typeFilter = searchParams.get('type') ?? '';
 
@@ -179,7 +314,6 @@ function FilesContent() {
   const [deleteFolderTarget, setDeleteFolderTarget] = useState<FolderType | null>(null);
   const [moveFiles, setMoveFiles] = useState<FileItem[] | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
-  const [folderCrumbs, setFolderCrumbs] = useState<{ id: string; name: string }[]>([]);
   // Map<fileId, setInterval handle>. When WS is connected, we don't
   // allocate a timer — files complete via FileUploadedBroadcast — and
   // the entry is absent. The cleanup pass at unmount clears any
@@ -208,31 +342,6 @@ function FilesContent() {
       pollRefs.current.clear();
     };
   }, []);
-
-  // Fetch folder breadcrumb for header when folderId changes.
-  // Cached per folder so revisit is instant + doesn't hit API.
-  useEffect(() => {
-    let cancelled = false;
-    if (!folderId) {
-      setFolderCrumbs([]);
-      return;
-    }
-    const userId = getLocalUserId();
-    const cacheKey = `crumb:${folderId}`;
-    const cached = cacheGet<{ id: string; name: string }[]>(userId, cacheKey);
-    if (cached) {
-      setFolderCrumbs(cached);
-      return;
-    }
-    apiRequest<{ breadcrumb: { id: string; name: string }[] }>(`/folders/${folderId}`)
-      .then((f) => {
-        if (cancelled) return;
-        setFolderCrumbs(f.breadcrumb);
-        cacheSet(userId, cacheKey, f.breadcrumb, 30 * 60_000);
-      })
-      .catch(() => { if (!cancelled) setFolderCrumbs([]); });
-    return () => { cancelled = true; };
-  }, [folderId]);
 
   // Global drag/drop overlay — works whether the page is empty or not
   useEffect(() => {
@@ -272,35 +381,43 @@ function FilesContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folderId]);
 
-  function navigateToFolder(id: string | null) {
-    if (id) {
-      router.push(`/files/${id}`);
+  function navigateToFolder(path: string | null) {
+    if (path && path !== '/') {
+      router.push(`/files${path}`);
     } else {
       router.push('/files');
     }
   }
 
+  // Preserve the current slug path when mutating the query string.
+  const basePath = currentPath === '/' ? '' : currentPath;
+
+  function replaceQuery(p: URLSearchParams) {
+    const qs = p.toString();
+    router.replace(`/files${basePath}${qs ? '?' + qs : ''}`);
+  }
+
   function setSearch(v: string) {
     setSearchInput(v);
-    const p = new URLSearchParams(params.toString());
+    const p = new URLSearchParams(searchParams.toString());
     if (v) p.set('q', v);
     else p.delete('q');
-    router.replace(`/files${p.toString() ? '?' + p.toString() : ''}`);
+    replaceQuery(p);
   }
 
   function setTypeFilter(v: string) {
-    const p = new URLSearchParams(params.toString());
+    const p = new URLSearchParams(searchParams.toString());
     if (v) p.set('type', v);
     else p.delete('type');
-    router.replace(`/files${p.toString() ? '?' + p.toString() : ''}`);
+    replaceQuery(p);
   }
 
   function setTabFromUrl(v: Tab) {
     setTab(v);
-    const p = new URLSearchParams(params.toString());
+    const p = new URLSearchParams(searchParams.toString());
     if (v === 'all') p.delete('tab');
     else p.set('tab', v);
-    router.replace(`/files${p.toString() ? '?' + p.toString() : ''}`);
+    replaceQuery(p);
   }
 
   function openFilter() {
@@ -1016,8 +1133,12 @@ function FilesContent() {
           <Breadcrumb
             size="lg"
             items={[
-              { id: null, label: t('files.title') },
-              ...folderCrumbs.map((c) => ({ id: c.id, label: c.name })),
+              { id: null, label: t('files.title'), href: '/files' },
+              ...folderCrumbs.map((c) => ({
+                id: c.id,
+                label: c.name,
+                href: `/files${c.path}`,
+              })),
             ]}
           />
         </h1>
@@ -1188,7 +1309,7 @@ function FilesContent() {
                   </div>
                 }
                 subtitle={size > 0 ? t('folders.itemsSize', { count: items, size: bytes(size) }) : t('folders.items', { count: items })}
-                onClick={() => navigateToFolder(f.id)}
+                onClick={() => navigateToFolder(f.path)}
                 right={
                   <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1">
                     <DropdownMenu

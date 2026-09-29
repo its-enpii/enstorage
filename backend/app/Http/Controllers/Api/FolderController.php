@@ -129,6 +129,48 @@ class FolderController extends Controller
     }
 
     /**
+     * GET /folders/resolve?path=/sidbm/logo — resolve folder by materialized path.
+     *
+     * Dipakai oleh web untuk routing berbasis slug/hierarki path
+     * (`/files/sidbm/logo`) alih-alih UUID (`/files/{id}`).
+     *
+     * - path kosong atau "/" (root) → return null (bukan error: root
+     *   directory memang tidak punya baris Folder).
+     * - path tidak ditemukan → 404.
+     */
+    public function resolveByPath(Request $request): JsonResponse
+    {
+        $path = (string) $request->query('path', '');
+
+        // Root directory: path kosong atau hanya sekumpulan "/".
+        $normalized = trim($path);
+        if ($normalized === '' || trim($normalized, '/') === '') {
+            return $this->ok([
+                'folder' => null,
+                'breadcrumb' => [],
+            ], __('Root directory.'));
+        }
+
+        // Normalisasi menjadi "/Segmen/Segmen" tanpa trailing slash.
+        $normalized = '/'.trim($normalized, '/');
+
+        $folder = Folder::where('user_id', $request->user()->id)
+            ->where('path', $normalized)
+            ->withCount(['files', 'children as folders_count'])
+            ->withSum('files', 'size')
+            ->first();
+
+        if (! $folder) {
+            return $this->fail(__('Folder tidak ditemukan.'), 404);
+        }
+
+        return $this->ok([
+            'folder' => new FolderResource($folder),
+            'breadcrumb' => $this->breadcrumb($folder),
+        ], __('Detail folder.'));
+    }
+
+    /**
      * POST /folders — buat folder baru (root atau subfolder).
      */
     public function store(Request $request): JsonResponse
@@ -157,22 +199,15 @@ class FolderController extends Controller
             }
         }
 
-        // Cek duplikasi nama di parent yang sama
-        $exists = Folder::where('user_id', $userId)
-            ->where('parent_id', $parentId)
-            ->where('name', $data['name'])
-            ->exists();
-
-        if ($exists) {
-            throw ValidationException::withMessages([
-                'name' => [__('Folder dengan nama ini sudah ada di lokasi ini.')],
-            ]);
-        }
+        // Nama folder unik per direktori (parent). Kalau sudah ada,
+        // otomatis beri suffix penomoran yang ramah pengguna:
+        // "Backup" -> "Backup (1)" -> "Backup (2)", dst.
+        $uniqueName = $this->uniqueFolderName($userId, $parentId, $data['name']);
 
         $folder = new Folder;
         $folder->user_id = $userId;
         $folder->parent_id = $parentId;
-        $folder->name = $data['name'];
+        $folder->name = $uniqueName;
         $folder->path = $this->paths->computePath($folder);
         $folder->save();
 
@@ -869,6 +904,30 @@ class FolderController extends Controller
         }
 
         return $crumbs;
+    }
+
+    /**
+     * Hasilkan nama folder yang unik di dalam parent tertentu.
+     * Kalau "$base" belum dipakai → kembalikan apa adanya.
+     * Kalau sudah → tambahkan suffix " (n)" dengan n mulai 1.
+     */
+    private function uniqueFolderName(string $userId, ?string $parentId, string $base): string
+    {
+        $exists = fn (string $name): bool => Folder::where('user_id', $userId)
+            ->where('parent_id', $parentId)
+            ->where('name', $name)
+            ->exists();
+
+        if (! $exists($base)) {
+            return $base;
+        }
+
+        $i = 1;
+        while ($exists($base.' ('.$i.')')) {
+            $i++;
+        }
+
+        return $base.' ('.$i.')';
     }
 
     private function findOwned(Request $request, string $id): ?Folder

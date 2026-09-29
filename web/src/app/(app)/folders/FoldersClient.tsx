@@ -209,10 +209,11 @@ function FoldersContent() {
     );
   }, [userId, currentId, current, folders]);
 
-  async function navigateTo(id: string | null) {
-    // Klik folder di /folders artinya "lihat isi folder ini" — pindah ke /files.
+  async function navigateTo(id: string | null, path?: string | null) {
+    // Klik folder di /folders artinya "lihat isi folder ini" — pindah ke /files
+    // dengan routing berbasis slug/materialized path (mis. /files/sidbm/logo).
     if (id) {
-      router.push(`/files/${id}`);
+      router.push(path ? `/files${path}` : `/files/${id}`);
       return;
     }
     // Root: stay on /folders (cuma untuk navigation internal kalau ada)
@@ -415,7 +416,7 @@ function FoldersContent() {
                   return size > 0 ? t('folders.itemsSize', { count: items, size: bytes(size) }) : t('folders.items', { count: items });
                 })()
               }
-              onClick={editing === f.id ? undefined : () => navigateTo(f.id)}
+              onClick={editing === f.id ? undefined : () => navigateTo(f.id, f.path)}
               editSlot={
                 editing === f.id ? (
                   <Input

@@ -33,6 +33,14 @@ type RealtimeContextValue = {
    * reads the latest value.
    */
   bindFilesStore: (mutators: StoreMutators | null, visibleFolderIds: Set<string>) => void;
+  /**
+   * Register the resolved folder UUID for the current view. Under
+   * slug/path routing the URL segment is a folder name, not a UUID, so
+   * the URL-derived `folderId` can't be trusted — the mounted
+   * FilesStoreProvider knows the real id (resolved via
+   * /folders/resolve) and publishes it here.
+   */
+  setCurrentFolderId: (folderId: string | null) => void;
 };
 
 const RealtimeContext = createContext<RealtimeContextValue | null>(null);
@@ -77,16 +85,29 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   const [lastError, setLastError] = useState<string | null>(null);
   const storeRef = useRef<StoreMutators | null>(null);
   const visibleFolderIdsRef = useRef<Set<string>>(new Set());
+  // When set (slug/path routing), overrides the URL-derived folder id
+  // for realtime view-matching. `undefined` = not published yet.
+  const resolvedFolderIdRef = useRef<string | null | undefined>(undefined);
 
   const bindFilesStore: RealtimeContextValue['bindFilesStore'] = (mutators, visibleFolderIds) => {
     storeRef.current = mutators;
     visibleFolderIdsRef.current = visibleFolderIds;
   };
 
+  const setCurrentFolderId: RealtimeContextValue['setCurrentFolderId'] = (id) => {
+    resolvedFolderIdRef.current = id;
+  };
+
   const ctxValue = useMemo<RealtimeContextValue>(
-    () => ({ state, lastError, bindFilesStore }),
+    () => ({ state, lastError, bindFilesStore, setCurrentFolderId }),
     [state, lastError],
   );
+
+  // Effective folder id for view-matching: prefer the resolved id
+  // published by the mounted store; fall back to the URL segment.
+  const effectiveFolderId = resolvedFolderIdRef.current !== undefined
+    ? resolvedFolderIdRef.current
+    : folderId;
 
   // Disconnect on auth invalidation (401 from any API call).
   useEffect(() => {
@@ -186,7 +207,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       }
       applyEvent(ev, {
         store: storeRef.current,
-        currentFolderId: folderId,
+        currentFolderId: effectiveFolderId,
         visibleFolderIds: visibleFolderIdsRef.current,
       });
     };
@@ -215,7 +236,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         try { u(); } catch { /* ignore */ }
       }
     };
-  }, [user, folderId]);
+  }, [user, folderId, effectiveFolderId]);
 
   return (
     <RealtimeContext.Provider value={ctxValue}>
@@ -232,14 +253,24 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 export function FilesStoreBinder({
   mutators,
   visibleFolderIds,
+  folderId,
 }: {
   mutators: StoreMutators;
   visibleFolderIds: Set<string>;
+  /**
+   * Resolved folder UUID for the current view (null = root). Passed
+   * explicitly so realtime view-matching works under slug/path routing.
+   */
+  folderId?: string | null;
 }) {
-  const { bindFilesStore } = useRealtime();
+  const { bindFilesStore, setCurrentFolderId } = useRealtime();
   useEffect(() => {
     bindFilesStore(mutators, visibleFolderIds);
     return () => bindFilesStore(null, new Set());
   }, [bindFilesStore, mutators, visibleFolderIds]);
+  useEffect(() => {
+    setCurrentFolderId(folderId ?? null);
+    return () => setCurrentFolderId(null);
+  }, [setCurrentFolderId, folderId]);
   return null;
 }

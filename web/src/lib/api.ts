@@ -67,6 +67,22 @@ export type Folder = {
   updated_at: string;
 };
 
+/**
+ * Hasil resolusi folder berbasis materialized path via
+ * `GET /folders/resolve?path=...`. `folder` bernilai null untuk root.
+ */
+export type ResolvedFolder = {
+  folder: Folder | null;
+  breadcrumb: { id: string; name: string }[];
+};
+
+/** Apakah string terlihat seperti UUID (untuk deteksi URL legacy `/files/<uuid>`). */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value: string | null | undefined): boolean {
+  return !!value && UUID_RE.test(value);
+}
+
 export type FolderWithChildren = Folder & {
   breadcrumb: Folder[];
   children: Folder[];

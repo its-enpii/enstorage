@@ -7,6 +7,13 @@ import clsx from 'clsx';
 export type Crumb = {
   id: string | null; // null = root
   label: string;
+  /**
+   * Optional explicit href. When set, it wins over `hrefFor`/default
+   * `/files/{id}` derivation. Used for slug/path-based routing where the
+   * crumb resolves to a materialized path (e.g. `/files/sidbm/logo`)
+   * rather than a UUID.
+   */
+  href?: string;
 };
 
 type Props = {
@@ -15,6 +22,12 @@ type Props = {
   rootHref?: string;
   /** Custom href template for a crumb. Receives id, returns href. */
   hrefFor?: (id: string) => string;
+  /**
+   * Custom href resolver receiving the crumb + its index. Takes
+   * precedence over `hrefFor` and the default `/files/{id}` derivation,
+   * but yields to an explicit `crumb.href`. Enables slug/path routing.
+   */
+  hrefForIndex?: (crumb: Crumb, index: number) => string;
   /** Visual size. */
   size?: 'sm' | 'md' | 'lg';
   className?: string;
@@ -30,6 +43,7 @@ export function Breadcrumb({
   items,
   rootHref = '/files',
   hrefFor,
+  hrefForIndex,
   size = 'lg',
   className,
 }: Props) {
@@ -47,7 +61,9 @@ export function Breadcrumb({
         const href =
           c.id === null
             ? rootHref
-            : (hrefFor ? hrefFor(c.id) : `/files/${c.id}`);
+            : (c.href
+              ?? (hrefForIndex ? hrefForIndex(c, i) : undefined)
+              ?? (hrefFor ? hrefFor(c.id) : `/files/${c.id}`));
 
         return (
           <span key={`${c.label}-${i}`} className="flex items-center gap-2">

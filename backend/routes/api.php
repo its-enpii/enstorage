@@ -141,6 +141,9 @@ Route::middleware('auth.apikey')->group(function () {
     // Folders
     Route::get('folders', [FolderController::class, 'index']);
     Route::post('folders', [FolderController::class, 'store']);
+    // Resolve by materialized path — WAJIB sebelum `folders/{id}` agar
+    // literal "resolve" tidak tertelan sebagai parameter {id}.
+    Route::get('folders/resolve', [FolderController::class, 'resolveByPath']);
     Route::get('folders/{id}', [FolderController::class, 'show']);
     Route::get('folders/{id}/download', [FolderController::class, 'download']);
     Route::patch('folders/{id}', [FolderController::class, 'update']);
@@ -218,6 +221,7 @@ Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(funct
         Route::get('files/{id}/download', [FileController::class, 'download']);
         Route::get('files/{id}/thumbnail', [FileController::class, 'thumbnail']);
         Route::get('folders', [FolderController::class, 'index']);
+        Route::get('folders/resolve', [FolderController::class, 'resolveByPath']);
         Route::get('folders/{id}', [FolderController::class, 'show']);
         Route::get('folders/{id}/download', [FolderController::class, 'download']);
         Route::get('recent', [RecentController::class, 'index']);
