@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -9,9 +9,11 @@ import {
   CloudOff,
   DarkMode,
   DeleteForever,
+  Key,
   LightMode,
-  Logout,
+  RestartAlt,
   SettingsBrightness,
+  Star,
   Storage,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
@@ -30,7 +32,6 @@ import { Field, Input } from '@/components/Input';
 import { Toggle } from '@/components/Switch';
 import { useTheme } from '@/components/ThemeProvider';
 import { useAuth } from '@/components/AuthProvider';
-import { usePrompt } from '@/components/usePrompt';
 import { WebhooksSection } from '@/components/WebhooksSection';
 import { setLocale } from '@/lib/i18n';
 import { DeleteIcon } from '@/lib/icons';
@@ -67,12 +68,18 @@ function SettingsContent() {
   const { t, i18n } = useTranslation();
   usePageTitle(t('settings.title'));
   const router = useRouter();
-  const { user, logout } = useAuth();
-  const { confirm } = usePrompt();
+  const { user, logout, refresh } = useAuth();
   const { data: summary, loading, error, revalidate } = summaryStore.useStore();
   const [notif, setNotif] = useState({ upload: true, quota: true, security: true });
   const { theme, setTheme } = useTheme();
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
+
+  // Reset vault state
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetText, setResetText] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const resetWord = t('settings.resetVaultDialog.confirmWord');
 
   // Delete account state
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -103,17 +110,6 @@ function SettingsContent() {
     }
   }
 
-  async function handleLogout() {
-    const ok = await confirm(t('settings.logoutConfirmDesc'), {
-      title: t('settings.logoutConfirmTitle'),
-      danger: true,
-      confirmLabel: t('settings.logout'),
-    });
-    if (!ok) return;
-    await logout();
-    router.replace('/login');
-  }
-
   async function handleDeleteAccount() {
     if (confirmText.trim() !== expectedWord || deleting) return;
     setDeleting(true);
@@ -142,6 +138,36 @@ function SettingsContent() {
     setDeleteError(null);
   }
 
+  async function handleResetVault() {
+    if (resetText.trim() !== resetWord || resetting) return;
+    setResetting(true);
+    setResetError(null);
+    try {
+      await apiRequest('/vault/reset', { method: 'POST' });
+      await refresh();
+      await revalidate();
+      setResetOpen(false);
+      setResetText('');
+    } catch (e) {
+      setResetError(
+        e instanceof ApiError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : t('settings.resetVaultDialog.failed'),
+      );
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  function handleCloseResetDialog() {
+    if (resetting) return;
+    setResetOpen(false);
+    setResetText('');
+    setResetError(null);
+  }
+
   return (
     <>
       <h1 className="font-display text-headline-lg text-on-surface mb-8">
@@ -153,6 +179,21 @@ function SettingsContent() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-card-gap">
+        {/* Statistik Vault */}
+        {user?.counts && (
+          <Card as="section" className="lg:col-span-2">
+            <h2 className="font-body text-body-lg font-semibold text-on-surface mb-6">
+              {t('settings.vaultStats')}
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <Stat label={t('settings.googleAccounts')} value={user.counts.google_accounts} icon={<Cloud />} />
+              <Stat label={t('settings.folders')} value={user.counts.folders} icon={<Storage />} />
+              <Stat label={t('settings.files')} value={user.counts.files} icon={<Star />} />
+              <Stat label={t('settings.apiKeys')} value={user.counts.api_keys} icon={<Key />} />
+            </div>
+          </Card>
+        )}
+
         {/* Storage */}
         <Card className="lg:col-span-2 flex flex-col gap-6">
           <div className="flex items-start gap-4">
@@ -362,26 +403,51 @@ function SettingsContent() {
         <WebhooksSection webhooks={webhooks} onChange={loadWebhooks} />
 
         {/* Zona Berbahaya */}
-        <Card as="section" className="lg:col-span-2 border border-error/20 flex flex-col gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h2 className="font-body text-body-lg font-semibold text-error">
-                {t('settings.dangerZone')}
-              </h2>
-              <p className="text-metadata text-outline mt-1">
-                {t('settings.dangerDesc')}
-              </p>
-            </div>
-            <div className="flex items-center gap-3 shrink-0 flex-wrap">
+        <Card as="section" className="lg:col-span-2 border border-error/20 flex flex-col gap-6">
+          <div>
+            <h2 className="font-body text-body-lg font-semibold text-error">
+              {t('settings.dangerZone')}
+            </h2>
+            <p className="text-metadata text-outline mt-1">
+              {t('settings.dangerDesc')}
+            </p>
+          </div>
+
+          <div className="divide-y divide-outline-variant/15">
+            {/* Item 1: Reset Vault */}
+            <div className="py-4 first:pt-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h3 className="font-body text-body font-semibold text-on-surface">
+                  {t('settings.resetVault')}
+                </h3>
+                <p className="text-metadata text-outline mt-0.5 max-w-xl">
+                  {t('settings.resetVaultDesc')}
+                </p>
+              </div>
               <Button
                 variant="danger-soft"
-                onClick={handleLogout}
-                leftIcon={<Logout className="!text-lg" />}
+                size="md"
+                className="shrink-0 self-start sm:self-auto"
+                onClick={() => setResetOpen(true)}
               >
-                {t('settings.logout')}
+                {t('settings.resetVault')}
               </Button>
+            </div>
+
+            {/* Item 2: Hapus Akun */}
+            <div className="py-4 last:pb-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h3 className="font-body text-body font-semibold text-error">
+                  {t('settings.deleteAccount')}
+                </h3>
+                <p className="text-metadata text-outline mt-0.5 max-w-xl">
+                  {t('settings.deleteAccountDesc')}
+                </p>
+              </div>
               <Button
                 variant="danger"
+                size="md"
+                className="shrink-0 self-start sm:self-auto"
                 onClick={() => setDeleteOpen(true)}
                 leftIcon={<DeleteForever className="!text-lg" />}
               >
@@ -391,6 +457,59 @@ function SettingsContent() {
           </div>
         </Card>
       </div>
+
+      <Dialog
+        open={resetOpen}
+        onClose={handleCloseResetDialog}
+        title={t('settings.resetVaultDialog.title')}
+        description={t('settings.resetVaultDialog.description')}
+        icon={<RestartAlt className="!text-2xl text-error" />}
+        variant="danger"
+        actions={
+          <>
+            <Button
+              variant="ghost"
+              size="md"
+              onClick={handleCloseResetDialog}
+              disabled={resetting}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              onClick={() => void handleResetVault()}
+              disabled={resetText.trim() !== resetWord || resetting}
+            >
+              {resetting ? (
+                <div className="w-4 h-4 rounded-full border-2 border-on-primary/30 border-t-on-primary animate-spin mr-1" />
+              ) : (
+                <RestartAlt className="!text-lg" />
+              )}
+              {t('settings.resetVaultDialog.confirm')}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {resetError && (
+            <Alert tone="danger">{resetError}</Alert>
+          )}
+          <Field
+            label={t('settings.resetVaultDialog.instruction', { confirmWord: resetWord })}
+            htmlFor="reset-vault-confirm-input"
+          >
+            <Input
+              id="reset-vault-confirm-input"
+              value={resetText}
+              onChange={(e) => setResetText(e.target.value)}
+              placeholder={t('settings.resetVaultDialog.placeholder')}
+              disabled={resetting}
+              autoFocus
+            />
+          </Field>
+        </div>
+      </Dialog>
 
       <Dialog
         open={deleteOpen}
@@ -445,6 +564,28 @@ function SettingsContent() {
         </div>
       </Dialog>
     </>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: number;
+  icon: ReactNode;
+}) {
+  return (
+    <div className="bg-surface-container rounded-xl p-4 flex items-center gap-3">
+      <div className="w-10 h-10 rounded-lg bg-primary-container flex items-center justify-center text-on-primary-container shrink-0">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-metadata text-outline uppercase tracking-wider">{label}</p>
+        <p className="text-2xl font-semibold text-on-surface font-display">{value}</p>
+      </div>
+    </div>
   );
 }
 

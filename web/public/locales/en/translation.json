@@ -367,6 +367,8 @@
     "logout": "Sign Out",
     "logoutConfirmTitle": "Sign Out?",
     "logoutConfirmDesc": "Your session on this device will be ended.",
+    "resetVault": "Reset Vault",
+    "resetVaultDesc": "Delete all files, folders, and connected Google accounts from your vault. Your account and settings are kept.",
     "deleteAccount": "Delete Account",
     "deleteAccountDesc": "Permanently delete your account and all associated vault data.",
     "deleteAccountDialog": {
@@ -377,6 +379,15 @@
       "placeholder": "Type DELETE here",
       "confirm": "Delete Account",
       "failed": "Failed to delete account."
+    },
+    "resetVaultDialog": {
+      "title": "Reset Vault?",
+      "description": "This will permanently delete all your files, folders, and connected Google accounts. Your account and settings will not be removed.",
+      "instruction": "Please type {{confirmWord}} to confirm:",
+      "confirmWord": "RESET",
+      "placeholder": "Type RESET here",
+      "confirm": "Reset Vault",
+      "failed": "Failed to reset vault."
     }
   },
   "share": {

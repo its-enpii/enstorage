@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\File;
 use App\Models\File as FileModel;
+use App\Models\Folder;
 use App\Models\GoogleAccount;
+use App\Models\ShareLink;
 use App\Models\User;
 use App\Services\ActivityLogService;
 use App\Services\Google\GoogleClientFactory;
@@ -560,6 +562,63 @@ class AuthController extends Controller
         Log::info('Akun user telah dihapus permanen', ['user_id' => $userId]);
 
         return $this->ok(null, __('Akun berhasil dihapus.'));
+    }
+
+    /**
+     * POST /vault/reset
+     * Kosongkan seluruh vault user (file, folder, share link, thumbnail)
+     * tanpa menghapus akun. Akun Google & konfigurasi tetap aman — hanya
+     * root folder Drive yang di-forget agar dibuat ulang saat upload
+     * berikutnya.
+     */
+    public function resetVault(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $userId = $user->id;
+
+        // Path thumbnail lokal harus diambil SEBELUM baris files dihapus
+        // (metadata thumbnail ikut ter-cascade saat files dibersihkan).
+        $thumbnailPaths = FileModel::where('user_id', $userId)
+            ->with('thumbnail:id,file_id,path')
+            ->get()
+            ->pluck('thumbnail')
+            ->filter()
+            ->pluck('path')
+            ->all();
+
+        DB::transaction(function () use ($userId, $thumbnailPaths) {
+            // 1. Google Drive: lepaskan root folder EnStorage agar dibuat
+            //    ulang pada upload berikutnya. Folder lama di Drive
+            //    dibiarkan (bukan bagian dari vault akun).
+            $accounts = GoogleAccount::where('user_id', $userId)->get();
+            foreach ($accounts as $account) {
+                $account->gdrive_root_folder_id = null;
+                $account->save();
+                $this->quota->invalidate($account);
+            }
+
+            // 2. Thumbnail lokal.
+            foreach ($thumbnailPaths as $path) {
+                @unlink(storage_path('app/'.$path));
+            }
+
+            // 3. File, folder, dan share link milik user.
+            FileModel::where('user_id', $userId)->delete();
+            Folder::where('user_id', $userId)->delete();
+            ShareLink::where('user_id', $userId)->delete();
+        });
+
+        // 4. Jejak audit (user tetap ada, jadi user_id tetap valid).
+        $this->activityLog->log(
+            ActivityLog::ACTION_USER_UPDATE,
+            userId: $userId,
+            metadata: ['action' => 'vault_reset'],
+            request: $request,
+        );
+
+        Log::info('Vault user telah di-reset', ['user_id' => $userId]);
+
+        return $this->ok(null, __('Vault berhasil di-reset. Seluruh file dan folder telah dikosongkan.'));
     }
 
     public function me(Request $request): JsonResponse

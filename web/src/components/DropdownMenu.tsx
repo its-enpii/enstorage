@@ -15,13 +15,15 @@ type Props = {
   trigger: ReactNode;
   items: MenuItem[];
   align?: 'left' | 'right';
+  /** Optional content rendered above the items (e.g. a profile header). */
+  header?: ReactNode;
 };
 
 // useLayoutEffect warns on SSR; use useEffect on server.
 const useIsoLayoutEffect =
   typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
-export function DropdownMenu({ trigger, items, align = 'right' }: Props) {
+export function DropdownMenu({ trigger, items, align = 'right', header }: Props) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -91,6 +93,12 @@ export function DropdownMenu({ trigger, items, align = 'right' }: Props) {
           className="z-[1000] min-w-[180px] bg-surface-container-highest rounded-xl shadow-2xl py-1 border border-outline-variant/20"
           onClick={(e) => e.stopPropagation()}
         >
+          {header && (
+            <>
+              <div className="px-4 py-2.5">{header}</div>
+              <div className="my-1 border-b border-outline-variant/15" />
+            </>
+          )}
           {items.map((item, i) => (
             <div key={i}>
               <button

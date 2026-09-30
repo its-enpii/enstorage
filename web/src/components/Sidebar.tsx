@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import {
   Cloud,
@@ -9,12 +9,16 @@ import {
   GridView,
   Key,
   Group,
+  Logout,
+  Person,
   Settings,
   Star,
 } from '@mui/icons-material';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/components/AuthProvider';
+import { DropdownMenu } from '@/components/DropdownMenu';
+import { usePrompt } from '@/components/usePrompt';
 
 type Props = {
   /** When true (mobile only), slide the drawer in over the page with a backdrop. */
@@ -25,7 +29,67 @@ type Props = {
 export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
   const { t } = useTranslation();
   const pathname = usePathname();
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, logout } = useAuth();
+  const { confirm } = usePrompt();
+
+  async function handleLogout() {
+    const ok = await confirm(t('settings.logoutConfirmDesc'), {
+      title: t('settings.logoutConfirmTitle'),
+      danger: true,
+      confirmLabel: t('settings.logout'),
+    });
+    if (!ok) return;
+    await logout();
+    router.replace('/login');
+  }
+
+  const avatar = (
+    <button
+      type="button"
+      title={user?.email ?? t('nav.profile')}
+      aria-label={t('nav.profile')}
+      className="w-10 h-10 rounded-full bg-surface-container-high border border-outline-variant/20 flex items-center justify-center text-on-surface text-sm font-semibold overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all"
+    >
+      {user?.name?.[0]?.toUpperCase() ?? '?'}
+    </button>
+  );
+
+  const profileMenu = (
+    <DropdownMenu
+      align="left"
+      trigger={avatar}
+      header={
+        <div className="min-w-0">
+          <p className="font-semibold text-on-surface text-sm truncate">
+            {user?.name ?? t('nav.profile')}
+          </p>
+          <p className="text-metadata text-outline text-xs truncate">
+            {user?.email ?? ''}
+          </p>
+        </div>
+      }
+      items={[
+        {
+          label: t('nav.profile'),
+          icon: <Person className="!text-lg" />,
+          onClick: () => router.push('/profile'),
+        },
+        {
+          label: t('nav.settings'),
+          icon: <Settings className="!text-lg" />,
+          onClick: () => router.push('/settings'),
+          dividerAfter: true,
+        },
+        {
+          label: t('nav.logout'),
+          icon: <Logout className="!text-lg" />,
+          variant: 'danger',
+          onClick: () => void handleLogout(),
+        },
+      ]}
+    />
+  );
 
   // Body scroll lock + ESC close — only when mobile drawer is open.
   useEffect(() => {
@@ -94,13 +158,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
             <div className="absolute -left-[30px] top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
           )}
         </Link>
-        <Link
-          href="/profile"
-          title={user?.email ?? t('nav.profile')}
-          className="w-10 h-10 rounded-full bg-surface-container-high border border-outline-variant/20 flex items-center justify-center text-on-surface text-sm font-semibold overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all"
-        >
-          {user?.name?.[0]?.toUpperCase() ?? '?'}
-        </Link>
+        {profileMenu}
       </div>
     </>
   );

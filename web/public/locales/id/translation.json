@@ -367,6 +367,8 @@
     "logout": "Keluar",
     "logoutConfirmTitle": "Keluar?",
     "logoutConfirmDesc": "Sesi Anda di perangkat ini akan diakhiri.",
+    "resetVault": "Reset Vault",
+    "resetVaultDesc": "Hapus semua file, folder, dan akun Google yang terhubung dari vault Anda. Akun dan pengaturan Anda tetap dipertahankan.",
     "deleteAccount": "Hapus Akun",
     "deleteAccountDesc": "Hapus akun Anda dan semua data vault terkait secara permanen.",
     "deleteAccountDialog": {
@@ -377,6 +379,15 @@
       "placeholder": "Ketik HAPUS di sini",
       "confirm": "Hapus Akun",
       "failed": "Gagal menghapus akun."
+    },
+    "resetVaultDialog": {
+      "title": "Reset Vault?",
+      "description": "Tindakan ini akan menghapus semua file, folder, dan akun Google yang terhubung secara permanen. Akun dan pengaturan Anda tidak akan terhapus.",
+      "instruction": "Ketik {{confirmWord}} untuk mengonfirmasi:",
+      "confirmWord": "RESET",
+      "placeholder": "Ketik RESET di sini",
+      "confirm": "Reset Vault",
+      "failed": "Gagal mereset vault."
     }
   },
   "share": {

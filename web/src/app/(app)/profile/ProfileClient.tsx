@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Cloud, Logout, Person, Star, Storage, Edit, Save, Cancel } from '@mui/icons-material';
+import { Person, Edit, Save, Cancel } from '@mui/icons-material';
 import { apiRequest, ApiError } from '@/lib/api';
 import { AppShell } from '@/components/AppShell';
 import { Button, IconButton } from '@/components/Button';
@@ -12,7 +12,6 @@ import { Field, Input } from '@/components/Input';
 import { Chip } from '@/components/Chip';
 import { usePrompt } from '@/components/usePrompt';
 import { useAuth } from '@/components/AuthProvider';
-import { useRouter } from 'next/navigation';
 import { usePageTitle } from '@/lib/usePageTitle';
 
 export default function ProfileClient() {
@@ -25,9 +24,8 @@ export default function ProfileClient() {
 
 function ProfileContent() {
   const { t } = useTranslation();
-  const { user, logout, refresh } = useAuth();
-  const router = useRouter();
-  const { alert, confirm } = usePrompt();
+  const { user, refresh } = useAuth();
+  const { alert } = usePrompt();
   usePageTitle(t('profile.title'));
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -106,17 +104,6 @@ function ProfileContent() {
     } finally {
       setPwSaving(false);
     }
-  }
-
-  async function handleLogout() {
-    const ok = await confirm(t('profile.logoutConfirmDesc'), {
-      title: t('profile.logoutConfirmTitle'),
-      danger: true,
-      confirmLabel: t('profile.logout'),
-    });
-    if (!ok) return;
-    await logout();
-    router.replace('/login');
   }
 
   if (!user) return null;
@@ -253,34 +240,6 @@ function ProfileContent() {
             </Button>
           </div>
         </Card>
-
-        {/* Statistik */}
-        {user.counts && (
-          <Card as="section" className="lg:col-span-2">
-            <h2 className="font-body text-body-lg font-semibold text-on-surface mb-6">
-              {t('profile.vaultStats')}
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <Stat label={t('profile.googleAccounts')} value={user.counts.google_accounts} icon={<Cloud />} />
-              <Stat label={t('profile.folders')} value={user.counts.folders} icon={<Storage />} />
-              <Stat label={t('profile.files')} value={user.counts.files} icon={<Star />} />
-              <Stat label={t('profile.apiKeys')} value={user.counts.api_keys} icon={<Star />} />
-            </div>
-          </Card>
-        )}
-
-        {/* Zona Berbahaya */}
-        <Card as="section" className="lg:col-span-2 border border-error/20">
-          <h2 className="font-body text-body-lg font-semibold text-error mb-2">
-            {t('profile.dangerZone')}
-          </h2>
-          <p className="text-metadata text-outline mb-6">
-            {t('profile.dangerDesc')}
-          </p>
-          <Button variant="danger-soft" onClick={handleLogout} leftIcon={<Logout />}>
-            {t('profile.logout')}
-          </Button>
-        </Card>
       </div>
     </>
   );
@@ -291,28 +250,6 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
     <div className="flex items-center justify-between gap-4 py-1.5 border-b border-outline-variant/10 last:border-0">
       <span className="text-metadata text-outline">{label}</span>
       <span className="text-sm text-on-surface font-medium text-right break-all">{value}</span>
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="bg-surface-container rounded-xl p-4 flex items-center gap-3">
-      <div className="w-10 h-10 rounded-lg bg-primary-container flex items-center justify-center text-on-primary-container shrink-0">
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <p className="text-metadata text-outline uppercase tracking-wider">{label}</p>
-        <p className="text-2xl font-semibold text-on-surface font-display">{value}</p>
-      </div>
     </div>
   );
 }
