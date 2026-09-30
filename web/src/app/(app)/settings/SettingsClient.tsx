@@ -479,13 +479,10 @@ function SettingsContent() {
               variant="danger"
               size="md"
               onClick={() => void handleResetVault()}
-              disabled={resetText.trim() !== resetWord || resetting}
+              disabled={resetText.trim() !== resetWord}
+              loading={resetting}
+              leftIcon={<RestartAlt className="!text-lg" />}
             >
-              {resetting ? (
-                <div className="w-4 h-4 rounded-full border-2 border-on-primary/30 border-t-on-primary animate-spin mr-1" />
-              ) : (
-                <RestartAlt className="!text-lg" />
-              )}
               {t('settings.resetVaultDialog.confirm')}
             </Button>
           </>
@@ -532,13 +529,10 @@ function SettingsContent() {
               variant="danger"
               size="md"
               onClick={() => void handleDeleteAccount()}
-              disabled={confirmText.trim() !== expectedWord || deleting}
+              disabled={confirmText.trim() !== expectedWord}
+              loading={deleting}
+              leftIcon={<DeleteForever className="!text-lg" />}
             >
-              {deleting ? (
-                <div className="w-4 h-4 rounded-full border-2 border-on-primary/30 border-t-on-primary animate-spin mr-1" />
-              ) : (
-                <DeleteForever className="!text-lg" />
-              )}
               {t('settings.deleteAccountDialog.confirm')}
             </Button>
           </>

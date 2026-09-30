@@ -61,7 +61,7 @@ export function Dialog({
         </div>
       </div>
       {children && (
-        <div className="mt-6 flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
+        <div className="mt-6 flex-1 min-h-0 overflow-y-auto -m-1.5 p-1.5">
           {children}
         </div>
       )}

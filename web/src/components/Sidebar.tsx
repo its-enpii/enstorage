@@ -144,20 +144,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
         })}
       </nav>
 
-      <div className="flex flex-col gap-8 mt-auto pb-4 items-center">
-        <Link href="/settings" title={t('nav.settings')} className="relative group">
-          <Settings
-            className={clsx(
-              'text-2xl transition-colors',
-              pathname.startsWith('/settings')
-                ? 'text-primary fill'
-                : 'text-outline group-hover:text-primary',
-            )}
-          />
-          {pathname.startsWith('/settings') && (
-            <div className="absolute -left-[30px] top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
-          )}
-        </Link>
+      <div className="mt-auto pb-4 flex items-center justify-center">
         {profileMenu}
       </div>
     </>
