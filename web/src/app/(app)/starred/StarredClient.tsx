@@ -1,6 +1,6 @@
 'use client';
 
-import { triggerBlobDownload } from '@/lib/download';
+import { getFileDownloadUrl, triggerDirectDownload } from '@/lib/download';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -195,22 +195,11 @@ function StarredContent() {
     ];
   }
 
-  async function downloadFile(id: string) {
-    const token = getToken();
-    const url = `${process.env.NEXT_PUBLIC_API_BASE}/files/${id}/download`;
+  function downloadFile(id: string) {
     const targetFile = files.find((f) => f.id === id);
-    const fallbackName = targetFile?.name || targetFile?.original_name || 'download';
-    try {
-      const res = await fetch(url, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error(t('files.errors.downloadFailed'));
-      const blob = await res.blob();
-      const cd = res.headers.get('Content-Disposition');
-      triggerBlobDownload(blob, fallbackName, cd);
-    } catch (e) {
-      await alert(e instanceof Error ? e.message : t('files.errors.downloadFailed'));
-    }
+    const url = getFileDownloadUrl({ id, download_url: targetFile?.download_url });
+    const fallbackName = targetFile?.name || targetFile?.original_name;
+    triggerDirectDownload(url, fallbackName);
   }
 
   const visibleFolders = tab === 'files' ? [] : folders;

@@ -1,6 +1,6 @@
 'use client';
 
-import { triggerBlobDownload } from '@/lib/download';
+import { getFileDownloadUrl, getFolderDownloadUrl, triggerDirectDownload } from '@/lib/download';
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
@@ -925,43 +925,18 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     }
   }
 
-  async function downloadFile(id: string) {
-    const token = getToken();
-    const url = `${process.env.NEXT_PUBLIC_API_BASE}/files/${id}/download`;
+  function downloadFile(id: string) {
     const targetFile = files.find((f) => f.id === id);
-    const fallbackName = targetFile?.name || targetFile?.original_name || 'download';
-    try {
-      const res = await fetch(url, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error(t('files.errors.downloadFailed'));
-      const blob = await res.blob();
-      const cd = res.headers.get('Content-Disposition');
-      triggerBlobDownload(blob, fallbackName, cd);
-    } catch (e) {
-      await alert(e instanceof Error ? e.message : t('files.errors.downloadFailed'));
-    }
+    const url = getFileDownloadUrl({ id, download_url: targetFile?.download_url });
+    const fallbackName = targetFile?.name || targetFile?.original_name;
+    triggerDirectDownload(url, fallbackName);
   }
 
-  async function downloadFolder(id: string) {
-    const token = getToken();
-    const url = `${process.env.NEXT_PUBLIC_API_BASE}/folders/${id}/download`;
+  function downloadFolder(id: string) {
     const targetFolder = folders.find((f) => f.id === id);
+    const url = getFolderDownloadUrl(id);
     const fallbackName = targetFolder ? `${targetFolder.name}.zip` : 'folder.zip';
-    try {
-      const res = await fetch(url, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) {
-        if (res.status === 409) throw new Error(t('folders.errors.empty'));
-        throw new Error(t('files.errors.downloadFailed'));
-      }
-      const blob = await res.blob();
-      const cd = res.headers.get('Content-Disposition');
-      triggerBlobDownload(blob, fallbackName, cd);
-    } catch (e) {
-      await alert(e instanceof Error ? e.message : t('files.errors.downloadFailed'));
-    }
+    triggerDirectDownload(url, fallbackName);
   }
 
   const visibleFolders = tab === 'files' ? [] : folders;

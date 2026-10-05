@@ -8,9 +8,10 @@ import { marked } from 'marked';
 import type { FileItem } from '@/lib/api';
 import { getToken } from '@/lib/api';
 import { bytes } from '@/lib/format';
+import { getFileDownloadUrl } from '@/lib/download';
 import { DropdownMenu, type MenuItem } from '@/components/DropdownMenu';
 import { Tabs } from '@/components/Tabs';
-import { Button, IconButton, LinkButton, TextAction } from '@/components/Button';
+import { Button, IconButton, IconLink, LinkButton, TextAction } from '@/components/Button';
 
 type Props = {
   file: FileItem;
@@ -578,7 +579,7 @@ function CodeTextViewer({ file }: { file: FileItem }) {
   );
 }
 
-function OtherViewer({ file }: { file: FileItem }) {
+function OtherViewer({ file, downloadUrl }: { file: FileItem; downloadUrl: string }) {
   const { t } = useTranslation();
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-4 p-4" onClick={(e) => e.stopPropagation()}>
@@ -587,12 +588,12 @@ function OtherViewer({ file }: { file: FileItem }) {
       </div>
       <div className="text-center">
         <p className="text-on-surface font-display text-lg mb-1">{file.name}</p>
-        <p className="text-outline text-sm">{bytes(file.size)} Ã¢â‚¬Â¢ {file.mime_type}</p>
+        <p className="text-outline text-sm">{bytes(file.size)} • {file.mime_type}</p>
       </div>
       <LinkButton
         variant="primary"
         size="pill"
-        href={fileUrl(file).replace('?inline=1', '').replace('&inline=1', '')}
+        href={downloadUrl}
         download
         leftIcon={<Download className="!text-base" />}
         className="mt-2 !bg-primary !text-on-primary hover:!bg-primary/90 font-medium"
@@ -606,6 +607,7 @@ function OtherViewer({ file }: { file: FileItem }) {
 export function FileViewer({ file, files, onClose, onNavigate, actions }: Props) {
   const { t } = useTranslation();
   const category = mimeCategory(file);
+  const downloadUrl = file.download_url || getFileDownloadUrl(file);
   const currentIndex = files ? files.findIndex((f) => f.id === file.id) : -1;
   const hasNav = files && files.length > 1;
 
@@ -633,7 +635,7 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
     case 'markdown': viewer = <MarkdownViewer file={file} />; break;
     case 'code':
     case 'text':     viewer = <CodeTextViewer file={file} />; break;
-    default:         viewer = <OtherViewer file={file} />; break;
+    default:         viewer = <OtherViewer file={file} downloadUrl={downloadUrl} />; break;
   }
 
   return (
@@ -665,6 +667,18 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
               items={actions}
             />
           )}
+          <IconLink
+            bare
+            shape="circle"
+            size="lg"
+            href={downloadUrl}
+            download
+            title={t('files.actions.download')}
+            aria-label={t('files.actions.download')}
+            className="hover:!text-primary"
+          >
+            <span className="material-symbols-outlined !text-xl">download</span>
+          </IconLink>
           <IconButton
             bare
             shape="circle"

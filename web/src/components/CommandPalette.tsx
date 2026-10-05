@@ -1,6 +1,6 @@
 'use client';
 
-import { triggerBlobDownload } from '@/lib/download';
+import { getFileDownloadUrl, triggerDirectDownload } from '@/lib/download';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -127,22 +127,11 @@ export function CommandPalette({ open, onClose }: Props) {
   // === Aksi untuk FileViewer di dalam palette ===
   // (Palette tidak punya store global; mutasi langsung via API.)
 
-  async function downloadOne(id: string) {
-    const token = getToken();
-    const url = `${process.env.NEXT_PUBLIC_API_BASE}/files/${id}/download`;
+  function downloadOne(id: string) {
     const targetFile = results.find((r) => r.kind === 'file' && r.data.id === id)?.data as FileItem | undefined;
-    const fallbackName = targetFile?.name || targetFile?.original_name || 'download';
-    try {
-      const res = await fetch(url, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error(t('files.errors.downloadFailed'));
-      const blob = await res.blob();
-      const cd = res.headers.get('Content-Disposition');
-      triggerBlobDownload(blob, fallbackName, cd);
-    } catch (e) {
-      await alert(e instanceof Error ? e.message : t('files.errors.downloadFailed'));
-    }
+    const url = getFileDownloadUrl({ id, download_url: targetFile?.download_url });
+    const fallbackName = targetFile?.name || targetFile?.original_name;
+    triggerDirectDownload(url, fallbackName);
   }
 
   async function copyFileToClipboard(file: FileItem) {

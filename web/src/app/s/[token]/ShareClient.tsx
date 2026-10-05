@@ -615,6 +615,7 @@ function ViewerOnly({
   isText,
   originalName,
   textFetchUrl,
+  fallbackUrl,
 }: {
   streamUrl: string;
   isImage: boolean;
@@ -653,6 +654,18 @@ function ViewerOnly({
         title={t('share.viewerBackLabel')}
       >
         <span className="material-symbols-outlined">arrow_back</span>
+      </IconLink>
+      <IconLink
+        bare
+        shape="circle"
+        size="lg"
+        href={fallbackUrl}
+        download
+        className="absolute top-4 right-4 z-10 !bg-on-media/10 !text-on-media hover:!bg-on-media/20"
+        aria-label={t('files.actions.download')}
+        title={t('files.actions.download')}
+      >
+        <span className="material-symbols-outlined">download</span>
       </IconLink>
       {isImage && (
         // eslint-disable-next-line @next/next/no-img-element
