@@ -11,7 +11,7 @@ import { bytes } from '@/lib/format';
 import { getFileDownloadUrl } from '@/lib/download';
 import { DropdownMenu, type MenuItem } from '@/components/DropdownMenu';
 import { Tabs } from '@/components/Tabs';
-import { Button, IconButton, IconLink, LinkButton, TextAction } from '@/components/Button';
+import { Button, IconButton, LinkButton, TextAction } from '@/components/Button';
 
 type Props = {
   file: FileItem;
@@ -667,18 +667,6 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
               items={actions}
             />
           )}
-          <IconLink
-            bare
-            shape="circle"
-            size="lg"
-            href={downloadUrl}
-            download
-            title={t('files.actions.download')}
-            aria-label={t('files.actions.download')}
-            className="hover:!text-primary"
-          >
-            <span className="material-symbols-outlined !text-xl">download</span>
-          </IconLink>
           <IconButton
             bare
             shape="circle"
