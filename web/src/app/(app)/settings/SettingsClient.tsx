@@ -117,7 +117,7 @@ function SettingsContent() {
     try {
       await apiRequest('/auth/account', { method: 'DELETE' });
       await logout();
-      router.replace('/login');
+      router.replace('/');
     } catch (e) {
       setDeleteError(
         e instanceof ApiError

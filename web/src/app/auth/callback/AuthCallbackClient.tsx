@@ -45,7 +45,7 @@ function CallbackContent() {
     return (
       <Card className="w-full max-w-sm text-center">
         <Alert className="mb-5 !text-metadata">{error}</Alert>
-        <Button variant="link" onClick={() => router.replace('/login')}>
+        <Button variant="link" onClick={() => router.replace('/')}>
           {t('auth.reLogin')}
         </Button>
       </Card>

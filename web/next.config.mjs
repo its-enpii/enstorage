@@ -21,6 +21,15 @@ const nextConfig = {
   // when forwarding the shared link as image/video/etc. A rewrite
   // (not redirect) keeps the public origin in the address bar so
   // the backend's internal container hostname doesn't leak.
+  async redirects() {
+    return [
+      {
+        source: '/login',
+        destination: '/',
+        permanent: false,
+      },
+    ];
+  },
   async rewrites() {
     const apiBase =
       process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080/api/v1';

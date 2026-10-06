@@ -24,7 +24,7 @@ export function useGoogleSignIn() {
       await googleLogin();
     } catch {
       setSigningIn(false);
-      router.push('/login');
+      router.push('/');
     }
   }, [user, googleLogin, router]);
 

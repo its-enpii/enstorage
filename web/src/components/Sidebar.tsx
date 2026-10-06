@@ -41,7 +41,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
     });
     if (!ok) return;
     await logout();
-    router.replace('/login');
+    router.replace('/');
   }
 
   const avatar = (

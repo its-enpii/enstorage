@@ -30,7 +30,7 @@ export function AppShell({
   useEffect(() => {
     // Only redirect when loading is done AND there's no token in storage.
     if (!loading && !user && !localStorage.getItem('enstorage_token')) {
-      router.replace('/login');
+      router.replace('/');
     }
   }, [loading, user, router]);
 
@@ -98,7 +98,7 @@ function SessionRecovery() {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('enstorage_token');
     }
-    router.replace('/login');
+    router.replace('/');
   }
 
   return (
