@@ -132,6 +132,7 @@ CREATE TABLE files (
     uploaded_at         TIMESTAMP WITH TIME ZONE,
     is_starred          BOOLEAN NOT NULL DEFAULT FALSE,
     share_token         VARCHAR(64) UNIQUE,                        -- shareable link internal
+    metadata            JSONB,                                    -- kontekstual hasil ekstraksi
     created_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -150,6 +151,12 @@ CREATE INDEX idx_files_created_at ON files(created_at DESC);
 - Rename di EnStorage **tidak** mengubah nama di Google Drive (hanya update kolom `name`).
 - `is_starred` untuk fitur bookmark.
 - `share_token` untuk shareable link internal EnStorage (selain Google Drive link).
+- `metadata` (JSONB, nullable) menyimpan metadata **kontekstual** hasil ekstraksi
+  isi file: dimensi + EXIF foto (kamera, GPS, tanggal), durasi/bitrate/sample
+  rate file audio-video, jumlah halaman PDF, jumlah entri + ukuran archive, dan
+  statistik teks (baris/karakter). Nullable untuk file lama yang diupload sebelum
+  kolom ini ada. Diisi oleh `UploadFileJob` melalui `FileMetadataExtractor`;
+  kegagalan ekstraksi tidak menggagalkan upload (metadata tetap `null`).
 
 ---
 

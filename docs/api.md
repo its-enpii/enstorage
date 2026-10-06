@@ -708,8 +708,42 @@ List files dengan filter & sort.
   "upload_status": "done",
   "uploaded_at": "2026-06-30T10:05:00+00:00",
   "has_thumbnail": true,
+  "metadata": { /* lihat catatan di bawah; nullable */ },
   "created_at": "...",
   "updated_at": "..."
+}
+```
+
+`metadata` — objek kontekstual hasil ekstraksi isi file, **nullable** (file lama
+atau file yang gagal diekstraksi mengembalikan `null`). Hanya berisi key yang
+relevan dengan tipe file. Contohnya:
+
+```json
+{
+  "width": 4032,
+  "height": 3024,
+  "make": "Apple",
+  "model": "iPhone 14",
+  "datetime_original": "2026-06-30T10:05:00+00:00",
+  "gps_latitude": -6.2088,
+  "gps_longitude": 106.8456,
+  "duration_seconds": 125.4,
+  "bitrate": 192000,
+  "sample_rate": 44100,
+  "channels": 2,
+  "codec": "mp3",
+  "artist": "Artis",
+  "title": "Judul",
+  "album": "Album",
+  "resolution_width": 1920,
+  "resolution_height": 1080,
+  "page_count": 12,
+  "author": "Penulis",
+  "entry_count": 42,
+  "uncompressed_size": 10485760,
+  "line_count": 320,
+  "character_count": 18450,
+  "extracted_at": "2026-06-30T10:05:03+00:00"
 }
 ```
 
@@ -1576,6 +1610,11 @@ Purge log lama.
 - **Share link pivot (`share_links`)** → file stream atau folder listing (dengan view counter)
 - **Legacy file token (`files.share_token`)** → stream file inline (atau `?download=1` untuk attachment)
 - **Legacy folder token (`folders.share_token`)** → JSON listing read-only
+
+Untuk file, `?info=1` mengembalikan JSON metadata (tanpa streaming): `kind`,
+`id`, `name`, `original_name`, `mime_type`, `size`, `updated_at`, dan
+`metadata` (objek kontekstual hasil ekstraksi, **nullable** — bentuk isinya sama
+dengan `metadata` di FileResource shape di atas).
 
 Resolution order: share_links pivot dulu, fallback ke legacy `share_token` di files/folders untuk backward-compat URL share yang sudah terlanjur dishare.
 

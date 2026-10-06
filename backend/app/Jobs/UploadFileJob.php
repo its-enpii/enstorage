@@ -7,6 +7,7 @@ use App\Events\FileUploadFailedBroadcast;
 use App\Models\ActivityLog;
 use App\Models\File as FileModel;
 use App\Services\ActivityLogService;
+use App\Services\FileMetadataExtractor;
 use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\QuotaManager;
 use App\Services\NotificationService;
@@ -41,6 +42,7 @@ class UploadFileJob implements ShouldQueue
         WebhookService $webhooks,
         NotificationService $notifications,
         ThumbnailGenerator $thumbnails,
+        FileMetadataExtractor $extractor,
     ): void {
         @ini_set('memory_limit', '1024M');
         @set_time_limit(0);
@@ -121,6 +123,21 @@ class UploadFileJob implements ShouldQueue
             } elseif (str_starts_with($file->mime_type, 'video/')) {
                 // Video butuh ffmpeg — out of scope Fase 3, generate via background job.
                 GenerateThumbnailJob::dispatch($file->id);
+            }
+
+            // Ekstraksi metadata kontekstual SEBELUM file temp dihapus.
+            // Terisolasi: kegagalan ekstraksi TIDAK boleh menggagalkan upload.
+            // Idempotent: kalau metadata sudah terisi (job retry), skip.
+            if ($file->metadata === null) {
+                try {
+                    $file->metadata = $extractor->extract($localPath, $file->mime_type, (int) $file->size);
+                    $file->save();
+                } catch (\Throwable $e) {
+                    Log::warning('FileMetadataExtractor gagal', [
+                        'file_id' => $file->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
 
             // Hapus file temp setelah thumbnail selesai di-generate.

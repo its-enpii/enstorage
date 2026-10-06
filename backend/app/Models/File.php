@@ -34,6 +34,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'total_chunks',
     'received_chunks',
     'total_size',
+    'metadata',
 ])]
 class File extends Model
 {
@@ -63,6 +64,7 @@ class File extends Model
             'total_chunks' => 'integer',
             'received_chunks' => 'integer',
             'total_size' => 'integer',
+            'metadata' => 'array',
         ];
     }
 

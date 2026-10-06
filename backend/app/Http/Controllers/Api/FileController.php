@@ -865,6 +865,7 @@ class FileController extends Controller
                 'mime_type' => $file->mime_type,
                 'size' => $file->size,
                 'updated_at' => $file->updated_at?->toIso8601String(),
+                'metadata' => $file->metadata,
             ]);
         }
 

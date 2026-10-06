@@ -139,6 +139,37 @@
         "partial": "{{count}} file gagal dipindahkan.",
         "sameFolder": "File sudah berada di folder ini."
       }
+    },
+    "details": {
+      "title": "Judul",
+      "name": "Nama",
+      "type": "Tipe",
+      "size": "Ukuran",
+      "uploaded": "Diupload",
+      "width": "Dimensi",
+      "camera": "Kamera",
+      "software": "Software",
+      "datetimeOriginal": "Tanggal Asli",
+      "gps": "GPS",
+      "duration": "Durasi",
+      "bitrate": "Bitrate",
+      "sampleRate": "Sample Rate",
+      "channels": "Channel",
+      "codec": "Codec",
+      "artist": "Artis",
+      "album": "Album",
+      "resolution": "Resolusi",
+      "pageCount": "Jumlah Halaman",
+      "pdfTitle": "Judul PDF",
+      "pdfAuthor": "Penulis PDF",
+      "entryCount": "Jumlah Entri",
+      "uncompressedSize": "Ukuran Terurai",
+      "lineCount": "Jumlah Baris",
+      "characterCount": "Jumlah Karakter",
+      "extractedAt": "Diekstrak"
+    },
+    "action": {
+      "details": "Detail File"
     }
   },
   "folders": {

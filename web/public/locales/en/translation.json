@@ -139,6 +139,37 @@
         "partial": "{{count}} file(s) failed to move.",
         "sameFolder": "The file is already in this folder."
       }
+    },
+    "details": {
+      "title": "Title",
+      "name": "Name",
+      "type": "Type",
+      "size": "Size",
+      "uploaded": "Uploaded",
+      "width": "Dimensions",
+      "camera": "Camera",
+      "software": "Software",
+      "datetimeOriginal": "Original Date",
+      "gps": "GPS",
+      "duration": "Duration",
+      "bitrate": "Bitrate",
+      "sampleRate": "Sample Rate",
+      "channels": "Channels",
+      "codec": "Codec",
+      "artist": "Artist",
+      "album": "Album",
+      "resolution": "Resolution",
+      "pageCount": "Page Count",
+      "pdfTitle": "PDF Title",
+      "pdfAuthor": "PDF Author",
+      "entryCount": "Entry Count",
+      "uncompressedSize": "Uncompressed Size",
+      "lineCount": "Line Count",
+      "characterCount": "Character Count",
+      "extractedAt": "Extracted"
+    },
+    "action": {
+      "details": "File Details"
     }
   },
   "folders": {

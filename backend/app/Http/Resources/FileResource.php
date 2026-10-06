@@ -26,6 +26,7 @@ class FileResource extends JsonResource
             'upload_status' => $this->upload_status,
             'uploaded_at' => $this->uploaded_at?->toIso8601String(),
             'has_thumbnail' => $this->thumbnail !== null,
+            'metadata' => $this->metadata,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

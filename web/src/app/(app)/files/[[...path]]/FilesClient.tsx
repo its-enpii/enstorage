@@ -54,6 +54,165 @@ function statusLabel(t: (key: string) => string, s: FileItem['upload_status']) {
   return t('starred.statusPending');
 }
 
+type MetadataRow = { key: string; label: string; value: string };
+
+/** Format an audio/video duration (seconds) as h:mm:ss / m:ss. */
+function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+}
+
+/**
+ * Flatten the contextual `metadata` object into render-ready rows.
+ * Keys whose values are null/undefined/empty are skipped — the UI must
+ * never show "undefined"/"null". Paired values (dimensions, GPS, camera,
+ * resolution) collapse into a single row each.
+ */
+function buildMetadataRows(
+  metadata: Record<string, unknown> | null | undefined,
+  isPdf: boolean,
+): MetadataRow[] {
+  if (!metadata) return [];
+  const rows: MetadataRow[] = [];
+  const str = (key: string): string | null => {
+    const v = metadata[key];
+    if (v === null || v === undefined || v === '') return null;
+    return String(v);
+  };
+  const push = (key: string, labelKey: string, value: string | null) => {
+    if (value === null || value === '') return;
+    rows.push({ key, label: labelKey, value });
+  };
+
+  const width = str('width');
+  const height = str('height');
+  if (width || height) push('dimensions', 'files.details.width', [width, height].filter(Boolean).join(' × ') + ' px');
+
+  const make = str('make');
+  const model = str('model');
+  if (make || model) push('camera', 'files.details.camera', [make, model].filter(Boolean).join(' '));
+
+  push('software', 'files.details.software', str('software'));
+  push('datetime_original', 'files.details.datetimeOriginal', str('datetime_original'));
+
+  const lat = str('gps_latitude');
+  const lng = str('gps_longitude');
+  if (lat || lng) {
+    const latN = Number(lat);
+    const lngN = Number(lng);
+    const fmt = (n: number) => (Number.isFinite(n) ? n.toFixed(5) : null);
+    const latS = fmt(latN);
+    const lngS = fmt(lngN);
+    if (latS || lngS) push('gps', 'files.details.gps', [latS, lngS].filter(Boolean).join(', '));
+  }
+
+  const duration = metadata.duration_seconds;
+  if (typeof duration === 'number' && Number.isFinite(duration)) {
+    push('duration', 'files.details.duration', formatDuration(duration));
+  }
+
+  const bitrate = metadata.bitrate;
+  if (typeof bitrate === 'number' && Number.isFinite(bitrate)) {
+    push('bitrate', 'files.details.bitrate', `${Math.round(bitrate / 1000).toLocaleString()} kbps`);
+  }
+
+  const sampleRate = metadata.sample_rate;
+  if (typeof sampleRate === 'number' && Number.isFinite(sampleRate)) {
+    push('sampleRate', 'files.details.sampleRate', `${sampleRate.toLocaleString()} Hz`);
+  }
+
+  const channels = metadata.channels;
+  if (typeof channels === 'number' && Number.isFinite(channels)) {
+    push('channels', 'files.details.channels', String(channels));
+  }
+
+  push('codec', 'files.details.codec', str('codec'));
+  push('artist', 'files.details.artist', str('artist'));
+  push('album', 'files.details.album', str('album'));
+
+  const resW = str('resolution_width');
+  const resH = str('resolution_height');
+  if (resW || resH) push('resolution', 'files.details.resolution', [resW, resH].filter(Boolean).join(' × '));
+
+  const pageCount = metadata.page_count;
+  if (typeof pageCount === 'number' && Number.isFinite(pageCount)) {
+    push('pageCount', 'files.details.pageCount', pageCount.toLocaleString());
+  }
+
+  // PDF title/author share the generic keys but only render for PDFs.
+  if (isPdf) {
+    push('pdfTitle', 'files.details.pdfTitle', str('title'));
+    push('pdfAuthor', 'files.details.pdfAuthor', str('author'));
+  } else {
+    push('title', 'files.details.title', str('title'));
+  }
+
+  const entryCount = metadata.entry_count;
+  if (typeof entryCount === 'number' && Number.isFinite(entryCount)) {
+    push('entryCount', 'files.details.entryCount', entryCount.toLocaleString());
+  }
+
+  const uncompressed = metadata.uncompressed_size;
+  if (typeof uncompressed === 'number' && Number.isFinite(uncompressed)) {
+    push('uncompressedSize', 'files.details.uncompressedSize', bytes(uncompressed));
+  }
+
+  const lineCount = metadata.line_count;
+  if (typeof lineCount === 'number' && Number.isFinite(lineCount)) {
+    push('lineCount', 'files.details.lineCount', lineCount.toLocaleString());
+  }
+
+  const charCount = metadata.character_count;
+  if (typeof charCount === 'number' && Number.isFinite(charCount)) {
+    push('charCount', 'files.details.characterCount', charCount.toLocaleString());
+  }
+
+  const extractedAt = str('extracted_at');
+  if (extractedAt) {
+    const d = new Date(extractedAt);
+    push('extractedAt', 'files.details.extractedAt', Number.isNaN(d.getTime()) ? extractedAt : d.toLocaleString());
+  }
+
+  return rows;
+}
+
+/** Semantic detail list for a single file (name/type/size/upload + metadata). */
+function FileDetailsList({ file }: { file: FileItem }) {
+  const { t, i18n } = useTranslation();
+  const isPdf = file.mime_type === 'application/pdf';
+  const metadataRows = buildMetadataRows(file.metadata, isPdf);
+  const uploadedAt = file.uploaded_at ? new Date(file.uploaded_at) : null;
+  const uploadedLabel =
+    uploadedAt && !Number.isNaN(uploadedAt.getTime())
+      ? uploadedAt.toLocaleString(i18n.language)
+      : '—';
+
+  const rows: MetadataRow[] = [
+    { key: 'name', label: 'files.details.name', value: file.name },
+    { key: 'type', label: 'files.details.type', value: file.mime_type },
+    { key: 'size', label: 'files.details.size', value: bytes(file.size) },
+    { key: 'uploaded', label: 'files.details.uploaded', value: uploadedLabel },
+    ...metadataRows,
+  ];
+
+  return (
+    <dl className="divide-y divide-outline-variant/15">
+      {rows.map((row) => (
+        <div key={row.key} className="flex items-start justify-between gap-4 py-2">
+          <dt className="text-body-sm text-outline shrink-0">{t(row.label)}</dt>
+          <dd className="text-body-sm text-on-surface text-right tabular-nums break-words min-w-0">
+            {row.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 export default function FilesClient() {
   return (
     <AppShell>
@@ -296,6 +455,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   const [dragOver, setDragOver] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [viewerFile, setViewerFile] = useState<FileItem | null>(null);
+  const [showFileDetails, setShowFileDetails] = useState(false);
   const [shareFile, setShareFile] = useState<FileItem | null>(null);
   const [shareFolder, setShareFolder] = useState<Folder | null>(null);
   const [deleteFolderTarget, setDeleteFolderTarget] = useState<FolderType | null>(null);
@@ -1051,6 +1211,14 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         icon: <span className="material-symbols-outlined !text-base">visibility</span>,
         onClick: () => setViewerFile(f),
       });
+      items.push({
+        label: t('files.action.details'),
+        icon: <span className="material-symbols-outlined !text-base">info</span>,
+        onClick: () => {
+          setViewerFile(f);
+          setShowFileDetails(true);
+        },
+      });
     }
     items.push(
       {
@@ -1398,6 +1566,16 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           onNavigate={setViewerFile}
           actions={buildFileMenuItems(viewerFile)}
         />
+      )}
+      {viewerFile && showFileDetails && (
+        <Dialog
+          open={showFileDetails}
+          onClose={() => setShowFileDetails(false)}
+          title={t('files.details.title')}
+          icon={<span className="material-symbols-outlined">info</span>}
+        >
+          <FileDetailsList file={viewerFile} />
+        </Dialog>
       )}
       {shareFile && (
         <ShareDialog
