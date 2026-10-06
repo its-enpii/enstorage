@@ -93,7 +93,7 @@ export function Modal({
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}
         className={clsx(
-          'w-full bg-surface shadow-ambient',
+          'w-full bg-surface shadow-ambient border border-outline-variant/20',
           variant === 'sheet'
             ? 'rounded-t-3xl px-inner-padding pt-3 pb-[max(2rem,env(safe-area-inset-bottom))]'
             : clsx('max-h-[90vh] overflow-hidden rounded-card', SIZE_CLASSES[size]),

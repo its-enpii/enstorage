@@ -60,6 +60,11 @@ export function AppShell({
     <div className="flex min-h-screen overflow-hidden">
       <Sidebar mobileOpen={sidebarOpen} onMobileClose={() => setSidebarOpen(false)} />
       <main className="flex-1 h-screen flex flex-col relative overflow-hidden bg-background">
+        {/* Ambient atmospheric glow to align with landing page depth */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(198,192,255,0.06),transparent)]" />
+          <div className="absolute left-1/2 top-[-8rem] h-[28rem] w-[48rem] -translate-x-1/2 rounded-full bg-primary/4 blur-3xl" />
+        </div>
         <TopBar
           search={search}
           onSearchChange={onSearchChange}

@@ -137,7 +137,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
                 )}
               />
               {active && (
-                <div className="absolute -left-[30px] top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
+                <div className="absolute -left-[30px] top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full shadow-[0_0_12px_rgba(198,192,255,0.5)]" />
               )}
             </Link>
           );
@@ -163,7 +163,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
       />
       <aside
         className={clsx(
-          'sm:hidden fixed inset-y-0 left-0 z-[70] w-[72px] bg-surface-container-lowest flex flex-col items-center py-8 gap-10 shadow-ambient transform transition-transform duration-300 ease-out will-change-transform',
+          'sm:hidden fixed inset-y-0 left-0 z-[70] w-[72px] bg-surface-container-lowest flex flex-col items-center py-8 gap-10 shadow-ambient border-r border-outline-variant/15 transform transition-transform duration-300 ease-out will-change-transform',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
         aria-hidden={!mobileOpen}
@@ -172,7 +172,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
       </aside>
 
       {/* Desktop rail — fixed-visible on sm+, hidden on mobile */}
-      <aside className="hidden sm:flex w-[72px] h-screen bg-surface-container-lowest flex-col items-center py-8 gap-10 border-r border-outline-variant/10 z-50">
+      <aside className="hidden sm:flex w-[72px] h-screen bg-surface-container-lowest flex-col items-center py-8 gap-10 border-r border-outline-variant/15 z-50">
         {inner}
       </aside>
     </>

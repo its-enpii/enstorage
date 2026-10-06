@@ -23,10 +23,10 @@ export function Card({
     <Tag
       onClick={onClick}
       className={clsx(
-        'bg-surface p-inner-padding rounded-card shadow-inner-glow',
+        'bg-surface border border-outline-variant/15 p-inner-padding rounded-card shadow-inner-glow shadow-ambient/20 transition-all duration-200',
         onClick && 'cursor-pointer',
-        hover && 'hover-lift',
-        selected && 'shadow-selected-glow',
+        hover && 'hover-lift hover:border-outline-variant/35 hover:shadow-ambient/40',
+        selected && 'shadow-selected-glow !border-primary/60',
         className,
       )}
     >
@@ -45,9 +45,9 @@ export function CardIconBox({
   size?: 'md' | 'lg';
 }) {
   const styles: Record<string, string> = {
-    primary: 'bg-primary-container text-on-primary-container',
-    gold: 'bg-secondary-container/20 text-secondary',
-    muted: 'bg-surface-container-highest text-primary',
+    primary: 'bg-primary-container text-on-primary-container border border-primary/20 shadow-sm',
+    gold: 'bg-secondary-container/20 text-secondary border border-secondary/20 shadow-sm',
+    muted: 'bg-surface-container-highest text-primary border border-outline-variant/20 shadow-sm',
   };
   const sizes: Record<string, string> = {
     md: 'w-12 h-12 rounded-xl',
