@@ -13,6 +13,7 @@ REST API endpoint reference untuk integrasi dengan EnStorage.
 - [Error Codes](#error-codes)
 - [Endpoints](#endpoints)
   - [Auth](#auth)
+  - [Vault](#vault)
   - [Google Accounts](#google-accounts)
   - [Folders](#folders)
   - [Files](#files)
@@ -22,6 +23,7 @@ REST API endpoint reference untuk integrasi dengan EnStorage.
   - [Search](#search)
   - [Webhooks](#webhooks)
   - [Activity Logs](#activity-logs)
+  - [S3-Compatible Gateway](#s3-compatible-gateway)
   - [Public share](#public-share)
 - [Dokumentasi Interaktif](#dokumentasi-interaktif)
 
@@ -67,7 +69,11 @@ GET /api/v1/files
 X-API-Key: en_a1b2c3d4_e5f6g7h8...
 ```
 
-> Endpoint `/api-keys/*` & `/webhooks/*` **hanya** bisa diakses via Sanctum (bukan API key itu sendiri).
+> Endpoint `/api-keys/*`, `/webhooks/*`, `/auth/account`, dan `/vault/reset` **hanya** bisa diakses via Sanctum (bukan API key itu sendiri).
+
+### Mode 3: AWS Signature V4 (S3-Compatible Gateway)
+
+Endpoint `/s3/{bucket}/{path}` menerima AWS Signature V4 (`Authorization: AWS4-HMAC-SHA256 ...`) supaya S3 SDK standar (mis. Laravel filesystem driver `s3`) bisa memakainya sebagai drop-in replacement. Sebagai alternatif, gateway juga menerima header `X-API-Key: en_...`, `Authorization: Bearer en_...`, atau query `?api_key=en_...`. Bucket `public` dapat dibaca (HEAD/GET) tanpa autentikasi apa pun.
 
 ### Scope
 
@@ -126,6 +132,8 @@ Response kalau limit tercapai: `429 Too Many Requests` + header `Retry-After: 60
 ```
 
 Validation error (422) auto-dikonversi ke envelope ini dengan `data` berisi field errors.
+
+> **Pengecualian:** endpoint **S3-Compatible Gateway** (`/s3/{bucket}/{path}`) **tidak** memakai envelope JSON ini. Responsnya memakai status HTTP dan header standar S3 (mis. `ETag`, `Content-Length`, `Last-Modified`), atau format error XML S3 (`AccessDenied`, `NoSuchKey`) bila gagal. Lihat [S3-Compatible Gateway](#s3-compatible-gateway).
 
 ---
 
@@ -370,6 +378,31 @@ Handle Google OAuth web redirect. Query: `?code=...&state=...`. Validates state 
 
 ---
 
+### Vault
+
+#### `POST /vault/reset` — Sanctum-only
+
+**Danger Zone.** Kosongkan seluruh berkas, folder, dan share link milik user tanpa menghapus akun atau koneksi Google. Gunakan untuk "mulai dari nol" tanpa harus membuat akun baru.
+
+Hanya bisa diakses via sesi **Sanctum** — API key tidak diizinkan melakukan tindakan destruktif ini (`auth.sanctum.only`). Tidak ada request body.
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": [],
+  "message": "Vault berhasil di-reset. Semua file dan folder telah dikosongkan.",
+  "meta": []
+}
+```
+
+**Errors:** 401 (tidak terautentikasi / bukan sesi Sanctum)
+
+> ⚠️ Tindakan ini **permanen**: seluruh berkas dan folder dikosongkan dan tidak dapat dikembalikan.
+
+---
+
 ### Google Accounts
 
 #### `GET /google-accounts` — Scope: `read`
@@ -553,6 +586,46 @@ List folder. Default: root folder (parent_id = null). Query: `parent_id`, `searc
   "message": "Daftar folder."
 }
 ```
+
+---
+
+#### `GET /folders/resolve` — Scope: `read`
+
+**Path-Based Slug Resolver.** Ubah hierarki path (materialized path) langsung menjadi entri folder + breadcrumb tanpa perlu mengetahui ID folder terlebih dahulu. Berguna untuk deep-link ke folder yang sudah diketahui path-nya.
+
+**Query params:**
+
+| Param | Tipe | Keterangan |
+|-------|------|------------|
+| `path` | string | **Wajib.** Hierarki path folder, contoh `/Dokumen/Pribadi` atau `Backup/2026`. Path kosong / `/` = root. |
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "folder": {
+      "id": "9d90...-uuid",
+      "name": "Pribadi",
+      "path": "/Dokumen/Pribadi",
+      "files_count": 5,
+      "folders_count": 2,
+      "files_sum_size": 15420000
+    },
+    "breadcrumb": [
+      { "id": "uuid-1", "name": "Dokumen", "path": "/Dokumen" },
+      { "id": "uuid-2", "name": "Pribadi", "path": "/Dokumen/Pribadi" }
+    ]
+  },
+  "message": "Detail folder.",
+  "meta": []
+}
+```
+
+**Root:** bila `path` kosong atau hanya berisi `/`, response mengembalikan `folder: null` dan `breadcrumb: []` dengan message `"Root directory."`.
+
+**Errors:** 404 (folder pada path tersebut tidak ditemukan) · 422 (path tidak valid)
 
 ---
 
@@ -1598,6 +1671,83 @@ Audit log system-wide.
 Purge log lama.
 
 **Query:** `?older_than_days=90`
+
+---
+
+### S3-Compatible Gateway
+
+Gateway kompatibel S3 agar aplikasi klien yang memakai S3 SDK standar (mis. Laravel filesystem driver `s3`) bisa menunjuk ke EnStorage sebagai drop-in replacement. Bucket dipetakan ke folder root virtual milik user; key/path dipetakan ke hierarki Folder + File.
+
+- **Controller:** `Api\S3GatewayController`
+- **Prefix:** `/s3/{bucket}/{path}` — diakses via `/api/v1/s3/{bucket}/{path}`
+- **Autentikasi:** AWS Signature V4 (`Authorization: AWS4-HMAC-SHA256 ...`), header `X-API-Key: en_<prefix>_<secret>`, `Authorization: Bearer en_...`, query `?api_key=en_...`, atau tanpa auth khusus bucket `public` (HEAD/GET saja).
+
+> ⚠️ **Bukan envelope JSON.** Tidak seperti endpoint lain, gateway ini membalas dengan status HTTP + header standar S3 (mis. `ETag`, `Content-Length`, `Last-Modified`, `x-amz-request-id`), atau error XML S3 (`AccessDenied`, `NoSuchKey`) bila gagal. Lihat [Response Envelope](#response-envelope).
+
+#### `HEAD /s3/{bucket}/{path}`
+
+Ambil metadata objek tanpa body. Bucket `public` dapat di-HEAD tanpa autentikasi. Path kosong (`/s3/{bucket}`) diperlakukan sebagai head-bucket; prefix yang punya anak diperlakukan sebagai "direktori ada" (dipakai Flysystem `exists()` / `directoryExists()`).
+
+**Header Response:** `Content-Type`, `Content-Length`, `ETag`, `Last-Modified`, `x-amz-request-id`, `Accept-Ranges`
+
+**Status:** `200 OK` · `403 AccessDenied` · `404 NoSuchKey`
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/pdf
+Content-Length: 820341
+ETag: "3f9a1c7e5b2d48af90c6e1d7a3b5c8f0"
+Last-Modified: Mon, 14 Aug 2026 09:12:44 GMT
+
+<no body>
+```
+
+---
+
+#### `GET /s3/{bucket}/{path}` — Scope: `read`
+
+Stream isi objek sebagai binary. Bucket `public` dapat dibaca tanpa autentikasi.
+
+**Response:** binary stream (dari disk/S3 backend, temp upload, atau Google Drive), dengan header `Content-Type`, `Content-Length`, `ETag`, `Last-Modified`, `Accept-Ranges`.
+
+**Status:** `200 OK` · `403 AccessDenied` · `404 NoSuchKey`
+
+> `GET /s3/{bucket}` (tanpa path) atau dengan `?list-type=2` menjalankan **ListObjectsV2** dan membalas XML `ListBucketResult`.
+
+---
+
+#### `PUT /s3/{bucket}/{path}` — Scope: `write`
+
+Unggah objek baru atau ganti objek yang sudah ada. Body request adalah **binary payload** berkas. Overwrite bersifat idempotent (key yang sama akan mengganti objek, bukan menduplikasi). Direktori pada `path` dibuat otomatis bila belum ada.
+
+**Header request (opsional):** `Content-Type` (default `application/octet-stream`)
+
+**Header Response:** `ETag` (MD5 konten), `x-amz-request-id`
+
+**Status:** `200 OK` · `400 InvalidRequest` (key kosong) · `403 AccessDenied`
+
+```http
+HTTP/1.1 200 OK
+ETag: "3f9a1c7e5b2d48af90c6e1d7a3b5c8f0"
+x-amz-request-id: 8F3A1C7E5B2D48AF
+
+<no body>
+```
+
+---
+
+#### `DELETE /s3/{bucket}/{path}` — Scope: `delete`
+
+Hapus objek. Bersifat **idempotent**: key yang tidak ada tetap mengembalikan `204`.
+
+**Status:** `204 No Content` · `403 AccessDenied`
+
+```http
+HTTP/1.1 204 No Content
+x-amz-request-id: 8F3A1C7E5B2D48AF
+
+<no body>
+```
 
 ---
 

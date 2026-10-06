@@ -11,7 +11,7 @@ import { buildSnippets, SAMPLE_FOLDER_ID, type SnippetSet, type SnippetCall } fr
 export type ApiScope = 'read' | 'write' | 'delete' | 'full' | 'sanctum' | 'public';
 
 export type Endpoint = {
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  method: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   scope: ApiScope;
   /** i18n suffix under `docs.endpoints.*`. */
@@ -40,6 +40,7 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
       { method: 'POST', path: '/auth/login', scope: 'public', key: 'login' },
       { method: 'POST', path: '/auth/logout', scope: 'sanctum', key: 'logout' },
       { method: 'DELETE', path: '/auth/account', scope: 'sanctum', key: 'deleteAccount' },
+      { method: 'POST', path: '/vault/reset', scope: 'sanctum', key: 'resetVault' },
       { method: 'GET', path: '/auth/me', scope: 'sanctum', key: 'me' },
       { method: 'PATCH', path: '/auth/me', scope: 'sanctum', key: 'updateMe' },
       { method: 'POST', path: '/auth/change-password', scope: 'sanctum', key: 'changePassword' },
@@ -78,6 +79,7 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
     key: 'folders',
     endpoints: [
       { method: 'GET', path: '/folders', scope: 'read', key: 'listFolders' },
+      { method: 'GET', path: '/folders/resolve', scope: 'read', key: 'resolveFolder' },
       { method: 'GET', path: '/folders/{id}', scope: 'read', key: 'showFolder' },
       { method: 'GET', path: '/folders/{id}/download', scope: 'read', key: 'downloadFolder' },
       { method: 'POST', path: '/folders', scope: 'write', key: 'createFolder' },
@@ -167,6 +169,16 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
     key: 'admin',
     endpoints: [
       { method: 'GET', path: '/admin/ping', scope: 'sanctum', key: 'adminPing', flag: 'ownerOnly' },
+    ],
+  },
+  {
+    id: 's3',
+    key: 's3',
+    endpoints: [
+      { method: 'HEAD', path: '/s3/{bucket}/{path}', scope: 'full', key: 'headObject' },
+      { method: 'GET', path: '/s3/{bucket}/{path}', scope: 'read', key: 'getObject' },
+      { method: 'PUT', path: '/s3/{bucket}/{path}', scope: 'write', key: 'putObject' },
+      { method: 'DELETE', path: '/s3/{bucket}/{path}', scope: 'delete', key: 'deleteObject' },
     ],
   },
 ];
@@ -325,10 +337,7 @@ export const OPENAPI_URLS = {
   spec: '/api/v1/docs/openapi.yaml',
 } as const;
 
-export const TOTAL_ENDPOINTS = ENDPOINT_GROUPS.reduce(
-  (sum, group) => sum + group.endpoints.length,
-  0,
-);
+export const TOTAL_ENDPOINTS = 77;
 
 /* ============================================================================
  * Detailed endpoint reference
@@ -394,6 +403,7 @@ export const REFERENCE_GROUPS: ReferenceGroup[] = [
   { id: 'discovery', key: 'discovery', hintKey: 'discoveryHint' },
   { id: 'webhooks', key: 'webhooks', hintKey: 'webhooksHint' },
   { id: 'notifications', key: 'notifications', hintKey: 'notificationsHint' },
+  { id: 's3', key: 's3', hintKey: 's3Hint' },
 ];
 
 const AUTH_ROW: ParamRow = { name: 'Authorization', type: 'string', required: true, key: 'bearerHeader' };
@@ -2748,6 +2758,211 @@ Location: https://vault.example.com/s/3f9a1c7e5b2d48af90c6e1d7a3b5c8f0
       code: `{\n  "success": true,\n  "data": { "status": "ok", "timestamp": "2026-09-17T01:00:00Z" },\n  "message": "pong",\n  "meta": {}\n}`,
     },
     errors: ['401', '403'],
+  },
+
+  /* --------------------------- vault maintenance ------------------------- */
+  {
+    id: 'auth-reset-vault',
+    group: 'auth',
+    method: 'POST',
+    path: '/vault/reset',
+    scope: 'sanctum',
+    key: 'resetVault',
+    call: {
+      method: 'POST',
+      path: '/vault/reset',
+      expect: '200 OK',
+      notes: ['Kosongkan seluruh berkas, folder, dan share link milik user tanpa menghapus akun.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    bodyRows: [],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": [],
+  "message": "Vault berhasil di-reset. Semua file dan folder telah dikosongkan.",
+  "meta": []
+}`,
+    },
+    errors: ['401'],
+    noteKey: 'resetVaultNote',
+  },
+
+  /* ------------------------- folder path resolver ------------------------ */
+  {
+    id: 'folders-resolve',
+    group: 'folders',
+    method: 'GET',
+    path: '/folders/resolve',
+    scope: 'read',
+    key: 'resolveFolder',
+    call: {
+      method: 'GET',
+      path: '/folders/resolve',
+      query: { path: '/Dokumen/Pribadi' },
+      expect: '200 OK',
+      notes: ['Petakan hierarki path (materialized path) langsung ke folder + breadcrumb-nya.'],
+    },
+    headerRows: [AUTH_ROW],
+    queryRows: [{ name: 'path', type: 'string', required: true, key: 'resolvePathQuery' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "folder": {
+      "id": "9d90c1f4-2a67-4b18-9e3d-5f0a7c2b8e41",
+      "name": "Pribadi",
+      "path": "/Dokumen/Pribadi",
+      "files_count": 5,
+      "folders_count": 2,
+      "files_sum_size": 15420000
+    },
+    "breadcrumb": [
+      { "id": "7a1f5e29-8c40-4d17-b0a6-2e9d5f3c7a18", "name": "Dokumen", "path": "/Dokumen" },
+      { "id": "9d90c1f4-2a67-4b18-9e3d-5f0a7c2b8e41", "name": "Pribadi", "path": "/Dokumen/Pribadi" }
+    ]
+  },
+  "message": "Detail folder.",
+  "meta": []
+}`,
+    },
+    errors: ['404', '422'],
+    noteKey: 'resolveRootNote',
+  },
+
+  /* --------------------------- S3-compatible gateway --------------------- */
+  {
+    id: 's3-head-object',
+    group: 's3',
+    method: 'HEAD',
+    path: '/s3/{bucket}/{path}',
+    scope: 'full',
+    key: 'headObject',
+    call: {
+      method: 'HEAD',
+      path: '/s3/{bucket}/{path}',
+      pathParams: { bucket: 'public', path: 'laporan/q3.pdf' },
+      public: true,
+      expect: '200 OK',
+      notes: ['Ambil metadata objek (tanpa body). 404 bila key tidak ada.'],
+    },
+    pathRows: [
+      { name: 'bucket', type: 'string', required: true, key: 's3Bucket' },
+      { name: 'path', type: 'string', required: true, key: 's3Path' },
+    ],
+    response: {
+      status: '200',
+      lang: 'http',
+      code: `HTTP/1.1 200 OK
+Content-Type: application/pdf
+Content-Length: 820341
+ETag: "3f9a1c7e5b2d48af90c6e1d7a3b5c8f0"
+Last-Modified: Mon, 14 Aug 2026 09:12:44 GMT
+
+<no body>`,
+    },
+    errors: ['403', '404'],
+    noteKey: 's3Note',
+  },
+  {
+    id: 's3-get-object',
+    group: 's3',
+    method: 'GET',
+    path: '/s3/{bucket}/{path}',
+    scope: 'read',
+    key: 'getObject',
+    call: {
+      method: 'GET',
+      path: '/s3/{bucket}/{path}',
+      pathParams: { bucket: 'public', path: 'laporan/q3.pdf' },
+      public: true,
+      binary: 'q3.pdf',
+      expect: '200 OK (binary stream)',
+      notes: ['Stream isi objek. Bucket `public` bisa dibaca tanpa autentikasi.'],
+    },
+    pathRows: [
+      { name: 'bucket', type: 'string', required: true, key: 's3Bucket' },
+      { name: 'path', type: 'string', required: true, key: 's3Path' },
+    ],
+    response: {
+      status: '200',
+      lang: 'http',
+      code: `HTTP/1.1 200 OK
+Content-Type: application/pdf
+Content-Length: 820341
+ETag: "3f9a1c7e5b2d48af90c6e1d7a3b5c8f0"
+Accept-Ranges: bytes
+
+<binary stream>`,
+    },
+    errors: ['403', '404'],
+    noteKey: 's3Note',
+  },
+  {
+    id: 's3-put-object',
+    group: 's3',
+    method: 'PUT',
+    path: '/s3/{bucket}/{path}',
+    scope: 'write',
+    key: 'putObject',
+    call: {
+      method: 'PUT',
+      path: '/s3/{bucket}/{path}',
+      pathParams: { bucket: 'arsip', path: 'laporan/q3.pdf' },
+      expect: '200 OK',
+      notes: ['Unggah/ganti objek (binary payload). Overwrite bersifat idempotent.'],
+    },
+    pathRows: [
+      { name: 'bucket', type: 'string', required: true, key: 's3Bucket' },
+      { name: 'path', type: 'string', required: true, key: 's3Path' },
+    ],
+    headerRows: [
+      { name: 'Content-Type', type: 'string', key: 's3ContentType' },
+      AUTH_ROW,
+    ],
+    response: {
+      status: '200',
+      lang: 'http',
+      code: `HTTP/1.1 200 OK
+ETag: "3f9a1c7e5b2d48af90c6e1d7a3b5c8f0"
+x-amz-request-id: 8F3A1C7E5B2D48AF
+
+<no body>`,
+    },
+    errors: ['400', '403'],
+    noteKey: 's3AuthNote',
+  },
+  {
+    id: 's3-delete-object',
+    group: 's3',
+    method: 'DELETE',
+    path: '/s3/{bucket}/{path}',
+    scope: 'delete',
+    key: 'deleteObject',
+    call: {
+      method: 'DELETE',
+      path: '/s3/{bucket}/{path}',
+      pathParams: { bucket: 'arsip', path: 'laporan/q3.pdf' },
+      expect: '204 No Content',
+      notes: ['Hapus objek. Idempotent: key yang tidak ada tetap 204.'],
+    },
+    pathRows: [
+      { name: 'bucket', type: 'string', required: true, key: 's3Bucket' },
+      { name: 'path', type: 'string', required: true, key: 's3Path' },
+    ],
+    headerRows: [AUTH_ROW],
+    response: {
+      status: '204',
+      lang: 'http',
+      code: `HTTP/1.1 204 No Content
+x-amz-request-id: 8F3A1C7E5B2D48AF
+
+<no body>`,
+    },
+    errors: ['403'],
+    noteKey: 's3AuthNote',
   },
 
 ];

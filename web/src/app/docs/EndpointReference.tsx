@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
+  CloudQueue,
   ExpandLess,
   ExpandMore,
   Folder,
@@ -48,10 +49,12 @@ const GROUP_ICONS: Record<string, typeof InsertDriveFile> = {
   discovery: Search,
   webhooks: Notifications,
   notifications: Notifications,
+  s3: CloudQueue,
 };
 
 const METHOD_BADGE_CLASS: Record<ReferenceEntry['method'], string> = {
   GET: 'bg-sky-500/15 text-sky-400 border border-sky-500/30',
+  HEAD: 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30',
   POST: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30',
   PUT: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
   PATCH: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',

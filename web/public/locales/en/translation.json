@@ -1078,7 +1078,8 @@
       "apiKeys": "API keys",
       "webhooks": "Webhooks",
       "notifications": "Notifications",
-      "admin": "Administration"
+      "admin": "Administration",
+      "s3": "S3 gateway"
     },
     "endpoints": {
       "bulkDelete": "Delete many files in a single request.",
@@ -1152,7 +1153,13 @@
       "uploadComplete": "Mark all parts received and finish the write.",
       "uploadFromUrl": "Fetch a file from a source URL and store it in Drive.",
       "uploadInit": "Start a chunked upload for a large file.",
-      "adminPing": "Instance health check reserved for the owner role."
+      "adminPing": "Instance health check reserved for the owner role.",
+      "resolveFolder": "Map a folder path to its folder entry and breadcrumb.",
+      "resetVault": "Empty every file, folder, and share link.",
+      "headObject": "Fetch object metadata without downloading the body.",
+      "getObject": "Stream an object body.",
+      "putObject": "Upload or replace an object (binary).",
+      "deleteObject": "Delete an object."
     },
     "envelope": {
       "eyebrow": "Contract",
@@ -1316,6 +1323,10 @@
         "notifications": {
           "title": "Notifications",
           "hint": "Notification preferences and push device tokens."
+        },
+        "s3": {
+          "title": "S3 gateway",
+          "hint": "S3-compatible API (head, get, put, delete object) for S3 SDK clients."
         }
       },
       "notes": {
@@ -1344,7 +1355,11 @@
         "cursorNote": "Pass `next_cursor` back unchanged; the format is opaque and can change.",
         "webhookSanctumNote": "Like API keys: session auth only.",
         "signatureNote": "Verify the `X-Webhook-Signature` header with that secret before trusting a payload.",
-        "oauthCallbackWebNote": "Google rejects custom URI schemes, so this public endpoint must be the `redirect_uri`: its HTML then bounces to `enstorage://oauth-callback?code=...&state=...` for the app WebView to intercept."
+        "oauthCallbackWebNote": "Google rejects custom URI schemes, so this public endpoint must be the `redirect_uri`: its HTML then bounces to `enstorage://oauth-callback?code=...&state=...` for the app WebView to intercept.",
+        "resetVaultNote": "Permanently destructive: every file and folder is emptied and cannot be recovered. Sanctum sessions only, never an API key.",
+        "resolveRootNote": "An empty path or `/` returns `folder: null` with an empty breadcrumb (root directory).",
+        "s3Note": "The S3 gateway does not use the JSON envelope — responses use standard S3 status codes and headers, or an S3 XML error (`AccessDenied`, `NoSuchKey`) on failure.",
+        "s3AuthNote": "Authentication accepts AWS Signature V4, an `X-API-Key: en_...` header, `Authorization: Bearer en_...`, or the `?api_key=en_...` query."
       },
       "items": {
         "bulkDelete": {
@@ -1638,6 +1653,30 @@
         "adminPing": {
           "title": "Admin health check",
           "body": "Owner-only internal health probe."
+        },
+        "resolveFolder": {
+          "title": "Resolve folder path",
+          "body": "Turn a path hierarchy (e.g. `/Documents/Private`) into its folder plus breadcrumb, without knowing any ID."
+        },
+        "resetVault": {
+          "title": "Reset vault",
+          "body": "Empty every file and folder owned by the user without deleting the account. Sanctum sessions only."
+        },
+        "headObject": {
+          "title": "Head object",
+          "body": "Fetch object metadata (`Content-Type`, `Content-Length`, `ETag`, `Last-Modified`) without a body."
+        },
+        "getObject": {
+          "title": "Get object",
+          "body": "Stream the object body as binary. The `public` bucket is readable without authentication."
+        },
+        "putObject": {
+          "title": "Put object",
+          "body": "Upload a new object or replace an existing one (idempotent overwrite)."
+        },
+        "deleteObject": {
+          "title": "Delete object",
+          "body": "Delete an object. Idempotent: a missing key still returns `204`."
         }
       }
     },
@@ -1715,7 +1754,11 @@
       "accountActive": "Account status: inactive accounts are skipped by upload routing.",
       "authCode": "Authorization code from Google (`server_auth_code` or the callback `code`).",
       "authState": "Encrypted state from `/oauth/redirect`; expires after 10 minutes.",
-      "shareLabel": "Label to make this link easy to recognize."
+      "shareLabel": "Label to make this link easy to recognize.",
+      "resolvePathQuery": "Folder path hierarchy, e.g. `/Documents/Private` or `Backup/2026`.",
+      "s3Bucket": "Bucket name (e.g. `public`, `archive`). `public` is readable without authentication.",
+      "s3Path": "Object key relative to the bucket, e.g. `reports/q3.pdf`.",
+      "s3ContentType": "Object MIME type; defaults to `application/octet-stream`."
     },
     "filter": {
       "all": "All",

@@ -1078,7 +1078,8 @@
       "apiKeys": "API Keys",
       "webhooks": "Webhooks",
       "notifications": "Notifikasi",
-      "admin": "Administrasi"
+      "admin": "Administrasi",
+      "s3": "Gerbang S3"
     },
     "endpoints": {
       "bulkDelete": "Hapus banyak berkas dalam satu permintaan.",
@@ -1152,7 +1153,13 @@
       "uploadComplete": "Tandai semua bagian terkirim dan selesaikan penulisan.",
       "uploadFromUrl": "Unduh berkas dari URL sumber lalu simpan ke Drive.",
       "uploadInit": "Mulai upload terpotong untuk berkas berukuran besar.",
-      "adminPing": "Health check instance khusus role owner."
+      "adminPing": "Health check instance khusus role owner.",
+      "resolveFolder": "Petakan path folder ke entri folder dan breadcrumb-nya.",
+      "resetVault": "Kosongkan seluruh berkas, folder, dan tautan berbagi.",
+      "headObject": "Ambil metadata objek tanpa mengunduh isinya.",
+      "getObject": "Stream isi objek.",
+      "putObject": "Unggah atau ganti objek (binary).",
+      "deleteObject": "Hapus objek."
     },
     "envelope": {
       "eyebrow": "Kontrak",
@@ -1316,6 +1323,10 @@
         "notifications": {
           "title": "Notifikasi",
           "hint": "Preferensi notifikasi dan token perangkat push."
+        },
+        "s3": {
+          "title": "Gerbang S3",
+          "hint": "API kompatibel S3 (head, get, put, delete object) untuk klien S3 SDK."
         }
       },
       "notes": {
@@ -1344,7 +1355,11 @@
         "cursorNote": "Teruskan `next_cursor` apa adanya; formatnya opaque dan bisa berubah kapan saja.",
         "webhookSanctumNote": "Sama seperti API keys: hanya lewat sesi Sanctum.",
         "signatureNote": "Verifikasi header `X-Webhook-Signature` dengan secret tersebut sebelum memproses payload.",
-        "oauthCallbackWebNote": "Custom URI scheme ditolak Google, jadi endpoint publik ini harus jadi `redirect_uri`: HTML-nya lalu melompat ke `enstorage://oauth-callback?code=...&state=...` untuk diintercept WebView aplikasi."
+        "oauthCallbackWebNote": "Custom URI scheme ditolak Google, jadi endpoint publik ini harus jadi `redirect_uri`: HTML-nya lalu melompat ke `enstorage://oauth-callback?code=...&state=...` untuk diintercept WebView aplikasi.",
+        "resetVaultNote": "Tindakan destruktif permanen: seluruh berkas dan folder dikosongkan dan tidak dapat dikembalikan. Hanya bisa via sesi Sanctum, tidak lewat API key.",
+        "resolveRootNote": "Path kosong atau `/` mengembalikan `folder: null` dengan breadcrumb kosong (root directory).",
+        "s3Note": "Gerbang S3 tidak memakai envelope JSON — respons memakai status HTTP dan header standar S3, atau error XML S3 (`AccessDenied`, `NoSuchKey`) bila gagal.",
+        "s3AuthNote": "Autentikasi mendukung AWS Signature V4, header `X-API-Key: en_...`, `Authorization: Bearer en_...`, atau query `?api_key=en_...`."
       },
       "items": {
         "bulkDelete": {
@@ -1638,6 +1653,30 @@
         "adminPing": {
           "title": "Cek status admin",
           "body": "Pemeriksaan kesehatan internal khusus pemilik (owner)."
+        },
+        "resolveFolder": {
+          "title": "Resolve path folder",
+          "body": "Ubah hierarki path (mis. `/Dokumen/Pribadi`) menjadi folder beserta breadcrumb-nya tanpa perlu tahu ID."
+        },
+        "resetVault": {
+          "title": "Reset vault",
+          "body": "Kosongkan seluruh berkas dan folder milik user tanpa menghapus akun. Hanya bisa via sesi Sanctum."
+        },
+        "headObject": {
+          "title": "Head object",
+          "body": "Ambil metadata objek (`Content-Type`, `Content-Length`, `ETag`, `Last-Modified`) tanpa mengirim body."
+        },
+        "getObject": {
+          "title": "Get object",
+          "body": "Stream isi objek sebagai binary. Bucket `public` dapat dibaca tanpa autentikasi."
+        },
+        "putObject": {
+          "title": "Put object",
+          "body": "Unggah objek baru atau ganti objek yang sudah ada (idempotent overwrite)."
+        },
+        "deleteObject": {
+          "title": "Delete object",
+          "body": "Hapus objek. Bersifat idempotent: key yang tidak ada tetap mengembalikan `204`."
         }
       }
     },
@@ -1715,7 +1754,11 @@
       "accountActive": "Status akun: akun nonaktif tidak dipakai routing upload.",
       "authCode": "Kode otorisasi dari Google (`server_auth_code` atau `code` callback).",
       "authState": "State terenkripsi dari `/oauth/redirect`; kedaluwarsa dalam 10 menit.",
-      "shareLabel": "Label agar link ini mudah dikenali."
+      "shareLabel": "Label agar link ini mudah dikenali.",
+      "resolvePathQuery": "Hierarki path folder, contoh `/Dokumen/Pribadi` atau `Backup/2026`.",
+      "s3Bucket": "Nama bucket (mis. `public`, `arsip`). `public` dapat dibaca tanpa autentikasi.",
+      "s3Path": "Object key relatif di dalam bucket, mis. `laporan/q3.pdf`.",
+      "s3ContentType": "MIME type objek; default `application/octet-stream`."
     },
     "filter": {
       "all": "Semua",

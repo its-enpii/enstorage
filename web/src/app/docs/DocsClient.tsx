@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   ArrowForward,
   Bolt,
+  CloudQueue,
   DataObject,
   Folder,
   Hub,
@@ -104,6 +105,7 @@ const MODULE_ICONS: Record<ReferenceGroup['id'], typeof VpnKey> = {
   discovery: Search,
   webhooks: Notifications,
   notifications: PhoneAndroid,
+  s3: CloudQueue,
 };
 
 /** Highlights the TOC entry whose section is closest to the top of the view. */

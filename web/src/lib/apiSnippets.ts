@@ -5,7 +5,7 @@
  * other or from the endpoint catalog.
  */
 
-export type SnippetMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+export type SnippetMethod = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export type FilePart = { field: string; path: string; type?: string };
 
@@ -153,7 +153,9 @@ function buildCurl(call: SnippetCall): string {
   const lines: string[] = [...commentBlock('#', call.notes)];
   if (call.expect) lines.push(`# Expected: ${call.expect}`);
 
-  const parts = [`curl -sS -X ${call.method} ${url}`];
+  const parts = [
+    call.method === 'HEAD' ? `curl -sS -I ${url}` : `curl -sS -X ${call.method} ${url}`,
+  ];
   for (const [name, value] of headerEntries(call)) {
     parts.push(`  -H "${name}: ${value.replace('<key>', '$ENSTORAGE_KEY')}"`);
   }

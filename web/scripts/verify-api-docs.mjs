@@ -64,6 +64,7 @@ const CONSUMER_ROUTES = [
   { method: 'GET', path: '/auth/google/redirect' },
   { method: 'GET', path: '/auth/google/callback' },
   { method: 'DELETE', path: '/auth/account' },
+  { method: 'POST', path: '/vault/reset' },
 
   // API Keys (3)
   { method: 'GET', path: '/api-keys' },
@@ -108,8 +109,9 @@ const CONSUMER_ROUTES = [
   { method: 'GET', path: '/s/{token}' },
   { method: 'GET', path: '/s/{token}/view' },
 
-  // Folders (9)
+  // Folders (10)
   { method: 'GET', path: '/folders' },
+  { method: 'GET', path: '/folders/resolve' },
   { method: 'POST', path: '/folders' },
   { method: 'GET', path: '/folders/{id}' },
   { method: 'PATCH', path: '/folders/{id}' },
@@ -141,6 +143,12 @@ const CONSUMER_ROUTES = [
   { method: 'PATCH', path: '/notifications/settings' },
   { method: 'POST', path: '/notifications/token' },
   { method: 'DELETE', path: '/notifications/token' },
+
+  // S3-Compatible Gateway (4)
+  { method: 'HEAD', path: '/s3/{bucket}/{path}' },
+  { method: 'GET', path: '/s3/{bucket}/{path}' },
+  { method: 'PUT', path: '/s3/{bucket}/{path}' },
+  { method: 'DELETE', path: '/s3/{bucket}/{path}' },
 
   // Admin / Health (1)
   { method: 'GET', path: '/admin/ping' },
