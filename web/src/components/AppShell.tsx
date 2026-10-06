@@ -59,11 +59,12 @@ export function AppShell({
   return (
     <div className="flex min-h-screen overflow-hidden">
       <Sidebar mobileOpen={sidebarOpen} onMobileClose={() => setSidebarOpen(false)} />
-      <main className="flex-1 h-screen flex flex-col relative overflow-hidden bg-background">
+      <main className="flex-1 h-screen flex flex-col relative isolate overflow-hidden bg-background">
         {/* Ambient atmospheric glow to align with landing page depth */}
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(198,192,255,0.06),transparent)]" />
-          <div className="absolute left-1/2 top-[-8rem] h-[28rem] w-[48rem] -translate-x-1/2 rounded-full bg-primary/4 blur-3xl" />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_100%_70%_at_50%_-10%,rgba(198,192,255,0.12),transparent)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(198,192,255,0.035)_1px,transparent_1px)] [background-size:24px_24px]" />
+          <div className="absolute left-1/2 top-[-6rem] h-[28rem] w-[50rem] -translate-x-1/2 rounded-full bg-primary/8 blur-3xl" />
         </div>
         <TopBar
           search={search}
@@ -72,7 +73,7 @@ export function AppShell({
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
         />
-        <div className="flex-1 overflow-y-auto px-container-p pb-32">{children}</div>
+        <div className="relative z-10 flex-1 overflow-y-auto px-container-p pb-32">{children}</div>
       </main>
     </div>
   );

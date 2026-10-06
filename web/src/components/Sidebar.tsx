@@ -115,8 +115,10 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
 
   const inner = (
     <>
-      <Link href="/files" title="EnStorage" className="text-primary">
-        <Cloud className="!text-3xl fill" />
+      <Link href="/files" title="EnStorage" className="transition-transform hover:scale-105 active:scale-95">
+        <div className="w-10 h-10 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center shadow-md shadow-primary/25 border border-primary/30">
+          <Cloud className="!text-2xl fill" />
+        </div>
       </Link>
 
       <nav className="flex flex-col gap-8 flex-1">
@@ -172,7 +174,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
       </aside>
 
       {/* Desktop rail — fixed-visible on sm+, hidden on mobile */}
-      <aside className="hidden sm:flex w-[72px] h-screen bg-surface-container-lowest flex-col items-center py-8 gap-10 border-r border-outline-variant/15 z-50">
+      <aside className="hidden sm:flex w-[72px] h-screen bg-surface-container-lowest/80 backdrop-blur-xl flex-col items-center py-8 gap-10 border-r border-outline-variant/20 z-50">
         {inner}
       </aside>
     </>
