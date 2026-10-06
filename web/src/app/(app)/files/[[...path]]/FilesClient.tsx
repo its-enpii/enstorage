@@ -15,11 +15,6 @@ import {
   DriveFileMoveIcon,
   EditIcon,
   ErrorOutlineIcon,
-  FileIcon,
-  FolderIcon,
-  FolderSpecialIcon,
-  StarIcon,
-  StarBorderIcon,
 } from '@/lib/icons';
 import { AppShell } from '@/components/AppShell';
 import { Breadcrumb } from '@/components/Breadcrumb';
@@ -27,12 +22,11 @@ import { Button, IconButton, TextAction } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
 import { DropdownMenu, type MenuItem } from '@/components/DropdownMenu';
 import { FileViewer } from '@/components/FileViewer';
-import { ItemCard } from '@/components/ItemCard';
+import { FolderCard, FileCard } from '@/components/ItemCard';
 import { ShareDialog } from '@/components/ShareDialog';
 import { MoveDialog, type MovedFileResult } from '@/components/MoveDialog';
 import { DeleteFolderDialog } from '@/components/DeleteFolderDialog';
 import { Alert } from '@/components/Alert';
-import { SelectionIndicator } from '@/components/Checkbox';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { FilesStoreProvider, useFilesStore } from '@/lib/filesStore';;
 import { FilesStoreBinder, useRealtime } from '@/lib/realtime/realtimeProvider';
@@ -42,29 +36,22 @@ import { EmptyDropZone } from '@/components/EmptyDropZone';
 import { Loading } from '@/components/Loading';
 import { usePrompt } from '@/components/usePrompt';
 import { useInfiniteScroll } from '@/lib/useInfiniteScroll';
-import { bytes } from '@/lib/format';
+import { bytes, fileExtension } from '@/lib/format';
 import { usePageTitle } from '@/lib/usePageTitle';
 
 type Tab = 'all' | 'folders' | 'files';
 
-function fileIcon(file: FileItem) {
-  if (file.has_thumbnail && file.upload_status === 'done') {
-    const token = getToken();
-    const src = `${process.env.NEXT_PUBLIC_API_BASE}/files/${file.id}/thumbnail${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    return (
-      <img
-        src={src}
-        alt=""
-        className="w-16 h-16 object-cover rounded-xl"
-        loading="lazy"
-      />
-    );
-  }
-  return <FileIcon mime={file.mime_type} />;
+function fileThumbnailUrl(file: FileItem): string | null {
+  if (!file.has_thumbnail || file.upload_status !== 'done') return null;
+  const token = getToken();
+  return `${process.env.NEXT_PUBLIC_API_BASE}/files/${file.id}/thumbnail${token ? `?token=${encodeURIComponent(token)}` : ''}`;
 }
 
-function folderIcon() {
-  return <FolderIcon />;
+function statusLabel(t: (key: string) => string, s: FileItem['upload_status']) {
+  if (s === 'done') return t('starred.statusDone');
+  if (s === 'failed') return t('starred.statusFailed');
+  if (s === 'uploading') return t('starred.statusUploading');
+  return t('starred.statusPending');
 }
 
 export default function FilesClient() {
@@ -1272,31 +1259,24 @@ function FilesContent({ currentPath }: { currentPath: string }) {
                 }
                 data-testid={`drop-target-folder-${f.id}`}
               >
-              <ItemCard
-                icon={f.is_starred ? <FolderSpecialIcon /> : folderIcon()}
-                iconVariant={f.is_starred ? 'gold' : undefined}
-                title={
-                  <div className="flex items-center gap-1.5 min-w-0 max-w-full overflow-hidden">
-                    <span className="truncate block min-w-0 flex-1 overflow-hidden" title={f.name}>
-                      {f.name}
-                    </span>
-                    {f.is_starred && <StarIcon className="text-secondary shrink-0" />}
-                  </div>
-                }
-                subtitle={size > 0 ? t('folders.itemsSize', { count: items, size: bytes(size) }) : t('folders.items', { count: items })}
+              <FolderCard
+                name={f.name}
+                isStarred={f.is_starred}
+                itemCount={items}
+                itemsLabel={t('folders.items')}
+                totalSize={size > 0 ? bytes(size) : undefined}
+                isDropTarget={isDropTarget}
                 onClick={() => navigateToFolder(f.path)}
-                right={
-                  <div className="hover-actions flex items-center gap-1">
-                    <DropdownMenu
-                      align="right"
-                      trigger={
-                        <IconButton title={t('files.actions.menu')}>
-                          <span className="material-symbols-outlined !text-base">more_vert</span>
-                        </IconButton>
-                      }
-                      items={buildFolderMenuItems(f)}
-                    />
-                  </div>
+                actions={
+                  <DropdownMenu
+                    align="right"
+                    trigger={
+                      <IconButton title={t('files.actions.menu')}>
+                        <span className="material-symbols-outlined !text-base">more_vert</span>
+                      </IconButton>
+                    }
+                    items={buildFolderMenuItems(f)}
+                  />
                 }
               />
               </div>
@@ -1310,27 +1290,20 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               className={selectMode ? '' : 'cursor-grab active:cursor-grabbing'}
               data-testid={`draggable-file-${f.id}`}
             >
-            <ItemCard
-              icon={fileIcon(f)}
+            <FileCard
+              name={f.name}
+              size={bytes(f.size)}
+              mimeType={f.mime_type}
+              extension={fileExtension(f.name)}
+              thumbnailUrl={fileThumbnailUrl(f)}
+              isStarred={f.is_starred}
+              uploadStatus={f.upload_status}
+              uploadStatusLabel={statusLabel(t, f.upload_status)}
               selected={selected.has(f.id)}
+              selectMode={selectMode}
               onClick={selectMode ? () => toggleSelect(f.id) : () => setViewerFile(f)}
-              title={
-                <div className="flex items-center gap-1.5 min-w-0 max-w-full overflow-hidden">
-                  <span className="truncate block min-w-0 flex-1 overflow-hidden" title={f.name}>
-                    {f.name}
-                  </span>
-                  {f.is_starred && <StarIcon className="text-secondary shrink-0" />}
-                </div>
-              }
-              subtitle={
-                <span className="flex items-center gap-1">
-                  {bytes(f.size)}
-                </span>
-              }
-              right={
-                selectMode ? (
-                  <SelectionIndicator selected={selected.has(f.id)} />
-                ) : (
+              actions={
+                selectMode ? undefined : (
                   <DropdownMenu
                     align="right"
                     trigger={

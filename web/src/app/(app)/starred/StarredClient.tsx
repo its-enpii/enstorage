@@ -11,21 +11,18 @@ import { IconButton } from '@/components/Button';
 import { DropdownMenu, type MenuItem } from '@/components/DropdownMenu';
 import { FileViewer } from '@/components/FileViewer';
 import { ShareDialog } from '@/components/ShareDialog';
-import { ItemCard } from '@/components/ItemCard';
+import { FolderCard, FileCard } from '@/components/ItemCard';
 import { Loading } from '@/components/Loading';
 import { Alert } from '@/components/Alert';
 import { EmptyState } from '@/components/EmptyState';
 import { Tabs } from '@/components/Tabs';
 import { usePrompt } from '@/components/usePrompt';
-import { bytes } from '@/lib/format';
+import { bytes, fileExtension } from '@/lib/format';
 import { createViewStore } from '@/lib/viewStore';
 import { usePageTitle } from '@/lib/usePageTitle';
 import {
   CloudDoneIcon,
-  FileIcon,
-  FolderSpecialIcon,
   StarIcon,
-  StarBorderIcon,
   IconSymbol,
 } from '@/lib/icons';
 
@@ -40,20 +37,10 @@ const starredStore = createViewStore<StarredData>(async () => {
   return { folders, files };
 });
 
-function fileIcon(file: FileItem) {
-  if (file.has_thumbnail && file.upload_status === 'done') {
-    const token = getToken();
-    const src = `${process.env.NEXT_PUBLIC_API_BASE}/files/${file.id}/thumbnail${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    return (
-      <img
-        src={src}
-        alt=""
-        className="w-16 h-16 object-cover rounded-xl"
-        loading="lazy"
-      />
-    );
-  }
-  return <FileIcon mime={file.mime_type} className="text-secondary" />;
+function fileThumbnailUrl(file: FileItem): string | null {
+  if (!file.has_thumbnail || file.upload_status !== 'done') return null;
+  const token = getToken();
+  return `${process.env.NEXT_PUBLIC_API_BASE}/files/${file.id}/thumbnail${token ? `?token=${encodeURIComponent(token)}` : ''}`;
 }
 
 function statusLabel(t: (key: string) => string, s: FileItem['upload_status']) {
@@ -244,42 +231,42 @@ function StarredContent() {
             const items = (f.files_count ?? 0) + (f.folders_count ?? 0);
             const size = f.total_size ?? 0;
             return (
-              <ItemCard
+              <FolderCard
                 key={f.id}
-                icon={<FolderSpecialIcon />}
-              iconVariant="gold"
-                title={f.name}
-                subtitle={
-                  items > 0
-                    ? (size > 0 ? t('folders.itemsSize', { count: items, size: bytes(size) }) : t('folders.items', { count: items }))
-                    : t('folders.items', { count: 0 })
-                }
+                name={f.name}
+                isStarred={true}
+                itemCount={items}
+                itemsLabel={t('folders.items')}
+                totalSize={size > 0 ? bytes(size) : undefined}
                 onClick={() => router.push(`/files${f.path}`)}
-                right={
-                  <div className="hover-actions flex items-center gap-1">
-                    <IconButton
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleStarFolder(f.id);
-                      }}
-                      title={t('starred.unstar')}
-                      active
-                    >
-                      <StarIcon />
-                    </IconButton>
-                  </div>
+                actions={
+                  <IconButton
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleStarFolder(f.id);
+                    }}
+                    title={t('starred.unstar')}
+                    active
+                  >
+                    <StarIcon />
+                  </IconButton>
                 }
               />
             );
           })}
           {visibleFiles.map((f) => (
-            <ItemCard
+            <FileCard
               key={f.id}
-              icon={fileIcon(f)}
-              title={f.name}
-              subtitle={`${bytes(f.size)} • ${statusLabel(t, f.upload_status)}`}
+              name={f.name}
+              size={bytes(f.size)}
+              mimeType={f.mime_type}
+              extension={fileExtension(f.name)}
+              thumbnailUrl={fileThumbnailUrl(f)}
+              isStarred={f.is_starred}
+              uploadStatus={f.upload_status}
+              uploadStatusLabel={statusLabel(t, f.upload_status)}
               onClick={() => f.upload_status === 'done' && setViewerFile(f)}
-              right={
+              actions={
                 <DropdownMenu
                   align="right"
                   trigger={

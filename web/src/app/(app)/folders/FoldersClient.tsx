@@ -7,7 +7,7 @@ import { apiRequest, apiRequestEnvelope, ApiError, type Folder as FolderType, ty
 import { AppShell } from '@/components/AppShell';
 import { Button, IconButton } from '@/components/Button';
 import { Input } from '@/components/Input';
-import { ItemCard } from '@/components/ItemCard';
+import { FolderCard } from '@/components/ItemCard';
 import { UploadToolbar } from '@/components/UploadToolbar';
 import { Loading } from '@/components/Loading';
 import { Alert } from '@/components/Alert';
@@ -398,24 +398,17 @@ function FoldersContent() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-card-gap">
-          {folders.map((f) => (
-            <ItemCard
+          {folders.map((f) => {
+            const items = (f.files_count ?? 0) + (f.folders_count ?? 0);
+            const size = f.total_size ?? 0;
+            return (
+            <FolderCard
               key={f.id}
-              icon={f.is_starred ? <FolderSpecialIcon /> : <FolderIcon />}
-              iconVariant={f.is_starred ? 'gold' : undefined}
-              title={
-                <span className="flex items-center gap-1.5">
-                  {f.name}
-                  {f.is_starred && <StarIcon className="text-secondary shrink-0" />}
-                </span>
-              }
-              subtitle={
-                (() => {
-                  const items = (f.files_count ?? 0) + (f.folders_count ?? 0);
-                  const size = f.total_size ?? 0;
-                  return size > 0 ? t('folders.itemsSize', { count: items, size: bytes(size) }) : t('folders.items', { count: items });
-                })()
-              }
+              name={f.name}
+              isStarred={f.is_starred}
+              itemCount={items}
+              itemsLabel={t('folders.items')}
+              totalSize={size > 0 ? bytes(size) : undefined}
               onClick={editing === f.id ? undefined : () => navigateTo(f.id, f.path)}
               editSlot={
                 editing === f.id ? (
@@ -431,78 +424,77 @@ function FoldersContent() {
                   />
                 ) : undefined
               }
-              right={
-                <div className="hover-actions flex items-center gap-1">
-                  {editing === f.id ? (
-                    <>
+              actions={
+                editing === f.id ? (
+                  <div className="flex items-center gap-1">
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        renameFolder(f.id);
+                      }}
+                      title={t('common.save')}
+                    >
+                      <CheckIcon />
+                    </IconButton>
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        cancelRename();
+                      }}
+                      title={t('folders.renameCancel')}
+                    >
+                      <CloseIcon />
+                    </IconButton>
+                  </div>
+                ) : (
+                  <div className="hover-actions flex items-center gap-1">
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleStar(f.id, f.is_starred);
+                      }}
+                      title={f.is_starred ? t('files.actions.unstar') : t('files.actions.star')}
+                      active={f.is_starred}
+                    >
+                      {f.is_starred ? <StarIcon /> : <StarBorderIcon />}
+                    </IconButton>
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditing(f.id);
+                        setEditValue(f.name);
+                      }}
+                      title={t('files.actions.rename')}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    {currentId && (
                       <IconButton
                         onClick={(e) => {
                           e.stopPropagation();
-                          renameFolder(f.id);
+                          moveToRoot(f.id);
                         }}
-                        title={t('common.save')}
+                        title={t('folders.moveToRoot')}
                       >
-                        <CheckIcon />
+                        <DriveFileMoveIcon />
                       </IconButton>
-                      <IconButton
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          cancelRename();
-                        }}
-                        title={t('folders.renameCancel')}
-                      >
-                        <CloseIcon />
-                      </IconButton>
-                    </>
-                  ) : (
-                    <>
-                      <IconButton
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleStar(f.id, f.is_starred);
-                        }}
-                        title={f.is_starred ? t('files.actions.unstar') : t('files.actions.star')}
-                        active={f.is_starred}
-                      >
-                        {f.is_starred ? <StarIcon /> : <StarBorderIcon />}
-                      </IconButton>
-                      <IconButton
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditing(f.id);
-                          setEditValue(f.name);
-                        }}
-                        title={t('files.actions.rename')}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      {currentId && (
-                        <IconButton
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            moveToRoot(f.id);
-                          }}
-                          title={t('folders.moveToRoot')}
-                        >
-                          <DriveFileMoveIcon />
-                        </IconButton>
-                      )}
-                      <Button
-                        variant="danger-soft"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteFolderTarget(f);
-                        }}
-                      >
-                        <DeleteIcon /> {t('common.delete')}
-                      </Button>
-                    </>
-                  )}
-                </div>
+                    )}
+                    <Button
+                      variant="danger-soft"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteFolderTarget(f);
+                      }}
+                    >
+                      <DeleteIcon /> {t('common.delete')}
+                    </Button>
+                  </div>
+                )
               }
             />
-          ))}
+            );
+          })}
         </div>
       )}
 
