@@ -8,7 +8,6 @@ use App\Models\GoogleAccount;
 use Google\Http\MediaFileUpload;
 use Google\Service\Drive;
 use Google\Service\Drive\DriveFile;
-use Google\Service\Drive\Permission;
 use Illuminate\Support\Facades\Log;
 
 class GoogleDriveUploader
@@ -108,20 +107,12 @@ class GoogleDriveUploader
             throw new \RuntimeException('Upload gagal: response tidak valid dari Google Drive.');
         }
 
-        // 5. Set permission "Anyone with link can view" - non-fatal
+        // 5. File sengaja dibiarkan PRIVATE (tanpa permission publik):
+        //    hanya pemilik akun Google yang bisa mengakses file lewat UI Drive.
+        //    Semua akses share tetap dilayani EnStorage lewat /s/{token}, yang
+        //    mengambil file via OAuth token pemilik akun (bukan akses publik).
+        //    webViewLink tetap ada meski file private (link milik pemilik).
         $shareableLink = $uploaded->getWebViewLink();
-        try {
-            $permission = new Permission([
-                'type' => 'anyone',
-                'role' => 'reader',
-            ]);
-            $drive->permissions->create($uploaded->getId(), $permission, ['sendNotificationEmail' => false]);
-        } catch (\Throwable $e) {
-            Log::warning('GDrive set public permission failed (file sudah ter-upload)', [
-                'gdrive_file_id' => $uploaded->getId(),
-                'error' => $e->getMessage(),
-            ]);
-        }
 
         return [
             'gdrive_file_id' => $uploaded->getId(),

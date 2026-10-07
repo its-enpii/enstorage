@@ -57,7 +57,7 @@ Bagian dari ekosistem **En-suite** (EnCenter, EnVault, dsb), dengan **REST API t
 - Upload semua jenis file, **maks 1 GB per file**.
 - Folder hierarkis (nested).
 - Rename, move, delete.
-- Shareable link otomatis ("Anyone with link can view").
+- Shareable link via EnStorage `/s/{token}` — file di Google Drive tetap PRIVATE.
 - Download via proxy EnStorage.
 - Thumbnail otomatis untuk gambar & video (WebP 400×400 max).
 

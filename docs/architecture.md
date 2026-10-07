@@ -106,7 +106,7 @@ Client tidak perlu tahu soal chunking atau quota routing. Cukup kirim file via m
    → Update upload_status: uploading
    → Upload ke Google Drive via Resumable Upload API
      (server yang handle chunking, transparan dari client)
-   → Set permission "Anyone with link"
+   → File dibuat PRIVATE (tanpa permission publik; hanya pemilik akun yang bisa akses via Drive)
    → Simpan gdrive_file_id + shareable_link
    → Update upload_status: done
    → Dispatch ThumbnailJob (kalau image/* atau video/*)
