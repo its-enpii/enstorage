@@ -21,6 +21,8 @@ use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
 use Tests\TestCase;
 
 /**
@@ -41,7 +43,7 @@ class GDrivePrivateShareVerificationTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** @var array<int, array{request: \Psr\Http\Message\RequestInterface, response: ?\Psr\Http\Message\ResponseInterface}> */
+    /** @var array<int, array{request: RequestInterface, response: ?ResponseInterface}> */
     private array $history = [];
 
     private User $owner;

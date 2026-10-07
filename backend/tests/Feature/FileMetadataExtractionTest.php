@@ -8,7 +8,7 @@ use App\Models\User;
 use App\Services\FileMetadataExtractor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -41,7 +41,7 @@ class FileMetadataExtractionTest extends TestCase
     /**
      * Upload a raw file through the API and let the sync job run.
      *
-     * @return array{0: \Illuminate\Testing\TestResponse, 1: File}
+     * @return array{0: TestResponse, 1: File}
      */
     private function upload(User $user, string $name, string $content, ?string $mime = null): array
     {

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Log;
+use Smalot\PdfParser\Parser;
 
 /**
  * Ekstraksi metadata kontekstual dari file yang baru diupload.
@@ -144,7 +145,7 @@ class FileMetadataExtractor
      * Konversi EXIF GPS (derajat/menit/detik rasional) → derajat desimal.
      *
      * @param  mixed  $coord  array [deg, min, sec] (tiap elemen string "n/d" atau "n/d<space>")
-     * @param  mixed  $ref    'N'|'S'|'E'|'W'
+     * @param  mixed  $ref  'N'|'S'|'E'|'W'
      */
     private function gpsToDecimal(mixed $coord, mixed $ref): ?float
     {
@@ -213,7 +214,7 @@ class FileMetadataExtractor
         }
 
         try {
-            $analyzer = new \getID3();
+            $analyzer = new \getID3;
             $analyzer->option_tag_id3v1 = true;
             $analyzer->option_tag_id3v2 = true;
             $info = $analyzer->analyze($path);
@@ -290,12 +291,12 @@ class FileMetadataExtractor
         if ($size > self::PDF_PARSE_MAX_BYTES) {
             return [];
         }
-        if (! class_exists(\Smalot\PdfParser\Parser::class)) {
+        if (! class_exists(Parser::class)) {
             return [];
         }
 
         try {
-            $parser = new \Smalot\PdfParser\Parser();
+            $parser = new Parser;
             $pdf = $parser->parseFile($path);
 
             $out = [];
@@ -337,7 +338,7 @@ class FileMetadataExtractor
         }
 
         try {
-            $zip = new \ZipArchive();
+            $zip = new \ZipArchive;
             if ($zip->open($path) !== true) {
                 return [];
             }

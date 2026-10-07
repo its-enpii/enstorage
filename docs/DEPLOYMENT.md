@@ -181,6 +181,61 @@ is wrong — re-check section 2.
 
 ---
 
+## 5b. Backfill: cabut permission publik file Google Drive lama (`gdrive:revoke-public`)
+
+Commit `325b0dd` menghentikan pembuatan permission publik saat upload, jadi
+file **baru** sudah private. Namun file lama (di-upload lewat kode sebelum
+commit itu) masih menyimpan permission `type=anyone, role=reader` di Google
+Drive. Command `gdrive:revoke-public` mencabut permission itu agar file lama
+ikut private.
+
+Yang penting:
+
+- **Share EnStorage tetap aman.** Command hanya menghapus permission Drive
+  `anyone`. Kolom `files.shareable_link` (`webViewLink`) tidak diubah; nilai
+  link jadi owner-only. Share `/s/{token}` tetap berfungsi karena akses file
+  memakai OAuth token pemilik akun, bukan akses publik.
+- **Permission `user`/`group`/`domain` tidak disentuh** — hanya `anyone`.
+- **Idempoten**: file yang sudah private dilewati (bukan error), aman diulang.
+- **Group by akun**: satu refresh token per `google_account_id`, bukan per file.
+
+Langkah (jalankan di container `app`):
+
+```bash
+# 1. Lihat dulu file mana yang masih publik — tanpa menghapus apa pun.
+docker compose exec app php artisan gdrive:revoke-public --dry-run
+
+# 2. Verifikasi satu file tertentu (opsional, berguna untuk spot-check).
+docker compose exec app php artisan gdrive:revoke-public --file=<file_id> --dry-run
+
+# 3. Jalankan pencabutan sungguhan.
+docker compose exec app php artisan gdrive:revoke-public
+
+# 4. Ulangi dry-run — hasil harus "candidates: 0" untuk memastikan bersih.
+docker compose exec app php artisan gdrive:revoke-public --dry-run
+```
+
+Opsi:
+
+| Opsi | Arti |
+|---|---|
+| `--dry-run` | Hanya laporkan file yang masih punya permission `anyone`; tidak menghapus. |
+| `--file={id}` | Batasi ke satu file EnStorage (`files.id`) untuk verifikasi manual. |
+| `--limit=N` | Batasi jumlah file yang diproses. |
+
+Command selalu exit `0`; ringkasannya berbentuk:
+
+```
+Selesai — checked: 282, revoked: 282, already-private: 0, failed: 0
+```
+
+Bila ada file yang gagal, id-nya tercetak di daftar `Gagal (N file):`. Akun
+dengan token invalid/`credentialsNotFound` dihentikan untuk akun itu saja dan
+proses lanjut ke akun berikutnya; error rate limit (403
+`userRateLimitExceeded`) diberi jeda sederhana lalu dilanjut.
+
+---
+
 ## 6. Rollback
 
 If Reverb breaks production:
