@@ -102,7 +102,11 @@ jobs:
             # Stale bootstrap/cache from dev providers (e.g.
             # Laravel\Pail) can survive bind-mounts. Wipe and let
             # artisan rebuild against the production vendor.
-            $COMPOSE exec -T app rm -f bootstrap/cache/packages.php bootstrap/cache/services.php
+            # Also wipe the route cache: it lives on the persistent
+            # `app-bootstrap-cache` named volume, so a stale
+            # routes-v7.php shadows newly added routes and makes them
+            # 404 in production (incident 945242e).
+            $COMPOSE exec -T app rm -f bootstrap/cache/packages.php bootstrap/cache/services.php bootstrap/cache/routes-*.php
             $COMPOSE exec -T app php artisan package:discover --ansi
             $COMPOSE exec -T app php artisan config:clear
             $COMPOSE exec -T app php artisan cache:clear
