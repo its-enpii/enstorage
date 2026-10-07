@@ -50,6 +50,44 @@ export type GoogleAccount = {
   };
   last_synced_at?: string | null;
   created_at: string;
+  /**
+   * OAuth scopes actually granted on the stored token. Empty/absent for
+   * accounts connected before `drive.file`; drive full implies a restricted
+   * scope that needs re-consent.
+   */
+  granted_scopes?: string[];
+  /**
+   * True when the stored token predates the `drive.file` scope switch (or is
+   * missing required scopes), so the user should reconnect to keep
+   * upload/sync working.
+   */
+  needs_reconnect?: boolean;
+};
+
+/** Response of `GET /google-accounts/{id}/picker-config`. */
+export type PickerConfig = {
+  access_token: string;
+  developer_key: string | null;
+  app_id: string | null;
+  root_folder_id: string | null;
+  expires_at: string;
+};
+
+/** Response of `POST /google-accounts/{id}/import`. */
+export type GdriveImportResult = {
+  imported_files: number;
+  imported_folders: number;
+  updated: number;
+  skipped: { id: string; reason: string }[];
+  folder_children_visible: number;
+};
+
+/** Item of `GET /google-accounts/{id}/unreachable`. */
+export type UnreachableFile = {
+  id: string;
+  name: string;
+  path: string;
+  gdrive_file_id: string;
 };
 
 export type Folder = {

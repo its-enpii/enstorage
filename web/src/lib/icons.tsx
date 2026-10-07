@@ -37,6 +37,10 @@ export const ErrorIcon = makeIcon('error', 'base');
 export const ErrorOutlineIcon = makeIcon('error_outline', 'base');
 export const HourglassEmptyIcon = makeIcon('hourglass_empty', 'base');
 export const CheckCircleIcon = makeIcon('check_circle', 'base');
+export const AddToDriveIcon = makeIcon('add_to_drive', 'base');
+export const WarningIcon = makeIcon('warning', 'base');
+export const ExpandMoreIcon = makeIcon('expand_more', 'base');
+export const ChevronRightIcon = makeIcon('chevron_right', 'base');
 export const DeleteIcon = () => (
   <svg
     width="18"
