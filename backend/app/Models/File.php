@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'mime_type',
     'size',
     'gdrive_file_id',
+    'gdrive_unreachable_at',
     'shareable_link',
     'share_token',
     'client_key',
@@ -59,6 +60,7 @@ class File extends Model
             'original_mtime_ms' => 'integer',
             'original_size' => 'integer',
             'uploaded_at' => 'datetime',
+            'gdrive_unreachable_at' => 'datetime',
             'is_starred' => 'boolean',
             'is_chunked' => 'boolean',
             'total_chunks' => 'integer',
@@ -91,5 +93,31 @@ class File extends Model
     public function isDone(): bool
     {
         return $this->upload_status === self::STATUS_DONE;
+    }
+
+    /**
+     * File ditandai tidak terjangkau oleh token saat ini (Drive balas 403/404
+     * karena scope `drive.file` tidak lagi melihat objek lama). Perlu
+     * di-import ulang via Picker sebelum bisa di-stream.
+     */
+    public function isGdriveUnreachable(): bool
+    {
+        return $this->gdrive_unreachable_at !== null;
+    }
+
+    public function markGdriveUnreachable(): void
+    {
+        if ($this->gdrive_unreachable_at === null) {
+            $this->gdrive_unreachable_at = now();
+            $this->save();
+        }
+    }
+
+    public function clearGdriveUnreachable(): void
+    {
+        if ($this->gdrive_unreachable_at !== null) {
+            $this->gdrive_unreachable_at = null;
+            $this->save();
+        }
     }
 }

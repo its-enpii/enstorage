@@ -50,21 +50,34 @@ return [
         'redirect_uri_mobile' => env('GOOGLE_REDIRECT_URI_MOBILE', 'enstorage://oauth-callback'),
 
         'scopes' => [
-            // `drive` (full) — bukan `drive.file` — karena:
-            // 1. `QuotaManager::getQuota()` panggil `about.get` untuk baca
-            //    `storageQuota` global akun. Scope `drive.file` cuma cover
-            //    file yang dibuat app ini, tidak termasuk `about` endpoint,
-            //    sehingga Google return 403 `insufficient authentication scopes`.
-            // 2. App butuh manage folder root `EnStorage` di root Drive +
-            //    read/write file di dalamnya — semua covered by `drive`.
-            // Trade-off: consent screen lebih "berat" (full Drive access),
-            // tapi tanpa scope ini quota sync & beberapa Drive fitur lain
-            // tidak akan jalan. Akun existing harus Cabut & Hubungkan ulang
-            // agar Google re-issue token dengan scope baru.
-            'https://www.googleapis.com/auth/drive',
+            // `drive.file` (terbatas) — BUKAN `drive` (full). Scope ini hanya
+            // memberi akses ke file/folder yang dibuat app ini sendiri, plus
+            // file/folder yang user pilih lewat Google Picker.
+            //
+            // Catatan historis: komentar lama mengklaim `drive.file` ditolak
+            // oleh `about.get` dengan 403 `insufficient authentication scopes`.
+            // Itu tidak benar — method yang dipakai EnStorage (`about.get`
+            // untuk `storageQuota`, `files.get`/`files.list`, `permissions.*`)
+            // semuanya menerima `drive.file`. Batasnya bukan method, melainkan
+            // VISIBILITAS OBJEK: file yang dibuat user langsung di
+            // drive.google.com tidak terlihat sampai user memilihnya lewat
+            // Picker (endpoint `POST /google-accounts/{id}/import`).
+            //
+            // Konsekuensi: file lama hasil scan (`client_key_origin='server'`)
+            // bisa 404/403 bagi token baru sampai di-import ulang; lihat kolom
+            // `files.gdrive_unreachable_at` + `needs_reconnect` di akun.
+            'https://www.googleapis.com/auth/drive.file',
             'https://www.googleapis.com/auth/userinfo.email',
             'https://www.googleapis.com/auth/userinfo.profile',
         ],
+
+        // Google Picker (web lane). Dua nilai non-secret dari Google Cloud
+        // Console yang dipakai FE untuk membuka dialog Picker:
+        //   GOOGLE_PICKER_API_KEY        → API key dengan akses Google Picker API
+        //   GOOGLE_CLOUD_PROJECT_NUMBER  → project number (String) untuk setAppId
+        // Kosong = fitur Picker belum dikonfigurasi (endpoint picker-config → 503).
+        'picker_api_key' => env('GOOGLE_PICKER_API_KEY'),
+        'picker_app_id' => env('GOOGLE_CLOUD_PROJECT_NUMBER'),
     ],
 
     'firebase' => [

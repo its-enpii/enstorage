@@ -30,7 +30,11 @@ class GoogleClientFactory
         $client->setScopes((array) config('services.google.scopes'));
         $client->setAccessType('offline');     // minta refresh_token
         $client->setPrompt('consent');         // pastikan refresh_token selalu dikirim
-        $client->setIncludeGrantedScopes(true);
+        // `false` supaya token baru TIDAK mewarisi grant `drive` (full) lama
+        // milik user. Dengan `true`, Google menggabungkan scope yang pernah
+        // disetujui ke token baru — itu justru mempertahankan akses restricted
+        // yang sedang kita tinggalkan. Token baru harus murni `drive.file`.
+        $client->setIncludeGrantedScopes(false);
 
         return $client;
     }

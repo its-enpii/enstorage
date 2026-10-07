@@ -198,6 +198,42 @@ QuotaManager::getAvailableAccount($user, $fileSizeBytes)
 // 5. Return null kalau tidak ada yang muat
 ```
 
+### Model scope Google Drive: `drive.file` + Google Picker
+
+Sejak perubahan scope (lihat riwayat), EnStorage memakai
+`https://www.googleapis.com/auth/drive.file` — **bukan** `drive` (full,
+restricted). Konsekuensinya:
+
+- **Dibuat app** (upload/mkdir dari EnStorage) → app selalu punya akses; file
+  tetap sinkron dua arah lewat **Pindai** (`POST /google-accounts/scan`).
+- **User taruh langsung di drive.google.com** → tidak terlihat sampai user
+  memilihnya lewat **Google Picker**. FE memanggil
+  `GET /google-accounts/{id}/picker-config` untuk bekal token + developer key,
+  lalu `POST /google-accounts/{id}/import` mengimpor id terpilih (idempoten).
+- **Quota** (`about.get`) tetap jalan — method ini menerima `drive.file`. Batas
+  `drive.file` adalah **visibilitas objek**, bukan endpoint.
+- `setIncludeGrantedScopes(false)` mencegah token baru mewarisi grant `drive`
+  lama.
+
+Akun lama yang tokennya masih memuat `drive` penuh (atau belum merekam scope)
+akan memiliki `needs_reconnect=true` di `GoogleAccountResource`. Kolom baru:
+
+- `google_accounts.granted_scopes` (text, nullable) — daftar scope dari respons
+  token, dipisah spasi. Null = legacy.
+- `files.gdrive_unreachable_at` (timestamptz, nullable) — di-set saat Drive
+  membalas 403/404 untuk file akun (jalur stream/download/share dan command
+  `gdrive:audit-access`). Stream file bertanda membalas **409
+  `gdrive_reauth_required`**, bukan 500. Cron audit:
+  `php artisan gdrive:audit-access [--account=]` — set/clear tanda.
+
+**Env baru** (non-secret, dari Google Cloud Console):
+
+- `GOOGLE_PICKER_API_KEY` — API key dengan Google Picker API aktif.
+- `GOOGLE_CLOUD_PROJECT_NUMBER` — project number untuk `setAppId` Picker.
+
+Keduanya kosong → `GET /google-accounts/{id}/picker-config` balas 503
+`picker_not_configured`.
+
 ### Auto-refresh + manual sync
 
 - **Auto**: `SyncAllQuotasJob` (scheduled hourly) sync quota semua akun.

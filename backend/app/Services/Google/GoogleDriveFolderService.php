@@ -11,6 +11,7 @@ use Google\Service\Drive\DriveFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Throwable;
 
 class GoogleDriveFolderService
 {
@@ -68,7 +69,7 @@ class GoogleDriveFolderService
 
                 return $existing->getId();
             }
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             Log::warning('GDrive listFiles search folder failed: '.$e->getMessage());
         }
 
@@ -114,7 +115,7 @@ class GoogleDriveFolderService
                 $optParams['removeParents'] = $oldParents;
             }
             $drive->files->update($gdriveFolderId, new DriveFile, $optParams);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             Log::warning('GDrive moveFolderOnDrive failed: '.$e->getMessage(), [
                 'folder_id' => $folder->id,
                 'gdrive_folder_id' => $gdriveFolderId,
@@ -150,7 +151,7 @@ class GoogleDriveFolderService
             }
 
             $drive->files->update($file->gdrive_file_id, new DriveFile, $optParams);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             Log::warning('GDrive moveFileOnDrive failed: '.$e->getMessage(), [
                 'file_id' => $file->id,
                 'gdrive_file_id' => $file->gdrive_file_id,
@@ -181,7 +182,7 @@ class GoogleDriveFolderService
             $drive->files->delete($gdriveFolderId);
 
             return true;
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             Log::warning('GDrive deleteFolderOnDrive failed', [
                 'account_id' => $account->id,
                 'gdrive_folder_id' => $gdriveFolderId,
@@ -240,7 +241,7 @@ class GoogleDriveFolderService
     {
         try {
             $rootFolderId = $this->quota->ensureRootFolder($account);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             throw new RuntimeException(
                 __('Gagal menyiapkan folder root EnStorage di Google Drive: ').$e->getMessage(),
                 previous: $e,
@@ -306,6 +307,9 @@ class GoogleDriveFolderService
             'size' => $gfile->getSize(),
             'web_view_link' => $gfile->getWebViewLink(),
             'is_shortcut' => $isShortcut,
+            'trashed' => (bool) $gfile->getTrashed(),
+            'modified_time' => $gfile->getModifiedTime(),
+            'parents' => $gfile->getParents() ?? [],
         ];
     }
 
@@ -326,144 +330,410 @@ class GoogleDriveFolderService
         return $key;
     }
 
+    /**
+     * Telusuri satu folder Google Drive dan petakan isinya 1:1 ke DB.
+     *
+     * Dipakai bersama oleh scan (`scanGoogleDrive`) dan impor Picker
+     * (`importDriveItems`) supaya logika pemetaan tidak diduplikasi.
+     *
+     * @param  int|null  $visibleCount  Jumlah anak yang berhasil terlihat (out).
+     * @param  int|null  $updatedCount  Jumlah record lama yang di-refresh (out).
+     */
     private function traverseGDriveFolder(
         Drive $drive,
         GoogleAccount $account,
         string $gdriveParentId,
         ?string $appParentFolderId,
-        array &$stats
+        array &$stats,
+        ?int &$visibleCount = null,
+        ?int &$updatedCount = null,
     ): void {
         $pageToken = null;
-        $userId = $account->user_id;
 
         do {
             $page = $this->fetchChildren($drive, $gdriveParentId, $pageToken);
 
             foreach ($page['items'] as $gitem) {
-                $itemId = $gitem['id'];
-                $itemName = $gitem['name'];
-
-                // Item tanpa id (fields tidak cocok / respons Google tidak
-                // lengkap) tidak bisa dipetakan 1:1 — lewati, jangan crash.
-                if (! is_string($itemId) || $itemId === '') {
-                    Log::warning('Scan Google Drive: item tanpa ID dilewati', [
-                        'account_id' => $account->id,
-                        'gdrive_parent_id' => $gdriveParentId,
-                        'name' => $itemName,
-                        'mime_type' => $gitem['mime_type'],
-                    ]);
-
+                if (! $this->isUsableItem($account, $gitem, $gdriveParentId)) {
                     continue;
                 }
 
-                if (! is_string($itemName) || $itemName === '') {
-                    Log::warning('Scan Google Drive: item tanpa nama dilewati', [
-                        'account_id' => $account->id,
-                        'gdrive_item_id' => $itemId,
-                    ]);
-
-                    continue;
+                if ($visibleCount !== null) {
+                    $visibleCount++;
                 }
 
-                // Shortcut yang targetnya tidak bisa di-resolve (target sudah
-                // terhapus) masih membawa mimeType shortcut — lewati.
-                if ($gitem['is_shortcut'] && $gitem['mime_type'] === self::SHORTCUT_MIME_TYPE) {
-                    Log::warning('Scan Google Drive: shortcut gagal di-resolve ke target', [
-                        'account_id' => $account->id,
-                        'gdrive_item_id' => $itemId,
-                        'name' => $itemName,
-                    ]);
-
-                    continue;
-                }
-
-                $isFolder = $gitem['mime_type'] === self::FOLDER_MIME_TYPE;
-
-                if ($isFolder) {
-                    // Cari atau buat folder di database
-                    $folder = Folder::where('user_id', $userId)
-                        ->where('gdrive_folder_id', $itemId)
-                        ->first();
-
-                    if (! $folder) {
-                        $folder = Folder::where('user_id', $userId)
-                            ->where('name', $itemName)
-                            ->when(
-                                $appParentFolderId === null,
-                                fn ($q) => $q->whereNull('parent_id'),
-                                fn ($q) => $q->where('parent_id', $appParentFolderId),
-                            )
-                            ->first();
-                    }
-
-                    if (! $folder) {
-                        $folder = Folder::create([
-                            'user_id' => $userId,
-                            'parent_id' => $appParentFolderId,
-                            'name' => $itemName,
-                            'path' => '/',
-                            'gdrive_folder_id' => $itemId,
-                        ]);
-                        $folder->path = $this->folderPathService->computePath($folder);
-                        $folder->save();
-                        $stats['folders_created']++;
-                    } else {
-                        if ($folder->gdrive_folder_id !== $itemId) {
-                            $folder->gdrive_folder_id = $itemId;
-                            $folder->save();
-                        }
-                    }
-
-                    // Rekursi ke subfolder
-                    $this->traverseGDriveFolder($drive, $account, $itemId, $folder->id, $stats);
-                } else {
-                    // File
-                    $file = FileModel::where('user_id', $userId)
-                        ->where('gdrive_file_id', $itemId)
-                        ->first();
-
-                    if (! $file) {
-                        $file = FileModel::where('user_id', $userId)
-                            ->where('name', $itemName)
-                            ->when(
-                                $appParentFolderId === null,
-                                fn ($q) => $q->whereNull('folder_id'),
-                                fn ($q) => $q->where('folder_id', $appParentFolderId),
-                            )
-                            ->first();
-                    }
-
-                    if (! $file) {
-                        FileModel::create([
-                            'user_id' => $userId,
-                            'folder_id' => $appParentFolderId,
-                            'google_account_id' => $account->id,
-                            'client_key' => $this->uniqueClientKey($userId),
-                            'client_key_origin' => 'server',
-                            'name' => $itemName,
-                            'original_name' => $itemName,
-                            'mime_type' => $gitem['mime_type'] ?: 'application/octet-stream',
-                            'size' => (int) ($gitem['size'] ?? 0),
-                            'gdrive_file_id' => $itemId,
-                            'shareable_link' => $gitem['web_view_link'],
-                            'upload_status' => FileModel::STATUS_DONE,
-                            'uploaded_at' => now(),
-                        ]);
-                        $stats['files_created']++;
-                    } else {
-                        $file->google_account_id = $account->id;
-                        $file->gdrive_file_id = $itemId;
-                        $file->upload_status = FileModel::STATUS_DONE;
-                        if (! $file->shareable_link) {
-                            $file->shareable_link = $gitem['web_view_link'];
-                        }
-                        $file->save();
-                        $stats['files_updated']++;
-                    }
-                }
+                $this->mapDriveItem($drive, $account, $gitem, $appParentFolderId, $stats, $updatedCount);
             }
 
             $pageToken = $page['next_page_token'];
         } while ($pageToken);
+    }
+
+    /**
+     * Guard: item ternormalisasi layak dipetakan?
+     *
+     * Item tanpa id/nama (respons Google tidak lengkap) atau shortcut yang
+     * targetnya tidak bisa di-resolve dilewati dengan log warning — bukan crash.
+     */
+    private function isUsableItem(GoogleAccount $account, array $gitem, string $gdriveParentId): bool
+    {
+        $itemId = $gitem['id'] ?? null;
+        $itemName = $gitem['name'] ?? null;
+
+        if (! is_string($itemId) || $itemId === '') {
+            Log::warning('Google Drive: item tanpa ID dilewati', [
+                'account_id' => $account->id,
+                'gdrive_parent_id' => $gdriveParentId,
+                'name' => $itemName,
+                'mime_type' => $gitem['mime_type'] ?? null,
+            ]);
+
+            return false;
+        }
+
+        if (! is_string($itemName) || $itemName === '') {
+            Log::warning('Google Drive: item tanpa nama dilewati', [
+                'account_id' => $account->id,
+                'gdrive_item_id' => $itemId,
+            ]);
+
+            return false;
+        }
+
+        if (($gitem['is_shortcut'] ?? false) && ($gitem['mime_type'] ?? null) === self::SHORTCUT_MIME_TYPE) {
+            Log::warning('Google Drive: shortcut gagal di-resolve ke target', [
+                'account_id' => $account->id,
+                'gdrive_item_id' => $itemId,
+                'name' => $itemName,
+            ]);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Petakan satu item (folder atau file) ternormalisasi ke DB.
+     *
+     * IDEMPOTEN: record dicari lewat `gdrive_file_id`/`gdrive_folder_id` lalu
+     * (untuk kompatibilitas) nama+parent; bila sudah ada → metadata di-refresh
+     * dan tanda tidak-terjangkau dibersihkan, TIDAK membuat duplikat.
+     *
+     * @param  int|null  $updatedCount  Increment bila record sudah ada (out).
+     */
+    private function mapDriveItem(
+        Drive $drive,
+        GoogleAccount $account,
+        array $gitem,
+        ?string $appParentFolderId,
+        array &$stats,
+        ?int &$updatedCount = null,
+    ): void {
+        $userId = $account->user_id;
+        $itemId = $gitem['id'];
+        $itemName = $gitem['name'];
+        $isFolder = ($gitem['mime_type'] ?? null) === self::FOLDER_MIME_TYPE;
+
+        if ($isFolder) {
+            $folder = Folder::where('user_id', $userId)->where('gdrive_folder_id', $itemId)->first();
+
+            if (! $folder) {
+                $folder = Folder::where('user_id', $userId)
+                    ->where('name', $itemName)
+                    ->when(
+                        $appParentFolderId === null,
+                        fn ($q) => $q->whereNull('parent_id'),
+                        fn ($q) => $q->where('parent_id', $appParentFolderId),
+                    )
+                    ->first();
+            }
+
+            if (! $folder) {
+                $folder = Folder::create([
+                    'user_id' => $userId,
+                    'parent_id' => $appParentFolderId,
+                    'name' => $itemName,
+                    'path' => '/',
+                    'gdrive_folder_id' => $itemId,
+                ]);
+                $folder->path = $this->folderPathService->computePath($folder);
+                $folder->save();
+                $stats['folders_created']++;
+            } else {
+                if ($folder->gdrive_folder_id !== $itemId) {
+                    $folder->gdrive_folder_id = $itemId;
+                    $folder->save();
+                }
+                if ($updatedCount !== null) {
+                    $updatedCount++;
+                }
+            }
+
+            // Rekursi ke subfolder
+            $this->traverseGDriveFolder($drive, $account, $itemId, $folder->id, $stats);
+
+            return;
+        }
+
+        // File
+        $file = FileModel::where('user_id', $userId)->where('gdrive_file_id', $itemId)->first();
+
+        if (! $file) {
+            $file = FileModel::where('user_id', $userId)
+                ->where('name', $itemName)
+                ->when(
+                    $appParentFolderId === null,
+                    fn ($q) => $q->whereNull('folder_id'),
+                    fn ($q) => $q->where('folder_id', $appParentFolderId),
+                )
+                ->first();
+        }
+
+        if (! $file) {
+            FileModel::create([
+                'user_id' => $userId,
+                'folder_id' => $appParentFolderId,
+                'google_account_id' => $account->id,
+                'client_key' => $this->uniqueClientKey($userId),
+                'client_key_origin' => 'server',
+                'name' => $itemName,
+                'original_name' => $itemName,
+                'mime_type' => $gitem['mime_type'] ?: 'application/octet-stream',
+                'size' => (int) ($gitem['size'] ?? 0),
+                'gdrive_file_id' => $itemId,
+                'shareable_link' => $gitem['web_view_link'],
+                'upload_status' => FileModel::STATUS_DONE,
+                'uploaded_at' => now(),
+            ]);
+            $stats['files_created']++;
+
+            return;
+        }
+
+        $file->google_account_id = $account->id;
+        $file->gdrive_file_id = $itemId;
+        $file->upload_status = FileModel::STATUS_DONE;
+        if (! $file->shareable_link) {
+            $file->shareable_link = $gitem['web_view_link'];
+        }
+        // File terlihat lagi → hapus tanda tidak-terjangkau.
+        $file->gdrive_unreachable_at = null;
+        $file->save();
+        $stats['files_updated']++;
+        if ($updatedCount !== null) {
+            $updatedCount++;
+        }
+    }
+
+    /**
+     * Ambil metadata satu item Drive via `files.get`.
+     *
+     * @param  array<int, string>  $fields
+     * @return array<string, mixed> Bentuk ternormalisasi seperti fetchChildren().
+     *
+     * @throws Throwable Error Drive (403/404) diteruskan ke pemanggil.
+     */
+    public function fetchFileMeta(
+        Drive $drive,
+        string $gdriveFileId,
+        array $fields = ['id', 'name', 'mimeType', 'size', 'parents', 'trashed', 'webViewLink', 'modifiedTime'],
+    ): array {
+        $gfile = $drive->files->get($gdriveFileId, ['fields' => implode(',', $fields)]);
+
+        return $this->normalizeDriveItem($gfile);
+    }
+
+    /**
+     * Impor item yang dipilih user lewat Google Picker.
+     *
+     * Untuk setiap id: `files.get` → tentukan penempatan → buat/temukan record;
+     * folder ditelusuri anak-anaknya memakai traversal yang sama dengan scan.
+     *
+     * Penempatan:
+     *  - Bila item berada di bawah folder root EnStorage → dipetakan ke path
+     *    relatif terhadap root (folder antara dibuat/ditemukan sesuai chain).
+     *  - Bila di luar root (mis. "Shared with me" / My Drive lain) → ditaruh di
+     *    root app (top-level, parent_id = null).
+     *
+     * @param  array<int, string>  $ids
+     * @return array{imported_files: int, imported_folders: int, updated: int, skipped: array<int, array{id: string, reason: string}>, folder_children_visible: int}
+     */
+    public function importDriveItems(GoogleAccount $account, array $ids): array
+    {
+        $drive = $this->makeDrive($account);
+        $rootFolderId = $this->requireRootFolderId($account);
+
+        $stats = ['folders_created' => 0, 'files_created' => 0, 'files_updated' => 0];
+        $updated = 0;
+        $skipped = [];
+        $folderChildrenVisible = 0;
+
+        foreach ($ids as $id) {
+            if (! is_string($id) || trim($id) === '') {
+                continue;
+            }
+
+            try {
+                $meta = $this->fetchFileMeta($drive, $id);
+            } catch (Throwable $e) {
+                $skipped[] = ['id' => $id, 'reason' => $this->classifyImportError($e)];
+
+                continue;
+            }
+
+            if (($meta['trashed'] ?? false) === true) {
+                $skipped[] = ['id' => $id, 'reason' => 'trashed'];
+
+                continue;
+            }
+
+            if (! $this->isUsableItem($account, $meta, $rootFolderId)) {
+                $skipped[] = ['id' => $id, 'reason' => 'unusable'];
+
+                continue;
+            }
+
+            // Tempatkan item relatif ke root bila ia memang di bawah root,
+            // kalau tidak jatuh ke top-level root app.
+            $appParentFolderId = $this->resolveAppParentFolderId($drive, $account, $meta, $rootFolderId, $stats);
+
+            if (($meta['mime_type'] ?? null) === self::FOLDER_MIME_TYPE) {
+                $this->mapDriveItem($drive, $account, $meta, $appParentFolderId, $stats, $updated);
+
+                $folder = Folder::where('user_id', $account->user_id)
+                    ->where('gdrive_folder_id', $meta['id'])
+                    ->first();
+
+                if ($folder) {
+                    $visible = 0;
+                    // Traversal anak memakai helper yang sama dengan scan.
+                    $this->traverseGDriveFolder($drive, $account, $meta['id'], $folder->id, $stats, $visible, $updated);
+                    $folderChildrenVisible += $visible;
+                }
+            } else {
+                $this->mapDriveItem($drive, $account, $meta, $appParentFolderId, $stats, $updated);
+            }
+        }
+
+        return [
+            'imported_files' => $stats['files_created'],
+            'imported_folders' => $stats['folders_created'],
+            'updated' => $updated,
+            'skipped' => $skipped,
+            'folder_children_visible' => $folderChildrenVisible,
+        ];
+    }
+
+    /**
+     * Tentukan folder parent di DB untuk item hasil impor.
+     *
+     * Menelusuri rantai parent di Drive dari item ke atas. Bila rantai
+     * mencapai folder root EnStorage, setiap folder antara dipetakan ke DB
+     * (find-or-create) dan id folder DB paling dekat dikembalikan. Bila tidak
+     * (item di luar root, atau metadata parent tidak terlihat) → null (top-level).
+     */
+    private function resolveAppParentFolderId(
+        Drive $drive,
+        GoogleAccount $account,
+        array $meta,
+        string $rootFolderId,
+        array &$stats,
+    ): ?string {
+        $parents = $meta['parents'] ?? [];
+        if (! is_array($parents) || $parents === []) {
+            return null;
+        }
+
+        // Susun chain dari item ke atas: [parentTerdekat, ..., root?]
+        $chain = [];
+        $current = $parents[0] ?? null;
+        $guard = 0;
+
+        while (is_string($current) && $current !== '' && $guard < 50) {
+            $guard++;
+
+            if ($current === $rootFolderId) {
+                // Chain dari root turun: buat/temukan folder per level.
+                $appParentId = null;
+                foreach (array_reverse($chain) as $folderMeta) {
+                    $appParentId = $this->ensureFolderRecord($account, $folderMeta, $appParentId, $stats);
+                }
+
+                return $appParentId;
+            }
+
+            try {
+                $parentMeta = $this->fetchFileMeta($drive, $current, ['id', 'name', 'mimeType', 'parents', 'trashed']);
+            } catch (Throwable $e) {
+                // Parent tidak terlihat (drive.file) / error → anggap di luar root.
+                return null;
+            }
+
+            if (! is_string($parentMeta['name'] ?? null) || ($parentMeta['name'] ?? '') === '') {
+                return null;
+            }
+
+            $chain[] = $parentMeta;
+            $current = $parentMeta['parents'][0] ?? null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Find-or-create record folder DB untuk satu folder Drive (dipakai saat
+     * memetakan chain parent di dalam root).
+     */
+    private function ensureFolderRecord(GoogleAccount $account, array $folderMeta, ?string $appParentId, array &$stats): string
+    {
+        $userId = $account->user_id;
+        $folderId = $folderMeta['id'];
+        $name = $folderMeta['name'];
+
+        $folder = Folder::where('user_id', $userId)->where('gdrive_folder_id', $folderId)->first();
+
+        if (! $folder) {
+            $folder = Folder::create([
+                'user_id' => $userId,
+                'parent_id' => $appParentId,
+                'name' => $name,
+                'path' => '/',
+                'gdrive_folder_id' => $folderId,
+            ]);
+            $folder->path = $this->folderPathService->computePath($folder);
+            $folder->save();
+            $stats['folders_created']++;
+        } elseif ($folder->gdrive_folder_id !== $folderId) {
+            $folder->gdrive_folder_id = $folderId;
+            $folder->save();
+        }
+
+        return $folder->id;
+    }
+
+    /**
+     * Terjemahkan error Drive saat impor menjadi alasan ringkas untuk `skipped`.
+     */
+    private function classifyImportError(Throwable $e): string
+    {
+        $code = (int) $e->getCode();
+
+        if ($code === 404) {
+            return 'not_found';
+        }
+        if ($code === 403) {
+            return 'forbidden';
+        }
+
+        $haystack = strtolower($e->getMessage());
+        if (str_contains($haystack, 'not found') || str_contains($haystack, '404')) {
+            return 'not_found';
+        }
+        if (str_contains($haystack, 'forbidden') || str_contains($haystack, 'insufficient')) {
+            return 'forbidden';
+        }
+
+        return 'error';
     }
 }

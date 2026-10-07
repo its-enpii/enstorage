@@ -6,6 +6,7 @@ use App\Models\GoogleAccount;
 use App\Services\Google\GoogleDriveFolderService;
 use Google\Service\Drive;
 use Google\Service\Drive\DriveFile;
+use Google\Service\Exception;
 use Mockery;
 
 /**
@@ -34,6 +35,58 @@ class FakeDriveScanService extends GoogleDriveFolderService
 
     /** ID akun yang deleteFolderOnDrive()-nya gagal. @var array<int, string> */
     public array $deleteFailures = [];
+
+    /**
+     * Metadata per-id untuk fetchFileMeta() (dipakai import Picker).
+     *
+     * @var array<string, array<string, mixed>>
+     */
+    public array $fileMeta = [];
+
+    /**
+     * Exception per-id: fetchFileMeta() melempar ini (uji 403/404/trashed).
+     *
+     * @var array<string, \Throwable>
+     */
+    public array $fileMetaErrors = [];
+
+    public function fetchFileMeta(
+        Drive $drive,
+        string $gdriveFileId,
+        array $fields = ['id', 'name', 'mimeType', 'size', 'parents', 'trashed', 'webViewLink', 'modifiedTime'],
+    ): array {
+        if (isset($this->fileMetaErrors[$gdriveFileId])) {
+            throw $this->fileMetaErrors[$gdriveFileId];
+        }
+
+        if (! isset($this->fileMeta[$gdriveFileId])) {
+            // Tanpa metadata eksplisit, anggap tak terlihat (403/404).
+            throw new Exception('File not found: '.$gdriveFileId, 404);
+        }
+
+        return $this->fileMeta[$gdriveFileId];
+    }
+
+    /**
+     * Helper: metadata ternormalisasi seperti hasil fetchFileMeta().
+     *
+     * @param  array<int, string>  $parents
+     * @return array<string, mixed>
+     */
+    public static function fileMeta(?string $id, ?string $name, ?string $mimeType, ?string $parent = null, int $size = 10, bool $trashed = false): array
+    {
+        return [
+            'id' => $id,
+            'name' => $name,
+            'mime_type' => $mimeType,
+            'size' => $size,
+            'web_view_link' => $id ? 'https://drive.test/'.$id : null,
+            'is_shortcut' => false,
+            'trashed' => $trashed,
+            'modified_time' => null,
+            'parents' => $parent === null ? [] : [$parent],
+        ];
+    }
 
     public function scanGoogleDrive(GoogleAccount $account): array
     {

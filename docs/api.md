@@ -428,6 +428,8 @@ List akun Google Drive milik user.
       "label": "Gmail Utama",
       "email": "utamaku@gmail.com",
       "gdrive_root_folder_id": "abc123",
+      "granted_scopes": ["https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/userinfo.email"],
+      "needs_reconnect": false,
       "is_active": true,
       "token_expires_at": "2026-06-30T15:00:00+00:00",
       "quota_synced_at": "2026-06-30T14:55:00+00:00",
@@ -471,7 +473,7 @@ Update label akun.
 
 #### `DELETE /google-accounts/{id}` — Scope: `delete`
 
-Cabut akses, hapus dari DB. Revoke token di Google (best-effort). Invalidate cache quota.
+Cabut akses, hapus dari DB. Revoke token di Google (best-effort — kegagalan revoke tidak menggagalkan delete). Invalidate cache quota.
 
 **Errors:** 404
 
@@ -543,6 +545,103 @@ Mobile WebView flow: app intercept `enstorage://oauth-callback?code=...&state=..
 ```
 
 **Errors:** 401 (state invalid/expired) · 409 (duplicate) · 422
+
+---
+
+#### `GET /google-accounts/{id}/picker-config` — Sanctum-only
+
+Bekal untuk membuka Google Picker di FE: access token akun (di-refresh lebih
+dulu bila perlu), developer key, app id, id folder root, dan waktu kadaluarsa
+token.
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "access_token": "ya29....",
+    "developer_key": "AIza...",
+    "app_id": "123456789012",
+    "root_folder_id": "1AbCdEfGhIiJkLmNoPqRsTuVwXyZ",
+    "expires_at": "2026-08-14T10:05:00+00:00"
+  },
+  "message": "Konfigurasi Google Picker.",
+  "meta": {}
+}
+```
+
+**Errors:** 404 (akun tidak ditemukan) · 502 (gagal refresh token) ·
+503 (`picker_not_configured` — `GOOGLE_PICKER_API_KEY` / `GOOGLE_CLOUD_PROJECT_NUMBER` kosong):
+
+```json
+{ "success": false, "data": null, "message": "Google Picker belum dikonfigurasi", "meta": { "code": "picker_not_configured" } }
+```
+
+---
+
+#### `POST /google-accounts/{id}/import` — Scope: `write`
+
+Impor item yang dipilih user lewat Google Picker. Setiap id Drive dibaca via
+`files.get`; folder ditelusuri anak-anaknya secara rekursif memakai helper yang
+sama dengan scan. **Idempoten**: item yang `gdrive_file_id`-nya sudah ada hanya
+di-refresh metadatanya (dan tanda tidak-terjangkau dibersihkan) — tidak membuat
+duplikat. Item di bawah root `EnStorage` dipetakan sesuai path relatifnya; item
+di luar root ditaruh di top-level root app.
+
+**Body:**
+
+```json
+{ "ids": ["1AbCdEf...", "1GhIjKl..."] }
+```
+
+`ids`: array of string, 1..200 item.
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "imported_files": 3,
+    "imported_folders": 1,
+    "updated": 2,
+    "skipped": [{ "id": "1XyZ...", "reason": "not_found" }],
+    "folder_children_visible": 5
+  },
+  "message": "Impor Google Drive selesai.",
+  "meta": {}
+}
+```
+
+`folder_children_visible` = jumlah anak folder terpilih yang berhasil terlihat.
+Bila `0` padahal folder tampak berisi, UI disarankan meminta user memilih file
+langsung (scope `drive.file` tidak melihat anak yang bukan dibuat app).
+
+**Errors:** 404 (akun tidak ditemukan) · 422 (validasi `ids`) · 502 (impor gagal)
+
+---
+
+#### `GET /google-accounts/{id}/unreachable` — Scope: `read`
+
+Daftar file akun ini yang ditandai tidak terjangkau token saat ini (Drive balas
+403/404 karena scope `drive.file` tidak lagi melihat objek lama). File seperti
+ini perlu dipilih ulang lewat Picker untuk memulihkan akses.
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": [
+    { "id": "uuid", "name": "laporan.pdf", "path": "/Dokumen/laporan.pdf", "gdrive_file_id": "1AbC..." }
+  ],
+  "message": "Daftar file tidak terjangkau.",
+  "meta": {}
+}
+```
+
+**Errors:** 404
 
 ---
 

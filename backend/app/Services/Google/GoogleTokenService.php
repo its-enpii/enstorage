@@ -67,6 +67,7 @@ class GoogleTokenService
             'refresh_token' => $token['refresh_token'] ?? null,
             'expires_in' => (int) ($token['expires_in'] ?? 0),
             'email' => $email,
+            'scope' => $this->normalizeScope($token['scope'] ?? null),
         ];
     }
 
@@ -135,6 +136,7 @@ class GoogleTokenService
             'expires_in' => (int) ($data['expires_in'] ?? 0),
             'email' => $userInfo['email'] ?? null,
             'name' => $userInfo['name'] ?? null,
+            'scope' => $this->normalizeScope($data['scope'] ?? null),
         ];
     }
 
@@ -203,11 +205,35 @@ class GoogleTokenService
             if (! empty($newToken['refresh_token'])) {
                 $account->refresh_token = $newToken['refresh_token'];
             }
+            if (! empty($newToken['scope'])) {
+                $account->granted_scopes = $this->normalizeScope($newToken['scope']);
+            }
             $account->token_expires_at = now()->addSeconds((int) ($newToken['expires_in'] ?? 3600));
             $account->save();
         }
 
         return $account->access_token;
+    }
+
+    /**
+     * Normalisasi nilai `scope` dari respons token Google menjadi string
+     * dipisah spasi (bentuk asli). Google mengirim string, tapi sebagian
+     * respons/testing bisa mengirim array — terima keduanya. Null/array kosong
+     * → null supaya akun tanpa info scope tetap terdeteksi sebagai legacy.
+     */
+    private function normalizeScope(mixed $scope): ?string
+    {
+        if (is_array($scope)) {
+            $scope = implode(' ', array_filter(array_map('strval', $scope)));
+        }
+
+        if (! is_string($scope)) {
+            return null;
+        }
+
+        $scope = trim($scope);
+
+        return $scope === '' ? null : $scope;
     }
 
     private function fetchUserEmail(GoogleClient $client, string $accessToken): ?string

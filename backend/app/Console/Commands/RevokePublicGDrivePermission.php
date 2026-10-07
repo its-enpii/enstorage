@@ -81,6 +81,7 @@ class RevokePublicGDrivePermission extends Command
         $checked = 0;
         $revoked = 0;
         $alreadyPrivate = 0;
+        $skippedUnreachable = 0;
         $failed = [];
 
         foreach ($filesByAccount as $accountId => $files) {
@@ -127,6 +128,19 @@ class RevokePublicGDrivePermission extends Command
                     break;
                 }
 
+                // File yang sudah ditandai tidak terjangkau (token `drive.file`
+                // tidak lagi melihatnya) dilewati — permissions.list pasti
+                // gagal. Dicatat sebagai log, bukan crash.
+                if ($file->gdrive_unreachable_at !== null) {
+                    $skippedUnreachable++;
+                    Log::info('gdrive:revoke-public — lewati file tidak terjangkau', [
+                        'gdrive_file_id' => $file->gdrive_file_id,
+                    ]);
+                    $this->line("  skip     {$file->gdrive_file_id} (tidak terjangkau)");
+
+                    continue;
+                }
+
                 $checked++;
 
                 try {
@@ -159,6 +173,16 @@ class RevokePublicGDrivePermission extends Command
                         $this->warn('  rate limit, jeda '.self::RATE_LIMIT_BACKOFF_SECONDS.'s…');
                         sleep(self::RATE_LIMIT_BACKOFF_SECONDS);
                         $failed[$file->gdrive_file_id] = 'rate limit';
+                    } elseif ($this->isNotFoundOrForbidden($e)) {
+                        // File tidak terlihat lagi oleh token (403/404, bukan
+                        // rate limit) — tandai & lewati, jangan gagalkan.
+                        $file->markGdriveUnreachable();
+                        $skippedUnreachable++;
+                        Log::info('gdrive:revoke-public — file tidak terjangkau, ditandai', [
+                            'gdrive_file_id' => $file->gdrive_file_id,
+                            'error' => $e->getMessage(),
+                        ]);
+                        $this->line("  skip     {$file->gdrive_file_id} (403/404)");
                     } else {
                         $this->logFileFailure($file->gdrive_file_id, $e);
                         $failed[$file->gdrive_file_id] = $e->getMessage();
@@ -177,12 +201,13 @@ class RevokePublicGDrivePermission extends Command
 
         $this->newLine();
         $this->info(sprintf(
-            'Selesai%s — checked: %d, %s: %d, already-private: %d, failed: %d',
+            'Selesai%s — checked: %d, %s: %d, already-private: %d, skipped: %d, failed: %d',
             $dryRun ? ' (dry-run)' : '',
             $checked,
             $dryRun ? 'candidates' : 'revoked',
             $revoked,
             $alreadyPrivate,
+            $skippedUnreachable,
             count($failed),
         ));
 
@@ -238,6 +263,12 @@ class RevokePublicGDrivePermission extends Command
             'gdrive_file_id' => $gdriveFileId,
             'error' => $e->getMessage(),
         ]);
+    }
+
+    /** 403/404: file tidak terlihat lagi oleh token saat ini. */
+    private function isNotFoundOrForbidden(GoogleServiceException $e): bool
+    {
+        return in_array((int) $e->getCode(), [403, 404], true);
     }
 
     /** Token invalid / kredensial hilang → hentikan akun. */

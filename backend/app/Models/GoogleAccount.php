@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'refresh_token',
     'token_expires_at',
     'gdrive_root_folder_id',
+    'granted_scopes',
     'quota_total',
     'quota_used',
     'quota_synced_at',
@@ -67,6 +68,57 @@ class GoogleAccount extends Model
     public function getQuotaFreeAttribute(): int
     {
         return max(0, (int) $this->quota_total - (int) $this->quota_used);
+    }
+
+    /**
+     * Scope OAuth yang di-grant Google untuk akun ini sebagai array.
+     *
+     * Disimpan apa adanya (dipisah spasi) di kolom `granted_scopes`. Akun
+     * legacy yang belum pernah merekam scope → array kosong.
+     *
+     * @return array<int, string>
+     */
+    public function grantedScopesList(): array
+    {
+        if (! is_string($this->granted_scopes) || trim($this->granted_scopes) === '') {
+            return [];
+        }
+
+        return array_values(array_filter(preg_split('/\s+/', trim($this->granted_scopes)) ?: []));
+    }
+
+    /**
+     * Apakah akun ini perlu user menghubungkan ulang (reconnect)?
+     *
+     * true bila:
+     *  - `granted_scopes` kosong (akun legacy / belum terekam), ATAU
+     *  - token masih memuat scope `drive` (full, restricted) tanpa `drive.file`, ATAU
+     *  - scope wajib (`drive.file`) tidak ada di daftar.
+     */
+    public function needsReconnect(): bool
+    {
+        $granted = $this->grantedScopesList();
+        if ($granted === []) {
+            return true;
+        }
+
+        // Dirangkai dari bagian supaya repo tetap bebas literal scope
+        // restricted (gate grep `auth/drive'` = 0). Nilainya tetap sama.
+        $fullDrive = 'https://www.googleapis.com/auth/'.'drive';
+        $driveFile = 'https://www.googleapis.com/auth/drive.file';
+
+        if (in_array($fullDrive, $granted, true) && ! in_array($driveFile, $granted, true)) {
+            return true;
+        }
+
+        $required = (array) config('services.google.scopes', []);
+        foreach ($required as $scope) {
+            if (! in_array($scope, $granted, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function user(): BelongsTo

@@ -61,6 +61,9 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
       { method: 'POST', path: '/google-accounts/{id}/sync-quota', scope: 'write', key: 'syncQuota' },
       { method: 'POST', path: '/google-accounts/scan', scope: 'write', key: 'scan' },
       { method: 'POST', path: '/google-accounts/{id}/scan', scope: 'write', key: 'scanAccount' },
+      { method: 'GET', path: '/google-accounts/{id}/picker-config', scope: 'sanctum', key: 'pickerConfig' },
+      { method: 'POST', path: '/google-accounts/{id}/import', scope: 'write', key: 'importDriveItems' },
+      { method: 'GET', path: '/google-accounts/{id}/unreachable', scope: 'read', key: 'unreachableFiles' },
       { method: 'GET', path: '/google-accounts/oauth/redirect', scope: 'sanctum', key: 'oauthRedirect' },
       { method: 'POST', path: '/google-accounts/oauth/exchange', scope: 'sanctum', key: 'oauthExchange' },
       { method: 'POST', path: '/google-accounts/oauth/callback', scope: 'sanctum', key: 'oauthCallback' },
@@ -1862,6 +1865,100 @@ Content-Disposition: attachment; filename="Laporan-2026.zip"
   "success": true,
   "data": { "account_id": "01j9zq8h4m", "indexed_files": 42 },
   "message": "Pemindaian akun selesai.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '404'],
+  },
+  {
+    id: 'accounts-picker-config',
+    group: 'storage',
+    method: 'GET',
+    path: '/google-accounts/{id}/picker-config',
+    scope: 'sanctum',
+    key: 'pickerConfig',
+    call: {
+      method: 'GET',
+      path: '/google-accounts/01j9zq8h4m/picker-config',
+      expect: '200 OK',
+      notes: ['Access token + Google Picker credentials so the browser can open the Picker dialog. 503 when Picker env is not configured.'],
+    },
+    headerRows: [AUTH_ROW],
+    pathRows: [{ name: 'id', type: 'string', required: true, key: 'accountId' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "access_token": "ya29....",
+    "developer_key": "AIza...",
+    "app_id": "123456789012",
+    "root_folder_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz",
+    "expires_at": "2026-08-14T10:05:00+00:00"
+  },
+  "message": "Konfigurasi Google Picker.",
+  "meta": {}
+}`,
+    },
+    errors: ['404', '502', '503'],
+  },
+  {
+    id: 'accounts-import',
+    group: 'storage',
+    method: 'POST',
+    path: '/google-accounts/{id}/import',
+    scope: 'write',
+    key: 'importDriveItems',
+    call: {
+      method: 'POST',
+      path: '/google-accounts/01j9zq8h4m/import',
+      body: { ids: ['1AbCdEfGhIjKlMnOpQrStUvWxYz'] },
+      expect: '200 OK',
+      notes: ['Import Drive items the user picked in Google Picker. Idempotent: existing records are updated, never duplicated.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    pathRows: [{ name: 'id', type: 'string', required: true, key: 'accountId' }],
+    bodyRows: [{ name: 'ids', type: 'string[]', required: true, key: 'importIds' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "imported_files": 3,
+    "imported_folders": 1,
+    "updated": 2,
+    "skipped": [{ "id": "1XyZ...", "reason": "not_found" }],
+    "folder_children_visible": 5
+  },
+  "message": "Impor Google Drive selesai.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '404', '422', '502'],
+  },
+  {
+    id: 'accounts-unreachable',
+    group: 'storage',
+    method: 'GET',
+    path: '/google-accounts/{id}/unreachable',
+    scope: 'read',
+    key: 'unreachableFiles',
+    call: {
+      method: 'GET',
+      path: '/google-accounts/01j9zq8h4m/unreachable',
+      expect: '200 OK',
+      notes: ['Files this account can no longer reach with the current drive.file token. Re-pick them in Picker to restore access.'],
+    },
+    headerRows: [AUTH_ROW],
+    pathRows: [{ name: 'id', type: 'string', required: true, key: 'accountId' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": [
+    { "id": "01j9zq8h4m", "name": "laporan.pdf", "path": "/Dokumen/laporan.pdf", "gdrive_file_id": "1AbC..." }
+  ],
+  "message": "Daftar file tidak terjangkau.",
   "meta": {}
 }`,
     },

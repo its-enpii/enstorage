@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\GoogleAccountResource;
 use App\Models\ActivityLog;
+use App\Models\File as FileModel;
 use App\Models\GoogleAccount;
 use App\Models\User;
 use App\Services\ActivityLogService;
@@ -127,6 +128,7 @@ class GoogleAccountController extends Controller
                     'access_token' => $token['access_token'],
                     'refresh_token' => $token['refresh_token'] ?? '',
                     'token_expires_at' => now()->addSeconds($token['expires_in']),
+                    'granted_scopes' => $token['scope'] ?? null,
                     'is_active' => true,
                 ]);
             });
@@ -230,6 +232,7 @@ class GoogleAccountController extends Controller
                     'access_token' => $token['access_token'],
                     'refresh_token' => $token['refresh_token'] ?? '',
                     'token_expires_at' => now()->addSeconds($token['expires_in']),
+                    'granted_scopes' => $token['scope'] ?? null,
                     'is_active' => true,
                 ]);
             });
@@ -331,6 +334,7 @@ class GoogleAccountController extends Controller
                     'access_token' => $token['access_token'],
                     'refresh_token' => $token['refresh_token'] ?? '',
                     'token_expires_at' => now()->addSeconds($token['expires_in']),
+                    'granted_scopes' => $token['scope'] ?? null,
                     'is_active' => true,
                 ]);
             });
@@ -572,12 +576,21 @@ HTML;
             return $this->fail(__('Hanya akun utama yang dapat mengelola daftar akun.'), 403);
         }
 
-        // Coba revoke token di Google
+        // Revoke token di Google (best-effort). Kegagalan revoke TIDAK boleh
+        // menggagalkan pencabutan akun di sisi EnStorage — user tetap bisa
+        // menghapus akun meski Google sedang error / token sudah kadaluarsa.
+        // Pakai refresh_token bila ada (lebih tahan lama), fallback access_token.
         try {
             $client = app(GoogleClientFactory::class)->makeFor($account);
-            $client->revokeToken($account->access_token);
+            $tokenToRevoke = $account->refresh_token ?: $account->access_token;
+            if ($tokenToRevoke) {
+                $client->revokeToken($tokenToRevoke);
+            }
         } catch (Throwable $e) {
-            // Lanjut saja — token revoke failure tidak boleh blokir delete
+            Log::warning('Gagal revoke token Google saat disconnect', [
+                'account_id' => $account->id,
+                'error' => $e->getMessage(),
+            ]);
         }
 
         $this->quota->invalidate($account);
@@ -683,6 +696,122 @@ HTML;
             : __('Scan dan pemetaan 1:1 Google Drive selesai.');
 
         return $this->ok($payload, $message);
+    }
+
+    /**
+     * GET /google-accounts/{id}/picker-config — Sanctum-only.
+     *
+     * Bekal untuk FE membuka Google Picker: access token akun (di-refresh
+     * lebih dulu bila perlu), developer key + app id dari env, dan id folder
+     * root EnStorage (agar UI bisa menyorot/membatasi lokasi).
+     */
+    public function pickerConfig(Request $request, string $id): JsonResponse
+    {
+        $account = $this->findOwned($request, $id);
+        if (! $account) {
+            return $this->fail(__('Akun tidak ditemukan.'), 404);
+        }
+
+        $developerKey = config('services.google.picker_api_key');
+        $appId = config('services.google.picker_app_id');
+
+        if (! is_string($developerKey) || trim($developerKey) === ''
+            || ! is_string($appId) || trim($appId) === '') {
+            return $this->fail(
+                __('Google Picker belum dikonfigurasi'),
+                503,
+                null,
+                ['code' => 'picker_not_configured'],
+            );
+        }
+
+        try {
+            $this->tokens->ensureFreshToken($account);
+            $account->refresh();
+        } catch (Throwable $e) {
+            return $this->fail(__('Gagal menyegarkan token Google: ').$e->getMessage(), 502);
+        }
+
+        // Kode error eksplisit di meta (kontrak lane B).
+        $payload = [
+            'access_token' => (string) $account->access_token,
+            'developer_key' => $developerKey,
+            'app_id' => $appId,
+            'root_folder_id' => $account->gdrive_root_folder_id,
+            'expires_at' => $account->token_expires_at?->toIso8601String(),
+        ];
+
+        return $this->ok($payload, __('Konfigurasi Google Picker.'));
+    }
+
+    /**
+     * POST /google-accounts/{id}/import — Sanctum-only.
+     *
+     * Impor item yang dipilih user lewat Picker (id Drive). Idempoten.
+     */
+    public function import(Request $request, string $id): JsonResponse
+    {
+        $account = $this->findOwned($request, $id);
+        if (! $account) {
+            return $this->fail(__('Akun tidak ditemukan.'), 404);
+        }
+
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:200'],
+            'ids.*' => ['required', 'string'],
+        ]);
+
+        try {
+            $result = app(GoogleDriveFolderService::class)
+                ->importDriveItems($account, array_values($data['ids']));
+        } catch (Throwable $e) {
+            Log::warning('Import Google Drive gagal', [
+                'account_id' => $account->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return $this->fail(__('Impor Google Drive gagal: ').$e->getMessage(), 502);
+        }
+
+        // Impor tidak menulis activity log tersendiri (pola sama seperti scan);
+        // hasil ringkas sudah dikembalikan ke klien.
+
+        return $this->ok($result, __('Impor Google Drive selesai.'));
+    }
+
+    /**
+     * GET /google-accounts/{id}/unreachable — Sanctum-only.
+     *
+     * Daftar file akun ini yang ditandai tidak terjangkau token saat ini.
+     */
+    public function unreachable(Request $request, string $id): JsonResponse
+    {
+        $account = $this->findOwned($request, $id);
+        if (! $account) {
+            return $this->fail(__('Akun tidak ditemukan.'), 404);
+        }
+
+        $files = FileModel::where('user_id', $request->user()->id)
+            ->where('google_account_id', $account->id)
+            ->whereNotNull('gdrive_unreachable_at')
+            ->with('folder')
+            ->orderBy('name')
+            ->get()
+            ->map(function (FileModel $file) {
+                $path = $file->folder
+                    ? rtrim($file->folder->path, '/').'/'.$file->name
+                    : '/'.$file->name;
+
+                return [
+                    'id' => $file->id,
+                    'name' => $file->name,
+                    'path' => $path,
+                    'gdrive_file_id' => $file->gdrive_file_id,
+                ];
+            })
+            ->values();
+
+        return $this->ok($files, __('Daftar file tidak terjangkau.'));
     }
 
     /**

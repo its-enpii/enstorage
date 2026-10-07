@@ -10,20 +10,17 @@ library;
 /// HARUS SAMA PERSIS dengan `google.scopes` di backend
 /// (`backend/config/services.php`) — jangan dipersempit.
 ///
-/// Kenapa `drive` (full) dan bukan scope per-file yang terbatas pada
-/// file buatan app ini saja:
-/// 1. `QuotaManager` memanggil `about.get` untuk membaca `storageQuota`
-///    global akun. Scope per-file tidak mencakup endpoint `about`, sehingga
-///    Google membalas 403 `insufficient authentication scopes`.
-/// 2. `GoogleDriveFolderService` men-scan 1:1 folder `EnStorage` yang sudah
-///    ada di Drive user (`files.list`). File yang dibuat di luar app ini
-///    tidak terlihat oleh scope per-file.
+/// Pakai `drive.file` (terbatas), bukan `drive` (full). Scope ini hanya
+/// memberi akses ke file/folder yang dibuat app ini sendiri plus item yang
+/// user pilih lewat Google Picker di web. Method yang dipakai EnStorage
+/// (`about.get` untuk storageQuota, `files.get`/`files.list`,
+/// `permissions.*`) semuanya menerima `drive.file` — batasnya adalah
+/// visibilitas objek, bukan endpoint.
 ///
-/// Trade-off: consent screen terlihat lebih "berat" (akses penuh Drive).
 /// Akun yang ter-connect sebelum scope ini diubah harus Cabut & Hubungkan
 /// ulang agar Google me-reissue token dengan scope baru.
 const List<String> kGoogleOAuthScopes = <String>[
-  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
 ];

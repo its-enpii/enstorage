@@ -28,6 +28,8 @@ class GoogleAccountResource extends JsonResource
             'label' => $this->label,
             'email' => $this->email,
             'gdrive_root_folder_id' => $this->gdrive_root_folder_id,
+            'granted_scopes' => $this->grantedScopesList(),
+            'needs_reconnect' => $this->needsReconnect(),
             'is_active' => (bool) $this->is_active,
             'token_expires_at' => $this->token_expires_at?->toIso8601String(),
             'quota_synced_at' => $this->quota_synced_at?->toIso8601String(),

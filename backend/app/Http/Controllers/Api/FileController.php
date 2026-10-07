@@ -373,6 +373,16 @@ class FileController extends Controller
                 'Content-Length' => (string) $file->size,
             ]);
         } catch (Throwable $e) {
+            if ($this->isDriveAccessError($e)) {
+                $file->markGdriveUnreachable();
+
+                return $this->fail(
+                    __('File ini tidak dapat diakses lagi oleh token akun Google. Pilih ulang file ini lewat Google Picker untuk memulihkan akses.'),
+                    409,
+                    ['code' => 'gdrive_reauth_required'],
+                );
+            }
+
             return $this->fail(__('Download gagal: ').$e->getMessage(), 502);
         }
     }
@@ -954,8 +964,42 @@ class FileController extends Controller
                 'Content-Length' => (string) $file->size,
             ]);
         } catch (Throwable $e) {
+            if ($this->isDriveAccessError($e)) {
+                $file->markGdriveUnreachable();
+
+                return $this->fail(
+                    __('File ini tidak dapat diakses lagi oleh token akun Google. Pilih ulang file ini lewat Google Picker untuk memulihkan akses.'),
+                    409,
+                    ['code' => 'gdrive_reauth_required'],
+                );
+            }
+
             return $this->fail(__('Gagal memuat file: ').$e->getMessage(), 502);
         }
+    }
+
+    /**
+     * Apakah error dari Drive berarti objek tidak lagi terlihat oleh token
+     * saat ini (403 forbidden / 404 not found)? Dipakai untuk menandai file
+     * `gdrive_unreachable_at` dan membalas 409 `gdrive_reauth_required`,
+     * bukan 500/502 generik.
+     */
+    private function isDriveAccessError(Throwable $e): bool
+    {
+        $code = (int) $e->getCode();
+        if ($code === 403 || $code === 404) {
+            return true;
+        }
+
+        $haystack = strtolower($e->getMessage());
+
+        foreach (['file not found', 'not found', 'forbidden', 'insufficient', 'does not exist', 'shared drive'] as $needle) {
+            if (str_contains($haystack, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

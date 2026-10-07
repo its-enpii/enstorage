@@ -111,6 +111,14 @@ Route::middleware('auth.apikey')->group(function () {
         Route::post('{id}/sync-quota', [GoogleAccountController::class, 'syncQuota']);
         Route::post('scan', [GoogleAccountController::class, 'scan']);
         Route::post('{id}/scan', [GoogleAccountController::class, 'scan']);
+        // Google Picker: bekal FE (access token akun + developer key/app id)
+        // untuk membuka dialog Picker. Sanctum-only — mengembalikan access token.
+        Route::get('{id}/picker-config', [GoogleAccountController::class, 'pickerConfig'])
+            ->middleware('auth.sanctum.only');
+        // Impor item yang dipilih user lewat Picker (idempoten).
+        Route::post('{id}/import', [GoogleAccountController::class, 'import']);
+        // Daftar file akun yang ditandai tidak terjangkau token saat ini.
+        Route::get('{id}/unreachable', [GoogleAccountController::class, 'unreachable']);
     });
 
     // Storage summary
@@ -194,6 +202,7 @@ Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(funct
         Route::post('google-accounts/{id}/sync-quota', [GoogleAccountController::class, 'syncQuota']);
         Route::post('google-accounts/scan', [GoogleAccountController::class, 'scan']);
         Route::post('google-accounts/{id}/scan', [GoogleAccountController::class, 'scan']);
+        Route::post('google-accounts/{id}/import', [GoogleAccountController::class, 'import']);
     });
 
     Route::middleware('check.scope:delete')->group(function () {
@@ -217,6 +226,7 @@ Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(funct
         Route::get('storage/summary', [StorageController::class, 'summary']);
         Route::get('google-accounts', [GoogleAccountController::class, 'index']);
         Route::get('google-accounts/{id}', [GoogleAccountController::class, 'show']);
+        Route::get('google-accounts/{id}/unreachable', [GoogleAccountController::class, 'unreachable']);
         Route::get('files', [FileController::class, 'index']);
         Route::get('files/by-hashes', [FileController::class, 'byHashes']);
         Route::post('files/by-metadata', [FileController::class, 'byMetadata']);
