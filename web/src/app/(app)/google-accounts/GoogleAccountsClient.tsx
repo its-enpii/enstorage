@@ -4,7 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { apiRequest, ApiError, type GoogleAccount } from '@/lib/api';
+import {
+  apiRequest,
+  ApiError,
+  type GoogleAccount,
+  type PickerConfig,
+  type GdriveImportResult,
+  type UnreachableFile,
+} from '@/lib/api';
 import { AppShell } from '@/components/AppShell';
 import { Button, IconButton } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -18,12 +25,17 @@ import { usePrompt } from '@/components/usePrompt';
 import { useAuth } from '@/components/AuthProvider';
 import { createViewStore } from '@/lib/viewStore';
 import { usePageTitle } from '@/lib/usePageTitle';
+import { openGooglePicker } from '@/lib/googlePicker';
+import { cacheInvalidatePrefix } from '@/lib/cache';
 import {
   AddIcon,
+  AddToDriveIcon,
   CloudIcon,
+  ExpandMoreIcon,
   LinkOffIcon,
   RefreshIcon,
   ScanIcon,
+  WarningIcon,
 } from '@/lib/icons';
 
 const accountsStore = createViewStore<GoogleAccount[]>(async () => {
@@ -64,6 +76,13 @@ function AccountsContent() {
   const accounts = data ?? [];
   const [busy, setBusy] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [importing, setImporting] = useState<string | null>(null);
+  // Per-account list of files that Drive can no longer serve (needs the user
+  // to pick them again through the Picker). Loaded on demand.
+  const [unreachable, setUnreachable] = useState<Record<string, UnreachableFile[] | undefined>>({});
+  const [unreachableBusy, setUnreachableBusy] = useState<string | null>(null);
+  const [unreachableOpen, setUnreachableOpen] = useState<Record<string, boolean>>({});
+  const [unreachableLoaded, setUnreachableLoaded] = useState<Record<string, boolean>>({});
 
   // Handle return from Google OAuth callback (?connected=1 | ?error=msg)
   useEffect(() => {
@@ -103,6 +122,17 @@ function AccountsContent() {
     }
   }
 
+  /**
+   * Refresh the file/folder views after a scan or import. This page has no
+   * files store of its own, so we drop the cached list views for the current
+   * user; the files/folders pages refetch on their next mount.
+   */
+  function refreshFileViews() {
+    if (!user?.id) return;
+    cacheInvalidatePrefix(user.id, 'view:');
+    cacheInvalidatePrefix(user.id, 'folders:parent:');
+  }
+
   async function scanDrive(id?: string) {
     setScanning(true);
     try {
@@ -112,14 +142,80 @@ function AccountsContent() {
         { method: 'POST' },
       );
       await alert(
-        `Pemetaan 1:1 selesai!\n� Folder Baru: ${stats.folders_created}\n� File Baru: ${stats.files_created}\n� File Diperbarui: ${stats.files_updated}`,
-        { title: 'Scan Google Drive Selesai' },
+        t('accounts.scanDone', {
+          folders: stats.folders_created,
+          files: stats.files_created,
+          updated: stats.files_updated,
+        }),
+        { title: t('accounts.scanDoneTitle') },
       );
+      refreshFileViews();
       void revalidate();
     } catch (e) {
-      await alert(e instanceof ApiError ? e.message : 'Scan Google Drive gagal.');
+      await alert(e instanceof ApiError ? e.message : t('accounts.scanFailed'));
     } finally {
       setScanning(false);
+    }
+  }
+
+  /**
+   * Import flow: fetch a short-lived picker config, open the Google Picker,
+   * then POST the chosen ids to the import endpoint and report the summary.
+   */
+  async function importFromDrive(id: string) {
+    setImporting(id);
+    try {
+      let config: PickerConfig;
+      try {
+        config = await apiRequest<PickerConfig>(`/google-accounts/${id}/picker-config`);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 503) {
+          await alert(e.message || t('accounts.import.notConfiguredBody'), {
+            title: t('accounts.import.notConfiguredTitle'),
+          });
+          return;
+        }
+        throw e;
+      }
+
+      const ids = await openGooglePicker(config, {
+        locale: i18n.language,
+        title: t('accounts.import.pickerTitle'),
+      });
+      if (ids.length === 0) return;
+
+      const result = await apiRequest<GdriveImportResult>(`/google-accounts/${id}/import`, {
+        method: 'POST',
+        body: { ids },
+      });
+
+      await alert(
+        t('accounts.import.summary', {
+          files: result.imported_files,
+          folders: result.imported_folders,
+          updated: result.updated,
+          skipped: result.skipped.length,
+        }),
+        { title: t('accounts.import.doneTitle') },
+      );
+
+      if (result.imported_folders > 0 && result.folder_children_visible === 0) {
+        await alert(t('accounts.import.folderEmptyBody'), {
+          title: t('accounts.import.folderEmptyTitle'),
+        });
+      }
+
+      // Any previously-flagged unreachable file may now be visible again.
+      setUnreachable((prev) => ({ ...prev, [id]: undefined }));
+      setUnreachableLoaded((prev) => ({ ...prev, [id]: false }));
+      refreshFileViews();
+      void revalidate();
+    } catch (e) {
+      await alert(e instanceof ApiError ? e.message : t('accounts.import.failed'), {
+        title: t('accounts.import.failedTitle'),
+      });
+    } finally {
+      setImporting(null);
     }
   }
 
@@ -150,6 +246,28 @@ function AccountsContent() {
     } catch (e) {
       setData(prev);
       await alert(e instanceof ApiError ? e.message : t('accounts.revokeFailed'));
+    }
+  }
+
+  /** Lazily load the unreachable-file list for an account. */
+  async function loadUnreachable(id: string) {
+    setUnreachableBusy(id);
+    try {
+      const rows = await apiRequest<UnreachableFile[]>(`/google-accounts/${id}/unreachable`);
+      setUnreachable((prev) => ({ ...prev, [id]: rows }));
+      setUnreachableLoaded((prev) => ({ ...prev, [id]: true }));
+    } catch (e) {
+      await alert(e instanceof ApiError ? e.message : t('accounts.unreachable.loadFailed'));
+    } finally {
+      setUnreachableBusy(null);
+    }
+  }
+
+  async function toggleUnreachable(id: string) {
+    const next = !unreachableOpen[id];
+    setUnreachableOpen((prev) => ({ ...prev, [id]: next }));
+    if (next && !unreachableLoaded[id]) {
+      await loadUnreachable(id);
     }
   }
 
@@ -186,6 +304,10 @@ function AccountsContent() {
         </div>
       </div>
 
+      <Alert tone="info" className="mb-6" icon={false}>
+        {t('accounts.scanHint')}
+      </Alert>
+
       {error && (
         <Alert className="mb-6">{error}</Alert>
       )}
@@ -211,85 +333,173 @@ function AccountsContent() {
             const total = acc.quota?.total ?? 0;
             const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
             const isPrimary = Boolean(user?.email && acc.email.toLowerCase() === user.email.toLowerCase());
+            const needsReconnect = Boolean(acc.needs_reconnect);
+            const rows = unreachable[acc.id];
+            const isOpen = Boolean(unreachableOpen[acc.id]);
+            const accountBusy = importing === acc.id || busy === acc.id || scanning;
             return (
               <Card
                 key={acc.id}
                 hover
-                className="flex items-start gap-5 group relative"
+                className="flex flex-col gap-3 group relative"
               >
-                <div className="absolute top-6 right-6 hover-actions flex items-center gap-1">
-                  <IconButton
-                    onClick={() => scanDrive(acc.id)}
-                    disabled={scanning || busy === acc.id}
-                    title={t('accounts.scanDriveAccount')}
-                  >
-                    <ScanIcon />
-                  </IconButton>
-                  <IconButton
-                    onClick={() => syncQuota(acc.id)}
-                    disabled={busy === acc.id}
-                    title={t('accounts.syncQuota')}
-                  >
-                    {busy === acc.id ? <Spinner size="xs" /> : <RefreshIcon />}
-                  </IconButton>
-                  {!isPrimary && (
-                    <Button
-                      variant="danger-soft"
-                      size="sm"
-                      onClick={() => remove(acc.id)}
-                      disabled={busy === acc.id}
+                <div className="flex items-start gap-5">
+                  <div className="absolute top-6 right-6 hover-actions flex items-center gap-1">
+                    <IconButton
+                      onClick={() => importFromDrive(acc.id)}
+                      disabled={accountBusy}
+                      title={t('accounts.import.action')}
                     >
-                      <LinkOffIcon /> {t('accounts.revoke')}
-                    </Button>
-                  )}
-                </div>
-
-                <div className="w-16 h-16 rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container shrink-0">
-                  <CloudIcon className="!text-4xl fill" />
-                </div>
-
-                <div className="flex-1 min-w-0 flex flex-col gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-body text-body-lg font-semibold text-on-surface break-words">
-                        {acc.label && acc.label !== acc.email ? acc.label : acc.email}
-                      </h3>
-                      {isPrimary && (
-                        <Chip variant="primary">
-                          {t('accounts.primary')}
-                        </Chip>
-                      )}
-                    </div>
-                    {acc.label && acc.label !== acc.email && (
-                      <p className="text-metadata text-outline font-mono truncate">{acc.email}</p>
+                      {importing === acc.id ? <Spinner size="xs" /> : <AddToDriveIcon />}
+                    </IconButton>
+                    <IconButton
+                      onClick={() => scanDrive(acc.id)}
+                      disabled={accountBusy}
+                      title={t('accounts.scanDriveAccount')}
+                    >
+                      <ScanIcon />
+                    </IconButton>
+                    <IconButton
+                      onClick={() => syncQuota(acc.id)}
+                      disabled={busy === acc.id}
+                      title={t('accounts.syncQuota')}
+                    >
+                      {busy === acc.id ? <Spinner size="xs" /> : <RefreshIcon />}
+                    </IconButton>
+                    {!isPrimary && (
+                      <Button
+                        variant="danger-soft"
+                        size="sm"
+                        onClick={() => remove(acc.id)}
+                        disabled={busy === acc.id}
+                      >
+                        <LinkOffIcon /> {t('accounts.revoke')}
+                      </Button>
                     )}
                   </div>
-                  {total > 0 ? (
-                    <div>
-                      <div className="flex justify-between text-metadata mb-1.5">
-                        <span className="text-on-surface-variant">
-                          {bytes(used)} / {bytes(total)}
-                        </span>
-                        <span className={clsx('font-semibold', pct > 90 ? 'text-error' : 'text-secondary')}>
-                          {pct}%
-                        </span>
+
+                  <div className="w-16 h-16 rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container shrink-0">
+                    <CloudIcon className="!text-4xl fill" />
+                  </div>
+
+                  <div className="flex-1 min-w-0 flex flex-col gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-body text-body-lg font-semibold text-on-surface break-words">
+                          {acc.label && acc.label !== acc.email ? acc.label : acc.email}
+                        </h3>
+                        {isPrimary && (
+                          <Chip variant="primary">
+                            {t('accounts.primary')}
+                          </Chip>
+                        )}
+                        {needsReconnect && (
+                          <Chip variant="warning">
+                            {t('accounts.needsReconnect.badge')}
+                          </Chip>
+                        )}
                       </div>
-                      <ProgressBar
-                        value={pct}
-                        size="sm"
-                        tone={pct > 90 ? 'error' : 'secondary'}
-                        label={t('accounts.quota')}
-                      />
+                      {acc.label && acc.label !== acc.email && (
+                        <p className="text-metadata text-outline font-mono truncate">{acc.email}</p>
+                      )}
                     </div>
-                  ) : (
-                    <p className="text-metadata text-outline">{t('accounts.quotaNotSynced')}</p>
-                  )}
-                  {acc.last_synced_at && (
-                    <p className="text-metadata text-outline">
-                      {t('accounts.lastSynced')}: {new Date(acc.last_synced_at).toLocaleString(i18n.language, { dateStyle: 'medium', timeStyle: 'short' })}
-                    </p>
-                  )}
+                    {total > 0 ? (
+                      <div>
+                        <div className="flex justify-between text-metadata mb-1.5">
+                          <span className="text-on-surface-variant">
+                            {bytes(used)} / {bytes(total)}
+                          </span>
+                          <span className={clsx('font-semibold', pct > 90 ? 'text-error' : 'text-secondary')}>
+                            {pct}%
+                          </span>
+                        </div>
+                        <ProgressBar
+                          value={pct}
+                          size="sm"
+                          tone={pct > 90 ? 'error' : 'secondary'}
+                          label={t('accounts.quota')}
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-metadata text-outline">{t('accounts.quotaNotSynced')}</p>
+                    )}
+                    {acc.last_synced_at && (
+                      <p className="text-metadata text-outline">
+                        {t('accounts.lastSynced')}: {new Date(acc.last_synced_at).toLocaleString(i18n.language, { dateStyle: 'medium', timeStyle: 'short' })}
+                      </p>
+                    )}
+                  </div>
                 </div>
+
+                {needsReconnect && (
+                  <Alert tone="warning">
+                    <div className="flex flex-col gap-2">
+                      <span>{t('accounts.needsReconnect.body')}</span>
+                      <div>
+                        <Button variant="tonal" size="sm" onClick={connect}>
+                          {t('accounts.needsReconnect.action')}
+                        </Button>
+                      </div>
+                    </div>
+                  </Alert>
+                )}
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    variant="tonal"
+                    size="sm"
+                    onClick={() => importFromDrive(acc.id)}
+                    disabled={accountBusy}
+                    leftIcon={<AddToDriveIcon />}
+                  >
+                    {t('accounts.import.action')}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleUnreachable(acc.id)}
+                    disabled={unreachableBusy === acc.id}
+                    leftIcon={unreachableBusy === acc.id ? <Spinner size="xs" /> : <ExpandMoreIcon />}
+                  >
+                    {t('accounts.unreachable.toggle')}
+                  </Button>
+                </div>
+
+                {isOpen && (
+                  <div className="rounded-xl border border-outline-variant/20 bg-surface-container p-3 flex flex-col gap-2">
+                    {rows === undefined ? (
+                      <p className="text-metadata text-outline">{t('accounts.unreachable.loading')}</p>
+                    ) : rows.length === 0 ? (
+                      <p className="text-metadata text-outline">{t('accounts.unreachable.empty')}</p>
+                    ) : (
+                      <>
+                        <p className="text-sm text-on-surface flex items-center gap-1.5">
+                          <WarningIcon className="!text-base fill text-secondary" />
+                          {t('accounts.unreachable.count', { count: rows.length })}
+                        </p>
+                        <ul className="flex flex-col gap-1 max-h-48 overflow-auto">
+                          {rows.map((row) => (
+                            <li key={row.id} className="min-w-0">
+                              <p className="text-sm text-on-surface truncate">{row.name}</p>
+                              <p className="text-metadata text-outline font-mono truncate">{row.path}</p>
+                            </li>
+                          ))}
+                        </ul>
+                        <div>
+                          <Button
+                            variant="tonal"
+                            size="sm"
+                            onClick={() => importFromDrive(acc.id)}
+                            disabled={accountBusy}
+                            leftIcon={<AddToDriveIcon />}
+                          >
+                            {t('accounts.unreachable.repick')}
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </Card>
             );
           })}

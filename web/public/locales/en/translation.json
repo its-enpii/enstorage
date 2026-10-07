@@ -355,7 +355,36 @@
     "scanDriveAccount": "Scan Google Drive (1:1)",
     "scanning": "Scanning...",
     "primary": "Primary",
-    "quota": "Quota usage"
+    "quota": "Quota usage",
+    "scanHint": "Scan syncs files and folders created by EnStorage. Files you placed directly in Google Drive come in through \"Import from Google Drive\".",
+    "scanDone": "1:1 mapping complete. New folders: {{folders}}, new files: {{files}}, files updated: {{updated}}.",
+    "scanDoneTitle": "Google Drive scan complete",
+    "scanFailed": "Google Drive scan failed.",
+    "needsReconnect": {
+      "badge": "Reconnect needed",
+      "body": "Google access permissions changed. Reconnect so upload and sync keep working.",
+      "action": "Reconnect"
+    },
+    "import": {
+      "action": "Import from Google Drive",
+      "pickerTitle": "Pick files or folders from Google Drive",
+      "doneTitle": "Import complete",
+      "summary": "Imported {{files}} files, {{folders}} folders, updated {{updated}}, skipped {{skipped}}.",
+      "failedTitle": "Import failed",
+      "failed": "Import from Google Drive failed.",
+      "notConfiguredTitle": "Picker not configured",
+      "notConfiguredBody": "Google Picker is not configured by an admin yet.",
+      "folderEmptyTitle": "Folder contents not visible yet",
+      "folderEmptyBody": "The folder contents are not visible to EnStorage yet. Pick the files directly in the Picker (multi-select works)."
+    },
+    "unreachable": {
+      "toggle": "Files to pick again",
+      "loading": "Loading file list…",
+      "empty": "All files are reachable.",
+      "count": "{{count}} files need to be picked again",
+      "repick": "Pick again with Picker",
+      "loadFailed": "Failed to load the files that need re-picking."
+    }
   },
   "starred": {
     "title": "Starred",

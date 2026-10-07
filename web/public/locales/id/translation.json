@@ -355,7 +355,36 @@
     "scanDriveAccount": "Pindai Google Drive (1:1)",
     "scanning": "Memindai...",
     "primary": "Akun Utama",
-    "quota": "Penggunaan kuota"
+    "quota": "Penggunaan kuota",
+    "scanHint": "Pindai menyinkronkan file dan folder yang dibuat EnStorage. File yang kamu taruh langsung di Google Drive dimasukkan lewat \"Impor dari Google Drive\".",
+    "scanDone": "Pemetaan 1:1 selesai. Folder baru: {{folders}}, file baru: {{files}}, file diperbarui: {{updated}}.",
+    "scanDoneTitle": "Pindai Google Drive selesai",
+    "scanFailed": "Pindai Google Drive gagal.",
+    "needsReconnect": {
+      "badge": "Perlu sambung ulang",
+      "body": "Izin akses Google diperbarui. Sambungkan ulang agar unggah dan sinkron tetap jalan.",
+      "action": "Sambungkan ulang"
+    },
+    "import": {
+      "action": "Impor dari Google Drive",
+      "pickerTitle": "Pilih file atau folder dari Google Drive",
+      "doneTitle": "Impor selesai",
+      "summary": "Diimpor {{files}} file, {{folders}} folder, diperbarui {{updated}}, dilewati {{skipped}}.",
+      "failedTitle": "Impor gagal",
+      "failed": "Impor dari Google Drive gagal.",
+      "notConfiguredTitle": "Picker belum dikonfigurasi",
+      "notConfiguredBody": "Google Picker belum dikonfigurasi admin.",
+      "folderEmptyTitle": "Isi folder belum terlihat",
+      "folderEmptyBody": "Isi folder belum terlihat oleh EnStorage. Pilih file-filenya langsung di Picker (bisa banyak sekaligus)."
+    },
+    "unreachable": {
+      "toggle": "File perlu dipilih ulang",
+      "loading": "Memuat daftar file…",
+      "empty": "Semua file terjangkau.",
+      "count": "{{count}} file perlu dipilih ulang",
+      "repick": "Pilih ulang lewat Picker",
+      "loadFailed": "Gagal memuat daftar file yang perlu dipilih ulang."
+    }
   },
   "starred": {
     "title": "Favorit",
