@@ -26,6 +26,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { createViewStore } from '@/lib/viewStore';
 import { usePageTitle } from '@/lib/usePageTitle';
 import { openGooglePicker } from '@/lib/googlePicker';
+import { GooglePickerDialog } from '@/components/GooglePickerDialog';
 import { cacheInvalidatePrefix } from '@/lib/cache';
 import {
   AddIcon,
@@ -77,6 +78,11 @@ function AccountsContent() {
   const [busy, setBusy] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [importing, setImporting] = useState<string | null>(null);
+  // Embedded Google Picker: the modal renders the URI obtained from the
+  // builder instead of Google's own dialog. Kept for the account being imported.
+  const [pickerState, setPickerState] = useState<{ uri: string; accountId: string } | null>(null);
+  // Imperative abort for the in-flight picker promise, set while the modal is open.
+  const pickerCancelRef = useRef<(() => void) | null>(null);
   // Per-account list of files that Drive can no longer serve (needs the user
   // to pick them again through the Picker). Loaded on demand.
   const [unreachable, setUnreachable] = useState<Record<string, UnreachableFile[] | undefined>>({});
@@ -178,10 +184,19 @@ function AccountsContent() {
         throw e;
       }
 
-      const ids = await openGooglePicker(config, {
-        locale: i18n.language,
-        title: t('accounts.import.pickerTitle'),
-      });
+      const ids = await openGooglePicker(
+        config,
+        {
+          locale: i18n.language,
+          title: t('accounts.import.pickerTitle'),
+          onUri: (uri) => setPickerState({ uri, accountId: id }),
+        },
+        (cancel) => {
+          pickerCancelRef.current = cancel;
+        },
+      );
+      pickerCancelRef.current = null;
+      setPickerState(null);
       if (ids.length === 0) return;
 
       const result = await apiRequest<GdriveImportResult>(`/google-accounts/${id}/import`, {
@@ -504,6 +519,20 @@ function AccountsContent() {
             );
           })}
         </div>
+      )}
+
+      {pickerState && (
+        <GooglePickerDialog
+          open
+          uri={pickerState.uri}
+          onClose={() => {
+            // Dismissing the frame before a selection resolves the pending
+            // picker promise with an empty array — no import request is sent.
+            setPickerState(null);
+            pickerCancelRef.current?.();
+            pickerCancelRef.current = null;
+          }}
+        />
       )}
     </>
   );
