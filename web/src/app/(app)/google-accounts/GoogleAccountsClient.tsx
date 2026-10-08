@@ -35,7 +35,6 @@ import {
   ExpandMoreIcon,
   LinkOffIcon,
   RefreshIcon,
-  ScanIcon,
   WarningIcon,
 } from '@/lib/icons';
 
@@ -76,7 +75,6 @@ function AccountsContent() {
   const { data, loading, error, setData, revalidate } = accountsStore.useStore();
   const accounts = data ?? [];
   const [busy, setBusy] = useState<string | null>(null);
-  const [scanning, setScanning] = useState(false);
   const [importing, setImporting] = useState<string | null>(null);
   // Embedded Google Picker: the modal renders the URI obtained from the
   // builder instead of Google's own dialog. Kept for the account being imported.
@@ -137,31 +135,6 @@ function AccountsContent() {
     if (!user?.id) return;
     cacheInvalidatePrefix(user.id, 'view:');
     cacheInvalidatePrefix(user.id, 'folders:parent:');
-  }
-
-  async function scanDrive(id?: string) {
-    setScanning(true);
-    try {
-      const url = id ? `/google-accounts/${id}/scan` : '/google-accounts/scan';
-      const stats = await apiRequest<{ folders_created: number; files_created: number; files_updated: number }>(
-        url,
-        { method: 'POST' },
-      );
-      await alert(
-        t('accounts.scanDone', {
-          folders: stats.folders_created,
-          files: stats.files_created,
-          updated: stats.files_updated,
-        }),
-        { title: t('accounts.scanDoneTitle') },
-      );
-      refreshFileViews();
-      void revalidate();
-    } catch (e) {
-      await alert(e instanceof ApiError ? e.message : t('accounts.scanFailed'));
-    } finally {
-      setScanning(false);
-    }
   }
 
   /**
@@ -302,17 +275,6 @@ function AccountsContent() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {accounts.length > 0 && (
-            <Button
-              variant="secondary"
-              onClick={() => scanDrive()}
-              disabled={scanning}
-              size="lg"
-              leftIcon={<ScanIcon />}
-            >
-              {scanning ? t('accounts.scanning') : t('accounts.scanDrive')}
-            </Button>
-          )}
           <Button onClick={connect} leftIcon={<AddIcon />} size="lg">
             {t('accounts.connect')}
           </Button>
@@ -351,7 +313,7 @@ function AccountsContent() {
             const needsReconnect = Boolean(acc.needs_reconnect);
             const rows = unreachable[acc.id];
             const isOpen = Boolean(unreachableOpen[acc.id]);
-            const accountBusy = importing === acc.id || busy === acc.id || scanning;
+            const accountBusy = importing === acc.id || busy === acc.id;
             return (
               <Card
                 key={acc.id}
@@ -359,40 +321,6 @@ function AccountsContent() {
                 className="flex flex-col gap-3 group relative"
               >
                 <div className="flex items-start gap-5">
-                  <div className="absolute top-6 right-6 hover-actions flex items-center gap-1">
-                    <IconButton
-                      onClick={() => importFromDrive(acc.id)}
-                      disabled={accountBusy}
-                      title={t('accounts.import.action')}
-                    >
-                      {importing === acc.id ? <Spinner size="xs" /> : <AddToDriveIcon />}
-                    </IconButton>
-                    <IconButton
-                      onClick={() => scanDrive(acc.id)}
-                      disabled={accountBusy}
-                      title={t('accounts.scanDriveAccount')}
-                    >
-                      <ScanIcon />
-                    </IconButton>
-                    <IconButton
-                      onClick={() => syncQuota(acc.id)}
-                      disabled={busy === acc.id}
-                      title={t('accounts.syncQuota')}
-                    >
-                      {busy === acc.id ? <Spinner size="xs" /> : <RefreshIcon />}
-                    </IconButton>
-                    {!isPrimary && (
-                      <Button
-                        variant="danger-soft"
-                        size="sm"
-                        onClick={() => remove(acc.id)}
-                        disabled={busy === acc.id}
-                      >
-                        <LinkOffIcon /> {t('accounts.revoke')}
-                      </Button>
-                    )}
-                  </div>
-
                   <div className="w-16 h-16 rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container shrink-0">
                     <CloudIcon className="!text-4xl fill" />
                   </div>
@@ -478,6 +406,23 @@ function AccountsContent() {
                   >
                     {t('accounts.unreachable.toggle')}
                   </Button>
+                  <IconButton
+                    onClick={() => syncQuota(acc.id)}
+                    disabled={busy === acc.id}
+                    title={t('accounts.syncQuota')}
+                  >
+                    {busy === acc.id ? <Spinner size="xs" /> : <RefreshIcon />}
+                  </IconButton>
+                  {!isPrimary && (
+                    <Button
+                      variant="danger-soft"
+                      size="sm"
+                      onClick={() => remove(acc.id)}
+                      disabled={busy === acc.id}
+                    >
+                      <LinkOffIcon /> {t('accounts.revoke')}
+                    </Button>
+                  )}
                 </div>
 
                 {isOpen && (
