@@ -499,7 +499,17 @@
     "linkViewsUnlimited": "{{count}} views",
     "linkRevoke": "Revoke",
     "linkCopied": "Copied",
-    "linkPermanent": "Permanent"
+    "linkPermanent": "Permanent",
+    "locked": {
+      "title": "Locked folder",
+      "desc": "This shared folder is password protected. Enter the password to view its contents.",
+      "descNamed": "The folder \"{{name}}\" is password protected. Enter the password to view its contents.",
+      "passwordLabel": "Password",
+      "submit": "Unlock",
+      "wrong": "Wrong password.",
+      "passwordRequired": "Password is required.",
+      "error": "Could not unlock the folder. Please try again."
+    }
   },
   "preview": {
     "loadingPdf": "Loading PDF document...",
@@ -1827,6 +1837,51 @@
         "title": "Update notification settings",
         "body": "Change the user notification preferences."
       }
+    }
+  },
+  "lock": {
+    "set": {
+      "title": "Lock folder",
+      "description": "The contents of \"{{name}}\" will be hidden. Enter a password to open it.",
+      "submit": "Lock folder"
+    },
+    "change": {
+      "title": "Change password",
+      "description": "Change the lock password for \"{{name}}\".",
+      "submit": "Save password"
+    },
+    "remove": {
+      "title": "Remove lock",
+      "description": "Remove the lock from \"{{name}}\".",
+      "warning": "Once removed, everything in this folder can be opened without a password until it is locked again.",
+      "submit": "Remove lock"
+    },
+    "fields": {
+      "password": "Password",
+      "confirmation": "Confirm password",
+      "currentPassword": "Current password"
+    },
+    "menu": {
+      "set": "Lock folder",
+      "change": "Change password",
+      "remove": "Remove lock"
+    },
+    "unlock": {
+      "title": "\"{{name}}\" is locked",
+      "description": "Enter the password to open this folder.",
+      "submit": "Unlock folder",
+      "wrong": "Wrong password.",
+      "passwordRequired": "Password is required."
+    },
+    "badge": "Locked",
+    "errors": {
+      "minLength": "Password must be at least 6 characters.",
+      "mismatch": "Password confirmation does not match.",
+      "currentRequired": "Current password is required.",
+      "passwordRequired": "Password is required.",
+      "invalidPassword": "Wrong password.",
+      "alreadyLocked": "This folder is already locked.",
+      "generic": "Something went wrong. Please try again."
     }
   }
 }

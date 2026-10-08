@@ -26,6 +26,8 @@ import { FolderCard, FileCard } from '@/components/ItemCard';
 import { ShareDialog } from '@/components/ShareDialog';
 import { MoveDialog, type MovedFileResult } from '@/components/MoveDialog';
 import { DeleteFolderDialog } from '@/components/DeleteFolderDialog';
+import { FolderLockDialog, type FolderLockMode } from '@/components/FolderLockDialog';
+import { Input, Field } from '@/components/Input';
 import { Alert } from '@/components/Alert';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { FilesStoreProvider, useFilesStore } from '@/lib/filesStore';;
@@ -230,6 +232,110 @@ type ResolvedRoute = {
   crumbs: { id: string; name: string; path: string }[];
 };
 
+/** Payload captured from an HTTP 423 `folder_locked` response. */
+type LockedInfo = {
+  folderId: string | null;
+  folderName: string | null;
+  message: string | null;
+};
+
+/** Router helper shared by the unlock prompt's "cancel" affordance. */
+function navigateFilesRoot(router: ReturnType<typeof useRouter>) {
+  router.push('/files');
+}
+
+/**
+ * Modal prompt shown when the current folder resolve/show fetch returns
+ * HTTP 423 `folder_locked`. Submits the password to `POST /folders/{id}/unlock`
+ * and, on success, asks the caller to refetch the folder. The prompt stays
+ * open with an inline error when the password is wrong (422).
+ */
+function FolderUnlockPrompt({
+  locked,
+  onUnlocked,
+  onCancel,
+}: {
+  locked: LockedInfo;
+  onUnlocked: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useTranslation();
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!locked.folderId || !password) {
+      setError(t('lock.unlock.passwordRequired'));
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await apiRequest<{ expires_at: string }>(`/folders/${locked.folderId}/unlock`, {
+        method: 'POST',
+        body: { password },
+      });
+      setPassword('');
+      onUnlocked();
+    } catch (e) {
+      setError(
+        e instanceof ApiError && e.status === 422
+          ? t('lock.unlock.wrong')
+          : e instanceof ApiError
+            ? e.message
+            : t('lock.errors.generic'),
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <AppShell>
+      <Dialog
+        open
+        onClose={submitting ? () => {} : onCancel}
+        title={t('lock.unlock.title', { name: locked.folderName ?? '' })}
+        description={t('lock.unlock.description')}
+        icon={<span className="material-symbols-outlined !text-2xl">lock</span>}
+        actions={
+          <>
+            <Button variant="ghost" size="md" onClick={onCancel} disabled={submitting}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              loading={submitting}
+              onClick={() => void submit()}
+            >
+              {t('lock.unlock.submit')}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Field label={t('lock.fields.password')} htmlFor="folder-unlock-password">
+            <Input
+              id="folder-unlock-password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void submit();
+              }}
+              disabled={submitting}
+            />
+          </Field>
+          {error && <Alert tone="danger">{error}</Alert>}
+        </div>
+      </Dialog>
+    </AppShell>
+  );
+}
+
 /**
  * Slug/path-aware routing layer.
  *
@@ -259,6 +365,12 @@ function FilesRoute() {
 
   const [resolved, setResolved] = useState<ResolvedRoute | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Set when the resolve/show fetch returns HTTP 423 `folder_locked`. Kept
+  // separate from `error` so we render an unlock prompt instead of falling
+  // back to the root view.
+  const [locked, setLocked] = useState<LockedInfo | null>(null);
+  // Bumping this re-runs the resolve effect after a successful unlock.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -267,6 +379,7 @@ function FilesRoute() {
     if (!legacyId && currentPath === '/') {
       setResolved({ folderId: null, currentPath: '/', crumbs: [] });
       setError(null);
+      setLocked(null);
       return;
     }
 
@@ -295,17 +408,42 @@ function FilesRoute() {
     request
       .then((value) => {
         if (cancelled) return;
-        if (value) setResolved(value);
+        if (value) {
+          setLocked(null);
+          setResolved(value);
+        }
       })
       .catch((e) => {
         if (cancelled) return;
+        // Locked folder → prompt for the password instead of a dead-end.
+        if (e instanceof ApiError && e.status === 423 && e.meta?.code === 'folder_locked') {
+          setLocked({
+            folderId: (e.meta.folder_id as string | undefined) ?? legacyId,
+            folderName: (e.meta.folder_name as string | undefined) ?? null,
+            message: e.message,
+          });
+          return;
+        }
         setError(e instanceof ApiError ? e.message : 'Folder tidak ditemukan.');
       });
 
     return () => {
       cancelled = true;
     };
-  }, [currentPath, legacyId, router]);
+  }, [currentPath, legacyId, router, reloadKey]);
+
+  if (locked) {
+    return (
+      <FolderUnlockPrompt
+        locked={locked}
+        onUnlocked={() => {
+          setLocked(null);
+          setReloadKey((k) => k + 1);
+        }}
+        onCancel={() => navigateFilesRoot(router)}
+      />
+    );
+  }
 
   if (error) {
     // Fall back to the root view; surface via the store error banner instead
@@ -459,6 +597,8 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   const [shareFile, setShareFile] = useState<FileItem | null>(null);
   const [shareFolder, setShareFolder] = useState<Folder | null>(null);
   const [deleteFolderTarget, setDeleteFolderTarget] = useState<FolderType | null>(null);
+  // Folder lock dialog: which folder + which mode, or null when closed.
+  const [lockTarget, setLockTarget] = useState<{ folder: FolderType; mode: FolderLockMode } | null>(null);
   const [moveFiles, setMoveFiles] = useState<FileItem[] | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   // Map<fileId, setInterval handle>. When WS is connected, we don't
@@ -1166,6 +1306,19 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     }
   }
 
+  /**
+   * Persist a lock mutation locally: the backend flips `is_locked` on the
+   * FolderResource, so mirror that flag in the store before revalidating so
+   * the badge and menu update without a full round-trip flicker.
+   */
+  function handleFolderLockSuccess(mode: FolderLockMode) {
+    if (lockTarget) {
+      upsertFolder({ ...lockTarget.folder, is_locked: mode !== 'remove' });
+    }
+    invalidateFoldersPageCache();
+    void revalidate();
+  }
+
   function buildFolderMenuItems(f: FolderType): MenuItem[] {
     return [
       {
@@ -1188,6 +1341,26 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         icon: <span className="material-symbols-outlined !text-base">link</span>,
         onClick: () => setShareFolder(f),
       },
+      f.is_locked
+        ? {
+            label: t('lock.menu.change'),
+            icon: <span className="material-symbols-outlined !text-base">key</span>,
+            onClick: () => setLockTarget({ folder: f, mode: 'change' }),
+          }
+        : {
+            label: t('lock.menu.set'),
+            icon: <span className="material-symbols-outlined !text-base">lock</span>,
+            onClick: () => setLockTarget({ folder: f, mode: 'set' }),
+          },
+      ...(f.is_locked
+        ? [
+            {
+              label: t('lock.menu.remove'),
+              icon: <span className="material-symbols-outlined !text-base">lock_open</span>,
+              onClick: () => setLockTarget({ folder: f, mode: 'remove' }),
+            } as MenuItem,
+          ]
+        : []),
       {
         label: t('files.actions.delete'),
         icon: <span className="material-symbols-outlined !text-base">delete</span>,
@@ -1430,6 +1603,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               <FolderCard
                 name={f.name}
                 isStarred={f.is_starred}
+                isLocked={f.is_locked}
                 itemCount={items}
                 itemsLabel={t('folders.items')}
                 totalSize={size > 0 ? bytes(size) : undefined}
@@ -1597,6 +1771,16 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           onConfirm={handleDeleteFolder}
         />
       )}
+      {lockTarget && (
+        <FolderLockDialog
+          folder={lockTarget.folder}
+          mode={lockTarget.mode}
+          open
+          onClose={() => setLockTarget(null)}
+          onSuccess={handleFolderLockSuccess}
+        />
+      )}
+
       {shareFolder && (
         <ShareDialog
           target={{ kind: 'folder', item: shareFolder }}
