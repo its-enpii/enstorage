@@ -5,6 +5,12 @@
  * Scope model: with `drive.file` the app only sees files it created or that the
  * user explicitly hands over through this Picker. The access token and
  * developer key come from the backend response; nothing is hardcoded here.
+ *
+ * Embed model: the Picker is no longer shown through its own `setVisible(true)`
+ * dialog (which mounts Google's chrome inside our page). Instead we ask the
+ * builder for a `toUri()` URL and let the caller render it inside an `<iframe>`
+ * of our own — a frame we fully control. The Picker still drives the selection
+ * callback, so callers keep receiving the same `string[]` of ids.
  */
 
 import type { PickerConfig } from '@/lib/api';
@@ -60,67 +66,153 @@ function loadGapiScript(): Promise<void> {
   return loaderPromise;
 }
 
-export type OpenPickerOptions = {
+/** Chrome options shared by the URI-only and interactive picker helpers. */
+export type PickerChromeOptions = {
   /** Locale used for the Picker chrome, e.g. `id` or `en`. */
   locale?: string;
   /** Dialog title shown at the top of the Picker. */
   title?: string;
 };
 
-/**
- * Opens the Google Picker for the given account config.
- *
- * Resolves with the array of selected Drive file/folder ids, or an empty array
- * when the user cancels. Rejects on loader/script failures so the caller can
- * surface a toast.
- */
-export async function openGooglePicker(
-  config: PickerConfig,
-  opts: OpenPickerOptions = {},
-): Promise<string[]> {
-  await loadGapiScript();
+export type OpenPickerOptions = PickerChromeOptions & {
+  /**
+   * Receives the embeddable Picker URI so the caller can mount it in a frame
+   * it owns. Required in embed mode — without it nothing is rendered.
+   */
+  onUri: (uri: string) => void;
+};
 
+type PickerLike = {
+  PickerBuilder: new () => google.picker.PickerBuilder;
+  DocsView: new (viewId?: string) => google.picker.DocsView;
+  Feature: typeof google.picker.Feature;
+  Action: typeof google.picker.Action;
+};
+
+/** Resolves the gapi/picker namespace once the loader script is ready. */
+async function resolvePicker(): Promise<PickerLike> {
+  await loadGapiScript();
   const gapi = window.gapi;
   const picker = window.google?.picker ?? gapi?.picker;
   if (!gapi?.picker || !picker) {
     throw new Error('Google Picker module is not available');
   }
+  return picker as unknown as PickerLike;
+}
+
+/**
+ * Builds the Picker instance configured from `config`, returning both the
+ * builder (so callers can derive its embed URI) and the live `Picker`.
+ */
+function buildPicker(
+  picker: PickerLike,
+  config: PickerConfig,
+  opts: PickerChromeOptions,
+  onResponse: (data: google.picker.ResponseObject) => void,
+): google.picker.PickerBuilder {
+  const builder = new picker.PickerBuilder();
+
+  const view = new picker.DocsView()
+    .setIncludeFolders(true)
+    .setSelectFolderEnabled(true);
+  if (config.root_folder_id) view.setParent(config.root_folder_id);
+
+  builder
+    .addView(view)
+    .enableFeature(picker.Feature.MULTISELECT_ENABLED)
+    .setOAuthToken(config.access_token)
+    .setCallback(onResponse);
+
+  if (config.developer_key) builder.setDeveloperKey(config.developer_key);
+  if (config.app_id) builder.setAppId(config.app_id);
+  if (opts.locale) builder.setLocale(opts.locale);
+  if (opts.title) builder.setTitle(opts.title);
+
+  return builder;
+}
+
+/**
+ * Resolves the embeddable Picker URI for the given account config.
+ *
+ * The returned URL is meant to be placed in an `<iframe>` the app owns. The
+ * selection callback still fires on the shared `google.picker` instance, so
+ * callers must keep a Picker alive (see `openGooglePicker`) to receive it.
+ */
+export async function getGooglePickerUri(
+  config: PickerConfig,
+  opts: PickerChromeOptions = {},
+): Promise<string> {
+  const picker = await resolvePicker();
+  const builder = buildPicker(picker, config, opts, () => {});
+
+  // `toUri` is the documented embed entry point but is absent from the minimal
+  // ambient typings, so read it through a narrow, optional cast.
+  const toUri = (builder as unknown as { toUri?: () => string }).toUri;
+  if (typeof toUri !== 'function') {
+    throw new Error('Google Picker embed URI is not available');
+  }
+  const uri = toUri.call(builder);
+  if (!uri) throw new Error('Google Picker returned an empty embed URI');
+  return uri;
+}
+
+/**
+ * Opens the Google Picker for the given account config in embed mode.
+ *
+ * Instead of mounting Google's own dialog, this hands the embeddable URI to
+ * `opts.onUri` so the caller can render it in an iframe, and resolves with the
+ * array of selected Drive file/folder ids — or an empty array when the user
+ * cancels (either through Google's own CANCEL action or programmatically).
+ * Rejects on loader/script failures so the caller can surface a toast.
+ *
+ * `onCancel` receives an imperative `cancel()` trigger. The caller wires it to
+ * the frame's close button/backdrop/ESC so dismissing the app's modal resolves
+ * the promise with `[]` and no request is sent.
+ */
+export async function openGooglePicker(
+  config: PickerConfig,
+  opts: OpenPickerOptions,
+  onCancel?: (cancel: () => void) => void,
+): Promise<string[]> {
+  const picker = await resolvePicker();
 
   return new Promise<string[]>((resolve, reject) => {
     let settled = false;
+    const settle = (ids: string[]) => {
+      if (settled) return;
+      settled = true;
+      resolve(ids);
+    };
 
-    const builder = new picker.PickerBuilder();
+    // Expose an imperative cancel so the caller can abort when the modal that
+    // hosts the iframe is dismissed before a selection is made.
+    onCancel?.(() => settle([]));
 
-    const view = new picker.DocsView()
-      .setIncludeFolders(true)
-      .setSelectFolderEnabled(true);
-    if (config.root_folder_id) view.setParent(config.root_folder_id);
+    const builder = buildPicker(picker, config, opts, (data) => {
+      if (data.action === picker.Action.PICKED) {
+        const ids = (data.docs ?? [])
+          .map((doc) => doc.id)
+          .filter((id): id is string => Boolean(id));
+        settle(ids);
+      } else if (data.action === picker.Action.CANCEL) {
+        settle([]);
+      }
+    });
 
-    builder
-      .addView(view)
-      .enableFeature(picker.Feature.MULTISELECT_ENABLED)
-      .setOAuthToken(config.access_token)
-      .setCallback((data: google.picker.ResponseObject) => {
-        if (data.action === picker.Action.PICKED) {
-          settled = true;
-          const ids = (data.docs ?? [])
-            .map((doc) => doc.id)
-            .filter((id): id is string => Boolean(id));
-          resolve(ids);
-        } else if (data.action === picker.Action.CANCEL) {
-          settled = true;
-          resolve([]);
-        }
-      });
-
-    if (config.developer_key) builder.setDeveloperKey(config.developer_key);
-    if (config.app_id) builder.setAppId(config.app_id);
-    if (opts.locale) builder.setLocale(opts.locale);
-    if (opts.title) builder.setTitle(opts.title);
+    // `toUri` is the documented embed entry point but is absent from the
+    // minimal ambient typings, so read it through a narrow, optional cast.
+    const toUri = (builder as unknown as { toUri?: () => string }).toUri;
 
     try {
-      const dialog = builder.build();
-      dialog.setVisible(true);
+      if (typeof toUri !== 'function') {
+        throw new Error('Google Picker embed URI is not available');
+      }
+      const uri = toUri.call(builder);
+      if (!uri) throw new Error('Google Picker returned an empty embed URI');
+      // Keep the built Picker alive: it owns the callback channel the iframe
+      // posts to. We never call `setVisible(true)` — the app renders the frame.
+      builder.build();
+      opts.onUri(uri);
     } catch (e) {
       if (!settled) reject(e instanceof Error ? e : new Error('Failed to open Google Picker'));
     }
