@@ -1188,7 +1188,12 @@
       "headObject": "Ambil metadata objek tanpa mengunduh isinya.",
       "getObject": "Stream isi objek.",
       "putObject": "Unggah atau ganti objek (binary).",
-      "deleteObject": "Hapus objek."
+      "deleteObject": "Hapus objek.",
+      "lockFolder": "Kunci folder dengan kata sandi.",
+      "unlockFolder": "Buka kunci folder sementara (30 menit).",
+      "updateFolderLockPassword": "Ganti kata sandi kunci folder.",
+      "destroyFolderLock": "Lepas kunci folder (butuh kata sandi).",
+      "publicShareUnlock": "Buka kunci share link folder dengan kata sandi."
     },
     "envelope": {
       "eyebrow": "Kontrak",
@@ -1388,7 +1393,11 @@
         "resetVaultNote": "Tindakan destruktif permanen: seluruh berkas dan folder dikosongkan dan tidak dapat dikembalikan. Hanya bisa via sesi Sanctum, tidak lewat API key.",
         "resolveRootNote": "Path kosong atau `/` mengembalikan `folder: null` dengan breadcrumb kosong (root directory).",
         "s3Note": "Gerbang S3 tidak memakai envelope JSON. Respons memakai status HTTP dan header standar S3, atau error XML S3 (`AccessDenied`, `NoSuchKey`) bila gagal.",
-        "s3AuthNote": "Autentikasi mendukung AWS Signature V4, header `X-API-Key: en_...`, `Authorization: Bearer en_...`, atau query `?api_key=en_...`."
+        "s3AuthNote": "Autentikasi mendukung AWS Signature V4, header `X-API-Key: en_...`, `Authorization: Bearer en_...`, atau query `?api_key=en_...`.",
+        "folderLockNote": "Folder terkunci privat total: isi subtree tidak bisa dibaca (owner pun) tanpa membuka kuncinya. Nama folder tetap tampil di list dengan `is_locked: true`.",
+        "folderUnlockNote": "Unlock bersifat sementara (TTL 30 menit, server-side). Tidak ada \"lupa password\" — lepas kunci & ganti password tetap butuh password.",
+        "folderLockPasswordNote": "Ganti password membatalkan semua unlock sementara yang lama pada folder ini.",
+        "shareUnlockNote": "Kirim password ke endpoint unlock; server membalas Set-Cookie HttpOnly `share_unlock_<token>` yang dipakai ulang oleh `GET /s/{token}`. Header `X-Share-Unlock` juga diterima."
       },
       "items": {
         "bulkDelete": {
@@ -1706,6 +1715,26 @@
         "deleteObject": {
           "title": "Delete object",
           "body": "Hapus objek. Bersifat idempotent: key yang tidak ada tetap mengembalikan `204`."
+        },
+        "lockFolder": {
+          "title": "Kunci folder",
+          "body": "Pasang kata sandi pada folder."
+        },
+        "unlockFolder": {
+          "title": "Buka kunci folder",
+          "body": "Buka kunci sementara selama 30 menit."
+        },
+        "updateFolderLockPassword": {
+          "title": "Ganti sandi kunci",
+          "body": "Ganti kata sandi kunci folder."
+        },
+        "destroyFolderLock": {
+          "title": "Lepas kunci folder",
+          "body": "Hapus kunci beserta kata sandinya."
+        },
+        "publicShareUnlock": {
+          "title": "Buka kunci share",
+          "body": "Buka kunci share folder dengan sandi."
         }
       }
     },
@@ -1787,7 +1816,11 @@
       "resolvePathQuery": "Hierarki path folder, contoh `/Dokumen/Pribadi` atau `Backup/2026`.",
       "s3Bucket": "Nama bucket (mis. `public`, `arsip`). `public` dapat dibaca tanpa autentikasi.",
       "s3Path": "Object key relatif di dalam bucket, mis. `laporan/q3.pdf`.",
-      "s3ContentType": "MIME type objek; default `application/octet-stream`."
+      "s3ContentType": "MIME type objek; default `application/octet-stream`.",
+      "lockPassword": "Kata sandi kunci folder, minimal 6 karakter.",
+      "passwordConfirmation": "Ulangi kata sandi kunci (harus sama).",
+      "currentPassword": "Kata sandi kunci yang sedang berlaku.",
+      "newPassword": "Kata sandi kunci baru, minimal 6 karakter."
     },
     "filter": {
       "all": "Semua",

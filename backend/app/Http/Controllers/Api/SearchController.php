@@ -6,12 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\SearchResultResource;
 use App\Models\File as FileModel;
 use App\Models\Folder;
+use App\Services\FolderLockGuard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class SearchController extends Controller
 {
+    public function __construct(
+        private readonly FolderLockGuard $lockGuard,
+    ) {}
+
     /**
      * GET /search/files — smart search file milik user.
      *
@@ -65,6 +70,9 @@ class SearchController extends Controller
             if (! $folder) {
                 return $this->fail(__('Folder tidak ditemukan.'), 404);
             }
+            if ($blocked = $this->lockGuardResponse($request, $folder)) {
+                return $blocked;
+            }
             $folderResolved = ['id' => $folder->id, 'name' => $folder->name, 'path' => $folder->path];
             $folderIds = [$folder->id];
 
@@ -77,6 +85,9 @@ class SearchController extends Controller
                 ->first();
             if (! $folder) {
                 return $this->fail(__('Folder dengan path tersebut tidak ditemukan.'), 404);
+            }
+            if ($blocked = $this->lockGuardResponse($request, $folder)) {
+                return $blocked;
             }
             $folderResolved = ['id' => $folder->id, 'name' => $folder->name, 'path' => $folder->path];
             $folderIds = [$folder->id];
@@ -104,12 +115,23 @@ class SearchController extends Controller
             default => 'score DESC, created_at DESC',
         };
 
+        // Kecualikan file yang berada di subtree terkunci (belum di-unlock)
+        // dari hasil pencarian global — jangan bocorkan nama file terkunci.
+        $lockedFolderIds = $this->lockedFolderIds($userId);
+
         // Query builder — pakai pg_trgm + ILIKE baseline untuk recall
         $query = FileModel::query()
             ->where('user_id', $userId)
             ->where('upload_status', '!=', FileModel::STATUS_FAILED)
             ->select('files.*')
             ->selectRaw('similarity(lower(files.name), ?) AS score', [mb_strtolower($rawQuery)]);
+
+        if (! empty($lockedFolderIds)) {
+            $query->where(function ($q) use ($lockedFolderIds) {
+                $q->whereNull('files.folder_id')
+                    ->orWhereNotIn('files.folder_id', $lockedFolderIds);
+            });
+        }
 
         if ($folderIds !== null && empty($folderIds)) {
             // Folder ada tapi subtree kosong (recursive=1) — return empty tanpa hit DB
@@ -305,6 +327,14 @@ class SearchController extends Controller
             $query->whereIn('folder_id', $folderIds);
         }
 
+        $lockedFolderIds = $this->lockedFolderIds($userId);
+        if (! empty($lockedFolderIds) && $folderIds === null) {
+            $query->where(function ($q) use ($lockedFolderIds) {
+                $q->whereNull('folder_id')
+                    ->orWhereNotIn('folder_id', $lockedFolderIds);
+            });
+        }
+
         $rows = $query->whereRaw('similarity(lower(name), ?) > 0.2', [mb_strtolower($rawQuery)])
             ->orderByDesc('score')
             ->limit(3)
@@ -314,5 +344,52 @@ class SearchController extends Controller
             'name' => $r->name,
             'score' => round((float) $r->score, 4),
         ])->all();
+    }
+
+    /**
+     * Response 423 kalau folder terkunci & belum di-unlock.
+     */
+    private function lockGuardResponse(Request $request, ?Folder $folder): ?JsonResponse
+    {
+        $locked = $this->lockGuard->gateForFolder($folder, $request->user()->id);
+
+        if (! $locked) {
+            return null;
+        }
+
+        return $this->fail(
+            __('Folder terkunci. Masukkan kata sandi untuk membukanya.'),
+            423,
+            null,
+            [
+                'code' => FolderLockGuard::API_CODE,
+                'folder_id' => $locked->id,
+                'folder_name' => $locked->name,
+            ],
+        );
+    }
+
+    /**
+     * Kumpulkan id folder terkunci (belum di-unlock) beserta seluruh
+     * descendant-nya — untuk dikecualikan dari pencarian global.
+     *
+     * @return array<int, string>
+     */
+    private function lockedFolderIds(string $userId): array
+    {
+        $locked = Folder::where('user_id', $userId)
+            ->where('is_locked', true)
+            ->get();
+
+        $ids = [];
+        foreach ($locked as $folder) {
+            if ($this->lockGuard->unlocked($folder, $userId)) {
+                continue;
+            }
+
+            $ids = array_merge($ids, $this->descendantFolderIds($userId, (string) $folder->id));
+        }
+
+        return array_values(array_unique($ids));
     }
 }

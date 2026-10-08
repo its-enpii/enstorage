@@ -13,6 +13,7 @@ use App\Models\File as FileModel;
 use App\Models\Folder;
 use App\Models\ShareLink;
 use App\Services\ActivityLogService;
+use App\Services\FolderLockGuard;
 use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleDriveUploader;
@@ -25,6 +26,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -39,6 +41,7 @@ class FileController extends Controller
         private readonly ActivityLogService $activityLog,
         private readonly GoogleDriveUploader $uploader,
         private readonly WebhookService $webhooks,
+        private readonly FolderLockGuard $lockGuard,
     ) {}
 
     /**
@@ -56,7 +59,17 @@ class FileController extends Controller
         // want all files must explicitly pass `folder_id=` (or `null`).
         if ($request->has('folder_id')) {
             $fid = $request->query('folder_id');
-            $query->where('folder_id', $fid === 'null' || $fid === '' ? null : $fid);
+            $fid = $fid === 'null' || $fid === '' ? null : $fid;
+            if ($fid !== null) {
+                $folder = Folder::where('id', $fid)->where('user_id', $userId)->first();
+                if (! $folder) {
+                    return $this->fail(__('Folder tidak ditemukan.'), 404);
+                }
+                if ($blocked = $this->lockGuardResponse($request, $folder)) {
+                    return $blocked;
+                }
+            }
+            $query->where('folder_id', $fid);
         } else {
             $query->whereNull('folder_id');
         }
@@ -292,6 +305,10 @@ class FileController extends Controller
             return $this->fail(__('File tidak ditemukan.'), 404);
         }
 
+        if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
+            return $blocked;
+        }
+
         return $this->ok(new FileResource($file->load('thumbnail')), __('Detail file.'));
     }
 
@@ -303,6 +320,10 @@ class FileController extends Controller
         $file = $this->findOwned($request, $id);
         if (! $file) {
             return $this->fail(__('File tidak ditemukan.'), 404);
+        }
+
+        if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
+            return $blocked;
         }
 
         return $this->ok([
@@ -320,6 +341,10 @@ class FileController extends Controller
         $file = $this->findOwned($request, $id);
         if (! $file) {
             return $this->fail(__('File tidak ditemukan.'), 404);
+        }
+
+        if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
+            return $blocked;
         }
 
         // Read-after-write: file yang baru di-upload (S3 gateway atau
@@ -396,6 +421,11 @@ class FileController extends Controller
         if (! $file) {
             return $this->fail(__('File tidak ditemukan.'), 404);
         }
+
+        if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
+            return $blocked;
+        }
+
         $thumb = $file->thumbnail;
         if (! $thumb) {
             return $this->fail(__('Thumbnail belum tersedia.'), 404);
@@ -420,6 +450,10 @@ class FileController extends Controller
         $file = $this->findOwned($request, $id);
         if (! $file) {
             return $this->fail(__('File tidak ditemukan.'), 404);
+        }
+
+        if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
+            return $blocked;
         }
 
         $data = $request->validate([
@@ -486,6 +520,10 @@ class FileController extends Controller
             return $this->fail(__('File tidak ditemukan.'), 404);
         }
 
+        if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
+            return $blocked;
+        }
+
         $data = $request->validate([
             'folder_id' => ['nullable', 'uuid'],
         ]);
@@ -497,6 +535,13 @@ class FileController extends Controller
                 ->exists();
             if (! $folderExists) {
                 return $this->fail(__('Folder tujuan tidak ditemukan.'), 404);
+            }
+
+            $targetFolder = Folder::where('id', $newFolderId)
+                ->where('user_id', $file->user_id)
+                ->first();
+            if ($targetFolder && ($blocked = $this->lockGuardResponse($request, $targetFolder))) {
+                return $blocked;
             }
         }
 
@@ -637,6 +682,10 @@ class FileController extends Controller
             return $this->fail(__('File tidak ditemukan.'), 404);
         }
 
+        if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
+            return $blocked;
+        }
+
         // Capture channel-routing fields BEFORE deletion (the model is
         // detached from the DB after deleteOne).
         $clientKey = $file->client_key;
@@ -671,6 +720,10 @@ class FileController extends Controller
         $notFound = array_diff($data['ids'], $files->pluck('id')->toArray());
 
         foreach ($files as $file) {
+            if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
+                return $blocked;
+            }
+
             // Snapshot for broadcast before the row goes away.
             $clientKey = $file->client_key;
             $folderId = $file->folder_id;
@@ -835,9 +888,17 @@ class FileController extends Controller
         if ($link) {
             $subject = $link->shareable;
             if ($subject instanceof FileModel) {
+                if ($blocked = $this->publicLockResponse($request, $token, $this->lockGuard->gateForPublicFile($subject, $this->shareUnlockToken($request, $token)))) {
+                    return $blocked;
+                }
+
                 return $this->resolveFileResponse($request, $subject);
             }
             if ($subject instanceof Folder) {
+                if ($blocked = $this->publicLockResponse($request, $token, $this->lockGuard->gateForPublicFolder($subject, $this->shareUnlockToken($request, $token)))) {
+                    return $blocked;
+                }
+
                 return $this->respondSharedFolder($request, $subject);
             }
         }
@@ -845,18 +906,136 @@ class FileController extends Controller
         // 2) Legacy: file token first (most common).
         $file = FileModel::where('share_token', $token)->first();
         if ($file) {
+            if ($blocked = $this->publicLockResponse($request, $token, $this->lockGuard->gateForPublicFile($file, $this->shareUnlockToken($request, $token)))) {
+                return $blocked;
+            }
+
             return $this->resolveFileResponse($request, $file);
         }
 
         // 3) Legacy fallback: folder token → JSON read-only listing.
         $folder = Folder::where('share_token', $token)->first();
         if ($folder) {
+            if ($blocked = $this->publicLockResponse($request, $token, $this->lockGuard->gateForPublicFolder($folder, $this->shareUnlockToken($request, $token)))) {
+                return $blocked;
+            }
+
             return $this->respondSharedFolder($request, $folder);
         }
 
         return $this->fail(
             __('Link share tidak ditemukan, sudah kadaluarsa, atau sudah di-revoke.'),
             410,
+        );
+    }
+
+    /**
+     * POST /s/{token}/unlock — public. Buka kunci share folder terkunci
+     * dengan password; sukses → set cookie `share_unlock_<token>` (TTL 30 mnt).
+     */
+    public function unlockByToken(Request $request, string $token): JsonResponse
+    {
+        $folder = $this->sharedFolderForToken($token);
+
+        if (! $folder) {
+            return $this->fail(
+                __('Link share tidak ditemukan, sudah kadaluarsa, atau sudah di-revoke.'),
+                410,
+            );
+        }
+
+        $locked = $this->lockGuard->isGated($folder, (string) $folder->user_id);
+
+        if (! $locked || ! $locked->lock_password_hash) {
+            return $this->fail(__('Folder tidak terkunci.'), 409);
+        }
+
+        $data = $request->validate([
+            'password' => ['required', 'string'],
+        ]);
+
+        if (! Hash::check($data['password'], $locked->lock_password_hash)) {
+            return $this->fail(
+                __('Kata sandi salah.'),
+                422,
+                null,
+                ['code' => 'invalid_password'],
+            );
+        }
+
+        $unlockToken = bin2hex(random_bytes(32));
+        $this->lockGuard->storePublicUnlock($unlockToken, (string) $locked->id);
+
+        $cookie = cookie(
+            'share_unlock_'.$token,
+            $unlockToken,
+            FolderLockGuard::UNLOCK_TTL_MINUTES,
+            '/',
+            null,
+            true,   // Secure
+            true,   // HttpOnly
+            false,
+            'lax',  // SameSite=Lax
+        );
+
+        return $this->ok(
+            [
+                'is_locked' => false,
+                'expires_at' => now()->addMinutes(FolderLockGuard::UNLOCK_TTL_MINUTES)->toIso8601String(),
+            ],
+            __('Folder berhasil dibuka.'),
+        )->withCookie($cookie);
+    }
+
+    /**
+     * Resolve folder yang di-share lewat token (pivot share_links dulu,
+     * lalu legacy folders.share_token).
+     */
+    private function sharedFolderForToken(string $token): ?Folder
+    {
+        $link = ShareLink::resolveActive($token);
+        if ($link && $link->shareable instanceof Folder) {
+            return $link->shareable;
+        }
+
+        return Folder::where('share_token', $token)->first();
+    }
+
+    /**
+     * Baca token unlock publik dari cookie atau header X-Share-Unlock.
+     */
+    private function shareUnlockToken(Request $request, string $token): ?string
+    {
+        $header = $request->header('X-Share-Unlock');
+        if (is_string($header) && $header !== '') {
+            return $header;
+        }
+
+        $cookie = $request->cookie('share_unlock_'.$token);
+
+        return is_string($cookie) && $cookie !== '' ? $cookie : null;
+    }
+
+    /**
+     * Response 423 kalau folder terkunci & belum di-unlock (kontrak share).
+     */
+    private function publicLockResponse(Request $request, string $token, ?Folder $locked): ?JsonResponse
+    {
+        if (! $locked) {
+            return null;
+        }
+
+        return $this->fail(
+            __('Folder terkunci. Masukkan kata sandi untuk membukanya.'),
+            423,
+            null,
+            [
+                'code' => FolderLockGuard::API_CODE,
+                'folder_id' => $locked->id,
+                'folder_name' => $locked->name,
+                'requires_password' => true,
+                'unlock_endpoint' => "/api/v1/s/{$token}/unlock",
+            ],
         );
     }
 
@@ -1275,6 +1454,43 @@ class FileController extends Controller
         return FileModel::where('id', $id)
             ->where('user_id', $request->user()->id)
             ->first();
+    }
+
+    /**
+     * Guard kunci untuk folder (423 kalau terkunci & belum di-unlock).
+     */
+    private function lockGuardResponse(Request $request, ?Folder $folder): ?JsonResponse
+    {
+        $locked = $this->lockGuard->gateForFolder($folder, $request->user()->id);
+
+        return $locked ? $this->lockedResponse($locked) : null;
+    }
+
+    /**
+     * Guard kunci untuk file (berdasar rantai folder induk).
+     */
+    private function lockGuardResponseForFile(Request $request, ?FileModel $file): ?JsonResponse
+    {
+        $locked = $this->lockGuard->gateForFile($file, $request->user()->id);
+
+        return $locked ? $this->lockedResponse($locked) : null;
+    }
+
+    /**
+     * Bungkus response 423 envelope untuk folder terkunci.
+     */
+    private function lockedResponse(Folder $locked): JsonResponse
+    {
+        return $this->fail(
+            __('Folder terkunci. Masukkan kata sandi untuk membukanya.'),
+            423,
+            null,
+            [
+                'code' => FolderLockGuard::API_CODE,
+                'folder_id' => $locked->id,
+                'folder_name' => $locked->name,
+            ],
+        );
     }
 
     /**

@@ -87,7 +87,7 @@ const CONSUMER_ROUTES = [
   { method: 'POST', path: '/google-accounts/oauth/callback' },
   { method: 'GET', path: '/google-accounts/oauth/callback-web' },
 
-  // Files & Uploads (20)
+  // Files & Uploads (21)
   { method: 'POST', path: '/files/upload' },
   { method: 'POST', path: '/files/upload-from-url' },
   { method: 'POST', path: '/files/upload/init' },
@@ -108,8 +108,9 @@ const CONSUMER_ROUTES = [
   { method: 'DELETE', path: '/files/{id}/share' },
   { method: 'GET', path: '/s/{token}' },
   { method: 'GET', path: '/s/{token}/view' },
+  { method: 'POST', path: '/s/{token}/unlock' },
 
-  // Folders (10)
+  // Folders (14)
   { method: 'GET', path: '/folders' },
   { method: 'GET', path: '/folders/resolve' },
   { method: 'POST', path: '/folders' },
@@ -120,6 +121,10 @@ const CONSUMER_ROUTES = [
   { method: 'PUT', path: '/folders/{id}/move' },
   { method: 'POST', path: '/folders/{id}/share' },
   { method: 'DELETE', path: '/folders/{id}/share' },
+  { method: 'POST', path: '/folders/{id}/lock' },
+  { method: 'POST', path: '/folders/{id}/unlock' },
+  { method: 'PUT', path: '/folders/{id}/lock/password' },
+  { method: 'DELETE', path: '/folders/{id}/lock' },
 
   // Share Links (5)
   { method: 'GET', path: '/files/{id}/share-links' },
