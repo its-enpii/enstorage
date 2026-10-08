@@ -101,6 +101,12 @@ export type Folder = {
   folders_count?: number;
   total_size?: number;
   share_token?: string | null;
+  /**
+   * True when the folder is password-locked. Present from the backend
+   * `FolderResource`; consumers use it to render the lock badge and to
+   * decide which lock menu actions to offer.
+   */
+  is_locked?: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -246,6 +252,13 @@ export type Webhook = {
 };
 
 export class ApiError extends Error {
+  /**
+   * Envelope `meta` object carried from the error response body, if any.
+   * Lets callers branch on `meta.code` (e.g. `folder_locked` on HTTP 423,
+   * `invalid_password` on 422) without re-parsing `payload`.
+   */
+  public meta?: Record<string, unknown>;
+
   constructor(
     message: string,
     public status: number,
@@ -253,6 +266,11 @@ export class ApiError extends Error {
   ) {
     super(message);
     this.name = 'ApiError';
+
+    const body = payload as Envelope<unknown> | null | undefined;
+    if (body && typeof body === 'object' && body.meta && typeof body.meta === 'object') {
+      this.meta = body.meta as Record<string, unknown>;
+    }
   }
 }
 

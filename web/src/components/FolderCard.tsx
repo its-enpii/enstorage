@@ -2,7 +2,9 @@
 
 import clsx from 'clsx';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FolderIcon, FolderSpecialIcon, StarIcon } from '@/lib/icons';
+import { Chip } from '@/components/Chip';
 
 export type FolderCardProps = {
   name: string;
@@ -13,6 +15,8 @@ export type FolderCardProps = {
   itemsLabel?: string;
   totalSize?: ReactNode;
   isStarred?: boolean;
+  /** Renders a lock badge over the glyph when the folder is password-locked. */
+  isLocked?: boolean;
   selected?: boolean;
   isDropTarget?: boolean;
   onClick?: () => void;
@@ -35,6 +39,7 @@ export function FolderCard({
   itemsLabel,
   totalSize,
   isStarred,
+  isLocked,
   selected,
   isDropTarget,
   onClick,
@@ -43,6 +48,7 @@ export function FolderCard({
   className,
   'data-testid': dataTestId,
 }: FolderCardProps) {
+  const { t } = useTranslation();
   const hasMeta = itemCount !== undefined || totalSize != null;
 
   return (
@@ -75,6 +81,12 @@ export function FolderCard({
         )}
 
         <div className="shrink-0 flex items-center gap-1">
+          {isLocked && (
+            <Chip variant="warning" className="!py-1 gap-1">
+              <span className="material-symbols-outlined !text-sm">lock</span>
+              <span className="sr-only">{t('lock.badge')}</span>
+            </Chip>
+          )}
           {isStarred && (
             <span className="p-1 rounded-lg bg-secondary/10 border border-secondary/25 text-secondary flex items-center justify-center">
               <StarIcon className="!text-sm" />

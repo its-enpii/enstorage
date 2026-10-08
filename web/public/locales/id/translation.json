@@ -499,7 +499,17 @@
     "linkViewsUnlimited": "{{count}} tampilan",
     "linkRevoke": "Cabut",
     "linkCopied": "Tersalin",
-    "linkPermanent": "Permanen"
+    "linkPermanent": "Permanen",
+    "locked": {
+      "title": "Folder terkunci",
+      "desc": "Folder yang dibagikan ini dilindungi password. Masukkan password untuk melihat isinya.",
+      "descNamed": "Folder \"{{name}}\" dilindungi password. Masukkan password untuk melihat isinya.",
+      "passwordLabel": "Password",
+      "submit": "Buka",
+      "wrong": "Password salah.",
+      "passwordRequired": "Password wajib diisi.",
+      "error": "Gagal membuka folder. Coba lagi."
+    }
   },
   "preview": {
     "loadingPdf": "Memuat dokumen PDF...",
@@ -1860,6 +1870,51 @@
         "title": "Perbarui pengaturan notifikasi",
         "body": "Ubah preferensi notifikasi user."
       }
+    }
+  },
+  "lock": {
+    "set": {
+      "title": "Kunci folder",
+      "description": "Isi folder \"{{name}}\" akan disembunyikan. Masukkan password untuk membukanya.",
+      "submit": "Kunci folder"
+    },
+    "change": {
+      "title": "Ganti password",
+      "description": "Ganti password kunci untuk folder \"{{name}}\".",
+      "submit": "Simpan password"
+    },
+    "remove": {
+      "title": "Lepas kunci",
+      "description": "Hapus kunci dari folder \"{{name}}\".",
+      "warning": "Setelah kunci dilepas, semua isi folder bisa dibuka tanpa password sampai dikunci lagi.",
+      "submit": "Lepas kunci"
+    },
+    "fields": {
+      "password": "Password",
+      "confirmation": "Konfirmasi password",
+      "currentPassword": "Password lama"
+    },
+    "menu": {
+      "set": "Kunci folder",
+      "change": "Ganti password",
+      "remove": "Lepas kunci"
+    },
+    "unlock": {
+      "title": "\"{{name}}\" terkunci",
+      "description": "Masukkan password untuk membuka folder ini.",
+      "submit": "Buka folder",
+      "wrong": "Password salah.",
+      "passwordRequired": "Password wajib diisi."
+    },
+    "badge": "Terkunci",
+    "errors": {
+      "minLength": "Password minimal 6 karakter.",
+      "mismatch": "Konfirmasi password tidak cocok.",
+      "currentRequired": "Password lama wajib diisi.",
+      "passwordRequired": "Password wajib diisi.",
+      "invalidPassword": "Password salah.",
+      "alreadyLocked": "Folder ini sudah terkunci.",
+      "generic": "Terjadi kesalahan. Coba lagi."
     }
   }
 }

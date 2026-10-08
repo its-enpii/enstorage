@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { usePageTitle } from '@/lib/usePageTitle';
 import { FileViewer } from '@/components/FileViewer';
-import { IconButton, IconLink, LinkButton, TextAction } from '@/components/Button';
+import { Button, IconButton, IconLink, LinkButton, TextAction } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { Alert } from '@/components/Alert';
+import { Input, Field } from '@/components/Input';
 import { Spinner } from '@/components/Spinner';
 import { EmptyState } from '@/components/EmptyState';
 import type { FileItem } from '@/lib/api';
@@ -60,6 +62,9 @@ type FileListing = {
 type ListingState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
+  // HTTP 423 `folder_locked`: the share link is valid but the folder needs
+  // its password before the listing (and any child) is served.
+  | { status: 'locked'; folderName: string | null; message: string | null }
   | { status: 'ready'; listing: FolderListing | FileListing };
 
 export type ShareClientMode = 'landing' | 'viewer';
@@ -72,6 +77,8 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
   const [state, setState] = useState<ListingState>({ status: 'loading' });
   const [isNavigating, setIsNavigating] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
+  // Bumped after a successful unlock to re-run the listing fetch.
+  const [reloadKey, setReloadKey] = useState(0);
 
   usePageTitle(
     mode === 'viewer'
@@ -80,9 +87,11 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
         ? state.listing.folder.name
         : state.status === 'error'
           ? t('share.sharedNotFound')
-          : state.status === 'ready'
-            ? t('share.sharedFile')
-            : t('common.loadingLabel'),
+          : state.status === 'locked'
+            ? t('share.locked.title')
+            : state.status === 'ready'
+              ? t('share.sharedFile')
+              : t('common.loadingLabel'),
   );
 
   const viewUrl = `${API_BASE}/s/${token}`;
@@ -100,8 +109,33 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
         const fetchUrl = currentFolderId
           ? `${infoUrl}&folder_id=${encodeURIComponent(currentFolderId)}`
           : infoUrl;
-        const res = await fetch(fetchUrl, { headers: { Accept: 'application/json' } });
+        const res = await fetch(fetchUrl, {
+          headers: { Accept: 'application/json' },
+          credentials: 'include',
+        });
         const ct = res.headers.get('content-type') ?? '';
+
+        // Locked folder: the share link is valid but the listing must not be
+        // shown until the visitor enters the folder password. The backend
+        // replies 423 with meta.code=folder_locked.
+        if (res.status === 423) {
+          let envMessage: string | undefined;
+          let folderName: string | null = null;
+          try {
+            const env = await res.json();
+            envMessage = env?.message;
+            if (env?.meta?.folder_name) folderName = env.meta.folder_name as string;
+          } catch {
+            // ignore non-JSON bodies
+          }
+          setState({
+            status: 'locked',
+            folderName,
+            message: envMessage ?? null,
+          });
+          setIsNavigating(false);
+          return;
+        }
 
         if (res.ok && ct.includes('application/json')) {
           const env = await res.json();
@@ -199,7 +233,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
     return () => {
       cancelled = true;
     };
-  }, [token, infoUrl, currentFolderId, mode, t]);
+  }, [token, infoUrl, currentFolderId, mode, t, reloadKey]);
 
   if (state.status === 'loading') {
     return (
@@ -209,6 +243,19 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
           <span>{t('share.sharedLoading')}</span>
         </div>
       </div>
+    );
+  }
+
+  if (state.status === 'locked') {
+    return (
+      <ShareUnlockPanel
+        token={token}
+        folderName={state.folderName}
+        onUnlocked={() => {
+          setState({ status: 'loading' });
+          setReloadKey((k) => k + 1);
+        }}
+      />
     );
   }
 
@@ -437,6 +484,114 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
           />
         )}
 
+        <p className="mt-6 text-xs text-outline text-center">{t('share.sharedVia')}</p>
+      </Card>
+    </div>
+  );
+}
+
+/**
+ * Inline password prompt shown on the public share page when the backend
+ * answers the listing with HTTP 423 `folder_locked`. Submits to
+ * `POST /s/{token}/unlock` with `credentials: 'include'` so the issued
+ * HttpOnly cookie rides along on the next listing/stream/thumbnail fetch.
+ * On success the caller reloads the listing; on failure the wrong-password
+ * message is surfaced in place without leaving the page.
+ */
+function ShareUnlockPanel({
+  token,
+  folderName,
+  onUnlocked,
+}: {
+  token: string;
+  folderName: string | null;
+  onUnlocked: () => void;
+}) {
+  const { t } = useTranslation();
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = useCallback(async () => {
+    if (!password) {
+      setError(t('share.locked.passwordRequired'));
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/s/${token}/unlock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ password }),
+      });
+      if (res.ok) {
+        setPassword('');
+        onUnlocked();
+        return;
+      }
+      let message: string | undefined;
+      try {
+        const env = await res.json();
+        message = env?.message;
+      } catch {
+        // ignore non-JSON bodies
+      }
+      setError(
+        res.status === 422
+          ? t('share.locked.wrong')
+          : message ?? t('share.locked.error'),
+      );
+    } catch {
+      setError(t('share.locked.error'));
+    } finally {
+      setSubmitting(false);
+    }
+  }, [password, token, onUnlocked, t]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-sm !p-8">
+        <div className="w-16 h-16 rounded-2xl bg-secondary-container/30 flex items-center justify-center mx-auto mb-4">
+          <span className="material-symbols-outlined !text-4xl text-secondary">lock</span>
+        </div>
+        <h1 className="font-display text-lg font-semibold text-on-surface text-center mb-2">
+          {t('share.locked.title')}
+        </h1>
+        <p className="text-metadata text-outline text-center mb-6">
+          {folderName
+            ? t('share.locked.descNamed', { name: folderName })
+            : t('share.locked.desc')}
+        </p>
+        <Field label={t('share.locked.passwordLabel')} htmlFor="share-unlock-password">
+          <Input
+            id="share-unlock-password"
+            type="password"
+            autoComplete="current-password"
+            autoFocus
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void submit();
+            }}
+            disabled={submitting}
+          />
+        </Field>
+        {error && (
+          <Alert tone="danger" className="mt-4">
+            {error}
+          </Alert>
+        )}
+        <Button
+          variant="primary"
+          size="md"
+          className="w-full mt-4"
+          loading={submitting}
+          onClick={() => void submit()}
+        >
+          {t('share.locked.submit')}
+        </Button>
         <p className="mt-6 text-xs text-outline text-center">{t('share.sharedVia')}</p>
       </Card>
     </div>
