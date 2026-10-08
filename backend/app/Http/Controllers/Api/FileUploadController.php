@@ -7,6 +7,7 @@ use App\Jobs\UploadFileJob;
 use App\Models\File as FileModel;
 use App\Models\Folder;
 use App\Models\ShareLink;
+use App\Services\FolderLockGuard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -19,6 +20,10 @@ class FileUploadController extends Controller
     private const MAX_FILES = 10;
 
     private const MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
+
+    public function __construct(
+        private readonly FolderLockGuard $lockGuard,
+    ) {}
 
     /**
      * POST /files/upload
@@ -44,9 +49,12 @@ class FileUploadController extends Controller
         // Validasi folder_id (jika ada)
         $folderId = $request->input('folder_id');
         if ($folderId) {
-            $folderExists = Folder::where('id', $folderId)->where('user_id', $userId)->exists();
-            if (! $folderExists) {
+            $folder = Folder::where('id', $folderId)->where('user_id', $userId)->first();
+            if (! $folder) {
                 throw ValidationException::withMessages(['folder_id' => __('Folder tidak ditemukan.')]);
+            }
+            if ($locked = $this->lockGuard->gateForFolder($folder, $userId)) {
+                return $this->lockGuardFail($locked);
             }
         }
 
@@ -284,9 +292,12 @@ class FileUploadController extends Controller
 
         $folderId = $request->input('folder_id');
         if ($folderId) {
-            $folderExists = Folder::where('id', $folderId)->where('user_id', $userId)->exists();
-            if (! $folderExists) {
+            $folder = Folder::where('id', $folderId)->where('user_id', $userId)->first();
+            if (! $folder) {
                 throw ValidationException::withMessages(['folder_id' => __('Folder tidak ditemukan.')]);
+            }
+            if ($locked = $this->lockGuard->gateForFolder($folder, $userId)) {
+                return $this->lockGuardFail($locked);
             }
         }
 
@@ -562,8 +573,12 @@ class FileUploadController extends Controller
 
         $folderId = $request->input('folder_id');
         if ($folderId) {
-            if (! Folder::where('id', $folderId)->where('user_id', $userId)->exists()) {
+            $folder = Folder::where('id', $folderId)->where('user_id', $userId)->first();
+            if (! $folder) {
                 throw ValidationException::withMessages(['folder_id' => __('Folder tidak ditemukan.')]);
+            }
+            if ($locked = $this->lockGuard->gateForFolder($folder, $userId)) {
+                return $this->lockGuardFail($locked);
             }
         }
 
@@ -954,5 +969,22 @@ class FileUploadController extends Controller
         }
 
         return ! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
+    }
+
+    /**
+     * Response 423 envelope untuk folder terkunci (upload flow).
+     */
+    private function lockGuardFail(Folder $locked): JsonResponse
+    {
+        return $this->fail(
+            __('Folder terkunci. Masukkan kata sandi untuk membukanya.'),
+            423,
+            null,
+            [
+                'code' => FolderLockGuard::API_CODE,
+                'folder_id' => $locked->id,
+                'folder_name' => $locked->name,
+            ],
+        );
     }
 }

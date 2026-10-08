@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['user_id', 'parent_id', 'name', 'path', 'gdrive_folder_id', 'is_starred', 'share_token'])]
+#[Fillable(['user_id', 'parent_id', 'name', 'path', 'gdrive_folder_id', 'is_starred', 'share_token', 'is_locked', 'lock_password_hash'])]
 class Folder extends Model
 {
     use HasUuids;
@@ -16,6 +16,16 @@ class Folder extends Model
     protected $keyType = 'string';
 
     public $incrementing = false;
+
+    protected $hidden = ['lock_password_hash'];
+
+    protected function casts(): array
+    {
+        return [
+            'is_starred' => 'boolean',
+            'is_locked' => 'boolean',
+        ];
+    }
 
     public function user(): BelongsTo
     {

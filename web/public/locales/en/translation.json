@@ -1188,7 +1188,12 @@
       "headObject": "Fetch object metadata without downloading the body.",
       "getObject": "Stream an object body.",
       "putObject": "Upload or replace an object (binary).",
-      "deleteObject": "Delete an object."
+      "deleteObject": "Delete an object.",
+      "lockFolder": "Lock a folder with a password.",
+      "unlockFolder": "Temporarily unlock a folder (30 minutes).",
+      "updateFolderLockPassword": "Change the folder lock password.",
+      "destroyFolderLock": "Remove the folder lock (password required).",
+      "publicShareUnlock": "Unlock a shared folder link with a password."
     },
     "envelope": {
       "eyebrow": "Contract",
@@ -1388,7 +1393,11 @@
         "resetVaultNote": "Permanently destructive: every file and folder is emptied and cannot be recovered. Sanctum sessions only, never an API key.",
         "resolveRootNote": "An empty path or `/` returns `folder: null` with an empty breadcrumb (root directory).",
         "s3Note": "The S3 gateway does not use the JSON envelope. Responses use standard S3 status codes and headers, or an S3 XML error (`AccessDenied`, `NoSuchKey`) on failure.",
-        "s3AuthNote": "Authentication accepts AWS Signature V4, an `X-API-Key: en_...` header, `Authorization: Bearer en_...`, or the `?api_key=en_...` query."
+        "s3AuthNote": "Authentication accepts AWS Signature V4, an `X-API-Key: en_...` header, `Authorization: Bearer en_...`, or the `?api_key=en_...` query.",
+        "folderLockNote": "A locked folder is fully private: its subtree cannot be read (not even by the owner) without unlocking. The folder name still shows in listings with `is_locked: true`.",
+        "folderUnlockNote": "Unlock is temporary (30-minute server-side TTL). There is no \"forgot password\" — removing the lock and changing the password both require the password.",
+        "folderLockPasswordNote": "Changing the password invalidates all previous temporary unlocks on this folder.",
+        "shareUnlockNote": "POST the password to the unlock endpoint; the server replies with an HttpOnly `share_unlock_<token>` cookie that `GET /s/{token}` reuses. The `X-Share-Unlock` header is also accepted."
       },
       "items": {
         "bulkDelete": {
@@ -1706,6 +1715,26 @@
         "deleteObject": {
           "title": "Delete object",
           "body": "Delete an object. Idempotent: a missing key still returns `204`."
+        },
+        "lockFolder": {
+          "title": "Lock folder",
+          "body": "Set a password on a folder."
+        },
+        "unlockFolder": {
+          "title": "Unlock folder",
+          "body": "Temporarily unlock for 30 minutes."
+        },
+        "updateFolderLockPassword": {
+          "title": "Change lock password",
+          "body": "Change the folder lock password."
+        },
+        "destroyFolderLock": {
+          "title": "Remove folder lock",
+          "body": "Delete the lock and its password."
+        },
+        "publicShareUnlock": {
+          "title": "Unlock shared folder",
+          "body": "Unlock a shared folder with a password."
         }
       }
     },
@@ -1787,7 +1816,11 @@
       "resolvePathQuery": "Folder path hierarchy, e.g. `/Documents/Private` or `Backup/2026`.",
       "s3Bucket": "Bucket name (e.g. `public`, `archive`). `public` is readable without authentication.",
       "s3Path": "Object key relative to the bucket, e.g. `reports/q3.pdf`.",
-      "s3ContentType": "Object MIME type; defaults to `application/octet-stream`."
+      "s3ContentType": "Object MIME type; defaults to `application/octet-stream`.",
+      "lockPassword": "Folder lock password, at least 6 characters.",
+      "passwordConfirmation": "Repeat the lock password (must match).",
+      "currentPassword": "The current folder lock password.",
+      "newPassword": "The new folder lock password, at least 6 characters."
     },
     "filter": {
       "all": "All",

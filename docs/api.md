@@ -671,6 +671,7 @@ List folder. Default: root folder (parent_id = null). Query: `parent_id`, `searc
       "id": "uuid",
       "name": "Foto Liburan",
       "is_starred": false,
+      "is_locked": false,
       "share_token": null,
       "path": "/Foto Liburan",
       "parent_id": null,
@@ -836,6 +837,117 @@ Generate share token (kalau belum ada). Idempotent. Selalu create `share_links` 
 #### `DELETE /folders/{id}/share` — Scope: `delete`
 
 Hapus share token legacy dan semua pivot rows untuk folder ini.
+
+---
+
+#### `POST /folders/{id}/lock` — Scope: `write`
+
+Kunci folder dengan password. Folder yang terkunci menjadi privat: owner pun
+tidak dapat membaca isi subtree (subfolder + file) tanpa membuka kuncinya.
+Nama folder + ringkasan isi tetap tampil di list (dengan `is_locked: true`).
+
+**Body:**
+
+```json
+{ "password": "rahasia123", "password_confirmation": "rahasia123" }
+```
+
+`password`: string, minimal 6 karakter. `password_confirmation`: wajib sama.
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": { "is_locked": true },
+  "message": "Folder berhasil dikunci.",
+  "meta": {}
+}
+```
+
+**Errors:** 404 (folder tidak ditemukan) · 409 (folder sudah terkunci) ·
+422 (password < 6 karakter / konfirmasi tidak cocok).
+
+---
+
+#### `POST /folders/{id}/unlock` — Scope: `write`
+
+Buka kunci folder secara **sementara** (TTL 30 menit, server-side). Setiap
+folder terkunci pada rantai nenek moyang wajib dibuka sendiri.
+
+**Body:**
+
+```json
+{ "password": "rahasia123" }
+```
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": { "is_locked": false, "expires_at": "2026-10-08T12:30:00+00:00" },
+  "message": "Folder berhasil dibuka sementara.",
+  "meta": {}
+}
+```
+
+`expires_at`: ISO8601, waktu kedaluwarsa unlock (TTL 30 menit).
+
+**Errors:** 404 · 409 (folder tidak terkunci) · 422 (`invalid_password`).
+
+---
+
+#### `PUT /folders/{id}/lock/password` — Scope: `write`
+
+Ganti password kunci folder. Wajib menyertakan password saat ini.
+
+**Body:**
+
+```json
+{ "current_password": "rahasia123", "new_password": "rahasia456" }
+```
+
+`new_password`: string, minimal 6 karakter.
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": null,
+  "message": "Kata sandi folder berhasil diganti.",
+  "meta": {}
+}
+```
+
+**Errors:** 404 · 409 (folder tidak terkunci) · 422 (`invalid_password` /
+`new_password` < 6 karakter).
+
+---
+
+#### `DELETE /folders/{id}/lock` — Scope: `delete`
+
+Lepas kunci folder (butuh password). Kunci turunan (kalau ada) tetap berlaku.
+
+**Body:**
+
+```json
+{ "password": "rahasia123" }
+```
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": { "is_locked": false },
+  "message": "Kunci folder berhasil dilepas.",
+  "meta": {}
+}
+```
+
+**Errors:** 404 · 409 (folder tidak terkunci) · 422 (`invalid_password`).
 
 ---
 
@@ -1870,12 +1982,44 @@ Resolution order: share_links pivot dulu, fallback ke legacy `share_token` di fi
 **Errors:**
 - 404 ("Link share tidak ditemukan atau tidak valid.")
 - 410 ("Link share tidak ditemukan, sudah kadaluarsa, atau sudah di-revoke.") — untuk token pivot yang expired/revoked/over-quota
+- 423 (`folder_locked`) — folder terkunci & belum di-unlock lewat `POST /s/{token}/unlock`
 
 ---
 
 #### `GET /s/{token}/view`
 
 Redirect ke FE preview page (`{frontend_url}/s/{token}/view`). FE handle rendering UI preview.
+
+---
+
+#### `POST /s/{token}/unlock`
+
+**No auth.** Buka kunci share link folder yang menunjuk subtree terkunci.
+Sukses → response + cookie `share_unlock_<token>` (`HttpOnly; SameSite=Lax;
+Secure; Max-Age=1800`). Cookie/header ini (atau `X-Share-Unlock: <token-cookie>`)
+dipakai `GET /s/{token}` untuk membuka listing.
+
+**Body:**
+
+```json
+{ "password": "rahasia123" }
+```
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": { "is_locked": false, "expires_at": "2026-10-08T12:30:00+00:00" },
+  "message": "Folder berhasil dibuka.",
+  "meta": {}
+}
+```
+
+**Errors:** 409 (folder tidak terkunci) · 410 (token tidak valid / kadaluarsa /
+revoked) · 422 (`invalid_password`).
+
+Token share tidak valid → 410 (sama dengan `GET /s/{token}`).
 
 ---
 

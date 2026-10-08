@@ -38,6 +38,7 @@ Route::get('docs/openapi.yaml', [DocsController::class, 'spec']);
 // Public share link (tanpa auth)
 Route::get('s/{token}', [FileController::class, 'viewByToken']);
 Route::get('s/{token}/view', [FileController::class, 'view']);
+Route::post('s/{token}/unlock', [FileController::class, 'unlockByToken']);
 
 // S3-Compatible Gateway (drop-in replacement untuk S3 SDK / Laravel
 // `s3` driver). Autentikasi dilakukan di controller (AWS SigV4, X-API-Key,
@@ -163,6 +164,10 @@ Route::middleware('auth.apikey')->group(function () {
     Route::delete('folders/{id}', [FolderController::class, 'destroy']);
     Route::post('folders/{id}/share', [FolderController::class, 'share']);
     Route::delete('folders/{id}/share', [FolderController::class, 'unshare']);
+    Route::post('folders/{id}/lock', [FolderController::class, 'lock']);
+    Route::post('folders/{id}/unlock', [FolderController::class, 'unlock']);
+    Route::put('folders/{id}/lock/password', [FolderController::class, 'updateLockPassword']);
+    Route::delete('folders/{id}/lock', [FolderController::class, 'destroyLock']);
 
     // Share links untuk folder.
     Route::get('folders/{id}/share-links', [ShareLinkController::class, 'indexForFolder']);

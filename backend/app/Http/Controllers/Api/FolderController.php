@@ -19,6 +19,7 @@ use App\Models\GoogleAccount;
 use App\Models\ShareLink;
 use App\Services\ActivityLogService;
 use App\Services\Folder\FolderPathService;
+use App\Services\FolderLockGuard;
 use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleDriveUploader;
@@ -30,6 +31,7 @@ use Google\Service\Drive\DriveFile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -44,6 +46,7 @@ class FolderController extends Controller
         private readonly WebhookService $webhooks,
         private readonly GoogleDriveUploader $uploader,
         private readonly GoogleDriveFolderService $folders,
+        private readonly FolderLockGuard $lockGuard,
     ) {}
 
     /**
@@ -93,6 +96,10 @@ class FolderController extends Controller
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
             return $this->fail(__('Folder tidak ditemukan.'), 404);
+        }
+
+        if ($blocked = $this->lockGuardResponse($request, $folder)) {
+            return $blocked;
         }
 
         $subfoldersQ = Folder::where('parent_id', $folder->id)
@@ -164,6 +171,10 @@ class FolderController extends Controller
             return $this->fail(__('Folder tidak ditemukan.'), 404);
         }
 
+        if ($blocked = $this->lockGuardResponse($request, $folder)) {
+            return $blocked;
+        }
+
         return $this->ok([
             'folder' => new FolderResource($folder),
             'breadcrumb' => $this->breadcrumb($folder),
@@ -196,6 +207,10 @@ class FolderController extends Controller
                 ->first();
             if (! $parent) {
                 return $this->fail(__('Parent folder tidak ditemukan.'), 404);
+            }
+
+            if ($blocked = $this->lockGuardResponse($request, $parent)) {
+                return $blocked;
             }
         }
 
@@ -242,6 +257,10 @@ class FolderController extends Controller
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
             return $this->fail(__('Folder tidak ditemukan.'), 404);
+        }
+
+        if ($blocked = $this->lockGuardResponse($request, $folder)) {
+            return $blocked;
         }
 
         $data = $request->validate([
@@ -335,6 +354,10 @@ class FolderController extends Controller
             return $this->fail(__('Folder tidak ditemukan.'), 404);
         }
 
+        if ($blocked = $this->lockGuardResponse($request, $folder)) {
+            return $blocked;
+        }
+
         $data = $request->validate([
             'parent_id' => ['nullable', 'string', 'uuid'],
         ]);
@@ -349,11 +372,15 @@ class FolderController extends Controller
 
         // Validasi: parent baru harus milik user
         if ($newParentId) {
-            $parentOwned = Folder::where('id', $newParentId)
+            $newParent = Folder::where('id', $newParentId)
                 ->where('user_id', $folder->user_id)
-                ->exists();
-            if (! $parentOwned) {
+                ->first();
+            if (! $newParent) {
                 return $this->fail(__('Parent folder tujuan tidak ditemukan.'), 404);
+            }
+
+            if ($blocked = $this->lockGuardResponse($request, $newParent)) {
+                return $blocked;
             }
 
             // Cegah move ke dirinya sendiri atau descendant (cycle)
@@ -558,6 +585,10 @@ class FolderController extends Controller
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
             return $this->fail(__('Folder tidak ditemukan.'), 404);
+        }
+
+        if ($blocked = $this->lockGuardResponse($request, $folder)) {
+            return $blocked;
         }
 
         $userId = $folder->user_id;
@@ -783,6 +814,10 @@ class FolderController extends Controller
             return $this->fail(__('Folder tidak ditemukan.'), 404);
         }
 
+        if ($blocked = $this->lockGuardResponse($request, $folder)) {
+            return $blocked;
+        }
+
         $files = File::where('folder_id', $folder->id)
             ->where('user_id', $folder->user_id)
             ->where('upload_status', File::STATUS_DONE)
@@ -953,5 +988,180 @@ class FolderController extends Controller
         }
 
         return false;
+    }
+
+    // =========================================================================
+    // Kunci folder (folder lock)
+    // =========================================================================
+
+    /**
+     * Bungkus response 423 untuk folder terkunci.
+     */
+    private function lockedResponse(Folder $locked): JsonResponse
+    {
+        return $this->fail(
+            __('Folder terkunci. Masukkan kata sandi untuk membukanya.'),
+            423,
+            null,
+            [
+                'code' => FolderLockGuard::API_CODE,
+                'folder_id' => $locked->id,
+                'folder_name' => $locked->name,
+            ],
+        );
+    }
+
+    /**
+     * Guard: tolak (423) kalau folder terkunci dan belum di-unlock.
+     * Return JsonResponse kalau ditolak, null kalau boleh lanjut.
+     */
+    private function lockGuardResponse(Request $request, ?Folder $folder): ?JsonResponse
+    {
+        $locked = $this->lockGuard->gateForFolder($folder, $request->user()->id);
+
+        return $locked ? $this->lockedResponse($locked) : null;
+    }
+
+    /**
+     * POST /folders/{id}/lock — kunci folder dengan password.
+     */
+    public function lock(Request $request, string $id): JsonResponse
+    {
+        $folder = $this->findOwned($request, $id);
+        if (! $folder) {
+            return $this->fail(__('Folder tidak ditemukan.'), 404);
+        }
+
+        // Kunci folder sendiri selalu boleh (tidak dijaga).
+        if ((bool) $folder->is_locked) {
+            return $this->fail(__('Folder sudah terkunci.'), 409);
+        }
+
+        $data = $request->validate([
+            'password' => ['required', 'string', 'min:6'],
+            'password_confirmation' => ['required', 'same:password'],
+        ], [
+            'password.min' => __('Kata sandi minimal 6 karakter.'),
+            'password_confirmation.same' => __('Konfirmasi kata sandi tidak cocok.'),
+        ]);
+
+        $folder->is_locked = true;
+        $folder->lock_password_hash = Hash::make($data['password']);
+        $folder->save();
+
+        return $this->ok(['is_locked' => true], __('Folder berhasil dikunci.'));
+    }
+
+    /**
+     * POST /folders/{id}/unlock — buka kunci sementara (TTL 30 menit).
+     */
+    public function unlock(Request $request, string $id): JsonResponse
+    {
+        $folder = $this->findOwned($request, $id);
+        if (! $folder) {
+            return $this->fail(__('Folder tidak ditemukan.'), 404);
+        }
+
+        if (! (bool) $folder->is_locked) {
+            return $this->fail(__('Folder tidak terkunci.'), 409);
+        }
+
+        $data = $request->validate([
+            'password' => ['required', 'string'],
+        ]);
+
+        if (! $folder->lock_password_hash || ! Hash::check($data['password'], $folder->lock_password_hash)) {
+            return $this->fail(
+                __('Kata sandi salah.'),
+                422,
+                null,
+                ['code' => 'invalid_password'],
+            );
+        }
+
+        $this->lockGuard->markUnlocked($folder, $request->user()->id);
+
+        $expiresAt = now()->addMinutes(FolderLockGuard::UNLOCK_TTL_MINUTES)->toIso8601String();
+
+        return $this->ok([
+            'is_locked' => false,
+            'expires_at' => $expiresAt,
+        ], __('Folder berhasil dibuka sementara.'));
+    }
+
+    /**
+     * PUT /folders/{id}/lock/password — ganti password kunci.
+     * Body: {current_password, new_password}.
+     */
+    public function updateLockPassword(Request $request, string $id): JsonResponse
+    {
+        $folder = $this->findOwned($request, $id);
+        if (! $folder) {
+            return $this->fail(__('Folder tidak ditemukan.'), 404);
+        }
+
+        if (! (bool) $folder->is_locked) {
+            return $this->fail(__('Folder tidak terkunci.'), 409);
+        }
+
+        $data = $request->validate([
+            'current_password' => ['required', 'string'],
+            'new_password' => ['required', 'string', 'min:6'],
+        ], [
+            'new_password.min' => __('Kata sandi minimal 6 karakter.'),
+        ]);
+
+        if (! $folder->lock_password_hash || ! Hash::check($data['current_password'], $folder->lock_password_hash)) {
+            return $this->fail(
+                __('Kata sandi saat ini salah.'),
+                422,
+                null,
+                ['code' => 'invalid_password'],
+            );
+        }
+
+        $folder->lock_password_hash = Hash::make($data['new_password']);
+        $folder->save();
+
+        // Password berubah → semua unlock sementara lama tidak valid lagi.
+        $this->lockGuard->forgetUnlocked($folder, $request->user()->id);
+
+        return $this->ok(null, __('Kata sandi folder berhasil diganti.'));
+    }
+
+    /**
+     * DELETE /folders/{id}/lock — lepas kunci (butuh password).
+     */
+    public function destroyLock(Request $request, string $id): JsonResponse
+    {
+        $folder = $this->findOwned($request, $id);
+        if (! $folder) {
+            return $this->fail(__('Folder tidak ditemukan.'), 404);
+        }
+
+        if (! (bool) $folder->is_locked) {
+            return $this->fail(__('Folder tidak terkunci.'), 409);
+        }
+
+        $data = $request->validate([
+            'password' => ['required', 'string'],
+        ]);
+
+        if (! $folder->lock_password_hash || ! Hash::check($data['password'], $folder->lock_password_hash)) {
+            return $this->fail(
+                __('Kata sandi salah.'),
+                422,
+                null,
+                ['code' => 'invalid_password'],
+            );
+        }
+
+        $folder->is_locked = false;
+        $folder->lock_password_hash = null;
+        $folder->save();
+
+        $this->lockGuard->forgetUnlocked($folder, $request->user()->id);
+
+        return $this->ok(['is_locked' => false], __('Kunci folder berhasil dilepas.'));
     }
 }

@@ -11,6 +11,7 @@ use App\Models\ShareLink;
 use App\Models\User;
 use App\Services\ApiKey\ApiKeyService;
 use App\Services\Folder\FolderPathService;
+use App\Services\FolderLockGuard;
 use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
@@ -50,6 +51,7 @@ class S3GatewayController extends Controller
     public function __construct(
         private readonly ApiKeyService $apiKeys,
         private readonly FolderPathService $folderPaths,
+        private readonly FolderLockGuard $lockGuard,
     ) {}
 
     /**
@@ -102,6 +104,10 @@ class S3GatewayController extends Controller
             bucket: $bucket,
             directory: $dirPath,
         );
+
+        if ($locked = $this->lockGuard->gateForFolder($targetFolder, (string) $user->id)) {
+            return $this->xmlError(403, 'AccessDenied', 'Access Denied');
+        }
 
         $this->streamBodyToTemp($request, $fileId, $md5, $sha256, $size);
 
@@ -251,6 +257,10 @@ class S3GatewayController extends Controller
             return $this->xmlError(404, 'NoSuchKey', 'The specified key does not exist.');
         }
 
+        if ($this->fileInLockedFolder($file)) {
+            return $this->xmlError(403, 'AccessDenied', 'Access Denied');
+        }
+
         // Read-after-write: kalau file belum selesai di-upload (masih
         // pending/uploading) tapi temp masih ada di disk, stream dari
         // temp supaya client yang baru saja PUT tidak menerima 404.
@@ -331,6 +341,10 @@ class S3GatewayController extends Controller
         }
 
         if ($file) {
+            if ($this->fileInLockedFolder($file)) {
+                return $this->xmlError(403, 'AccessDenied', 'Access Denied');
+            }
+
             return response('', 200, $this->metadataHeaders($file));
         }
 
@@ -1224,6 +1238,27 @@ class S3GatewayController extends Controller
     private function requestId(): string
     {
         return strtoupper(bin2hex(random_bytes(8)));
+    }
+
+    /**
+     * Apakah file berada di dalam subtree folder terkunci (belum di-unlock)?
+     * Dipakai guard baca S3 (get/head) — sesuai kontrak S3, error 403 XML.
+     */
+    private function fileInLockedFolder(FileModel $file): bool
+    {
+        if (! $file->folder_id) {
+            return false;
+        }
+
+        $folder = $file->relationLoaded('folder')
+            ? $file->folder
+            : Folder::find($file->folder_id);
+
+        if (! $folder) {
+            return false;
+        }
+
+        return $this->lockGuard->gateForFolder($folder, (string) $file->user_id) !== null;
     }
 
     private function xmlError(int $status, string $code, string $message): Response

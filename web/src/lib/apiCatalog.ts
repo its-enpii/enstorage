@@ -93,6 +93,10 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
       { method: 'DELETE', path: '/folders/{id}/share', scope: 'delete', key: 'unshareFolder' },
       { method: 'GET', path: '/folders/{id}/share-links', scope: 'read', key: 'listFolderShareLinks' },
       { method: 'POST', path: '/folders/{id}/share-links', scope: 'write', key: 'createFolderShareLink' },
+      { method: 'POST', path: '/folders/{id}/lock', scope: 'write', key: 'lockFolder' },
+      { method: 'POST', path: '/folders/{id}/unlock', scope: 'write', key: 'unlockFolder' },
+      { method: 'PUT', path: '/folders/{id}/lock/password', scope: 'write', key: 'updateFolderLockPassword' },
+      { method: 'DELETE', path: '/folders/{id}/lock', scope: 'delete', key: 'destroyFolderLock' },
     ],
   },
   {
@@ -128,6 +132,7 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
       { method: 'DELETE', path: '/share-links/{id}', scope: 'write', key: 'revokeShareLink' },
       { method: 'GET', path: '/s/{token}', scope: 'public', key: 'publicShare' },
       { method: 'GET', path: '/s/{token}/view', scope: 'public', key: 'publicShareView' },
+      { method: 'POST', path: '/s/{token}/unlock', scope: 'public', key: 'publicShareUnlock' },
     ],
   },
   {
@@ -436,6 +441,7 @@ const FOLDER_RESOURCE_SAMPLE = `{
   "id": "4d0cbe31-0a58-4c6f-9d2b-7f1e5a3c8b64",
   "name": "Laporan",
   "is_starred": false,
+  "is_locked": false,
   "share_token": null,
   "path": "Laporan/2026",
   "parent_id": "7a1f5e29-8c40-4d17-b0a6-2e9d5f3c7a18",
@@ -1609,6 +1615,136 @@ Content-Disposition: attachment; filename="Laporan-2026.zip"
     },
     errors: ['403', '404'],
   },
+  {
+    id: 'folders-lock',
+    group: 'folders',
+    method: 'POST',
+    path: '/folders/{folderId}/lock',
+    scope: 'write',
+    key: 'lockFolder',
+    call: {
+      method: 'POST',
+      path: '/folders/{folderId}/lock',
+      body: { password: 'rahasia123', password_confirmation: 'rahasia123' },
+      expect: '200 OK',
+      notes: [
+        'Kunci folder dengan password. Owner pun tidak bisa membaca isi subtree',
+        '(subfolder + file) tanpa membuka kuncinya lebih dulu.',
+      ],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    pathRows: [{ name: 'folderId', type: 'uuid', required: true, key: 'folderId' }],
+    bodyRows: [
+      { name: 'password', type: 'string', required: true, key: 'lockPassword' },
+      { name: 'password_confirmation', type: 'string', required: true, key: 'passwordConfirmation' },
+    ],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": { "is_locked": true },
+  "message": "Folder berhasil dikunci.",
+  "meta": {}
+}`,
+    },
+    errors: ['404', '409', '422'],
+    noteKey: 'folderLockNote',
+  },
+  {
+    id: 'folders-unlock',
+    group: 'folders',
+    method: 'POST',
+    path: '/folders/{folderId}/unlock',
+    scope: 'write',
+    key: 'unlockFolder',
+    call: {
+      method: 'POST',
+      path: '/folders/{folderId}/unlock',
+      body: { password: 'rahasia123' },
+      expect: '200 OK',
+      notes: [
+        'Buka kunci sementara (TTL 30 menit, server-side). Setiap folder terkunci',
+        'pada rantai nenek moyang harus dibuka sendiri.',
+      ],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    pathRows: [{ name: 'folderId', type: 'uuid', required: true, key: 'folderId' }],
+    bodyRows: [{ name: 'password', type: 'string', required: true, key: 'lockPassword' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": { "is_locked": false, "expires_at": "2026-10-08T12:30:00+00:00" },
+  "message": "Folder berhasil dibuka sementara.",
+  "meta": {}
+}`,
+    },
+    errors: ['404', '409', '422'],
+    noteKey: 'folderUnlockNote',
+  },
+  {
+    id: 'folders-lock-password',
+    group: 'folders',
+    method: 'PUT',
+    path: '/folders/{folderId}/lock/password',
+    scope: 'write',
+    key: 'updateFolderLockPassword',
+    call: {
+      method: 'PUT',
+      path: '/folders/{folderId}/lock/password',
+      body: { current_password: 'rahasia123', new_password: 'rahasia456' },
+      expect: '200 OK',
+      notes: ['Ganti password kunci folder. Wajib menyertakan password saat ini.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    pathRows: [{ name: 'folderId', type: 'uuid', required: true, key: 'folderId' }],
+    bodyRows: [
+      { name: 'current_password', type: 'string', required: true, key: 'currentPassword' },
+      { name: 'new_password', type: 'string', required: true, key: 'newPassword' },
+    ],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": null,
+  "message": "Kata sandi folder berhasil diganti.",
+  "meta": {}
+}`,
+    },
+    errors: ['404', '409', '422'],
+    noteKey: 'folderLockPasswordNote',
+  },
+  {
+    id: 'folders-lock-delete',
+    group: 'folders',
+    method: 'DELETE',
+    path: '/folders/{folderId}/lock',
+    scope: 'delete',
+    key: 'destroyFolderLock',
+    call: {
+      method: 'DELETE',
+      path: '/folders/{folderId}/lock',
+      body: { password: 'rahasia123' },
+      expect: '200 OK',
+      notes: [
+        'Lepas kunci folder (butuh password). Kunci turunan (kalau ada) tetap berlaku.',
+      ],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    pathRows: [{ name: 'folderId', type: 'uuid', required: true, key: 'folderId' }],
+    bodyRows: [{ name: 'password', type: 'string', required: true, key: 'lockPassword' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": { "is_locked": false },
+  "message": "Kunci folder berhasil dilepas.",
+  "meta": {}
+}`,
+    },
+    errors: ['404', '409', '422'],
+    noteKey: 'folderUnlockNote',
+  },
 
   /* -------------------------- storage & quota ---------------------------- */
   {
@@ -2436,6 +2572,44 @@ Location: https://vault.example.com/s/3f9a1c7e5b2d48af90c6e1d7a3b5c8f0
 # The web viewer then calls GET /s/{token}?info=1 and streams the bytes.`,
     },
     errors: ['404'],
+  },
+  {
+    id: 'share-unlock',
+    group: 'share',
+    method: 'POST',
+    path: '/s/{token}/unlock',
+    scope: 'public',
+    key: 'publicShareUnlock',
+    call: {
+      method: 'POST',
+      path: '/s/{token}/unlock',
+      public: true,
+      body: { password: 'rahasia123' },
+      expect: '200 OK',
+      notes: [
+        'Public share link folder terkunci: kirim password untuk membuka listing.',
+        'Sukses → set cookie HttpOnly `share_unlock_<token>` (Max-Age 1800) yang',
+        'dipakai ulang oleh GET /s/{token}.',
+      ],
+    },
+    pathRows: [{ name: 'token', type: 'string (32 hex)', required: true, key: 'shareToken' }],
+    bodyRows: [{ name: 'password', type: 'string', required: true, key: 'lockPassword' }],
+    response: {
+      status: '200',
+      lang: 'http',
+      code: `HTTP/1.1 200 OK
+Content-Type: application/json
+Set-Cookie: share_unlock_3f9a1c7e5b2d48af90c6e1d7a3b5c8f0=<random64>; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=1800
+
+{
+  "success": true,
+  "data": { "is_locked": false, "expires_at": "2026-10-08T12:30:00+00:00" },
+  "message": "Folder berhasil dibuka.",
+  "meta": {}
+}`,
+    },
+    errors: ['409', '410', '422'],
+    noteKey: 'shareUnlockNote',
   },
 
   /* --------------------------- search & starred --------------------------- */
