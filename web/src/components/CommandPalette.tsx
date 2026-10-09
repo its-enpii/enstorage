@@ -310,7 +310,7 @@ export function CommandPalette({ open, onClose }: Props) {
           ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('search.placeholderAlt')}
+          placeholder={t('search.placeholderAltMobile')}
           aria-label={t('search.placeholder')}
           wrapperClassName="flex-1 min-w-0"
           className="!text-base"

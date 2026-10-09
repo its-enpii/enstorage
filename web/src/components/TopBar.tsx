@@ -74,7 +74,14 @@ export function TopBar({
             leftIcon={<SearchIcon className="!text-xl shrink-0" />}
             className="hidden sm:inline-flex w-full !justify-start !font-normal !bg-surface-container/70 border border-outline-variant/25 hover:!bg-surface-container hover:border-primary/40 text-outline transition-all shadow-sm"
           >
-            <span className="truncate">{searchPlaceholder ?? t('search.placeholder')}</span>
+            <span className="truncate">
+              {searchPlaceholder ?? (
+                <>
+                  <span className="hidden sm:inline">{t('search.placeholder')}</span>
+                  <span className="sm:hidden">{t('search.placeholderShort')}</span>
+                </>
+              )}
+            </span>
           </Button>
         </div>
 

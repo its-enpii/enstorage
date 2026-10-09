@@ -36,7 +36,9 @@
     "noResultsDesc": "Coba kata kunci lain untuk \"{{query}}\".",
     "folders": "Folder ({{count}})",
     "files": "File ({{count}})",
-    "typeToSearch": "Ketik untuk mencari file atau folder."
+    "typeToSearch": "Ketik untuk mencari file atau folder.",
+    "placeholderShort": "Cari file…",
+    "placeholderAltMobile": "Cari file…"
   },
   "files": {
     "title": "File Saya",
