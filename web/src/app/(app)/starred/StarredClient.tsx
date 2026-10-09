@@ -200,7 +200,7 @@ function StarredContent() {
           <span className={`${IconSymbol} !text-3xl fill text-secondary shrink-0`}>star</span>
           <span className="truncate">{t('starred.title')}</span>
         </h1>
-        <Tabs className="max-w-full overflow-x-auto [&_button]:min-h-11"
+        <Tabs className="max-w-full overflow-x-auto ml-auto [&_button]:min-h-11"
           tabs={[
             { value: 'all', label: t('files.tabs.all') },
             { value: 'folders', label: t('files.tabs.folders') },

@@ -1445,7 +1445,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             ]}
           />
         </h1>
-        <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+        <div className="flex flex-wrap items-center gap-3 justify-between sm:justify-end">
           {folderId && (
             <Button
               variant="tonal"
@@ -1466,7 +1466,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             size="toolbar"
             onClick={openFilter}
             aria-label={filterActive ? t('files.filter.activeBadge') : t('files.filter.button')}
-            className="relative min-h-11"
+            className="relative min-h-11 ml-auto sm:ml-0"
             leftIcon={<Tune className="!text-lg" />}
           >
             <span>{t('files.filter.button')}</span>
