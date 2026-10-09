@@ -261,7 +261,7 @@ function AccountsContent() {
 
   return (
     <>
-      <nav className="flex items-center gap-2 mb-6 mt-2 text-sm text-outline">
+      <nav className="flex items-center gap-2 mb-6 text-sm text-outline">
         <span>{t('nav.home')}</span>
       </nav>
 
