@@ -110,7 +110,7 @@ function ProfileContent() {
 
   return (
     <>
-      <nav className="flex items-center gap-2 mb-6 mt-2 text-metadata text-outline">
+      <nav className="flex items-center gap-2 mb-6 text-metadata text-outline">
         <span>{t('nav.home')}</span>
         <span>/</span>
         <span className="text-on-surface">{t('nav.profile')}</span>
