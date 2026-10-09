@@ -195,12 +195,12 @@ function StarredContent() {
 
   return (
     <>
-      <div className="flex items-end justify-between mb-8">
-        <h1 className="font-display text-3xl font-semibold text-on-surface flex items-center gap-2">
-          <span className={`${IconSymbol} !text-3xl fill text-secondary`}>star</span>
-          {t('starred.title')}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-6">
+        <h1 className="font-display text-3xl font-semibold text-on-surface flex items-center gap-2 min-w-0">
+          <span className={`${IconSymbol} !text-3xl fill text-secondary shrink-0`}>star</span>
+          <span className="truncate">{t('starred.title')}</span>
         </h1>
-        <Tabs
+        <Tabs className="max-w-full overflow-x-auto [&_button]:min-h-11"
           tabs={[
             { value: 'all', label: t('files.tabs.all') },
             { value: 'folders', label: t('files.tabs.folders') },

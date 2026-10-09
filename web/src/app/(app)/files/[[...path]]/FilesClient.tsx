@@ -1431,8 +1431,8 @@ function FilesContent({ currentPath }: { currentPath: string }) {
 
   return (
     <>
-      <div className="flex items-end justify-between mb-8">
-        <h1 className="font-display text-3xl font-semibold">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-6">
+        <h1 className="font-display text-3xl font-semibold min-w-0">
           <Breadcrumb
             size="lg"
             items={[
@@ -1445,11 +1445,12 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             ]}
           />
         </h1>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 sm:justify-end">
           {folderId && (
             <Button
               variant="tonal"
               size="toolbar"
+              className="min-h-11"
               onClick={() => void downloadFolder(folderId)}
               aria-label={t('folders.downloadFolder')}
               leftIcon={<span className="material-symbols-outlined !text-lg">folder_zip</span>}
@@ -1465,7 +1466,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             size="toolbar"
             onClick={openFilter}
             aria-label={filterActive ? t('files.filter.activeBadge') : t('files.filter.button')}
-            className="relative"
+            className="relative min-h-11"
             leftIcon={<Tune className="!text-lg" />}
           >
             <span>{t('files.filter.button')}</span>
