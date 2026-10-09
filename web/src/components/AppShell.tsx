@@ -64,7 +64,7 @@ export function AppShell({
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_100%_70%_at_50%_-10%,rgba(198,192,255,0.12),transparent)]" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(198,192,255,0.035)_1px,transparent_1px)] [background-size:24px_24px]" />
-          <div className="absolute left-1/2 top-[-6rem] h-[28rem] w-[50rem] -translate-x-1/2 rounded-full bg-primary/8 blur-3xl" />
+          <div className="absolute left-1/2 top-[-6rem] h-[28rem] w-full max-w-[50rem] sm:w-[50rem] -translate-x-1/2 rounded-full bg-primary/8 blur-3xl" />
         </div>
         <TopBar
           search={search}

@@ -36,7 +36,9 @@
     "noResultsDesc": "Try different keywords for \"{{query}}\".",
     "folders": "Folders ({{count}})",
     "files": "Files ({{count}})",
-    "typeToSearch": "Type to search files or folders."
+    "typeToSearch": "Type to search files or folders.",
+    "placeholderShort": "Search files…",
+    "placeholderAltMobile": "Search files…"
   },
   "files": {
     "title": "My Files",

@@ -95,7 +95,7 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
           aria-label={t('upload.newFolder')}
           size="xl"
           shape="circle"
-          className="sm:hidden !w-14 !h-14 bg-primary text-on-primary shadow-ambient hover:bg-primary/90 hover:text-on-primary transition-transform hover:scale-105 active:scale-95"
+          className="sm:hidden !w-14 !h-14 bg-secondary text-on-secondary shadow-ambient hover:bg-secondary/90 hover:text-on-secondary transition-transform hover:scale-105 active:scale-95"
         >
           <Add className="!text-2xl" />
         </IconButton>
