@@ -137,7 +137,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
               <Icon
                 className={clsx(
                   'text-2xl transition-colors',
-                  active ? 'text-primary fill' : 'text-outline group-hover:text-primary',
+                  active ? 'text-primary fill' : 'text-on-surface-variant/75 group-hover:text-primary',
                 )}
               />
               {active && (

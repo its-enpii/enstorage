@@ -24,9 +24,9 @@ export const BUTTON_BASE =
 
 export const buttonVariantClass: Record<ButtonVariant, string> = {
   primary:
-    'bg-primary-container text-on-primary-container hover:bg-primary-container/80 active:bg-primary-container/70',
+    'bg-primary text-on-primary hover:bg-primary/90 active:bg-primary/80',
   secondary:
-    'border border-outline-variant/20 text-on-surface hover:bg-surface-container active:bg-surface-container-high',
+    'border border-outline-variant/40 text-on-surface hover:border-outline-variant/60 hover:bg-surface-container active:bg-surface-container-high',
   tonal:
     'bg-surface-container text-on-surface hover:bg-surface-container-high active:bg-surface-container-highest',
   ghost:
@@ -34,7 +34,7 @@ export const buttonVariantClass: Record<ButtonVariant, string> = {
   danger:
     'bg-error-container text-on-error-container hover:bg-error-container/80',
   'danger-soft':
-    'bg-error-container/15 text-error hover:bg-error-container/30',
+    'bg-error-container/25 text-error border border-error/30 hover:bg-error-container/40',
   link: 'text-primary underline-offset-2 hover:underline',
 };
 

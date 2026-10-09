@@ -110,12 +110,12 @@ export function FileCard({
       data-testid={dataTestId}
       onClick={onClick}
       className={clsx(
-        'rounded-card bg-surface/90 hover:bg-surface-container/80 border border-outline-variant/25 hover:border-primary/40 backdrop-blur-sm p-3 transition-all duration-200 shadow-md shadow-black/20 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-0.5 group cursor-pointer relative flex flex-col justify-between shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]',
+        'rounded-card bg-surface/90 hover:bg-surface-container/80 border border-outline-variant/40 hover:border-primary/50 backdrop-blur-sm p-3 transition-all duration-200 shadow-md shadow-black/20 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-0.5 group cursor-pointer relative flex flex-col justify-between shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]',
         selected && '!border-primary ring-2 ring-primary/40 bg-primary/5 shadow-selected-glow',
         className,
       )}
     >
-      <div className="w-full aspect-[16/10] rounded-xl overflow-hidden bg-surface-container-lowest/80 border border-outline-variant/15 relative flex items-center justify-center group-hover:border-primary/30 transition-colors">
+      <div className="w-full aspect-[16/10] rounded-xl overflow-hidden bg-surface-container-lowest/80 border border-outline-variant/30 relative flex items-center justify-center group-hover:border-primary/30 transition-colors">
         <div className="absolute inset-0 bg-gradient-to-b from-surface-container/60 to-surface-container-lowest/90" />
 
         {thumbnailUrl ? (
@@ -140,7 +140,7 @@ export function FileCard({
         )}
 
         {extension && (
-          <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold tracking-wider uppercase bg-background/85 text-outline border border-outline-variant/30 backdrop-blur-md shadow-sm pointer-events-none">
+          <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold tracking-wider uppercase bg-background/85 text-on-surface-variant border border-outline-variant/40 backdrop-blur-md shadow-sm pointer-events-none">
             {extension}
           </span>
         )}
@@ -174,10 +174,10 @@ export function FileCard({
         >
           {name}
         </span>
-        <div className="flex items-center justify-between gap-2 text-metadata text-outline">
+        <div className="flex items-center justify-between gap-2 text-metadata text-on-surface-variant">
           {size != null && <span className="tabular-nums truncate">{size}</span>}
           {!isDone && uploadStatusLabel && (
-            <span className="shrink-0 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium bg-surface-container-high text-outline border border-outline-variant/20">
+            <span className="shrink-0 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium bg-surface-container-high text-on-surface-variant border border-outline-variant/30">
               <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
               {uploadStatusLabel}
             </span>

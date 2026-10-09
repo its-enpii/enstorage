@@ -23,9 +23,9 @@ export function Card({
     <Tag
       onClick={onClick}
       className={clsx(
-        'bg-surface border border-outline-variant/25 p-inner-padding rounded-card shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] shadow-lg shadow-black/25 transition-all duration-200',
+        'bg-surface border border-outline-variant/40 p-inner-padding rounded-card shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] shadow-lg shadow-black/25 transition-all duration-200',
         onClick && 'cursor-pointer',
-        hover && 'hover-lift hover:border-primary/40 hover:shadow-xl hover:shadow-primary/10',
+        hover && 'hover-lift hover:border-primary/50 hover:shadow-xl hover:shadow-primary/10',
         selected && 'shadow-selected-glow !border-primary/60',
         className,
       )}
@@ -69,5 +69,5 @@ export function CardTitle({ children }: { children: ReactNode }) {
 }
 
 export function CardSubtitle({ children }: { children: ReactNode }) {
-  return <p className="text-metadata text-outline">{children}</p>;
+  return <p className="text-metadata text-on-surface-variant">{children}</p>;
 }
