@@ -1508,7 +1508,7 @@ Generate share link baru dengan opsi expiry & max_views. Berbeda dari `POST /fil
     "id": "uuid",
     "token": "abc123...",
     "url": "https://enstorage.test/s/abc123...",
-    "preview_url": "https://enstorage.test/s/abc123.../view",
+    "preview_url": "https://enstorage.test/s/abc123...?view=1",
     "expires_at": "2026-07-10T12:00:00Z",
     "max_views": 10,
     "views_count": 0,
@@ -1988,7 +1988,12 @@ Resolution order: share_links pivot dulu, fallback ke legacy `share_token` di fi
 
 #### `GET /s/{token}/view`
 
-Redirect ke FE preview page (`{frontend_url}/s/{token}/view`). FE handle rendering UI preview.
+Redirect ke FE human preview page (`{frontend_url}/s/{token}?view=1`), 302. FE
+merender UI viewer imersif (media fullscreen + kontrol back/download).
+
+Catatan: path `/view` di sisi FE (Next.js) adalah raw-bytes stream — di-rewrite
+server-side ke `GET /s/{token}` untuk bot / link preview yang butuh byte file
+asli. Halaman HTML preview memakai query `?view=1`, bukan path `/view`.
 
 ---
 

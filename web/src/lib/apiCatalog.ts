@@ -2276,7 +2276,7 @@ Content-Disposition: attachment; filename="Laporan-2026.zip"
       "id": "b2f7d914-3c6a-4f0d-8e51-6a2d9c7b4f10",
       "token": "3f9a1c7e5b2d48af90c6e1d7a3b5c8f0",
       "url": "https://vault.example.com/s/3f9a1c7e5b2d48af90c6e1d7a3b5c8f0",
-      "preview_url": "https://vault.example.com/s/3f9a1c7e5b2d48af90c6e1d7a3b5c8f0/view",
+      "preview_url": "https://vault.example.com/s/3f9a1c7e5b2d48af90c6e1d7a3b5c8f0?view=1",
       "expires_at": "2026-12-31T00:00:00+00:00",
       "max_views": 25,
       "views_count": 7,

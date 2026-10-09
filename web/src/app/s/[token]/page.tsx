@@ -26,5 +26,10 @@ export default async function Page({ params, searchParams }: PageProps) {
     redirect(`${API_BASE}/s/${token}?download=1`);
   }
 
-  return <ShareClient mode="landing" />;
+  // `?view=1` renders the immersive human viewer (fullscreen media + back /
+  // download controls). The raw-bytes path stays at `/s/:token/view`, which
+  // Next.js rewrites straight to the backend stream for bots / link previews.
+  const mode = search.view === '1' ? 'viewer' : 'landing';
+
+  return <ShareClient mode={mode} />;
 }

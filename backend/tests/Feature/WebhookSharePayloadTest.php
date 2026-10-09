@@ -137,10 +137,10 @@ class WebhookSharePayloadTest extends TestCase
         $this->assertSame('https://enstorage.test/s/abc123', $url);
     }
 
-    public function test_share_url_helper_with_preview_flag_appends_view_segment(): void
+    public function test_share_url_helper_with_preview_flag_appends_view_query(): void
     {
         $url = WebhookService::shareUrlFor('abc123', true);
-        $this->assertSame('https://enstorage.test/s/abc123/view', $url);
+        $this->assertSame('https://enstorage.test/s/abc123?view=1', $url);
     }
 
     public function test_file_share_payload_includes_share_preview_url(): void
@@ -154,7 +154,7 @@ class WebhookSharePayloadTest extends TestCase
         $this->postJson("/api/v1/files/{$file->id}/share")->assertOk();
 
         Bus::assertDispatched(FireWebhookJob::class, function (FireWebhookJob $job) {
-            return ($job->payload['share_preview_url'] ?? null) === 'https://enstorage.test/s/'.$job->payload['share_token'].'/view';
+            return ($job->payload['share_preview_url'] ?? null) === 'https://enstorage.test/s/'.$job->payload['share_token'].'?view=1';
         });
     }
 
@@ -169,7 +169,7 @@ class WebhookSharePayloadTest extends TestCase
         $this->postJson("/api/v1/folders/{$folder->id}/share")->assertOk();
 
         Bus::assertDispatched(FireWebhookJob::class, function (FireWebhookJob $job) {
-            return ($job->payload['share_preview_url'] ?? null) === 'https://enstorage.test/s/'.$job->payload['share_token'].'/view';
+            return ($job->payload['share_preview_url'] ?? null) === 'https://enstorage.test/s/'.$job->payload['share_token'].'?view=1';
         });
     }
 
@@ -181,7 +181,7 @@ class WebhookSharePayloadTest extends TestCase
         $file->save();
 
         $response = $this->get('/api/v1/s/preview-tok-1/view');
-        $response->assertRedirect('https://enstorage.test/s/preview-tok-1/view');
+        $response->assertRedirect('https://enstorage.test/s/preview-tok-1?view=1');
     }
 
     public function test_view_route_redirects_to_fe_preview_url_for_folder(): void
@@ -192,7 +192,7 @@ class WebhookSharePayloadTest extends TestCase
         $folder->save();
 
         $response = $this->get('/api/v1/s/preview-tok-2/view');
-        $response->assertRedirect('https://enstorage.test/s/preview-tok-2/view');
+        $response->assertRedirect('https://enstorage.test/s/preview-tok-2?view=1');
     }
 
     public function test_view_route_404_for_unknown_token(): void

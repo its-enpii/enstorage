@@ -9,13 +9,15 @@ class WebhookService
 {
     /**
      * Bangun URL shareable publik untuk sebuah token.
-     * Set $preview = true untuk URL halaman preview (path /view).
+     * Set $preview = true untuk URL halaman preview manusia (`?view=1`),
+     * yang dirender oleh frontend. Path `/view` kini khusus raw bytes
+     * (rewrite ke backend untuk bot / link preview), bukan halaman HTML.
      */
     public static function shareUrlFor(string $token, bool $preview = false): string
     {
         $base = rtrim((string) config('app.frontend_url', ''), '/').'/s/'.$token;
 
-        return $preview ? $base.'/view' : $base;
+        return $preview ? $base.'?view=1' : $base;
     }
 
     /**
