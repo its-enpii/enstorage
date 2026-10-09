@@ -56,7 +56,7 @@ export function FolderCard({
       data-testid={dataTestId}
       onClick={onClick}
       className={clsx(
-        'rounded-card bg-surface/90 hover:bg-surface-container/80 border border-outline-variant/25 hover:border-primary/40 backdrop-blur-sm p-4 transition-all duration-200 shadow-md shadow-black/20 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-0.5 group cursor-pointer relative shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] flex flex-col justify-between gap-3',
+        'rounded-card bg-surface/90 hover:bg-surface-container/80 border border-outline-variant/40 hover:border-primary/50 backdrop-blur-sm p-4 transition-all duration-200 shadow-md shadow-black/20 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-0.5 group cursor-pointer relative shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] flex flex-col justify-between gap-3',
         selected && '!border-primary ring-2 ring-primary/40 bg-primary/5 shadow-selected-glow',
         isDropTarget && 'ring-2 ring-primary bg-primary/10 scale-[1.02]',
         className,
@@ -112,9 +112,9 @@ export function FolderCard({
       </div>
 
       {hasMeta && (
-        <div className="border-t border-outline-variant/15 pt-2.5 flex items-center justify-between gap-2 text-metadata text-outline">
+        <div className="border-t border-outline-variant/25 pt-2.5 flex items-center justify-between gap-2 text-metadata text-on-surface-variant">
           {itemCount !== undefined && (
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-container-highest/60 text-xs font-medium text-outline border border-outline-variant/15 truncate">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-container-highest/60 text-xs font-medium text-on-surface-variant border border-outline-variant/25 truncate">
               <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
               <span className="truncate">
                 {itemCount} {itemsLabel}

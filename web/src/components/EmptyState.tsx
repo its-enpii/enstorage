@@ -28,18 +28,18 @@ export function EmptyState({
       className={clsx(
         'col-span-full flex flex-col items-center justify-center gap-3 text-center p-inner-padding',
         variant === 'dashed'
-          ? 'border-2 border-dashed border-outline-variant/20 rounded-card hover:border-primary/40 transition-colors'
-          : 'bg-surface-container/50 border border-outline-variant/10 rounded-2xl',
+          ? 'border-2 border-dashed border-outline-variant/50 rounded-card hover:border-primary/60 hover:bg-primary/5 transition-colors'
+          : 'bg-surface-container/50 border border-outline-variant/40 rounded-2xl',
         className,
       )}
     >
       {icon && (
-        <div className="w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center text-outline">
+        <div className="w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center text-on-surface-variant">
           {icon}
         </div>
       )}
       <p className="text-sm text-on-surface">{title}</p>
-      {description && <p className="text-metadata text-outline max-w-sm">{description}</p>}
+      {description && <p className="text-metadata text-on-surface-variant max-w-sm">{description}</p>}
       {action && <div className="pt-1">{action}</div>}
     </div>
   );

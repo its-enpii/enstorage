@@ -4,8 +4,8 @@ import type { ReactNode } from 'react';
 type Variant = 'primary' | 'default' | 'success' | 'warning' | 'danger';
 
 const variantClass: Record<Variant, string> = {
-  primary: 'bg-surface-container text-primary',
-  default: 'bg-surface-container text-on-surface-variant',
+  primary: 'bg-surface-container-high text-primary',
+  default: 'bg-surface-container-high text-on-surface',
   success: 'bg-primary-container/30 text-primary',
   warning: 'bg-secondary-container/20 text-secondary',
   danger: 'bg-error-container/30 text-error',

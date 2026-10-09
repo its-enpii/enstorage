@@ -8,7 +8,7 @@ const toneClass: Record<Tone, string> = {
   danger: 'bg-error-container/30 border-error/30 text-error',
   warning: 'bg-secondary-container/20 border-secondary/30 text-secondary',
   success: 'bg-primary-container/30 border-primary/30 text-primary',
-  info: 'bg-surface-container border-outline-variant/20 text-on-surface-variant',
+  info: 'bg-surface-container border-outline-variant/40 text-on-surface-variant',
 };
 
 const toneIcon: Record<Tone, ReactNode> = {

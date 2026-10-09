@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import { KeyboardArrowDown } from '@mui/icons-material';
 
 const FIELD_CLASSES =
-  'block w-full h-12 rounded-xl bg-background px-4 border-none text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary/20 focus:outline-none transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed';
+  'block w-full h-12 rounded-xl border border-outline-variant/40 bg-surface-container-lowest/80 px-4 text-on-surface placeholder:text-outline focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed';
 
 const BARE_FIELD_CLASSES =
   'block w-full bg-transparent text-on-surface placeholder:text-outline focus:outline-none';
@@ -60,7 +60,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
     <textarea
       ref={ref}
       className={clsx(
-        'block w-full min-h-24 rounded-xl bg-background p-4 border-none text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary/20 focus:outline-none transition-all text-sm resize-y',
+        'block w-full min-h-24 rounded-xl border border-outline-variant/40 bg-surface-container-lowest/80 p-4 text-on-surface placeholder:text-outline focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition-all text-sm resize-y',
         invalid && 'ring-2 ring-error',
         className,
       )}
@@ -79,7 +79,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
       <select
         ref={ref}
         className={clsx(
-          'block w-full h-12 rounded-xl bg-background px-4 pr-12 border-none text-on-surface focus:ring-2 focus:ring-primary/20 focus:outline-none transition-all text-sm appearance-none cursor-pointer disabled:opacity-50',
+          'block w-full h-12 rounded-xl border border-outline-variant/40 bg-surface-container-lowest/80 px-4 pr-12 text-on-surface focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition-all text-sm appearance-none cursor-pointer disabled:opacity-50',
           invalid && 'ring-2 ring-error',
           className,
         )}

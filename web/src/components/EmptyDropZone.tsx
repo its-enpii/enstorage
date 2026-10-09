@@ -43,13 +43,13 @@ export function EmptyDropZone({
         'cursor-pointer border-2 border-dashed rounded-card p-6 sm:p-inner-padding min-h-[240px] sm:min-h-[320px] flex flex-col items-center justify-center gap-4 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
         over
           ? 'border-primary/60 bg-primary/5'
-          : 'border-outline-variant/20 hover:border-primary/40 hover:bg-primary/5',
+          : 'border-outline-variant/50 hover:border-primary/60 hover:bg-primary/5',
       )}
     >
-      <div className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-outline">
+      <div className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant">
         <CloudUpload />
       </div>
-      <span className="text-sm sm:text-base text-outline text-center px-2">{hint}</span>
+      <span className="text-sm sm:text-base text-on-surface-variant text-center px-2">{hint}</span>
       <FileInput ref={pickerRef} multiple={multiple} onSelect={onDrop} />
     </div>
   );
