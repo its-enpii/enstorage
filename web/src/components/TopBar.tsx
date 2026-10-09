@@ -41,7 +41,7 @@ export function TopBar({
 
   return (
     <>
-      <header className="h-16 sm:h-20 px-4 sm:px-container-padding flex items-center gap-3 sm:gap-4 z-40 shrink-0 border-b border-outline-variant/20 backdrop-blur-xl bg-background/60">
+      <header className="sticky top-0 z-40 shrink-0 h-14 sm:h-20 px-4 sm:px-container-padding flex items-center gap-3 sm:gap-4 border-b border-outline-variant/20 backdrop-blur-xl bg-background/60">
         {/* Hamburger — mobile only, opens sidebar drawer */}
         <IconButton
           type="button"
@@ -54,7 +54,7 @@ export function TopBar({
         </IconButton>
 
         {/* Search — mobile: icon button, desktop: faux field that opens the palette */}
-        <div className="flex-1 max-w-2xl mx-auto">
+        <div className="flex-1 min-w-0 max-w-2xl mx-auto">
           {/* Mobile icon */}
           <IconButton
             type="button"

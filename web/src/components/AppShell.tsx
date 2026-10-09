@@ -73,7 +73,9 @@ export function AppShell({
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
         />
-        <div className="relative z-10 flex-1 overflow-y-auto px-container-p pb-32">{children}</div>
+        <div className="relative z-10 flex-1 min-w-0 overflow-y-auto overflow-x-hidden px-4 sm:px-container-p pb-24 sm:pb-32">
+          {children}
+        </div>
       </main>
     </div>
   );

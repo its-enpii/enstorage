@@ -476,6 +476,7 @@
     "sharedEmpty": "This folder is empty.",
     "viewInline": "View inline",
     "viewerBackLabel": "Back to share page",
+    "breadcrumbLabel": "Breadcrumb navigation",
     "sharedLoading": "Loading…",
     "sharedNotFound": "Link not found",
     "sharedError": "This share link is invalid, expired, or already revoked.",

@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { usePageTitle } from '@/lib/usePageTitle';
 import { FileViewer } from '@/components/FileViewer';
-import { Button, IconButton, IconLink, LinkButton, TextAction } from '@/components/Button';
+import { Button, IconButton, LinkButton, TextAction } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { triggerDirectDownload } from '@/lib/download';
 import { Alert } from '@/components/Alert';
 import { Input, Field } from '@/components/Input';
 import { Spinner } from '@/components/Spinner';
@@ -278,6 +279,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
   if (state.listing.kind === 'file') {
     return (
       <FilePreview
+        token={token}
         listing={state.listing}
         downloadUrl={downloadUrl}
         streamUrl={viewUrl}
@@ -318,6 +320,19 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
       <Card as="main" className="max-w-2xl mx-auto !p-6 sm:!p-8">
         {/* Header Folder Info */}
         <div className="flex items-center gap-3 mb-4">
+          {isInsideSubfolder && (
+            <IconButton
+              bare
+              shape="circle"
+              size="xl"
+              onClick={() => setCurrentFolderId(null)}
+              className="shrink-0 -ml-1.5"
+              title={root_folder?.name ?? t('share.folderTitle')}
+              aria-label={t('share.folderTitle')}
+            >
+              <span className="material-symbols-outlined !text-2xl">chevron_left</span>
+            </IconButton>
+          )}
           <div className="w-12 h-12 rounded-2xl bg-primary-container flex items-center justify-center shrink-0">
             <span className="material-symbols-outlined !text-3xl fill text-on-primary-container">folder</span>
           </div>
@@ -331,20 +346,33 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
 
         {/* Breadcrumb Navigation */}
         {breadcrumbs && breadcrumbs.length > 1 && (
-          <nav className="flex items-center gap-1.5 overflow-x-auto py-2 mb-4 text-sm text-outline border-b border-outline-variant/10">
+          <nav
+            aria-label={t('share.breadcrumbLabel')}
+            className="flex items-center gap-1.5 overflow-x-auto py-2 mb-4 text-sm text-outline border-b border-outline-variant/10 [-ms-overflow-style:none] [scrollbar-width:none]"
+          >
             {breadcrumbs.map((crumb, idx) => {
               const isLast = idx === breadcrumbs.length - 1;
               return (
                 <div key={crumb.id} className="flex items-center gap-1.5 shrink-0">
                   {idx > 0 && (
-                    <span className="material-symbols-outlined !text-base text-outline/40">chevron_right</span>
+                    <span
+                      aria-hidden="true"
+                      className="material-symbols-outlined !text-base text-outline/40 shrink-0"
+                    >
+                      chevron_right
+                    </span>
                   )}
                   {isLast ? (
-                    <span className="font-semibold text-on-surface max-w-[200px] truncate">{crumb.name}</span>
+                    <span
+                      aria-current="page"
+                      className="font-semibold text-on-surface max-w-[140px] min-w-0 truncate"
+                    >
+                      {crumb.name}
+                    </span>
                   ) : (
                     <TextAction
                       onClick={() => setCurrentFolderId(crumb.id === rootId ? null : crumb.id)}
-                      className="!text-sm !font-normal max-w-[150px] truncate text-inherit underline-offset-2 hover:underline"
+                      className="!text-sm !font-normal max-w-[140px] min-w-0 truncate !text-outline hover:!text-primary"
                     >
                       {crumb.name}
                     </TextAction>
@@ -366,7 +394,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
         {/* Subfolders list */}
         {subfolders.length > 0 && (
           <section className="mt-4">
-            <h2 className="text-label-sm text-outline mb-2 uppercase tracking-wider">
+            <h2 className="sticky top-0 z-10 bg-background/95 backdrop-blur text-label-sm text-outline mb-2 py-2 uppercase tracking-wider">
               {t('share.sharedFolders')}
             </h2>
             <ul className="divide-y divide-outline/10 rounded-2xl bg-surface-container overflow-hidden">
@@ -374,15 +402,18 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
                 <li
                   key={s.id}
                   onClick={() => setCurrentFolderId(s.id)}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-surface-container-highest/50 cursor-pointer transition-colors group"
+                  className="flex items-center gap-3 px-4 py-3.5 min-h-[56px] hover:bg-surface-container-highest/50 cursor-pointer transition-colors group"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-primary-container/40 group-hover:bg-primary-container/70 flex items-center justify-center transition-colors shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-primary-container/40 group-hover:bg-primary-container/70 flex items-center justify-center transition-colors shrink-0">
                     <span className="material-symbols-outlined !text-xl text-primary">folder</span>
                   </div>
-                  <span className="flex-1 text-sm font-medium text-on-surface truncate group-hover:text-primary transition-colors">
+                  <span className="flex-1 min-w-0 text-sm font-medium text-on-surface truncate group-hover:text-primary transition-colors">
                     {s.name}
                   </span>
-                  <span className="material-symbols-outlined !text-lg text-outline group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0">
+                  <span
+                    aria-hidden="true"
+                    className="material-symbols-outlined !text-lg text-outline group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0"
+                  >
                     chevron_right
                   </span>
                 </li>
@@ -394,7 +425,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
         {/* Files list */}
         {files.length > 0 && (
           <section className="mt-6">
-            <h2 className="text-label-sm text-outline mb-2 uppercase tracking-wider">
+            <h2 className="sticky top-0 z-10 bg-background/95 backdrop-blur text-label-sm text-outline mb-2 py-2 uppercase tracking-wider">
               {t('share.sharedFiles')}
             </h2>
             <ul className="divide-y divide-outline/10 rounded-2xl bg-surface-container overflow-hidden">
@@ -404,51 +435,61 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
                   <li
                     key={f.id}
                     onClick={() => setPreviewFile(item)}
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-surface-container-highest/50 cursor-pointer transition-colors group"
+                    className="flex items-center gap-3 px-4 py-3.5 min-h-[56px] hover:bg-surface-container-highest/50 cursor-pointer transition-colors group"
                   >
                     {f.has_thumbnail ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={`${API_BASE}/s/${token}?file_id=${f.id}&thumbnail=1`}
                         alt={f.name}
-                        className="w-9 h-9 object-cover rounded-lg border border-outline-variant/20 shrink-0"
+                        className="w-10 h-10 object-cover rounded-lg border border-outline-variant/20 shrink-0"
                       />
                     ) : (
-                      <div className="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center shrink-0">
+                      <div className="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center shrink-0">
                         <span className="material-symbols-outlined !text-xl text-on-surface-variant">description</span>
                       </div>
                     )}
-                    <span className="flex-1 text-sm font-medium text-on-surface truncate group-hover:text-primary transition-colors">
-                      {f.name}
-                    </span>
-                    <span className="text-xs text-outline tabular-nums mr-2 shrink-0">
-                      {formatBytes(f.size)}
-                    </span>
-                    <IconButton
-                      bare
-                      shape="circle"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPreviewFile(item);
-                      }}
-                      className="group-hover:!text-primary"
-                      title={t('files.actions.preview')}
-                      aria-label={t('files.actions.preview')}
-                    >
-                      <span className="material-symbols-outlined !text-xl">visibility</span>
-                    </IconButton>
-                    <IconLink
-                      bare
-                      shape="circle"
-                      href={`${API_BASE}/s/${token}?file_id=${f.id}&download=1`}
-                      onClick={(e) => e.stopPropagation()}
-                      download
-                      className="hover:!text-primary"
-                      title={t('files.actions.download')}
-                      aria-label={t('files.actions.download')}
-                    >
-                      <span className="material-symbols-outlined !text-xl">download</span>
-                    </IconLink>
+                    <div className="flex-1 min-w-0">
+                      <span className="block text-sm font-medium text-on-surface truncate group-hover:text-primary transition-colors">
+                        {f.name}
+                      </span>
+                      <span className="block text-xs text-outline tabular-nums truncate">
+                        {formatBytes(f.size)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <IconButton
+                        bare
+                        shape="circle"
+                        size="xl"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewFile(item);
+                        }}
+                        className="hidden min-[360px]:flex group-hover:!text-primary"
+                        title={t('files.actions.preview')}
+                        aria-label={t('files.actions.preview')}
+                      >
+                        <span className="material-symbols-outlined !text-xl">visibility</span>
+                      </IconButton>
+                      <IconButton
+                        bare
+                        shape="circle"
+                        size="xl"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          triggerDirectDownload(
+                            `${API_BASE}/s/${token}?file_id=${f.id}&download=1`,
+                            f.name,
+                          );
+                        }}
+                        className="hover:!text-primary"
+                        title={t('files.actions.download')}
+                        aria-label={t('files.actions.download')}
+                      >
+                        <span className="material-symbols-outlined !text-xl">download</span>
+                      </IconButton>
+                    </div>
                   </li>
                 );
               })}
@@ -620,6 +661,7 @@ function isPreviewable(mime: string): boolean {
 type PreviewTranslator = (key: string, opts?: Record<string, unknown>) => string;
 
 function FilePreview({
+  token,
   listing,
   streamUrl,
   downloadUrl,
@@ -627,6 +669,7 @@ function FilePreview({
   mode,
   t,
 }: {
+  token: string;
   listing: FileListing;
   streamUrl: string;
   downloadUrl: string;
@@ -646,6 +689,7 @@ function FilePreview({
   if (mode === 'viewer') {
     return (
       <ViewerOnly
+        token={token}
         streamUrl={streamUrl}
         isImage={isImage}
         isVideo={isVideo}
@@ -681,25 +725,27 @@ function FilePreview({
             </span>
           </div>
 
-          <h1 className="font-display text-lg font-semibold text-on-surface break-all max-w-full">
+          <h1 className="font-display text-lg sm:text-xl font-semibold text-on-surface break-words [overflow-wrap:anywhere] [text-wrap:balance] min-w-0 w-full">
             {listing.original_name}
           </h1>
 
-          <div className="mt-1 flex items-center gap-2 text-metadata text-outline">
-            {listing.size > 0 && <span>{formatBytes(listing.size)}</span>}
-            {listing.size > 0 && listing.mime_type && <span>•</span>}
-            {listing.mime_type && <span className="truncate max-w-[200px]">{listing.mime_type}</span>}
+          <div className="mt-1 flex items-center justify-center gap-2 text-metadata text-outline min-w-0 max-w-full truncate">
+            {listing.size > 0 && <span className="shrink-0">{formatBytes(listing.size)}</span>}
+            {listing.size > 0 && listing.mime_type && (
+              <span aria-hidden="true" className="shrink-0">•</span>
+            )}
+            {listing.mime_type && <span className="truncate">{listing.mime_type}</span>}
           </div>
 
           {canPreview && (
             <div className="w-full my-6">
               {isImage && (
-                <div className="rounded-2xl overflow-hidden bg-surface-container border border-outline-variant/20 flex items-center justify-center max-h-80">
+                <div className="rounded-2xl overflow-hidden bg-surface-container border border-outline-variant/20 flex items-center justify-center">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={streamUrl}
                     alt={listing.original_name}
-                    className="max-h-80 w-auto object-contain"
+                    className="object-contain max-h-[50vh] w-full"
                   />
                 </div>
               )}
@@ -730,14 +776,13 @@ function FilePreview({
             <p className="mt-4 text-metadata text-outline">{t('share.sharedDesc')}</p>
           )}
 
-          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3 w-full">
+          <div className="mt-6 flex flex-row flex-wrap items-stretch justify-center gap-3 w-full">
             {canPreview && (
               <LinkButton
                 variant="secondary"
                 size="pill"
                 href={viewerUrl}
-                fullWidth
-                className="sm:!w-auto !bg-surface-container font-medium !text-on-surface hover:!bg-surface-container-highest"
+                className="flex-1 basis-40 min-h-[44px] !bg-surface-container font-medium !text-on-surface hover:!bg-surface-container-highest"
                 leftIcon={<span className="material-symbols-outlined !text-lg">fullscreen</span>}
               >
                 {t('share.viewInline')}
@@ -748,8 +793,7 @@ function FilePreview({
               size="pill"
               href={downloadUrl}
               download
-              fullWidth
-              className="sm:!w-auto !px-6 !bg-primary !text-on-primary hover:!bg-primary/90 font-medium"
+              className="flex-1 basis-40 min-h-[44px] !px-6 !bg-primary !text-on-primary hover:!bg-primary/90 font-medium"
               leftIcon={<span className="material-symbols-outlined !text-lg">download</span>}
             >
               {t('files.actions.download')}
@@ -762,6 +806,7 @@ function FilePreview({
 }
 
 function ViewerOnly({
+  token,
   streamUrl,
   isImage,
   isVideo,
@@ -772,6 +817,7 @@ function ViewerOnly({
   textFetchUrl,
   fallbackUrl,
 }: {
+  token: string;
   streamUrl: string;
   isImage: boolean;
   isVideo: boolean;
@@ -783,45 +829,73 @@ function ViewerOnly({
   fallbackUrl: string;
 }) {
   const { t } = useTranslation();
+  const router = useRouter();
+  // File title overlay is visible on first paint and can be toggled off via
+  // the info button; auto-hides so it never blocks the media.
+  const [titleVisible, setTitleVisible] = useState(true);
+
+  const goBack = useCallback(() => {
+    // Client-side navigation back to the share landing page. Uses the router
+    // (not window.location) so React keeps control of the transition and the
+    // control is guaranteed to be interactive on the client.
+    router.replace(`/s/${token}`);
+  }, [router, token]);
+
+  const download = useCallback(() => {
+    triggerDirectDownload(fallbackUrl, originalName);
+  }, [fallbackUrl, originalName]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        const segs = window.location.pathname.split('/').filter(Boolean);
-        if (segs.length >= 2) {
-          window.location.href = `/s/${segs[1]}`;
-        }
-      }
+      if (e.key === 'Escape') goBack();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [goBack]);
 
   return (
     <div className="fixed inset-0 z-50 bg-media-backdrop flex items-center justify-center select-none">
-      <IconLink
+      {/* Back / close — always rendered client-side as a real <button>. */}
+      <IconButton
         bare
         shape="circle"
-        size="lg"
-        href={`/s/${typeof window !== 'undefined' ? window.location.pathname.split('/').filter(Boolean)[1] : ''}`}
-        className="absolute top-4 left-4 z-10 !bg-on-media/10 !text-on-media hover:!bg-on-media/20"
+        size="xl"
+        onClick={goBack}
+        className="absolute top-4 left-4 z-20 !w-11 !h-11 !bg-on-media/15 !text-on-media hover:!bg-on-media/25 backdrop-blur"
         aria-label={t('share.viewerBackLabel')}
         title={t('share.viewerBackLabel')}
       >
-        <span className="material-symbols-outlined">arrow_back</span>
-      </IconLink>
-      <IconLink
+        <span className="material-symbols-outlined !text-2xl">arrow_back</span>
+      </IconButton>
+      {/* Download — always rendered client-side as a real <button>. */}
+      <IconButton
         bare
         shape="circle"
-        size="lg"
-        href={fallbackUrl}
-        download
-        className="absolute top-4 right-4 z-10 !bg-on-media/10 !text-on-media hover:!bg-on-media/20"
+        size="xl"
+        onClick={download}
+        className="absolute top-4 right-4 z-20 !w-11 !h-11 !bg-on-media/15 !text-on-media hover:!bg-on-media/25 backdrop-blur"
         aria-label={t('files.actions.download')}
         title={t('files.actions.download')}
       >
-        <span className="material-symbols-outlined">download</span>
-      </IconLink>
+        <span className="material-symbols-outlined !text-2xl">download</span>
+      </IconButton>
+      {/* Dismissible file title overlay. */}
+      {titleVisible && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 max-w-[60%] flex items-center gap-2 rounded-full bg-black/50 backdrop-blur px-4 py-2">
+          <span className="truncate text-sm text-on-media">{originalName}</span>
+          <IconButton
+            bare
+            shape="circle"
+            size="sm"
+            onClick={() => setTitleVisible(false)}
+            className="!text-on-media hover:!bg-on-media/20 shrink-0"
+            aria-label={t('common.hide')}
+            title={t('common.hide')}
+          >
+            <span className="material-symbols-outlined !text-base">close</span>
+          </IconButton>
+        </div>
+      )}
       {isImage && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
