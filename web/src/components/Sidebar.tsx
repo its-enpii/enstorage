@@ -130,6 +130,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
               key={item.href}
               href={item.href}
               title={item.label}
+              aria-label={item.label}
+              aria-current={active ? 'page' : undefined}
               className="relative group"
             >
               <Icon
