@@ -98,7 +98,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
   const viewUrl = `${API_BASE}/s/${token}`;
   const downloadUrl = `${API_BASE}/s/${token}?download=1`;
   const infoUrl = `${API_BASE}/s/${token}?info=1`;
-  const viewerUrl = `/s/${token}/view`;
+  const viewerUrl = `/s/${token}?view=1`;
 
   useEffect(() => {
     let cancelled = false;

@@ -21,6 +21,15 @@ const nextConfig = {
   // when forwarding the shared link as image/video/etc. A rewrite
   // (not redirect) keeps the public origin in the address bar so
   // the backend's internal container hostname doesn't leak.
+  //
+  // Two distinct share entry points, do not collapse them:
+  //   * `/s/:token?view=1` — the HUMAN viewer. Stays inside Next.js
+  //     (see app/s/[token]/page.tsx) and renders the immersive media
+  //     shell with back / download controls. Query-string based so it
+  //     shares the same route as the landing page.
+  //   * `/s/:token/view`  — the RAW BYTES stream. Hands off to the
+  //     backend via the rewrite below for bots / link previews / API
+  //     consumers that need the file itself, not an HTML page.
   async redirects() {
     return [
       {
