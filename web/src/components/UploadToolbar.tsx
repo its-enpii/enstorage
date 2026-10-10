@@ -26,8 +26,6 @@ type Action = {
   label: string;
   icon: React.ReactNode;
   onClick: () => void;
-  targetX: number;
-  targetY: number;
   bgClass: string;
 };
 
@@ -59,7 +57,7 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
     onSelectMode?.();
   }
 
-  // Close the radial arc when Escape is pressed while it is open.
+  // Close the vertical speed dial when Escape is pressed while it is open.
   useEffect(() => {
     if (!fabOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -69,16 +67,13 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
     return () => document.removeEventListener('keydown', onKey);
   }, [fabOpen]);
 
-  // Radial arc actions, laid out along a 90° quadrant arc (12 o'clock -> 9 o'clock).
-  // Radius R = 100px; spaced ~52px apart (4px clean gap) along the quadrant.
+  // Vertical speed-dial actions, stacked top -> bottom above the Main FAB.
   const actions: Action[] = [
     {
       key: 'uploadFile',
       label: t('upload.uploadFile'),
       icon: <UploadFile className="!text-2xl text-white" />,
       onClick: triggerFile,
-      targetX: 0,
-      targetY: -100,
       bgClass: 'bg-[#4F46E5]',
     },
     ...(onNewFolder
@@ -88,8 +83,6 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
             label: t('upload.newFolder'),
             icon: <CreateNewFolder className="!text-2xl text-white" />,
             onClick: handleNewFolder,
-            targetX: -50,
-            targetY: -87,
             bgClass: 'bg-[#7C3AED]',
           },
         ]
@@ -101,8 +94,6 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
             label: t('upload.uploadFolder'),
             icon: <DriveFolderUpload className="!text-2xl text-white" />,
             onClick: triggerFolder,
-            targetX: -87,
-            targetY: -50,
             bgClass: 'bg-[#9333EA]',
           },
         ]
@@ -114,15 +105,13 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
             label: t('upload.selectMode'),
             icon: <Checklist className="!text-2xl text-white" />,
             onClick: handleSelectMode,
-            targetX: -100,
-            targetY: 0,
             bgClass: 'bg-[#0D9488]',
           },
         ]
       : []),
   ];
 
-  // GSAP radial arc timeline — GPU-only props (x/y translate + scale/rotation/opacity).
+  // GSAP vertical stack animation — GPU-only props (y, scale, opacity, rotation).
   useEffect(() => {
     const ctx = gsap.context(() => {
       const items = itemRefs.current ? Array.from(itemRefs.current.children) : [];
@@ -136,16 +125,14 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
         if (items.length) {
           gsap.fromTo(
             items,
-            { x: 0, y: 0, scale: 0.2, rotation: -90, opacity: 0 },
+            { y: 30, scale: 0.6, opacity: 0 },
             {
-              x: (i: number) => actions[i].targetX,
-              y: (i: number) => actions[i].targetY,
+              y: 0,
               scale: 1,
-              rotation: 0,
               opacity: 1,
-              duration: 0.32,
-              stagger: 0.035,
-              ease: 'back.out(2)',
+              duration: 0.28,
+              stagger: 0.04,
+              ease: 'back.out(1.8)',
             },
           );
         }
@@ -157,12 +144,11 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
         });
         if (items.length) {
           gsap.to(items, {
-            x: 0,
-            y: 0,
-            scale: 0.2,
-            rotation: -90,
+            y: 20,
+            scale: 0.6,
             opacity: 0,
             duration: 0.16,
+            stagger: 0.02,
             ease: 'power2.in',
           });
         }
@@ -179,36 +165,53 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
       <FileInput ref={fileRef} multiple onSelect={onUploadFiles} />
       <FileInput ref={folderRef} directory multiple onSelect={(files) => onUploadFolder?.(files)} />
 
-      {/* Floating wrapper — mobile=radial arc pojok, desktop=pill bottom-center */}
+      {/* Floating wrapper — mobile=vertical stack pojok, desktop=pill bottom-center */}
       <div className="fixed bottom-6 right-6 sm:bottom-10 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:max-w-[calc(100vw-2rem)] z-50">
-        {/* Mobile radial arc speed dial — hidden on sm+ */}
-        <div className="sm:hidden">
-          {/* Arc container anchored at the FAB centre; items translate outwards */}
-          <div className="absolute bottom-0 right-0 w-14 h-14 pointer-events-none">
-            <div
-              ref={itemRefs}
-              className={clsx(
-                "absolute inset-0 z-40 transition-opacity",
-                fabOpen ? "pointer-events-auto" : "pointer-events-none opacity-0"
-              )}
-              aria-hidden={!fabOpen}
-            >
-              {actions.map((action) => (
-                <button
-                  key={action.key}
-                  type="button"
-                  onClick={action.onClick}
-                  aria-label={action.label}
-                  title={action.label}
-                  className={clsx(
-                    'radial-action-btn absolute top-1 left-1 w-12 h-12 rounded-full flex items-center justify-center text-white shadow-xl shadow-black/60 border border-white/15 active:scale-90 hover:scale-105 transition-transform cursor-pointer',
-                    action.bgClass,
-                  )}
-                >
-                  {action.icon}
-                </button>
-              ))}
-            </div>
+        {/* Mobile vertical speed dial — hidden on sm+ */}
+        <div className="sm:hidden relative">
+          {/* Maintain FAB's center axis; each row's w-14 slot centers its 48px circle. */}
+          <div
+            ref={itemRefs}
+            className={clsx(
+              'speed-dial-stack absolute bottom-[calc(100%+1rem)] right-0 z-40 flex flex-col items-end gap-3.5 transition-opacity',
+              fabOpen ? 'pointer-events-auto' : 'pointer-events-none opacity-0',
+            )}
+            aria-hidden={!fabOpen}
+          >
+            {actions.map((action) => (
+              <div
+                key={action.key}
+                onClick={action.onClick}
+                className="speed-dial-row flex items-center justify-end gap-3 group cursor-pointer select-none active:scale-95 transition-transform"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    action.onClick();
+                  }
+                }}
+              >
+                {/* Floating Label Pill */}
+                <span className="px-3.5 py-1.5 rounded-xl bg-surface-container-high/95 border border-outline-variant/35 text-on-surface text-xs font-semibold shadow-lg shadow-black/40 whitespace-nowrap select-none group-hover:border-primary/40 group-hover:text-primary transition-colors">
+                  {action.label}
+                </span>
+
+                {/* Perfectly Centered Circular Action Button (w-14 slot -> 48px circle) */}
+                <div className="w-14 flex items-center justify-center shrink-0">
+                  <button
+                    type="button"
+                    aria-label={action.label}
+                    className={clsx(
+                      'w-12 h-12 rounded-full flex items-center justify-center text-white shadow-xl shadow-black/50 border border-white/10 active:scale-90 hover:scale-105 transition-transform cursor-pointer',
+                      action.bgClass,
+                    )}
+                  >
+                    {action.icon}
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Main FAB — "+" rotates 135° into "x" via GSAP */}
@@ -276,7 +279,7 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
         </div>
       </div>
 
-      {/* Backdrop — tap-to-close while the radial arc is open (mobile only) */}
+      {/* Backdrop — tap-to-close while the vertical stack is open (mobile only) */}
       <div
         onClick={closeFab}
         className={clsx(
