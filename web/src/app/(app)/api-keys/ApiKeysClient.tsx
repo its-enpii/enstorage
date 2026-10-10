@@ -134,9 +134,11 @@ function ApiKeysContent() {
             {t('apikeys.subtitle')}
           </p>
         </div>
-        <Button onClick={openCreate} leftIcon={<Add />} size="lg">
-          {t('apikeys.newKey')}
-        </Button>
+        <div className="flex items-center justify-end w-full sm:w-auto gap-3">
+          <Button onClick={openCreate} leftIcon={<Add />} size="lg">
+            {t('apikeys.newKey')}
+          </Button>
+        </div>
       </div>
 
       {revealed && <PlaintextReveal data={revealed} onClose={() => setRevealed(null)} onCopy={copy} />}

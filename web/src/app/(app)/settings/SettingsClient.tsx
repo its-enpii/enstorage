@@ -428,7 +428,7 @@ function SettingsContent() {
               <Button
                 variant="danger-soft"
                 size="md"
-                className="shrink-0 self-start sm:self-auto"
+                className="shrink-0 self-end sm:self-auto"
                 onClick={() => setResetOpen(true)}
               >
                 {t('settings.resetVault')}
@@ -448,7 +448,7 @@ function SettingsContent() {
               <Button
                 variant="danger"
                 size="md"
-                className="shrink-0 self-start sm:self-auto"
+                className="shrink-0 self-end sm:self-auto"
                 onClick={() => setDeleteOpen(true)}
                 leftIcon={<DeleteForever className="!text-lg" />}
               >

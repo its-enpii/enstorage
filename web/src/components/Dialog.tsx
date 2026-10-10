@@ -66,7 +66,7 @@ export function Dialog({
         </div>
       )}
       {actions && (
-        <div className="mt-5 flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-2 justify-end sm:items-center shrink-0">
+        <div className="mt-4 flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-2 justify-end sm:items-center shrink-0 [&>button]:w-full sm:[&>button]:w-auto [&>a]:w-full sm:[&>a]:w-auto">
           {actions}
         </div>
       )}

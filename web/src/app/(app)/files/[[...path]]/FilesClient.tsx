@@ -1446,37 +1446,39 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           />
         </h1>
         <div className="flex flex-wrap items-center gap-3 justify-between sm:justify-end">
-          {folderId && (
+          <span className="text-metadata text-outline tabular-nums sm:mr-auto">
+            {t('files.filter.summary', { folders: totalFolders, files: totalFiles })}
+          </span>
+          <div className="flex items-center justify-end gap-2 ml-auto sm:ml-0">
+            {folderId && (
+              <Button
+                variant="tonal"
+                size="toolbar"
+                className="min-h-11"
+                onClick={() => void downloadFolder(folderId)}
+                aria-label={t('folders.downloadFolder')}
+                leftIcon={<span className="material-symbols-outlined !text-lg">folder_zip</span>}
+              >
+                <span>{t('folders.downloadFolder')}</span>
+              </Button>
+            )}
             <Button
               variant="tonal"
               size="toolbar"
-              className="min-h-11"
-              onClick={() => void downloadFolder(folderId)}
-              aria-label={t('folders.downloadFolder')}
-              leftIcon={<span className="material-symbols-outlined !text-lg">folder_zip</span>}
+              onClick={openFilter}
+              aria-label={filterActive ? t('files.filter.activeBadge') : t('files.filter.button')}
+              className="relative min-h-11"
+              leftIcon={<Tune className="!text-lg" />}
             >
-              <span>{t('folders.downloadFolder')}</span>
+              <span>{t('files.filter.button')}</span>
+              {filterActive && (
+                <span
+                  aria-hidden
+                  className="absolute top-2 right-2 w-2 h-2 rounded-full bg-primary"
+                />
+              )}
             </Button>
-          )}
-          <span className="text-metadata text-outline tabular-nums">
-            {t('files.filter.summary', { folders: totalFolders, files: totalFiles })}
-          </span>
-          <Button
-            variant="tonal"
-            size="toolbar"
-            onClick={openFilter}
-            aria-label={filterActive ? t('files.filter.activeBadge') : t('files.filter.button')}
-            className="relative min-h-11 ml-auto sm:ml-0"
-            leftIcon={<Tune className="!text-lg" />}
-          >
-            <span>{t('files.filter.button')}</span>
-            {filterActive && (
-              <span
-                aria-hidden
-                className="absolute top-2 right-2 w-2 h-2 rounded-full bg-primary"
-              />
-            )}
-          </Button>
+          </div>
         </div>
       </div>
 
