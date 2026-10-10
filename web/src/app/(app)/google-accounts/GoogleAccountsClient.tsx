@@ -332,7 +332,10 @@ function AccountsContent() {
                           {acc.label && acc.label !== acc.email ? acc.label : acc.email}
                         </h3>
                         {isPrimary && (
-                          <Chip variant="primary">
+                          <Chip
+                            variant="primary"
+                            className="!bg-primary/20 !text-primary border border-primary/40 font-semibold"
+                          >
                             {t('accounts.primary')}
                           </Chip>
                         )}
@@ -375,22 +378,31 @@ function AccountsContent() {
                 </div>
 
                 {needsReconnect && (
-                  <Alert tone="warning">
+                  <div className="rounded-xl border border-secondary/40 bg-secondary-container/25 text-secondary font-medium px-4 py-3">
                     <div className="flex flex-col gap-2">
-                      <span>{t('accounts.needsReconnect.body')}</span>
+                      <span className="flex items-center gap-2">
+                        <WarningIcon className="!text-base fill text-secondary shrink-0" />
+                        {t('accounts.needsReconnect.body')}
+                      </span>
                       <div>
-                        <Button variant="tonal" size="sm" onClick={connect}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="!border-outline-variant/40"
+                          onClick={connect}
+                        >
                           {t('accounts.needsReconnect.action')}
                         </Button>
                       </div>
                     </div>
-                  </Alert>
+                  </div>
                 )}
 
                 <div className="flex items-center gap-2 flex-wrap">
                   <Button
-                    variant="tonal"
+                    variant="secondary"
                     size="sm"
+                    className="!border-outline-variant/40"
                     onClick={() => importFromDrive(acc.id)}
                     disabled={accountBusy}
                     leftIcon={<AddToDriveIcon />}
@@ -447,8 +459,9 @@ function AccountsContent() {
                         </ul>
                         <div>
                           <Button
-                            variant="tonal"
+                            variant="secondary"
                             size="sm"
+                            className="!border-outline-variant/40"
                             onClick={() => importFromDrive(acc.id)}
                             disabled={accountBusy}
                             leftIcon={<AddToDriveIcon />}

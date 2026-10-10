@@ -274,8 +274,8 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
     >
       {/* Legacy single-token section (backward-compat) */}
       {hasShare && (
-        <div className="bg-surface-container rounded-xl px-4 py-3 flex items-center gap-2 mb-4">
-          <p className="flex-1 text-sm text-on-surface truncate font-mono">{shareUrl}</p>
+        <div className="bg-surface-container-high border border-outline-variant/40 rounded-xl px-4 py-3 flex flex-wrap sm:flex-nowrap items-center gap-2 mb-4">
+          <p className="flex-1 min-w-0 text-sm text-on-surface truncate font-mono">{shareUrl}</p>
           <IconButton
             onClick={() => copyLink(false)}
             title={t('share.copy')}
@@ -287,7 +287,7 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
       )}
 
       {/* Form untuk create share link dengan expiry + max_views */}
-      <div className="space-y-3 pt-2 border-t border-outline/10">
+      <div className="space-y-3 pt-2 border-t border-outline-variant/30">
         <div className="pt-3 space-y-3">
           <Field label={t('share.expiryLabel')}>
             <PresetSelect
@@ -326,8 +326,8 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
       </div>
 
       {/* Active share links list */}
-      <div className="mt-6 pt-4 border-t border-outline/10">
-        <h3 className="text-label-sm text-outline uppercase tracking-wider mb-2">
+      <div className="mt-6 pt-4 border-t border-outline-variant/30">
+        <h3 className="text-label-sm text-on-surface-variant font-semibold uppercase tracking-wider mb-2">
           {t('share.activeLinks')}
         </h3>
         {links.length === 0 ? (
@@ -335,11 +335,11 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
             {t('share.noActiveLinks')}
           </p>
         ) : (
-          <ul className="divide-y divide-outline/10 rounded-2xl bg-surface-container overflow-hidden">
+          <ul className="divide-y divide-outline-variant/30 rounded-2xl bg-surface-container border border-outline-variant/30 overflow-hidden">
             {links.map((link) => (
               <li key={link.id} className="px-4 py-3 space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <p className="flex-1 text-xs font-mono text-on-surface truncate">{link.url}</p>
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+                  <p className="flex-1 min-w-0 text-xs font-mono text-on-surface truncate">{link.url}</p>
                   <IconButton
                     onClick={() => copyShareLink(link.url, link.id)}
                     title={t('share.copy')}

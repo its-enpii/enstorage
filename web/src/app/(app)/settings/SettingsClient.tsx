@@ -207,7 +207,7 @@ function SettingsContent() {
                   </Chip>
                 )}
               </div>
-              <p className="text-metadata text-outline mt-0.5">
+              <p className="text-metadata text-on-surface-variant mt-0.5">
                 {loading
                   ? t('common.loading')
                   : summary && summary.total > 0
@@ -225,7 +225,7 @@ function SettingsContent() {
           </div>
 
           {loading ? (
-            <div className="h-3 bg-surface-container rounded-full animate-pulse" />
+            <div className="h-3 bg-surface-container-highest border border-outline-variant/30 rounded-full animate-pulse" />
           ) : summary && summary.total > 0 ? (
             <>
               <div>
@@ -240,7 +240,8 @@ function SettingsContent() {
                 <ProgressBar
                   value={pct(summary.used, summary.total)}
                   size="md"
-                  tone={pct(summary.used, summary.total) > 90 ? 'error' : 'secondary'}
+                  tone={pct(summary.used, summary.total) > 90 ? 'error' : 'primary'}
+                  trackClassName="bg-surface-container-highest border border-outline-variant/30"
                   label={t('settings.storage')}
                 />
               </div>
@@ -288,7 +289,7 @@ function SettingsContent() {
                               tone={p > 90 ? 'error' : 'secondary'}
                               trackClassName="flex-1 bg-surface-container-high"
                             />
-                            <span className="text-metadata text-outline shrink-0">
+                            <span className="text-metadata text-on-surface-variant shrink-0">
                               {bytes(q.used)} / {bytes(q.total)}
                             </span>
                             <span className={clsx(
@@ -571,13 +572,13 @@ function Stat({
   icon: ReactNode;
 }) {
   return (
-    <div className="bg-surface-container rounded-xl p-4 flex items-center gap-3">
+    <div className="bg-surface-container border border-outline-variant/30 rounded-xl p-4 flex items-center gap-3">
       <div className="w-10 h-10 rounded-lg bg-primary-container flex items-center justify-center text-on-primary-container shrink-0">
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="text-metadata text-outline uppercase tracking-wider">{label}</p>
-        <p className="text-2xl font-semibold text-on-surface font-display">{value}</p>
+        <p className="text-on-surface-variant text-xs font-medium uppercase tracking-wider">{label}</p>
+        <p className="text-2xl font-bold text-on-surface font-display">{value}</p>
       </div>
     </div>
   );

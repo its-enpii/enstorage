@@ -33,8 +33,8 @@ export function Dialog({
       size={size}
       panelClassName={
         variant === 'danger'
-          ? 'flex flex-col p-inner-padding ring-2 ring-error-container'
-          : 'flex flex-col p-inner-padding'
+          ? 'flex flex-col p-5 sm:p-inner-padding ring-2 ring-error-container'
+          : 'flex flex-col p-5 sm:p-inner-padding'
       }
     >
       <div className="flex items-start gap-4 shrink-0">
@@ -65,7 +65,11 @@ export function Dialog({
           {children}
         </div>
       )}
-      {actions && <div className="mt-4 flex gap-2 justify-end shrink-0">{actions}</div>}
+      {actions && (
+        <div className="mt-5 flex flex-col-reverse sm:flex-row gap-2 justify-end sm:items-center shrink-0">
+          {actions}
+        </div>
+      )}
     </Modal>
   );
 }
