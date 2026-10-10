@@ -127,7 +127,7 @@ function ApiKeysContent() {
         <span>{t('nav.home')}</span>
       </nav>
 
-      <div className="flex items-end justify-between mb-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-6">
         <div>
           <h1 className="font-display text-headline-lg text-on-surface">{t('apikeys.title')}</h1>
           <p className="text-metadata text-outline mt-1">

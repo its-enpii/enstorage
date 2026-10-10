@@ -170,7 +170,7 @@ function SettingsContent() {
 
   return (
     <>
-      <h1 className="font-display text-headline-lg text-on-surface mb-8">
+      <h1 className="font-display text-headline-lg text-on-surface mb-6">
         {t('settings.title')}
       </h1>
 
@@ -572,13 +572,13 @@ function Stat({
   icon: ReactNode;
 }) {
   return (
-    <div className="bg-surface-container border border-outline-variant/30 rounded-xl p-4 flex items-center gap-3">
+    <div className="bg-surface-container border border-outline-variant/30 rounded-xl p-3 sm:p-4 flex items-center gap-3">
       <div className="w-10 h-10 rounded-lg bg-primary-container flex items-center justify-center text-on-primary-container shrink-0">
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="text-on-surface-variant text-xs font-medium uppercase tracking-wider">{label}</p>
-        <p className="text-2xl font-bold text-on-surface font-display">{value}</p>
+        <p className="truncate text-on-surface-variant text-xs font-medium uppercase tracking-wider">{label}</p>
+        <p className="text-xl sm:text-2xl font-bold text-on-surface font-display">{value}</p>
       </div>
     </div>
   );

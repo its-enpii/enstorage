@@ -96,7 +96,7 @@ export function Modal({
           'w-full bg-surface shadow-2xl border border-outline-variant/40',
           variant === 'sheet'
             ? 'rounded-t-3xl px-5 sm:px-inner-padding pt-3 pb-[max(2rem,env(safe-area-inset-bottom))]'
-            : clsx('max-h-[90vh] overflow-hidden rounded-card', SIZE_CLASSES[size]),
+            : clsx('max-h-[92vh] sm:max-h-[90vh] overflow-hidden rounded-2xl sm:rounded-card', SIZE_CLASSES[size]),
           panelClassName,
         )}
       >

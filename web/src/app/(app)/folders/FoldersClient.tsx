@@ -372,7 +372,7 @@ function FoldersContent() {
 
   return (
     <>
-      <div className="flex items-end justify-between mb-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-6">
         <h1 className="font-display text-3xl font-semibold text-on-surface">
           {current?.name ?? t('folders.title')}
         </h1>

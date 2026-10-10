@@ -33,8 +33,8 @@ export function Dialog({
       size={size}
       panelClassName={
         variant === 'danger'
-          ? 'flex flex-col p-5 sm:p-inner-padding ring-2 ring-error-container'
-          : 'flex flex-col p-5 sm:p-inner-padding'
+          ? 'flex flex-col p-4 sm:p-6 lg:p-inner-padding ring-2 ring-error-container'
+          : 'flex flex-col p-4 sm:p-6 lg:p-inner-padding'
       }
     >
       <div className="flex items-start gap-4 shrink-0">
@@ -42,15 +42,15 @@ export function Dialog({
           <div
             className={
               variant === 'danger'
-                ? 'w-12 h-12 shrink-0 rounded-2xl bg-error-container/30 flex items-center justify-center text-error'
-                : 'w-12 h-12 shrink-0 rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container'
+                ? 'w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-2xl bg-error-container/30 flex items-center justify-center text-error'
+                : 'w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container'
             }
           >
             {icon}
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <h2 className="font-display text-headline-lg-mobile text-on-surface mb-1">
+          <h2 className="font-display text-xl sm:text-headline-lg-mobile text-on-surface mb-1">
             {title}
           </h2>
           {description && (
@@ -66,7 +66,7 @@ export function Dialog({
         </div>
       )}
       {actions && (
-        <div className="mt-5 flex flex-col-reverse sm:flex-row gap-2 justify-end sm:items-center shrink-0">
+        <div className="mt-5 flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-2 justify-end sm:items-center shrink-0">
           {actions}
         </div>
       )}

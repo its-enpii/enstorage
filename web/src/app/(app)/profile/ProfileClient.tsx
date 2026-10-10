@@ -117,8 +117,8 @@ function ProfileContent() {
       </nav>
 
       {/* Hero */}
-      <Card className="flex items-center gap-6 mb-card-gap">
-        <div className="w-20 h-20 rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container font-display text-3xl font-semibold shrink-0">
+      <Card className="flex items-center gap-4 sm:gap-6 mb-card-gap">
+        <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container font-display text-3xl font-semibold shrink-0">
           {user.name?.[0]?.toUpperCase() ?? <Person className="!text-5xl" />}
         </div>
         <div className="flex-1 min-w-0">

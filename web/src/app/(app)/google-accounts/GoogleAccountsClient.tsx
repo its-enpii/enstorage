@@ -265,7 +265,7 @@ function AccountsContent() {
         <span>{t('nav.home')}</span>
       </nav>
 
-      <div className="flex items-end justify-between mb-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-6">
         <div>
           <h1 className="font-display text-3xl font-semibold text-on-surface">
             {t('accounts.title')}
@@ -320,8 +320,8 @@ function AccountsContent() {
                 hover
                 className="flex flex-col gap-3 group relative"
               >
-                <div className="flex items-start gap-5">
-                  <div className="w-16 h-16 rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container shrink-0">
+                <div className="flex items-start gap-3 sm:gap-5">
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container shrink-0">
                     <CloudIcon className="!text-4xl fill" />
                   </div>
 
