@@ -124,6 +124,13 @@ export function PublicHeader({ navItems = PUBLIC_NAV, activeSection }: Props) {
   const onLanding = pathname === LANDING_PATH;
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const { resolved, setTheme } = useTheme();
+  const { user, signIn, signingIn } = useGoogleSignIn();
+  const [locale, setLocaleState] = useState('id');
+
+  useEffect(() => {
+    setLocaleState(getLocale());
+  }, []);
 
   useEffect(() => {
     function onScroll() {
@@ -229,48 +236,140 @@ export function PublicHeader({ navItems = PUBLIC_NAV, activeSection }: Props) {
       </div>
 
       {menuOpen && (
-        <div className="glass-toolbar max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-outline-variant/20 lg:hidden">
-          <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6">
-            <nav className="grid gap-1" aria-label={t('landing.nav.mainNav')}>
+        <div className="glass-toolbar border-t border-outline-variant/20 max-h-[calc(100vh-4rem)] overflow-y-auto lg:hidden">
+          <div className="mx-auto w-full max-w-md px-5 py-6 flex flex-col gap-6">
+            {/* 1. Navigasi Utama — rata kiri, tautan ringan dengan active state */}
+            <nav className="flex flex-col gap-1" aria-label={t('landing.nav.mainNav')}>
               {navItems.map((item) => {
                 const active = item.anchor
                   ? activeSection === item.anchor
                   : pathname === item.href;
                 const inPage = Boolean(item.anchor) && onLanding;
+
+                const baseClasses = clsx(
+                  'flex items-center justify-between px-4 py-3 rounded-xl text-base font-semibold no-underline transition-colors',
+                  active
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-on-surface hover:bg-surface-container hover:text-primary active:bg-surface-container-high',
+                );
+
                 if (inPage) {
                   return (
-                    <Button
+                    <button
                       key={item.href}
                       type="button"
-                      size="lg"
-                      variant={active ? 'primary' : 'ghost'}
+                      aria-current={active ? 'true' : undefined}
                       onClick={() => handleNavClick(item)}
-                      className="justify-between !rounded-xl"
-                      rightIcon={<ArrowForward className="!text-lg opacity-70" />}
+                      className={baseClasses}
                     >
-                      {t(item.labelKey)}
-                    </Button>
+                      <span>{t(item.labelKey)}</span>
+                      <span className="material-symbols-outlined !text-xl text-outline-variant">
+                        chevron_right
+                      </span>
+                    </button>
                   );
                 }
+
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     scroll
-                    className="inline-flex h-12 items-center justify-between gap-2 rounded-xl px-5 text-sm font-semibold text-on-surface no-underline transition-colors hover:bg-surface-container active:bg-surface-container-high"
+                    aria-current={active ? 'true' : undefined}
+                    onClick={() => setMenuOpen(false)}
+                    className={baseClasses}
                   >
-                    {t(item.labelKey)}
-                    <ArrowForward className="!text-lg opacity-70" />
+                    <span>{t(item.labelKey)}</span>
+                    <span className="material-symbols-outlined !text-xl text-outline-variant">
+                      chevron_right
+                    </span>
                   </Link>
                 );
               })}
             </nav>
-            <div className="mt-5">
-              <HeaderActions stacked />
+
+            {/* Divider elegan */}
+            <div className="h-px w-full bg-outline-variant/20" />
+
+            {/* 2. Preferensi — bahasa & tema sejajar dalam satu baris */}
+            <div className="flex items-center justify-between gap-3 px-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-on-surface-variant uppercase tracking-wider">
+                  {t('landing.nav.language')}
+                </span>
+                <div
+                  className="flex items-center rounded-full border border-outline-variant/30 bg-surface-container p-0.5"
+                  role="group"
+                  aria-label={t('landing.nav.language')}
+                >
+                  {(['id', 'en'] as const).map((code) => (
+                    <button
+                      key={code}
+                      type="button"
+                      aria-pressed={locale === code}
+                      onClick={() => {
+                        setLocale(code);
+                        setLocaleState(code);
+                      }}
+                      className={clsx(
+                        'h-7 px-3 rounded-full text-xs font-semibold uppercase tracking-wider transition-all',
+                        locale === code
+                          ? 'bg-primary text-on-primary shadow-sm'
+                          : 'text-on-surface-variant hover:text-on-surface',
+                      )}
+                    >
+                      {code}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setTheme(resolved === 'dark' ? 'light' : 'dark')}
+                aria-label={t('landing.nav.theme')}
+                title={t('landing.nav.theme')}
+                className="flex shrink-0 items-center gap-2 h-8 px-3 rounded-full border border-outline-variant/30 bg-surface-container text-on-surface text-xs font-medium hover:bg-surface-container-high transition-colors"
+              >
+                {resolved === 'dark' ? (
+                  <>
+                    <LightMode className="!text-base text-amber-400" />
+                    <span>Terang</span>
+                  </>
+                ) : (
+                  <>
+                    <DarkMode className="!text-base text-indigo-400" />
+                    <span>Gelap</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* 3. CTA autentikasi — tombol solid penuh berkelas */}
+            <div className="pt-1">
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => {
+                  setMenuOpen(false);
+                  signIn();
+                }}
+                loading={signingIn}
+                fullWidth
+                className="!h-12 !rounded-2xl !text-base font-bold shadow-lg shadow-primary/20"
+                rightIcon={!signingIn && user ? <ArrowForward className="!text-xl" /> : undefined}
+              >
+                {user
+                  ? t('landing.cta.dashboard')
+                  : signingIn
+                    ? t('landing.cta.signInLoading')
+                    : t('landing.cta.signIn')}
+              </Button>
             </div>
           </div>
         </div>
       )}
+
     </header>
   );
 }
