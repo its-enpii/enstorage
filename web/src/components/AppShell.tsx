@@ -57,9 +57,9 @@ export function AppShell({
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden">
+    <div className="flex h-dvh overflow-hidden bg-background">
       <Sidebar mobileOpen={sidebarOpen} onMobileClose={() => setSidebarOpen(false)} />
-      <main className="flex-1 h-dvh flex flex-col relative isolate overflow-hidden bg-background">
+      <main className="flex-1 h-full flex flex-col relative isolate overflow-hidden bg-background">
         {/* Ambient atmospheric glow to align with landing page depth */}
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_100%_70%_at_50%_-10%,rgba(198,192,255,0.12),transparent)]" />
@@ -73,14 +73,9 @@ export function AppShell({
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
         />
-        <div className="relative z-10 flex-1 min-w-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 md:px-8 lg:px-container-p pt-4 sm:pt-6 pb-6 sm:pb-8">
+        <div className="relative z-10 flex-1 min-w-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 md:px-8 lg:px-container-p pt-4 sm:pt-6 pb-20 sm:pb-24">
           {children}
         </div>
-        {/* Docked bar slot at the very bottom of the viewport (shrink-0,
-            sibling of — and OUTSIDE — the scroll container). Empty on
-            pages without a toolbar so `empty:hidden` lets the content
-            area fill the full height. */}
-        <div id="app-docked-bar" className="relative z-20 shrink-0 empty:hidden" />
       </main>
     </div>
   );

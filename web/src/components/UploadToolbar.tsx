@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import gsap from 'gsap';
 import { Button } from '@/components/Button';
 import { FileInput, type FileInputHandle } from '@/components/FileInput';
@@ -35,20 +34,6 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
   const fileRef = useRef<FileInputHandle>(null);
   const folderRef = useRef<FileInputHandle>(null);
   const [fabOpen, setFabOpen] = useState(false);
-
-  // Portal target for the docked desktop/tablet toolbar. Resolved only
-  // after mount so SSR (and test runners without the DOM slot) never
-  // touch `document`. When absent, the desktop toolbar simply isn't
-  // rendered — the mobile FAB path is unaffected.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const portalTarget =
-    mounted && typeof document !== 'undefined'
-      ? document.getElementById('app-docked-bar')
-      : null;
 
   const fabIconRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<HTMLDivElement>(null);
@@ -181,7 +166,7 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
       <FileInput ref={folderRef} directory multiple onSelect={(files) => onUploadFolder?.(files)} />
 
       {/* Mobile speed dial — pinned to the bottom-right corner (<sm only).
-          Desktop/tablet use the docked toolbar portaled below instead. */}
+          Desktop/tablet use the floating pill toolbar rendered below. */}
       <div className="sm:hidden fixed bottom-6 right-6 z-50">
         {/* Mobile vertical speed dial */}
         <div className="relative">
@@ -246,63 +231,56 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
         </div>
       </div>
 
-      {/* Desktop/tablet toolbar — docked to #app-docked-bar (sm+). Sits below
-          the scroll container so it never overlays the bottom file cards. */}
-      {portalTarget && createPortal(
-        <div className="hidden sm:flex w-full py-3 px-6 items-center justify-center border-t border-outline-variant/20 bg-surface-container-low/90 backdrop-blur-md">
-          <div className="glass-toolbar rounded-full h-14 px-6 flex items-center gap-6 border border-outline-variant/30">
-            {onNewFolder && (
-              <Button
-                onClick={() => {
-                  closeFab();
-                  onNewFolder();
-                }}
-                size="pill"
-                leftIcon={<CreateNewFolder className="!text-lg" />}
-                className="bg-primary text-on-primary hover:bg-primary/90"
-              >
-                <span className="text-label-sm">{t('upload.newFolder')}</span>
-              </Button>
-            )}
-            <div className="h-6 w-px bg-outline-variant/30" aria-hidden />
+      {/* Desktop/tablet toolbar — floating pill centered at the bottom (sm+). */}
+      <div className="hidden sm:flex fixed bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 z-40 max-w-[calc(100vw-2rem)]">
+        <div className="glass-toolbar rounded-full h-14 sm:h-16 px-6 flex items-center gap-6 border border-outline-variant/30 shadow-2xl shadow-black/40 backdrop-blur-xl bg-surface-container-low/80">
+          {onNewFolder && (
+            <Button
+              onClick={onNewFolder}
+              size="pill"
+              leftIcon={<CreateNewFolder className="!text-lg" />}
+              className="bg-primary text-on-primary hover:bg-primary/90"
+            >
+              <span className="text-label-sm">{t('upload.newFolder')}</span>
+            </Button>
+          )}
+          <div className="h-6 w-px bg-outline-variant/30" aria-hidden />
+          <Button
+            variant="ghost"
+            size="pill"
+            onClick={() => fileRef.current?.open()}
+            leftIcon={<UploadFile className="!text-xl" />}
+            className="!px-2 font-medium text-on-surface hover:text-primary hover:bg-transparent"
+          >
+            <span className="text-label-sm">{t('upload.uploadFile')}</span>
+          </Button>
+          {onUploadFolder && (
             <Button
               variant="ghost"
               size="pill"
-              onClick={() => fileRef.current?.open()}
-              leftIcon={<UploadFile className="!text-xl" />}
+              onClick={() => folderRef.current?.open()}
+              leftIcon={<DriveFolderUpload className="!text-xl" />}
               className="!px-2 font-medium text-on-surface hover:text-primary hover:bg-transparent"
             >
-              <span className="text-label-sm">{t('upload.uploadFile')}</span>
+              <span className="text-label-sm">{t('upload.uploadFolder')}</span>
             </Button>
-            {onUploadFolder && (
+          )}
+          {onSelectMode && (
+            <>
+              <div className="h-6 w-px bg-outline-variant/30" aria-hidden />
               <Button
                 variant="ghost"
                 size="pill"
-                onClick={() => folderRef.current?.open()}
-                leftIcon={<DriveFolderUpload className="!text-xl" />}
+                onClick={onSelectMode}
+                leftIcon={<Checklist className="!text-xl" />}
                 className="!px-2 font-medium text-on-surface hover:text-primary hover:bg-transparent"
               >
-                <span className="text-label-sm">{t('upload.uploadFolder')}</span>
+                <span className="text-label-sm">{t('upload.selectMode')}</span>
               </Button>
-            )}
-            {onSelectMode && (
-              <>
-                <div className="h-6 w-px bg-outline-variant/30" aria-hidden />
-                <Button
-                  variant="ghost"
-                  size="pill"
-                  onClick={onSelectMode}
-                  leftIcon={<Checklist className="!text-xl" />}
-                  className="!px-2 font-medium text-on-surface hover:text-primary hover:bg-transparent"
-                >
-                  <span className="text-label-sm">{t('upload.selectMode')}</span>
-                </Button>
-              </>
-            )}
-          </div>
-        </div>,
-        portalTarget,
-      )}
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Backdrop — tap-to-close while the vertical stack is open (mobile only) */}
       <div
