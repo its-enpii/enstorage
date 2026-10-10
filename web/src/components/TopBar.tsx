@@ -48,7 +48,7 @@ export function TopBar({
           onClick={onToggleSidebar}
           aria-label={t('nav.menu', 'Menu')}
           size="lg"
-          className="sm:hidden"
+          className="md:hidden"
         >
           <Menu className="!text-xl" />
         </IconButton>
@@ -61,7 +61,7 @@ export function TopBar({
             onClick={openPalette}
             aria-label={t('search.placeholder')}
             size="lg"
-            className="sm:hidden mx-auto"
+            className="md:hidden mx-auto"
           >
             <SearchIcon className="!text-xl" />
           </IconButton>
@@ -72,13 +72,13 @@ export function TopBar({
             onClick={openPalette}
             aria-label={t('search.placeholder')}
             leftIcon={<SearchIcon className="!text-xl shrink-0" />}
-            className="!hidden sm:!inline-flex w-full !justify-start !font-normal !bg-surface-container/70 border border-outline-variant/25 hover:!bg-surface-container hover:border-primary/40 text-outline transition-all shadow-sm"
+            className="!hidden md:!inline-flex w-full !justify-start !font-normal !bg-surface-container/70 border border-outline-variant/25 hover:!bg-surface-container hover:border-primary/40 text-outline transition-all shadow-sm"
           >
             <span className="truncate">
               {searchPlaceholder ?? (
                 <>
-                  <span className="hidden sm:inline">{t('search.placeholder')}</span>
-                  <span className="sm:hidden">{t('search.placeholderShort')}</span>
+                  <span className="hidden md:inline">{t('search.placeholder')}</span>
+                  <span className="md:hidden">{t('search.placeholderShort')}</span>
                 </>
               )}
             </span>

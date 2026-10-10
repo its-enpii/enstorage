@@ -37,7 +37,7 @@ export function SegmentedControl<T extends string | number = string>({
       role="group"
       aria-label={ariaLabel}
       className={clsx(
-        'flex w-full rounded-2xl bg-surface-container p-1 gap-1 text-sm flex-wrap',
+        'flex w-full rounded-2xl bg-surface-container border border-outline-variant/30 p-1 gap-1 text-sm flex-wrap',
         className,
       )}
     >
@@ -55,8 +55,8 @@ export function SegmentedControl<T extends string | number = string>({
             className={clsx(
               '!h-auto flex-1 basis-0 min-w-0 !px-3 !py-1.5 !rounded-full !font-medium whitespace-nowrap',
               active
-                ? '!bg-primary !text-on-primary hover:!bg-primary hover:!text-on-primary'
-                : '!bg-transparent !text-on-surface-variant hover:!bg-transparent hover:!text-on-surface',
+                ? '!bg-primary !text-on-primary font-semibold hover:!bg-primary hover:!text-on-primary'
+                : '!bg-transparent !text-on-surface-variant hover:!text-on-surface hover:!bg-surface-container-highest/60',
               opt.disabled && 'opacity-40 cursor-not-allowed',
             )}
           >

@@ -156,18 +156,18 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
 
   return (
     <>
-      {/* Mobile drawer — fixed overlay, slides in from left, hidden on sm+ */}
+      {/* Mobile drawer — fixed overlay, slides in from left, hidden on md+ */}
       <div
         onClick={onMobileClose}
         className={clsx(
-          'sm:hidden fixed inset-0 z-[69] bg-background/80 backdrop-blur-sm transition-opacity duration-300 ease-out',
+          'md:hidden fixed inset-0 z-[69] bg-background/80 backdrop-blur-sm transition-opacity duration-300 ease-out',
           mobileOpen ? 'opacity-100' : 'opacity-0 pointer-events-none',
         )}
         aria-hidden={!mobileOpen}
       />
       <aside
         className={clsx(
-          'sm:hidden fixed inset-y-0 left-0 z-[70] w-[72px] bg-surface-container-lowest flex flex-col items-center py-8 gap-10 shadow-ambient border-r border-outline-variant/15 transform transition-transform duration-300 ease-out will-change-transform',
+          'md:hidden fixed inset-y-0 left-0 z-[70] w-[72px] bg-surface-container-lowest flex flex-col items-center py-8 gap-10 shadow-ambient border-r border-outline-variant/15 transform transition-transform duration-300 ease-out will-change-transform',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
         aria-hidden={!mobileOpen}
@@ -175,8 +175,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
         {inner}
       </aside>
 
-      {/* Desktop rail — fixed-visible on sm+, hidden on mobile */}
-      <aside className="hidden sm:flex w-[72px] h-screen bg-surface-container-lowest/80 backdrop-blur-xl flex-col items-center py-8 gap-10 border-r border-outline-variant/20 z-50">
+      {/* Desktop rail — fixed-visible on md+, hidden on mobile/tablet portrait */}
+      <aside className="hidden md:flex w-[72px] h-screen bg-surface-container-lowest/80 backdrop-blur-xl flex-col items-center py-8 gap-10 border-r border-outline-variant/20 z-50">
         {inner}
       </aside>
     </>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import clsx from 'clsx';
 import { DriveFileMoveIcon } from '@/lib/icons';
 import { apiRequest, type FileItem, type Folder as FolderType } from '@/lib/api';
 import { Dialog } from '@/components/Dialog';
@@ -163,7 +164,7 @@ export function MoveDialog({
         </>
       }
     >
-      <p className="text-sm text-outline mb-3">
+      <p className="text-sm text-on-surface-variant mb-3">
         {targetName
           ? t('files.move.toLabel', { target: targetName })
           : t('files.move.pickTarget')}
@@ -172,17 +173,22 @@ export function MoveDialog({
       <div className="max-h-72 overflow-y-auto rounded-2xl border border-outline-variant/30 bg-surface-container-low">
         <Button
           type="button"
-          variant={pickedFolderId === null ? 'primary' : 'ghost'}
+          variant="ghost"
           size="sm"
           fullWidth
-          className="justify-start text-left font-normal"
+          className={clsx(
+            'justify-start text-left',
+            pickedFolderId === null
+              ? '!bg-primary/20 !text-primary border border-primary/40 font-medium hover:!bg-primary/25'
+              : '!text-on-surface hover:!bg-surface-container',
+          )}
           onClick={() => setPickedFolderId(null)}
           leftIcon={<span className="material-symbols-outlined !text-base">home</span>}
         >
           <span className="truncate">{t('files.move.root')}</span>
         </Button>
         {sortedFolders.length === 0 ? (
-          <div className="px-4 py-3 text-sm text-outline">
+          <div className="px-4 py-3 text-sm text-on-surface-variant font-medium">
             {t('files.move.noFolders')}
           </div>
         ) : (
@@ -190,10 +196,15 @@ export function MoveDialog({
             <Button
               key={f.id}
               type="button"
-              variant={pickedFolderId === f.id ? 'primary' : 'ghost'}
+              variant="ghost"
               size="sm"
               fullWidth
-              className="justify-start text-left font-normal"
+              className={clsx(
+                'justify-start text-left',
+                pickedFolderId === f.id
+                  ? '!bg-primary/20 !text-primary border border-primary/40 font-medium hover:!bg-primary/25'
+                  : '!text-on-surface hover:!bg-surface-container',
+              )}
               onClick={() => setPickedFolderId(f.id)}
               data-testid={`move-folder-${f.id}`}
               leftIcon={<span className="material-symbols-outlined !text-base">folder</span>}
