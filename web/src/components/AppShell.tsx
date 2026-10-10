@@ -39,6 +39,20 @@ export function AppShell({
     setSidebarOpen(false);
   }, [pathname]);
 
+  // Lock outer page scroll ONLY while the authenticated AppShell is mounted.
+  // Isolated here (not in globals.css) so public routes stay freely scrollable.
+  useEffect(() => {
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+    };
+  }, []);
+
   if (loading) {
     // Only shows when there's a token but NO cached user — first visit or
     // cache cleared. Cached-user case skips straight to children.
