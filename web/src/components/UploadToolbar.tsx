@@ -70,15 +70,15 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
   }, [fabOpen]);
 
   // Radial arc actions, laid out along a 90° quadrant arc (12 o'clock -> 9 o'clock).
-  // Radius R = 105px, one action every 30°.
+  // Radius R = 100px; spaced ~52px apart (4px clean gap) along the quadrant.
   const actions: Action[] = [
     {
       key: 'uploadFile',
       label: t('upload.uploadFile'),
-      icon: <UploadFile className="!text-2xl" />,
+      icon: <UploadFile className="!text-2xl text-white" />,
       onClick: triggerFile,
       targetX: 0,
-      targetY: -105,
+      targetY: -100,
       bgClass: 'bg-[#4F46E5]',
     },
     ...(onNewFolder
@@ -86,10 +86,10 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
           {
             key: 'newFolder',
             label: t('upload.newFolder'),
-            icon: <CreateNewFolder className="!text-2xl" />,
+            icon: <CreateNewFolder className="!text-2xl text-white" />,
             onClick: handleNewFolder,
-            targetX: -52,
-            targetY: -91,
+            targetX: -50,
+            targetY: -87,
             bgClass: 'bg-[#7C3AED]',
           },
         ]
@@ -99,10 +99,10 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
           {
             key: 'uploadFolder',
             label: t('upload.uploadFolder'),
-            icon: <DriveFolderUpload className="!text-2xl" />,
+            icon: <DriveFolderUpload className="!text-2xl text-white" />,
             onClick: triggerFolder,
-            targetX: -91,
-            targetY: -52,
+            targetX: -87,
+            targetY: -50,
             bgClass: 'bg-[#9333EA]',
           },
         ]
@@ -112,9 +112,9 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
           {
             key: 'selectMode',
             label: t('upload.selectMode'),
-            icon: <Checklist className="!text-2xl" />,
+            icon: <Checklist className="!text-2xl text-white" />,
             onClick: handleSelectMode,
-            targetX: -105,
+            targetX: -100,
             targetY: 0,
             bgClass: 'bg-[#0D9488]',
           },
@@ -144,7 +144,7 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
               rotation: 0,
               opacity: 1,
               duration: 0.32,
-              stagger: 0.04,
+              stagger: 0.035,
               ease: 'back.out(2)',
             },
           );
@@ -162,7 +162,7 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
             scale: 0.2,
             rotation: -90,
             opacity: 0,
-            duration: 0.18,
+            duration: 0.16,
             ease: 'power2.in',
           });
         }
@@ -194,28 +194,19 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
               aria-hidden={!fabOpen}
             >
               {actions.map((action) => (
-                <div
+                <button
                   key={action.key}
-                  className="radial-action-item absolute top-0 left-0 flex flex-col items-center"
-                  style={{
-                    transform: `translate(${action.targetX}px, ${action.targetY}px)`,
-                  }}
+                  type="button"
+                  onClick={action.onClick}
+                  aria-label={action.label}
+                  title={action.label}
+                  className={clsx(
+                    'radial-action-btn absolute top-1 left-1 w-12 h-12 rounded-full flex items-center justify-center text-white shadow-xl shadow-black/60 border border-white/15 active:scale-90 hover:scale-105 transition-transform cursor-pointer',
+                    action.bgClass,
+                  )}
                 >
-                  <button
-                    type="button"
-                    onClick={action.onClick}
-                    aria-label={action.label}
-                    className={clsx(
-                      'w-12 h-12 rounded-full flex items-center justify-center text-white shadow-xl shadow-black/50 border border-white/10 active:scale-95 transition-transform cursor-pointer',
-                      action.bgClass,
-                    )}
-                  >
-                    {action.icon}
-                  </button>
-                  <span className="mt-1 px-2 py-0.5 rounded-md bg-surface-container-highest/95 border border-outline-variant/30 text-on-surface text-[11px] font-medium shadow-md whitespace-nowrap pointer-events-none select-none">
-                    {action.label}
-                  </span>
-                </div>
+                  {action.icon}
+                </button>
               ))}
             </div>
           </div>
