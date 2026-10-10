@@ -3,7 +3,6 @@
 import { getFileDownloadUrl, getFolderDownloadUrl, triggerDirectDownload } from '@/lib/download';
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { Tune, Link as LinkIcon } from '@mui/icons-material';
@@ -603,12 +602,6 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   const [moveFiles, setMoveFiles] = useState<FileItem[] | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
 
-  // Portal target for the docked select-mode bar (#app-docked-bar in
-  // AppShell). Resolved post-mount so SSR never touches `document`.
-  const [dockedBarEl, setDockedBarEl] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    setDockedBarEl(document.getElementById('app-docked-bar'));
-  }, []);
   // Map<fileId, setInterval handle>. When WS is connected, we don't
   // allocate a timer — files complete via FileUploadedBroadcast — and
   // the entry is absent. The cleanup pass at unmount clears any
@@ -1699,71 +1692,35 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       )}
 
       {selectMode ? (
-        dockedBarEl ? (
-          createPortal(
-            <div className="hidden sm:flex w-full py-3 px-6 items-center justify-center border-t border-outline-variant/20 bg-surface-container-low/90 backdrop-blur-md">
-              <div className="glass-toolbar rounded-full h-14 px-6 flex items-center gap-4 border border-outline-variant/30">
-                <span className="text-sm text-on-surface font-medium">{t('files.selected', { count: selected.size })}</span>
-                <div className="h-6 w-px bg-outline-variant/30" />
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    openMoveDialog(visibleFiles.filter((f) => selected.has(f.id)))
-                  }
-                  disabled={visibleFiles.filter((f) => selected.has(f.id)).length === 0}
-                >
-                  <DriveFileMoveIcon /> {t('files.moveAll')}
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => downloadMultiple(Array.from(selected))}
-                >
-                  <CloudDoneIcon /> {t('files.downloadAll')}
-                </Button>
-                <Button
-                  variant="danger-soft"
-                  size="sm"
-                  onClick={bulkDelete}
-                >
-                  <CloudOffIcon /> {t('files.deleteAll')}
-                </Button>
-                <TextAction onClick={clearSelection}>{t('common.cancel')}</TextAction>
-              </div>
-            </div>,
-            dockedBarEl,
-          )
-        ) : (
-          /* Mobile fallback (<sm) — floating pill centered at the bottom. */
-          <div className="sm:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100vw-2rem)]">
-            <div className="glass-toolbar rounded-full h-14 px-4 flex items-center gap-3 border border-outline-variant/30 overflow-x-auto">
-              <span className="text-sm text-on-surface font-medium whitespace-nowrap">{t('files.selected', { count: selected.size })}</span>
-              <div className="h-6 w-px bg-outline-variant/30 shrink-0" />
-              <Button
-                size="sm"
-                onClick={() =>
-                  openMoveDialog(visibleFiles.filter((f) => selected.has(f.id)))
-                }
-                disabled={visibleFiles.filter((f) => selected.has(f.id)).length === 0}
-              >
-                <DriveFileMoveIcon /> {t('files.moveAll')}
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => downloadMultiple(Array.from(selected))}
-              >
-                <CloudDoneIcon /> {t('files.downloadAll')}
-              </Button>
-              <Button
-                variant="danger-soft"
-                size="sm"
-                onClick={bulkDelete}
-              >
-                <CloudOffIcon /> {t('files.deleteAll')}
-              </Button>
-              <TextAction onClick={clearSelection}>{t('common.cancel')}</TextAction>
-            </div>
+        <div className="fixed bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100vw-2rem)]">
+          <div className="glass-toolbar rounded-full h-14 sm:h-16 px-6 flex items-center gap-4 border border-outline-variant/30 shadow-2xl shadow-black/40 backdrop-blur-xl bg-surface-container-low/80">
+            <span className="text-sm text-on-surface font-medium whitespace-nowrap">{t('files.selected', { count: selected.size })}</span>
+            <div className="h-6 w-px bg-outline-variant/30" />
+            <Button
+              size="sm"
+              onClick={() =>
+                openMoveDialog(visibleFiles.filter((f) => selected.has(f.id)))
+              }
+              disabled={visibleFiles.filter((f) => selected.has(f.id)).length === 0}
+            >
+              <DriveFileMoveIcon /> {t('files.moveAll')}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => downloadMultiple(Array.from(selected))}
+            >
+              <CloudDoneIcon /> {t('files.downloadAll')}
+            </Button>
+            <Button
+              variant="danger-soft"
+              size="sm"
+              onClick={bulkDelete}
+            >
+              <CloudOffIcon /> {t('files.deleteAll')}
+            </Button>
+            <TextAction onClick={clearSelection}>{t('common.cancel')}</TextAction>
           </div>
-        )
+        </div>
       ) : (
         <UploadToolbar
           onNewFolder={createFolder}

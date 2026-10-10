@@ -138,7 +138,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
         {brandMark}
       </Link>
 
-      <nav className="flex flex-col gap-8 flex-1">
+      <nav className="flex flex-col gap-6 flex-1">
         {NAV.map((item) => {
           const Icon = item.icon;
           const active = pathname.startsWith(item.href);
@@ -166,7 +166,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
         })}
       </nav>
 
-      <div className="mt-auto pb-4 flex items-center justify-center">
+      <div className="mt-auto pb-2 flex items-center justify-center">
         {profileMenu}
       </div>
     </>
@@ -292,7 +292,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
       </aside>
 
       {/* Desktop rail — fixed-visible on md+, hidden on mobile/tablet portrait */}
-      <aside className="hidden md:flex w-[72px] h-screen bg-surface-container-lowest/80 backdrop-blur-xl flex-col items-center py-8 gap-10 border-r border-outline-variant/20 z-50">
+      <aside className="hidden md:flex w-[72px] h-full shrink-0 bg-surface-container-lowest/80 backdrop-blur-xl flex-col items-center py-6 gap-6 border-r border-outline-variant/20 z-50">
         {railInner}
       </aside>
     </>
