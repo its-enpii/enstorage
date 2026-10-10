@@ -338,9 +338,9 @@ export function ShareDialog({ target, onClose, onUpdate }: Props) {
           <ul className="divide-y divide-outline-variant/30 rounded-2xl bg-surface-container border border-outline-variant/30 overflow-hidden">
             {links.map((link) => (
               <li key={link.id} className="px-4 py-3 space-y-1.5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <p className="flex-1 min-w-0 text-xs font-mono text-on-surface truncate">{link.url}</p>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center justify-end gap-2 shrink-0">
                     <IconButton
                       onClick={() => copyShareLink(link.url, link.id)}
                       title={t('share.copy')}

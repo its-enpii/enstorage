@@ -274,7 +274,7 @@ function AccountsContent() {
             {t('accounts.subtitle')}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-end w-full sm:w-auto gap-3">
           <Button onClick={connect} leftIcon={<AddIcon />} size="lg">
             {t('accounts.connect')}
           </Button>
