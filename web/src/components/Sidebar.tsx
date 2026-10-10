@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import {
   Cloud,
+  Close,
   Folder,
   GridView,
   Key,
@@ -17,6 +18,7 @@ import {
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/components/AuthProvider';
+import { IconButton } from '@/components/Button';
 import { DropdownMenu } from '@/components/DropdownMenu';
 import { usePrompt } from '@/components/usePrompt';
 
@@ -24,6 +26,12 @@ type Props = {
   /** When true (mobile only), slide the drawer in over the page with a backdrop. */
   mobileOpen?: boolean;
   onMobileClose?: () => void;
+};
+
+type NavEntry = {
+  href: string;
+  labelKey: string;
+  icon: typeof GridView;
 };
 
 export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
@@ -105,32 +113,42 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
     };
   }, [mobileOpen, onMobileClose]);
 
-  const NAV = [
-    { href: '/files', label: t('nav.files'), icon: GridView },
-    { href: '/folders', label: t('nav.folders'), icon: Folder },
-    { href: '/starred', label: t('nav.starred'), icon: Star },
-    { href: '/google-accounts', label: t('nav.googleAccounts'), icon: Group },
-    { href: '/api-keys', label: t('nav.apiKeys'), icon: Key },
+  const NAV: NavEntry[] = [
+    { href: '/files', labelKey: 'nav.files', icon: GridView },
+    { href: '/folders', labelKey: 'nav.folders', icon: Folder },
+    { href: '/starred', labelKey: 'nav.starred', icon: Star },
+    { href: '/google-accounts', labelKey: 'nav.googleAccounts', icon: Group },
+    { href: '/api-keys', labelKey: 'nav.apiKeys', icon: Key },
   ];
 
-  const inner = (
+  const brandMark = (
+    <div className="w-10 h-10 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center shadow-md shadow-primary/25 border border-primary/30">
+      <Cloud className="!text-2xl fill" />
+    </div>
+  );
+
+  // --- Desktop rail body: icon-only, 72px minimalist column ---
+  const railInner = (
     <>
-      <Link href="/files" title="EnStorage" className="transition-transform hover:scale-105 active:scale-95">
-        <div className="w-10 h-10 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center shadow-md shadow-primary/25 border border-primary/30">
-          <Cloud className="!text-2xl fill" />
-        </div>
+      <Link
+        href="/files"
+        title="EnStorage"
+        className="transition-transform hover:scale-105 active:scale-95"
+      >
+        {brandMark}
       </Link>
 
       <nav className="flex flex-col gap-8 flex-1">
         {NAV.map((item) => {
           const Icon = item.icon;
           const active = pathname.startsWith(item.href);
+          const label = t(item.labelKey);
           return (
             <Link
               key={item.href}
               href={item.href}
-              title={item.label}
-              aria-label={item.label}
+              title={label}
+              aria-label={label}
               aria-current={active ? 'page' : undefined}
               className="relative group"
             >
@@ -154,9 +172,106 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
     </>
   );
 
+  // --- Mobile drawer body: full-width (w-72 / sm:w-80) with icon + label ---
+  const drawerInner = (
+    <>
+      <header className="flex items-center justify-between gap-3 px-5 pt-6 pb-5 border-b border-outline-variant/15">
+        <Link
+          href="/files"
+          onClick={onMobileClose}
+          className="flex items-center gap-3 min-w-0 no-underline transition-transform active:scale-[0.98]"
+        >
+          {brandMark}
+          <span className="flex flex-col min-w-0">
+            <span className="font-display font-bold text-lg text-on-surface leading-tight truncate">
+              EnStorage
+            </span>
+            <span className="text-xs text-on-surface-variant/80 leading-tight truncate">
+              Cloud Vault
+            </span>
+          </span>
+        </Link>
+        <IconButton
+          type="button"
+          size="sm"
+          shape="circle"
+          onClick={onMobileClose}
+          aria-label={t('common.close')}
+          className="shrink-0"
+        >
+          <Close className="!text-lg" />
+        </IconButton>
+      </header>
+
+      <nav className="flex flex-col gap-1.5 flex-1 px-3 py-4 overflow-y-auto">
+        {NAV.map((item) => {
+          const Icon = item.icon;
+          const active = pathname.startsWith(item.href);
+          const label = t(item.labelKey);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onMobileClose}
+              aria-current={active ? 'page' : undefined}
+              className={clsx(
+                'flex items-center gap-3.5 px-4 py-3 rounded-xl transition-colors font-medium text-sm min-h-[48px]',
+                active
+                  ? 'bg-primary/20 text-primary border border-primary/30 font-semibold shadow-sm'
+                  : 'text-on-surface hover:text-on-surface hover:bg-surface-container active:bg-surface-container-high border border-transparent',
+              )}
+            >
+              <Icon className={clsx('!text-xl shrink-0', active && 'fill')} />
+              <span className="truncate">{label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      <footer className="border-t border-outline-variant/15 px-3 py-4">
+        <div className="flex items-center gap-3 rounded-2xl bg-surface-container-high/70 border border-outline-variant/30 px-3 py-3">
+          <div className="w-10 h-10 shrink-0 rounded-full bg-surface-container-highest border border-outline-variant/30 flex items-center justify-center text-on-surface text-sm font-semibold overflow-hidden">
+            {user?.name?.[0]?.toUpperCase() ?? '?'}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-on-surface text-sm truncate">
+              {user?.name ?? t('nav.profile')}
+            </p>
+            <p className="text-outline text-xs truncate">{user?.email ?? ''}</p>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <IconButton
+              type="button"
+              size="sm"
+              shape="circle"
+              bare
+              onClick={() => router.push('/settings')}
+              aria-label={t('nav.settings')}
+              title={t('nav.settings')}
+            >
+              <Settings className="!text-lg" />
+            </IconButton>
+            <IconButton
+              type="button"
+              size="sm"
+              shape="circle"
+              bare
+              variant="danger"
+              onClick={() => void handleLogout()}
+              aria-label={t('nav.logout')}
+              title={t('nav.logout')}
+            >
+              <Logout className="!text-lg" />
+            </IconButton>
+          </div>
+        </div>
+      </footer>
+    </>
+  );
+
   return (
     <>
-      {/* Mobile drawer — fixed overlay, slides in from left, hidden on md+ */}
+      {/* Mobile drawer backdrop — tap to close, hidden on md+ */}
       <div
         onClick={onMobileClose}
         className={clsx(
@@ -165,19 +280,20 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
         )}
         aria-hidden={!mobileOpen}
       />
+      {/* Mobile drawer — full-width (w-72 / sm:w-80), slides in from left */}
       <aside
         className={clsx(
-          'md:hidden fixed inset-y-0 left-0 z-[70] w-[72px] bg-surface-container-lowest flex flex-col items-center py-8 gap-10 shadow-ambient border-r border-outline-variant/15 transform transition-transform duration-300 ease-out will-change-transform',
+          'md:hidden fixed inset-y-0 left-0 z-[70] w-72 sm:w-80 max-w-[85vw] bg-surface-container-lowest flex flex-col shadow-ambient border-r border-outline-variant/15 transform transition-transform duration-300 ease-out will-change-transform',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
         aria-hidden={!mobileOpen}
       >
-        {inner}
+        {drawerInner}
       </aside>
 
       {/* Desktop rail — fixed-visible on md+, hidden on mobile/tablet portrait */}
       <aside className="hidden md:flex w-[72px] h-screen bg-surface-container-lowest/80 backdrop-blur-xl flex-col items-center py-8 gap-10 border-r border-outline-variant/20 z-50">
-        {inner}
+        {railInner}
       </aside>
     </>
   );
