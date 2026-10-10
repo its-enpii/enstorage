@@ -184,12 +184,19 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
         {/* Mobile radial arc speed dial — hidden on sm+ */}
         <div className="sm:hidden">
           {/* Arc container anchored at the FAB centre; items translate outwards */}
-          <div className="absolute bottom-0 right-0 w-14 h-14 sm:hidden">
-            <div ref={itemRefs} className="absolute inset-0 z-40">
+          <div className="absolute bottom-0 right-0 w-14 h-14 pointer-events-none">
+            <div
+              ref={itemRefs}
+              className={clsx(
+                "absolute inset-0 z-40 transition-opacity",
+                fabOpen ? "pointer-events-auto" : "pointer-events-none opacity-0"
+              )}
+              aria-hidden={!fabOpen}
+            >
               {actions.map((action) => (
                 <div
                   key={action.key}
-                  className="radial-action-item absolute top-0 left-0 flex flex-col items-center pointer-events-auto"
+                  className="radial-action-item absolute top-0 left-0 flex flex-col items-center"
                   style={{
                     transform: `translate(${action.targetX}px, ${action.targetY}px)`,
                   }}
@@ -205,7 +212,7 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
                   >
                     {action.icon}
                   </button>
-                  <span className="mt-1 px-2 py-0.5 rounded-md bg-surface-container-highest/95 border border-outline-variant/30 text-on-surface text-[11px] font-medium shadow-md whitespace-nowrap pointer-events-none">
+                  <span className="mt-1 px-2 py-0.5 rounded-md bg-surface-container-highest/95 border border-outline-variant/30 text-on-surface text-[11px] font-medium shadow-md whitespace-nowrap pointer-events-none select-none">
                     {action.label}
                   </span>
                 </div>
@@ -220,7 +227,7 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
             aria-label={t('upload.uploadFile')}
             aria-expanded={fabOpen}
             aria-haspopup="menu"
-            className="w-14 h-14 rounded-full flex items-center justify-center bg-primary text-on-primary shadow-2xl shadow-black/50 border border-outline-variant/20 hover:scale-105 active:scale-95 transition-all"
+            className="relative z-50 w-14 h-14 rounded-full flex items-center justify-center bg-primary text-on-primary shadow-2xl shadow-black/50 border border-outline-variant/20 hover:scale-105 active:scale-95 transition-all cursor-pointer"
           >
             <div ref={fabIconRef} className="flex items-center justify-center will-change-transform">
               <Add className="!text-2xl" />
