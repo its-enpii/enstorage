@@ -25,7 +25,6 @@ type Action = {
   key: string;
   label: string;
   icon: React.ReactNode;
-  badgeClass: string;
   onClick: () => void;
 };
 
@@ -67,7 +66,7 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
     return () => document.removeEventListener('keydown', onKey);
   }, [fabOpen]);
 
-  // GSAP timeline for the speed dial — GPU-only props (y, x, scale, rotation, opacity).
+  // GSAP timeline for the speed dial — GPU-only props (transform + opacity).
   useEffect(() => {
     const ctx = gsap.context(() => {
       const items = itemsRef.current ? Array.from(itemsRef.current.children) : [];
@@ -75,39 +74,35 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
       if (fabOpen) {
         gsap.to(fabIconRef.current, {
           rotation: 135,
-          duration: 0.3,
-          ease: 'back.out(2)',
+          duration: 0.25,
+          ease: 'power2.out',
         });
         if (items.length) {
           gsap.fromTo(
             items,
-            { y: 35, x: 8, scale: 0.4, opacity: 0, rotation: -6 },
+            { y: 35, scale: 0.4, opacity: 0 },
             {
               y: 0,
-              x: 0,
               scale: 1,
               opacity: 1,
-              rotation: 0,
-              duration: 0.32,
+              duration: 0.28,
               stagger: 0.04,
-              ease: 'back.out(2.2)',
+              ease: 'back.out(1.7)',
             },
           );
         }
       } else {
         gsap.to(fabIconRef.current, {
           rotation: 0,
-          duration: 0.22,
+          duration: 0.25,
           ease: 'power2.out',
         });
         if (items.length) {
           gsap.to(items, {
-            y: 24,
-            x: 6,
+            y: 20,
             scale: 0.4,
             opacity: 0,
             duration: 0.16,
-            stagger: 0.02,
             ease: 'power2.in',
           });
         }
@@ -123,7 +118,6 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
       key: 'uploadFile',
       label: t('upload.uploadFile'),
       icon: <UploadFile className="!text-2xl" />,
-      badgeClass: 'bg-sky-500/20 text-sky-300 border border-sky-400/30 shadow-sky-500/20',
       onClick: triggerFile,
     },
     ...(onNewFolder
@@ -132,7 +126,6 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
             key: 'newFolder',
             label: t('upload.newFolder'),
             icon: <CreateNewFolder className="!text-2xl" />,
-            badgeClass: 'bg-amber-500/20 text-amber-300 border border-amber-400/30 shadow-amber-500/20',
             onClick: handleNewFolder,
           },
         ]
@@ -143,7 +136,6 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
             key: 'uploadFolder',
             label: t('upload.uploadFolder'),
             icon: <DriveFolderUpload className="!text-2xl" />,
-            badgeClass: 'bg-violet-500/20 text-violet-300 border border-violet-400/30 shadow-violet-500/20',
             onClick: triggerFolder,
           },
         ]
@@ -154,7 +146,6 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
             key: 'selectMode',
             label: t('upload.selectMode'),
             icon: <Checklist className="!text-2xl" />,
-            badgeClass: 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shadow-emerald-500/20',
             onClick: handleSelectMode,
           },
         ]
@@ -190,18 +181,13 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
                     }
                   }}
                 >
-                  {/* Frosted Glass Label Pill */}
-                  <span className="px-3.5 py-1.5 rounded-xl bg-surface-container-high/90 backdrop-blur-xl border border-white/10 text-on-surface text-xs font-semibold shadow-xl shadow-black/50 whitespace-nowrap group-hover:border-primary/50 group-hover:text-primary transition-colors">
+                  {/* Label Kapsul di kiri */}
+                  <span className="px-3.5 py-2 rounded-xl bg-surface-container-high border border-outline-variant/35 text-on-surface text-sm font-medium shadow-md shadow-black/30 whitespace-nowrap select-none group-hover:border-primary/40 transition-colors">
                     {action.label}
                   </span>
 
-                  {/* Vibrant Squircle Action Button (48x48) */}
-                  <div
-                    className={clsx(
-                      'w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-200 group-hover:scale-110 active:scale-95 shrink-0',
-                      action.badgeClass,
-                    )}
-                  >
+                  {/* Mini-Action Button (48x48) */}
+                  <div className="w-12 h-12 rounded-full bg-surface-container-high border border-outline-variant/35 text-primary flex items-center justify-center shadow-md shadow-black/30 group-hover:bg-surface-container-highest group-hover:border-primary/40 active:scale-95 transition-all shrink-0">
                     {action.icon}
                   </div>
                 </div>
@@ -218,8 +204,7 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
             aria-haspopup="menu"
             shape="circle"
             className={clsx(
-              '!w-14 !h-14 rounded-full flex items-center justify-center bg-gradient-to-tr from-primary to-primary-container text-on-primary shadow-2xl shadow-primary/35 border border-white/20 hover:scale-105 active:scale-95 transition-all',
-              fabOpen && 'ring-4 ring-primary/25',
+              '!w-14 !h-14 rounded-full flex items-center justify-center bg-primary text-on-primary shadow-lg shadow-black/40 border border-outline-variant/20 hover:bg-primary/90 active:scale-95 transition-all',
             )}
           >
             <div ref={fabIconRef} className="flex items-center justify-center will-change-transform">
@@ -282,7 +267,7 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
       <div
         onClick={closeFab}
         className={clsx(
-          'sm:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-md transition-opacity duration-300',
+          'sm:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-200',
           fabOpen ? 'opacity-100' : 'opacity-0 pointer-events-none',
         )}
         aria-hidden={!fabOpen}
