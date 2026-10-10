@@ -170,7 +170,7 @@ export function MoveDialog({
           : t('files.move.pickTarget')}
       </p>
 
-      <div className="max-h-72 overflow-y-auto rounded-2xl border border-outline-variant/30 bg-surface-container-low">
+      <div className="max-h-52 sm:max-h-64 md:max-h-72 overflow-y-auto rounded-2xl border border-outline-variant/30 bg-surface-container-low">
         <Button
           type="button"
           variant="ghost"

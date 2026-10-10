@@ -41,7 +41,7 @@ export function TopBar({
 
   return (
     <>
-      <header className="sticky top-0 z-40 shrink-0 h-16 sm:h-20 px-4 sm:px-container-padding flex items-center gap-3 sm:gap-4 border-b border-outline-variant/20 backdrop-blur-xl bg-background/60">
+      <header className="sticky top-0 z-40 shrink-0 h-16 sm:h-20 px-4 sm:px-6 lg:px-container-padding flex items-center gap-3 sm:gap-4 border-b border-outline-variant/20 backdrop-blur-xl bg-background/60">
         {/* Hamburger — mobile only, opens sidebar drawer */}
         <IconButton
           type="button"
