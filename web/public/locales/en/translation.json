@@ -194,8 +194,7 @@
       "confirm": "Delete Folder"
     },
     "moveToRoot": "Move to root",
-    "items": "{{count}} items",
-    "itemsSize": "{{count}} items • {{size}}",
+    "items": "items",
     "emptyTitle": "Add folder",
     "emptyAction": "Create now",
     "downloadFolder": "Download folder (zip)",

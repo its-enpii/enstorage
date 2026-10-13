@@ -194,8 +194,7 @@
       "confirm": "Hapus Folder"
     },
     "moveToRoot": "Pindah ke root",
-    "items": "{{count}} items",
-    "itemsSize": "{{count}} items • {{size}}",
+    "items": "item",
     "emptyTitle": "Tambah folder",
     "emptyAction": "Buat sekarang",
     "downloadFolder": "Download folder (zip)",
