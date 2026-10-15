@@ -9,6 +9,17 @@ export const CONTACT_EMAIL = 'enpiiofficial@gmail.com';
 /** On-site API documentation portal. No external code hosting anywhere. */
 export const DOCS_HREF = '/docs';
 
+/** enpiistudio — parent brand site. Locale is appended per language. */
+export const STUDIO_HREF_BASE = 'https://enpiistudio.com';
+
+/** Personal portfolio of the builder. Locale-less. */
+export const PORTFOLIO_HREF = 'https://portfolio.enpiistudio.com/';
+
+/** Resolve the parent-brand URL for a given language code. */
+export function studioHref(locale: string): string {
+  return `${STUDIO_HREF_BASE}/${locale === 'en' ? 'en' : 'id'}`;
+}
+
 /** Landing anchors the public navigation and footer point at. */
 export const LANDING_SECTIONS = {
   features: 'features',
