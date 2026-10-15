@@ -581,7 +581,7 @@
     "lastUpdated": "Last updated",
     "privacy": {
       "title": "Privacy Policy",
-      "intro": "This Privacy Policy explains how Enpii Studio (“we”) collects, uses, and protects information when you use EnStorage (the “Service”) at https://enstorage.enpiistudio.com. EnStorage is a managed non-custodial storage aggregator web platform: every file is stored directly in your own Google Drive account, and EnStorage servers never store your files permanently. By using the Service, you agree to the practices described below.",
+      "intro": "This Privacy Policy explains how enpiistudio (“we”) collects, uses, and protects information when you use EnStorage (the “Service”) at https://enstorage.enpiistudio.com. EnStorage is a managed non-custodial storage aggregator web platform: every file is stored directly in your own Google Drive account, and EnStorage servers never store your files permanently. By using the Service, you agree to the practices described below.",
       "dataWeCollect": "1. Information We Collect",
       "dataWeCollectBody": "Basic Google profile: When you sign in or connect an account with Google, we receive your name and email address (scopes `userinfo.profile` and `userinfo.email`). We use these only to identify your account; your profile picture is neither stored nor displayed by the application.\n\nOAuth tokens: For each Google Drive account you connect, we store an access token, a refresh token, and its expiry. Tokens are encrypted with AES-256-CBC at rest before being written to the database. We never receive or see your Google password.\n\nFile index metadata: We store the metadata required to manage files (name, size, MIME type, hash, folder path, the Google Drive object ID or `gdrive_file_id`, and share link token and settings). The file itself lives in your Google Drive account, not on EnStorage servers.\n\nAPI keys: When you create a personal access token, only a bcrypt hash and the 8-character prefix are stored. The plaintext token is shown once and cannot be retrieved again.\n\nBasic activity logs: We log basic request metadata (timestamp, endpoint, status code, API key ID) for security, auditing of sensitive actions, and abuse prevention. We do not ship third-party analytics, advertising, or tracking pixels.",
       "howWeUse": "2. How We Use Information",
@@ -610,7 +610,7 @@
     },
     "terms": {
       "title": "Terms of Service",
-      "intro": "These Terms of Service (the “Terms”) govern your use of EnStorage (the “Service”), a managed non-custodial storage aggregator web platform operated by Enpii Studio (“we”) at https://enstorage.enpiistudio.com. By creating an account or using the Service, you agree to these Terms.",
+      "intro": "These Terms of Service (the “Terms”) govern your use of EnStorage (the “Service”), a managed non-custodial storage aggregator web platform operated by enpiistudio (“we”) at https://enstorage.enpiistudio.com. By creating an account or using the Service, you agree to these Terms.",
       "eligibility": "1. Eligibility",
       "eligibilityBody": "You must be at least 13 years old (or the minimum digital consent age in your jurisdiction) to use the Service. You must own the Google Drive account you connect, or be authorized to act on its owner's behalf. By using the Service, you represent that you meet these requirements.",
       "account": "2. Your Account & Credentials",
@@ -622,13 +622,13 @@
       "service": "5. Nature of the Service",
       "serviceBody": "EnStorage is a managed non-custodial storage aggregator web platform that connects the user interface with the Google Drive API. EnStorage is an orchestrator that streams storage into your own Google Drive: files go directly to your Google Drive account and are never stored permanently on our server disk. EnStorage is not a standalone disk hosting provider and not a public storage provider. As a result:\n\n- Availability, capacity, and storage integrity depend on your Google Drive accounts and on the availability of the Google Drive API.\n- EnStorage stores only index metadata (name, size, MIME type, hash, folder path, Drive object ID, share link token) and encrypted OAuth tokens, never file contents.\n- We may change, suspend, or discontinue features in future releases at any time, with reasonable notice for material changes.",
       "googleTerms": "6. Compliance with Google Terms",
-      "googleTermsBody": "Because EnStorage accesses the Google Drive API, your use of Google-related features is subject to the Google API Terms of Service, the Google Drive Terms of Service, and the Google API Services User Data Policy, including the Limited Use requirements. You may only connect Google accounts you control or whose owner has granted you permission. Google is a third party unrelated to Enpii Studio and provides no warranties for this Service. You may revoke Google's permission at any time through myaccount.google.com/permissions, and doing so is not a breach of these Terms.",
+      "googleTermsBody": "Because EnStorage accesses the Google Drive API, your use of Google-related features is subject to the Google API Terms of Service, the Google Drive Terms of Service, and the Google API Services User Data Policy, including the Limited Use requirements. You may only connect Google accounts you control or whose owner has granted you permission. Google is a third party unrelated to enpiistudio and provides no warranties for this Service. You may revoke Google's permission at any time through myaccount.google.com/permissions, and doing so is not a breach of these Terms.",
       "termination": "7. Termination",
       "terminationBody": "You may stop using the Service at any time by detaching a child Google account from the dashboard, or by deleting your primary EnStorage account from the Settings menu (Danger Zone). We may suspend or terminate your access if you breach these Terms, with or without prior notice. After termination, your index metadata is deleted in accordance with the Privacy Policy and all of your Google tokens are revoked, while files in your Drive remain yours. Provisions of these Terms that by their nature should survive will survive.",
       "liability": "8. Limitation of Liability",
       "liabilityBody": "To the maximum extent permitted by law, we are not liable for losses arising from: loss of access to your Google Drive accounts, revocation of permissions by Google, changes to or discontinuation of the Google Drive API, damage caused by lost or compromised Google credentials, service outages or delays, and file deletions you instruct.\n\nOur aggregate liability for any claim arising from or related to the Service is limited to the amount you paid us (if any) in the 12 months before the claim, or USD 10, whichever is greater. We are not liable for indirect, incidental, special, consequential, or punitive damages. We do not warrant that the Service is error-free or always available.",
       "warranty": "9. Warranty & Disclaimer",
-      "warrantyBody": "The Service is provided “as is” and “as available”. Except as expressly stated in a written agreement, we disclaim all implied warranties, including merchantability, fitness for a particular purpose, and non-infringement. The Service is provided as a commercially managed platform operated by Enpii Studio; any obligations arising from use of the Service are governed by these Terms.",
+      "warrantyBody": "The Service is provided “as is” and “as available”. Except as expressly stated in a written agreement, we disclaim all implied warranties, including merchantability, fitness for a particular purpose, and non-infringement. The Service is provided as a commercially managed platform operated by enpiistudio; any obligations arising from use of the Service are governed by these Terms.",
       "changes": "10. Changes to These Terms",
       "changesBody": "We may update these Terms from time to time. Material changes will be announced through the Service and on this page together with the “Last updated” date. Continued use of the Service after changes indicates acceptance of the updated Terms.",
       "governingLaw": "11. Governing Law",
@@ -663,9 +663,9 @@
       "userControls": "10. User Controls & Revocation",
       "userControlsBody": "The EnStorage account model consists of a primary account (Parent) and child accounts (Child):\n\n- A child account (an additional Google Drive account you connected for quota aggregation) can be revoked and deleted at any time from the `/google-accounts` page.\n- The primary account (Parent) is bound to your registration email and can only be deleted from the Settings menu (Danger Zone).\n\nRevocation can also be done directly from Google's side: open myaccount.google.com/permissions, select EnStorage, and revoke access. You can also review and revoke sessions at myaccount.google.com/signin.\n\nAfter revocation the tokens are worthless and the system can no longer read or write files in your Drive. Deleting your EnStorage account removes all of your index metadata and revokes all of your Google OAuth tokens.",
       "deletion": "11. Data Deletion & Right to Be Forgotten",
-      "deletionBody": "Deletion is permanent and layered: disconnecting a child account revokes its token at Google and removes that token plus the account's metadata; deleting your primary EnStorage account removes all file metadata, folders, share links, API keys, and logs through cascade relations and revokes all of your Google OAuth tokens. Deleting a file in EnStorage also calls the Google Drive API to remove the object, so the file disappears from your Drive rather than merely from a listing. Files already deleted on the Drive side are reconciled in the metadata by the cleanup scheduler. Because file contents are never stored permanently on our servers, no additional deletion request to Enpii Studio is needed.",
+      "deletionBody": "Deletion is permanent and layered: disconnecting a child account revokes its token at Google and removes that token plus the account's metadata; deleting your primary EnStorage account removes all file metadata, folders, share links, API keys, and logs through cascade relations and revokes all of your Google OAuth tokens. Deleting a file in EnStorage also calls the Google Drive API to remove the object, so the file disappears from your Drive rather than merely from a listing. Files already deleted on the Drive side are reconciled in the metadata by the cleanup scheduler. Because file contents are never stored permanently on our servers, no additional deletion request to enpiistudio is needed.",
       "userResponsibilities": "12. Your Account Security Responsibilities",
-      "userResponsibilitiesBody": "Although EnStorage is managed by Enpii Studio, the security of your account remains your responsibility. We recommend:\n\n- Enabling 2-Step Verification on your Google Account.\n- Creating API keys with the minimum scope your integration needs.\n- Rotating API key tokens periodically and revoking keys you no longer use.\n- Keeping your EnStorage account password confidential and never sharing it with anyone.\n- Monitoring account activity and reporting any unauthorized use to us promptly.",
+      "userResponsibilitiesBody": "Although EnStorage is managed by enpiistudio, the security of your account remains your responsibility. We recommend:\n\n- Enabling 2-Step Verification on your Google Account.\n- Creating API keys with the minimum scope your integration needs.\n- Rotating API key tokens periodically and revoking keys you no longer use.\n- Keeping your EnStorage account password confidential and never sharing it with anyone.\n- Monitoring account activity and reporting any unauthorized use to us promptly.",
       "vulnerability": "13. Reporting Security Vulnerabilities",
       "vulnerabilityBody": "If you find a vulnerability in EnStorage, please report it responsibly to enpiiofficial@gmail.com with the subject “Security”. Do not publish vulnerability details (public issues, social media, or blog posts) before it is addressed.\n\nWhen we receive a report we will acknowledge it within at most 7 days, assess impact and severity, prepare a fix or mitigation for the next release, and agree on a disclosure timeline with you if you would like credit. Please avoid accessing other users' production data, disrupting the service, or downloading data as evidence; demonstrating the vulnerable point is enough.",
       "status": "14. Limitations & Closing Statement",
@@ -922,7 +922,7 @@
     },
     "footer": {
       "tagline": "A self-hosted multi-account Google Drive aggregator. Never Leaves Your Drive.",
-      "madeBy": "EnStorage by enpii studio",
+      "madeBy": "EnStorage by enpiistudio",
       "product": "Product",
       "productLinks": {
         "features": "Features",
@@ -940,8 +940,14 @@
         "api": "API documentation",
         "contact": "Contact email"
       },
-      "copyright": "Copyright {{year}} enpii studio. All rights reserved.",
-      "selfHostedNote": "EnStorage runs on an instance you own."
+      "copyright": "Copyright {{year}} enpiistudio. All rights reserved.",
+      "selfHostedNote": "EnStorage runs on an instance you own.",
+      "ekosistem": "Ecosystem",
+      "ekosistemLinks": {
+        "studio": "enpiistudio",
+        "portfolio": "Portfolio"
+      },
+      "opensInNewTab": "opens in a new tab"
     },
     "pageTitle": "Never Leaves Your Drive.",
     "teaser": {

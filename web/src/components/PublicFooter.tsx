@@ -1,15 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowForward, Email } from '@mui/icons-material';
+import { ArrowForward, Email, OpenInNew } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/Button';
 import { PublicWordmark } from '@/components/PublicHeader';
+import { getLocale } from '@/lib/i18n';
 import {
   DOCS_HREF,
   CONTACT_EMAIL,
   LEGAL_NAV,
+  PORTFOLIO_HREF,
   scrollToTop,
+  studioHref,
 } from '@/lib/site';
 
 /** Column 1 — product sections, as anchors so they resolve from any page. */
@@ -21,6 +24,12 @@ const PRODUCT_LINKS = [
 
 /** Column 3 — help. Everything stays on-site: no code hosting links. */
 const HELP_LINKS = [{ href: DOCS_HREF, labelKey: 'landing.footer.helpLinks.api' }];
+
+/** Column 3 — ecosystem: parent brand and the builder's portfolio. */
+const EKOSISTEM_LINKS = [
+  { href: studioHref(getLocale()), labelKey: 'landing.footer.ekosistemLinks.studio' },
+  { href: PORTFOLIO_HREF, labelKey: 'landing.footer.ekosistemLinks.portfolio' },
+];
 
 const COLUMN_TITLE = 'text-label-sm font-semibold uppercase tracking-[0.14em] text-outline';
 const LINK_CLASS =
@@ -37,7 +46,7 @@ export function PublicFooter({ showBackToTop = true }: { showBackToTop?: boolean
   return (
     <footer className="border-t border-outline-variant/20 bg-surface-dim">
       <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6">
-        <div className="grid gap-10 lg:grid-cols-[1.2fr_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[1.25fr_repeat(4,minmax(0,1fr))]">
           <div>
             <PublicWordmark />
             <p className="mt-4 max-w-xs text-body-md leading-relaxed text-on-surface-variant">
@@ -56,6 +65,29 @@ export function PublicFooter({ showBackToTop = true }: { showBackToTop?: boolean
                   </Link>
                 </li>
               ))}
+            </ul>
+          </div>
+
+          <div>
+            <h3 className={COLUMN_TITLE}>{t('landing.footer.ekosistem')}</h3>
+            <ul className="mt-4 space-y-2.5">
+              {EKOSISTEM_LINKS.map((link) => {
+                const label = t(link.labelKey);
+                return (
+                  <li key={link.labelKey}>
+                    <a
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`${label} — ${t('landing.footer.opensInNewTab')}`}
+                      className={`${LINK_CLASS} inline-flex items-center gap-1.5`}
+                    >
+                      {label}
+                      <OpenInNew className="!text-sm opacity-60" aria-hidden />
+                    </a>
+                  </li>
+                );
+              })}
             </ul>
           </div>
 
