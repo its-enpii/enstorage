@@ -411,7 +411,7 @@
 
   "legalLastUpdated": "Last updated",
   "legalPrivacyTitle": "Privacy Policy",
-  "legalPrivacyIntro": "This Privacy Policy describes how enpii studio ('we', 'us', or 'our') collects, uses, and protects information when you use EnStorage ('the Service'). By using the Service you agree to the practices described below.",
+  "legalPrivacyIntro": "This Privacy Policy describes how enpiistudio ('we', 'us', or 'our') collects, uses, and protects information when you use EnStorage ('the Service'). By using the Service you agree to the practices described below.",
   "legalPrivacySection1Title": "1. Information We Collect",
   "legalPrivacySection1Body": "Account information: When you sign in with Google, we receive your name, email address, and profile picture from Google. We use this to identify your account and personalize the interface.\n\nFiles and metadata: We store the files you upload and the metadata needed to organize them (folder names, star flags, share settings). File contents are stored exactly as uploaded.\n\nUsage data: We log basic request metadata (timestamp, endpoint, status code) for security and abuse prevention. We do not use third-party analytics or tracking pixels.\n\nAPI keys: When you create a personal access token, only a salted hash is stored. The plaintext token is shown to you once and cannot be recovered later.\n\nGoogle account links: If you connect a Google account for cross-cloud features, we store an encrypted refresh token. We never see your Google password.",
   "legalPrivacySection2Title": "2. How We Use Information",
@@ -432,7 +432,7 @@
   "legalPrivacySection9Body": "For privacy-related questions or to exercise your rights, contact us at enpiiofficial@gmail.com.",
 
   "legalTermsTitle": "Terms of Service",
-  "legalTermsIntro": "These Terms of Service ('Terms') govern your use of EnStorage operated by enpii studio ('we', 'us', or 'our'). By creating an account or using the Service, you agree to these Terms.",
+  "legalTermsIntro": "These Terms of Service ('Terms') govern your use of EnStorage operated by enpiistudio ('we', 'us', or 'our'). By creating an account or using the Service, you agree to these Terms.",
   "legalTermsSection1Title": "1. Eligibility",
   "legalTermsSection1Body": "You must be at least 13 years old (or the minimum age of digital consent in your jurisdiction) to use the Service. By using the Service you represent that you meet this requirement.",
   "legalTermsSection2Title": "2. Your Account",
