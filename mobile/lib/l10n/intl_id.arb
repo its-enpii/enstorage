@@ -401,7 +401,7 @@
 
   "legalLastUpdated": "Terakhir diperbarui",
   "legalPrivacyTitle": "Kebijakan Privasi",
-  "legalPrivacyIntro": "Kebijakan Privasi ini menjelaskan bagaimana enpii studio ('kami') mengumpulkan, menggunakan, dan melindungi informasi saat Anda menggunakan EnStorage ('Layanan'). Dengan menggunakan Layanan, Anda menyetujui praktik yang dijelaskan di bawah ini.",
+  "legalPrivacyIntro": "Kebijakan Privasi ini menjelaskan bagaimana enpiistudio ('kami') mengumpulkan, menggunakan, dan melindungi informasi saat Anda menggunakan EnStorage ('Layanan'). Dengan menggunakan Layanan, Anda menyetujui praktik yang dijelaskan di bawah ini.",
   "legalPrivacySection1Title": "1. Informasi yang Kami Kumpulkan",
   "legalPrivacySection1Body": "Informasi akun: Saat Anda masuk dengan Google, kami menerima nama, alamat email, dan foto profil Anda dari Google. Data ini digunakan untuk mengidentifikasi akun Anda dan mempersonalisasi antarmuka.\n\nBerkas dan metadata: Kami menyimpan berkas yang Anda unggah beserta metadata yang diperlukan untuk mengelolanya (nama folder, tanda favorit, pengaturan berbagi). Isi berkas disimpan persis seperti yang diunggah.\n\nData penggunaan: Kami mencatat metadata permintaan dasar (timestamp, endpoint, status code) untuk keamanan dan pencegahan penyalahgunaan. Kami tidak menggunakan analitik pihak ketiga atau piksel pelacakan.\n\nAPI key: Saat Anda membuat token akses pribadi, hanya hash dengan salt yang disimpan. Token plaintext ditampilkan sekali dan tidak dapat dilihat kembali.\n\nTautan akun Google: Jika Anda menghubungkan akun Google untuk fitur lintas-cloud, kami menyimpan refresh token terenkripsi. Kami tidak pernah melihat kata sandi Google Anda.",
   "legalPrivacySection2Title": "2. Cara Kami Menggunakan Informasi",
@@ -422,7 +422,7 @@
   "legalPrivacySection9Body": "Untuk pertanyaan terkait privasi atau untuk menggunakan hak Anda, hubungi kami di enpiiofficial@gmail.com.",
 
   "legalTermsTitle": "Ketentuan Layanan",
-  "legalTermsIntro": "Ketentuan Layanan ('Ketentuan') ini mengatur penggunaan Anda terhadap EnStorage yang dioperasikan oleh enpii studio ('kami'). Dengan membuat akun atau menggunakan Layanan, Anda menyetujui Ketentuan ini.",
+  "legalTermsIntro": "Ketentuan Layanan ('Ketentuan') ini mengatur penggunaan Anda terhadap EnStorage yang dioperasikan oleh enpiistudio ('kami'). Dengan membuat akun atau menggunakan Layanan, Anda menyetujui Ketentuan ini.",
   "legalTermsSection1Title": "1. Kelayakan",
   "legalTermsSection1Body": "Anda harus berusia minimal 13 tahun (atau usia minimum consent digital di yurisdiksi Anda) untuk menggunakan Layanan. Dengan menggunakan Layanan, Anda menyatakan bahwa Anda memenuhi persyaratan ini.",
   "legalTermsSection2Title": "2. Akun Anda",
