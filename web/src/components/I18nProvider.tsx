@@ -24,13 +24,19 @@ function Syncer({ initialLocale }: { initialLocale?: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync <html lang> whenever language changes
+  // Sync <html lang> with the active language: once on mount (the server can
+  // only prerender `lang="id"`, since the real locale lives in localStorage),
+  // then on every subsequent change.
   useEffect(() => {
     const handler = (lng: string) => {
       document.documentElement.lang = lng;
     };
+
+    document.documentElement.lang = getLocale();
     i18nInstance.on('languageChanged', handler);
-    return () => { i18nInstance.off('languageChanged', handler); };
+    return () => {
+      i18nInstance.off('languageChanged', handler);
+    };
   }, [i18nInstance]);
 
   return null;
