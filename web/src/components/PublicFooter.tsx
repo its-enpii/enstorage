@@ -27,9 +27,9 @@ const HELP_LINKS = [{ href: DOCS_HREF, labelKey: 'landing.footer.helpLinks.api' 
 
 /** Column 3 — ecosystem: parent brand and the builder's portfolio. */
 const EKOSISTEM_LINKS = [
-  { href: studioHref(getLocale()), labelKey: 'landing.footer.ekosistemLinks.studio' },
-  { href: PORTFOLIO_HREF, labelKey: 'landing.footer.ekosistemLinks.portfolio' },
-];
+  { external: true as const, labelKey: 'landing.footer.ekosistemLinks.studio' },
+  { external: true as const, labelKey: 'landing.footer.ekosistemLinks.portfolio' },
+] as const;
 
 const COLUMN_TITLE = 'text-label-sm font-semibold uppercase tracking-[0.14em] text-outline';
 const LINK_CLASS =
@@ -41,7 +41,14 @@ const LINK_CLASS =
  * the project is presented as on-site only.
  */
 export function PublicFooter({ showBackToTop = true }: { showBackToTop?: boolean }) {
+  // `useTranslation` subscribes to language changes, so the component re-renders
+  // whenever the active locale changes. Resolve the ecosystem hrefs here, inside
+  // render, so the studio link follows the language instead of being frozen at
+  // module import time.
   const { t } = useTranslation();
+  const locale = getLocale();
+  const hrefFor = (key: string) =>
+    key === 'landing.footer.ekosistemLinks.studio' ? studioHref(locale) : PORTFOLIO_HREF;
 
   return (
     <footer className="border-t border-outline-variant/20 bg-surface-dim">
@@ -76,7 +83,7 @@ export function PublicFooter({ showBackToTop = true }: { showBackToTop?: boolean
                 return (
                   <li key={link.labelKey}>
                     <a
-                      href={link.href}
+                      href={hrefFor(link.labelKey)}
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={`${label} — ${t('landing.footer.opensInNewTab')}`}
