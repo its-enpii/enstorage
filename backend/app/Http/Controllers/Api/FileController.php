@@ -20,6 +20,7 @@ use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
 use App\Services\Google\QuotaManager;
 use App\Services\WebhookService;
+use App\Support\StreamPump;
 use Google\Service\Drive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -43,6 +44,19 @@ class FileController extends Controller
         private readonly WebhookService $webhooks,
         private readonly FolderLockGuard $lockGuard,
     ) {}
+
+    /**
+     * Batas waktu (detik) satu loop streaming ke klien. Worker PHP dipakai
+     * selama transfer berlangsung; tanpa batas ini, worker yang klien-nya
+     * sudah menutup koneksi tidak pernah dilepas (max_execution_time=0 pada
+     * worker) → pool habis → nginx memotong request berikutnya di 60 detik
+     * (504). Loop juga berhenti lebih awal saat `connection_aborted()`.
+     *
+     * Nilainya diambil dari `App\Support\StreamPump` supaya perilaku
+     * pelepasan worker konsisten di seluruh jalur download (sama dengan
+     * `S3GatewayController::STREAM_LIMIT_SECONDS`).
+     */
+    public const STREAM_LIMIT_SECONDS = StreamPump::DEFAULT_LIMIT_SECONDS;
 
     /**
      * GET /files — list dengan filter, sort, pagination.
@@ -388,10 +402,9 @@ class FileController extends Controller
             $body = $response->getBody();
 
             return response()->stream(function () use ($body) {
-                while (! $body->eof()) {
-                    echo $body->read(8192);
-                    flush();
-                }
+                // Batas waktu + cek koneksi putus: worker dilepas walau klien
+                // mati di tengah transfer (lihat App\Support\StreamPump).
+                StreamPump::copy($body);
             }, 200, [
                 'Content-Type' => $file->mime_type,
                 'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
@@ -1133,10 +1146,9 @@ class FileController extends Controller
             $body = $response->getBody();
 
             return response()->stream(function () use ($body) {
-                while (! $body->eof()) {
-                    echo $body->read(8192);
-                    flush();
-                }
+                // Batas waktu + cek koneksi putus: worker dilepas walau klien
+                // mati di tengah transfer (lihat App\Support\StreamPump).
+                StreamPump::copy($body);
             }, 200, [
                 'Content-Type' => $file->mime_type,
                 'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
@@ -1510,13 +1522,13 @@ class FileController extends Controller
         $size = (int) (@filesize($tempPath) ?: $file->size);
 
         return response()->stream(function () use ($tempPath) {
-            $out = fopen('php://output', 'wb');
+            // Batas waktu + cek koneksi putus supaya worker tidak terkunci
+            // saat klien mati di tengah transfer.
             $in = fopen($tempPath, 'rb');
             if ($in !== false) {
-                stream_copy_to_stream($in, $out);
+                StreamPump::copy($in);
                 fclose($in);
             }
-            fclose($out);
         }, 200, [
             'Content-Type' => $file->mime_type,
             'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
@@ -1537,12 +1549,12 @@ class FileController extends Controller
         $size = (int) ($file->size ?: 0);
 
         return response()->stream(function () use ($stream) {
-            $out = fopen('php://output', 'wb');
+            // Batas waktu + cek koneksi putus supaya worker tidak terkunci
+            // saat klien mati di tengah transfer.
             if (is_resource($stream)) {
-                stream_copy_to_stream($stream, $out);
+                StreamPump::copy($stream);
                 fclose($stream);
             }
-            fclose($out);
         }, 200, [
             'Content-Type' => $file->mime_type,
             'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
