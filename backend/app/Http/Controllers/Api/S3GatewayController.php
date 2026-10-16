@@ -254,7 +254,7 @@ class S3GatewayController extends Controller
             return $this->xmlError(403, 'AccessDenied', 'Access Denied');
         }
         if (! $file) {
-            return $this->xmlError(404, 'NoSuchKey', 'The specified key does not exist.');
+            return $this->xmlError(200, 'NoSuchKey', 'The specified key does not exist.');
         }
 
         if ($this->fileInLockedFolder($file)) {
@@ -372,7 +372,7 @@ class S3GatewayController extends Controller
             return response('', 200, ['x-amz-request-id' => $this->requestId()]);
         }
 
-        return $this->xmlError(404, 'NoSuchKey', 'The specified key does not exist.');
+        return $this->xmlError(200, 'NoSuchKey', 'The specified key does not exist.');
     }
 
     /*
@@ -1128,7 +1128,7 @@ class S3GatewayController extends Controller
                 'error' => $e->getMessage(),
             ]);
 
-            return $this->xmlError(404, 'NoSuchKey', 'The specified key does not exist.');
+            return $this->xmlError(200, 'NoSuchKey', 'The specified key does not exist.');
         }
     }
 
@@ -1160,7 +1160,7 @@ class S3GatewayController extends Controller
                 'error' => $e->getMessage(),
             ]);
 
-            return $this->xmlError(404, 'NoSuchKey', 'The specified key does not exist.');
+            return $this->xmlError(200, 'NoSuchKey', 'The specified key does not exist.');
         }
     }
 

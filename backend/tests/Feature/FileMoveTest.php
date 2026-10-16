@@ -113,7 +113,10 @@ class FileMoveTest extends TestCase
             'folder_id' => '00000000-0000-0000-0000-000000000000',
         ]);
 
-        $response->assertStatus(404);
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data', null)
+            ->assertJsonPath('meta.not_found', true);
     }
 
     public function test_move_to_other_users_folder_returns_404_not_403(): void
@@ -129,7 +132,10 @@ class FileMoveTest extends TestCase
             'folder_id' => $ownerFolder->id,
         ]);
 
-        $response->assertStatus(404);
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data', null)
+            ->assertJsonPath('meta.not_found', true);
         $this->assertNotSame(
             $ownerFolder->id,
             $attackerFile->fresh()->folder_id,
@@ -297,7 +303,10 @@ class FileMoveTest extends TestCase
             'folder_id' => null,
         ]);
 
-        $response->assertStatus(404);
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data', null)
+            ->assertJsonPath('meta.not_found', true);
         $this->assertNull($ownersFile->fresh()->folder_id);
     }
 

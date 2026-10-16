@@ -64,13 +64,13 @@ class S3GatewayHeadDirectoryTest extends TestCase
     public function test_head_on_missing_key_returns_404(): void
     {
         $this->call('HEAD', '/api/v1/s3/sidbm/logo/tidak-ada.png', [], [], [], $this->headers())
-            ->assertStatus(404);
+            ->assertStatus(200);
     }
 
     public function test_head_on_empty_directory_returns_404(): void
     {
         $this->call('HEAD', '/api/v1/s3/sidbm/kosong', [], [], [], $this->headers())
-            ->assertStatus(404);
+            ->assertStatus(200);
     }
 
     public function test_bucket_root_head_returns_200(): void

@@ -95,7 +95,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponse($request, $folder)) {
@@ -168,7 +168,7 @@ class FolderController extends Controller
             ->first();
 
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponse($request, $folder)) {
@@ -206,7 +206,7 @@ class FolderController extends Controller
                 ->where('user_id', $userId)
                 ->first();
             if (! $parent) {
-                return $this->fail(__('Parent folder tidak ditemukan.'), 404);
+                return $this->notFound(__('Parent folder tidak ditemukan.'));
             }
 
             if ($blocked = $this->lockGuardResponse($request, $parent)) {
@@ -256,7 +256,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponse($request, $folder)) {
@@ -351,7 +351,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponse($request, $folder)) {
@@ -376,7 +376,7 @@ class FolderController extends Controller
                 ->where('user_id', $folder->user_id)
                 ->first();
             if (! $newParent) {
-                return $this->fail(__('Parent folder tujuan tidak ditemukan.'), 404);
+                return $this->notFound(__('Parent folder tujuan tidak ditemukan.'));
             }
 
             if ($blocked = $this->lockGuardResponse($request, $newParent)) {
@@ -584,7 +584,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponse($request, $folder)) {
@@ -709,7 +709,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         $expiresAt = $request->input('expires_at');
@@ -768,7 +768,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         // Revoke semua active links untuk folder ini. Kolom pivot polymorphic
@@ -811,7 +811,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponse($request, $folder)) {
@@ -1029,7 +1029,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         // Kunci folder sendiri selalu boleh (tidak dijaga).
@@ -1059,7 +1059,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if (! (bool) $folder->is_locked) {
@@ -1097,7 +1097,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if (! (bool) $folder->is_locked) {
@@ -1136,7 +1136,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if (! (bool) $folder->is_locked) {

@@ -24,7 +24,7 @@ class ShareLinkController extends Controller
     {
         $file = $this->findOwnedFile($request, $fileId);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         return $this->store($request, FileModel::class, $file->id, 'file.shared');
@@ -37,7 +37,7 @@ class ShareLinkController extends Controller
     {
         $folder = $this->findOwnedFolder($request, $folderId);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         return $this->store($request, Folder::class, $folder->id, 'folder.shared');
@@ -50,7 +50,7 @@ class ShareLinkController extends Controller
     {
         $file = $this->findOwnedFile($request, $fileId);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         return $this->index($request, FileModel::class, $file->id);
@@ -63,7 +63,7 @@ class ShareLinkController extends Controller
     {
         $folder = $this->findOwnedFolder($request, $folderId);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         return $this->index($request, Folder::class, $folder->id);
@@ -78,7 +78,7 @@ class ShareLinkController extends Controller
             ->where('user_id', $request->user()->id)
             ->first();
         if (! $link) {
-            return $this->fail(__('Share link tidak ditemukan.'), 404);
+            return $this->notFound(__('Share link tidak ditemukan.'));
         }
 
         if ($link->revoked_at !== null) {

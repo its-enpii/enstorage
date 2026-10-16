@@ -51,7 +51,7 @@ class FolderDownloadTest extends TestCase
 
         $response = $this->getJson('/api/v1/folders/00000000-0000-0000-0000-000000000000/download');
 
-        $response->assertNotFound();
+        $response->assertStatus(200)->assertJsonPath('meta.not_found', true);
     }
 
     public function test_returns_404_when_folder_belongs_to_another_user(): void
@@ -64,7 +64,7 @@ class FolderDownloadTest extends TestCase
 
         $response = $this->getJson("/api/v1/folders/{$folder->id}/download");
 
-        $response->assertNotFound();
+        $response->assertStatus(200)->assertJsonPath('meta.not_found', true);
     }
 
     public function test_returns_409_when_folder_is_empty(): void

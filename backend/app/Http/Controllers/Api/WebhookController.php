@@ -69,7 +69,7 @@ class WebhookController extends Controller
             ->where('user_id', $request->user()->id)
             ->first();
         if (! $webhook) {
-            return $this->fail(__('Webhook tidak ditemukan.'), 404);
+            return $this->notFound(__('Webhook tidak ditemukan.'));
         }
 
         $data = $request->validate([
@@ -95,7 +95,7 @@ class WebhookController extends Controller
             ->where('user_id', $request->user()->id)
             ->first();
         if (! $webhook) {
-            return $this->fail(__('Webhook tidak ditemukan.'), 404);
+            return $this->notFound(__('Webhook tidak ditemukan.'));
         }
 
         $webhook->delete();

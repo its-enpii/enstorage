@@ -63,7 +63,7 @@ class FileController extends Controller
             if ($fid !== null) {
                 $folder = Folder::where('id', $fid)->where('user_id', $userId)->first();
                 if (! $folder) {
-                    return $this->fail(__('Folder tidak ditemukan.'), 404);
+                    return $this->notFound(__('Folder tidak ditemukan.'));
                 }
                 if ($blocked = $this->lockGuardResponse($request, $folder)) {
                     return $blocked;
@@ -302,7 +302,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
@@ -319,7 +319,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
@@ -340,7 +340,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
@@ -419,7 +419,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
@@ -428,12 +428,12 @@ class FileController extends Controller
 
         $thumb = $file->thumbnail;
         if (! $thumb) {
-            return $this->fail(__('Thumbnail belum tersedia.'), 404);
+            return $this->notFound(__('Thumbnail belum tersedia.'));
         }
 
         $path = storage_path('app/'.$thumb->path);
         if (! file_exists($path)) {
-            return $this->fail(__('File thumbnail tidak ditemukan di storage.'), 404);
+            return $this->notFound(__('File thumbnail tidak ditemukan di storage.'));
         }
 
         return response()->file($path, [
@@ -449,7 +449,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
@@ -517,7 +517,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
@@ -534,7 +534,7 @@ class FileController extends Controller
                 ->where('user_id', $file->user_id)
                 ->exists();
             if (! $folderExists) {
-                return $this->fail(__('Folder tujuan tidak ditemukan.'), 404);
+                return $this->notFound(__('Folder tujuan tidak ditemukan.'));
             }
 
             $targetFolder = Folder::where('id', $newFolderId)
@@ -679,7 +679,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
@@ -757,7 +757,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
         if (! $file->isDone()) {
             return $this->fail(__('File belum selesai di-upload.'), 409);
@@ -820,7 +820,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         $file->share_token = null;
@@ -1075,7 +1075,7 @@ class FileController extends Controller
      * GET /s/{token}/view — public (no auth).
      * Redirect ke FE preview page (FE handle rendering UI preview).
      */
-    public function view(string $token): RedirectResponse
+    public function view(string $token): RedirectResponse|JsonResponse
     {
         // Cek pivot dulu, lalu legacy. Status (active vs expired) tidak
         // dicek di sini — FE yang akan render error state kalau token
@@ -1085,7 +1085,7 @@ class FileController extends Controller
             || Folder::where('share_token', $token)->exists();
 
         if (! $exists) {
-            abort(404, __('Link share tidak ditemukan atau tidak valid.'));
+            return $this->notFound(__('Link share tidak ditemukan atau tidak valid.'));
         }
 
         return redirect(WebhookService::shareUrlFor($token, true), 302);
@@ -1104,7 +1104,7 @@ class FileController extends Controller
                 return $this->streamLocalTempFile($request, $file, $tempPath);
             }
 
-            return $this->fail(__('File tidak ditemukan atau belum siap.'), 404);
+            return $this->notFound(__('File tidak ditemukan atau belum siap.'));
         }
 
         $disposition = $request->boolean('download') ? 'attachment' : 'inline';
@@ -1338,7 +1338,7 @@ class FileController extends Controller
             $file = $this->findFileInSharedFolder($request, $folder, (string) $request->query('file_id'));
 
             if (! $file) {
-                return $this->fail(__('File tidak ditemukan pada folder share ini.'), 404);
+                return $this->notFound(__('File tidak ditemukan pada folder share ini.'));
             }
 
             // info=1 / thumbnail=1 / download=1 / stream ditangani satu
@@ -1350,7 +1350,7 @@ class FileController extends Controller
         if ($request->filled('folder_id')) {
             $requested = $this->findFolderInSharedFolder($request, $folder, (string) $request->query('folder_id'));
             if (! $requested) {
-                return $this->fail(__('Folder tidak ditemukan pada folder share ini.'), 404);
+                return $this->notFound(__('Folder tidak ditemukan pada folder share ini.'));
             }
             $targetFolder = $requested;
         }

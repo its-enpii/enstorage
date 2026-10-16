@@ -153,7 +153,7 @@ class GoogleAccountDestroyTest extends TestCase
 
         Sanctum::actingAs($attacker);
 
-        $this->deleteJson('/api/v1/google-accounts/'.$ownerPrimary->id)->assertNotFound();
+        $this->deleteJson('/api/v1/google-accounts/'.$ownerPrimary->id)->assertStatus(200)->assertJsonPath('meta.not_found', true);
         $this->assertDatabaseHas('google_accounts', ['id' => $ownerPrimary->id]);
     }
 

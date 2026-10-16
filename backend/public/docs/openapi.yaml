@@ -111,8 +111,11 @@ paths:
       security: [{ sanctum: [] }]
       parameters: [ { $ref: '#/components/parameters/IdPath' } ]
       responses:
-        '200': { description: OK }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '200':
+          description: "OK — bila resource tidak ditemukan, envelope sukses dengan meta.not_found=true."
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotFoundEnvelope' }
 
   /google-accounts/oauth/redirect:
     get:
@@ -165,8 +168,11 @@ paths:
       security: [{ sanctum: [] }, { apiKey: [] }]
       parameters: [ { $ref: '#/components/parameters/IdPath' } ]
       responses:
-        '200': { description: OK }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '200':
+          description: "OK — bila resource tidak ditemukan, envelope sukses dengan meta.not_found=true."
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotFoundEnvelope' }
     patch:
       tags: [Google Accounts]
       summary: Update label/active
@@ -240,8 +246,11 @@ paths:
       security: [{ sanctum: [] }, { apiKey: [] }]
       parameters: [ { $ref: '#/components/parameters/IdPath' } ]
       responses:
-        '200': { description: OK }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '200':
+          description: "OK — bila resource tidak ditemukan, envelope sukses dengan meta.not_found=true."
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotFoundEnvelope' }
     patch:
       tags: [Folders]
       summary: Rename folder
@@ -282,8 +291,11 @@ paths:
       security: [{ sanctum: [] }, { apiKey: [] }]
       parameters: [ { $ref: '#/components/parameters/IdPath' } ]
       responses:
-        '200': { description: OK }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '200':
+          description: "OK — bila resource tidak ditemukan, envelope sukses dengan meta.not_found=true."
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotFoundEnvelope' }
 
   /files/upload:
     post:
@@ -376,8 +388,11 @@ paths:
       security: [{ sanctum: [] }, { apiKey: [] }]
       parameters: [ { $ref: '#/components/parameters/IdPath' } ]
       responses:
-        '200': { description: OK }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '200':
+          description: "OK — bila resource tidak ditemukan, envelope sukses dengan meta.not_found=true."
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotFoundEnvelope' }
     patch:
       tags: [Files]
       summary: Rename file
@@ -400,8 +415,11 @@ paths:
       security: [{ sanctum: [] }, { apiKey: [] }]
       parameters: [ { $ref: '#/components/parameters/IdPath' } ]
       responses:
-        '200': { description: OK }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '200':
+          description: "OK — bila resource tidak ditemukan, envelope sukses dengan meta.not_found=true."
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotFoundEnvelope' }
   /files/{id}/status:
     get:
       tags: [Files]
@@ -417,8 +435,11 @@ paths:
       security: [{ sanctum: [] }, { apiKey: [] }]
       parameters: [ { $ref: '#/components/parameters/IdPath' } ]
       responses:
-        '200': { description: Binary stream }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '200':
+          description: "Binary stream — bila resource tidak ditemukan, envelope sukses dengan meta.not_found=true."
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotFoundEnvelope' }
         '409': { description: File belum selesai upload }
   /files/{id}/thumbnail:
     get:
@@ -428,7 +449,7 @@ paths:
       parameters: [ { $ref: '#/components/parameters/IdPath' } ]
       responses:
         '200': { description: Binary WebP }
-        '404': { description: Thumbnail belum tersedia }
+        '200-not-found': { description: "Thumbnail belum tersedia → envelope sukses HTTP 200 dengan meta.not_found=true." }
   /files/{id}/move:
     put:
       tags: [Files]
@@ -465,7 +486,7 @@ paths:
                           renamed: { type: boolean, description: "true jika auto-rename dilakukan karena nama bentrok di folder tujuan." }
                           previous_name: { type: string, nullable: true, description: "Nama file sebelum rename (hanya diisi kalau renamed=true)." }
                   message: { type: string }
-        '404': { description: "File tidak ditemukan atau folder tujuan bukan milik user." }
+        '200-not-found': { description: "File tidak ditemukan atau folder tujuan bukan milik user → envelope sukses HTTP 200 dengan meta.not_found=true." }
   /search/files:
     get:
       tags: [Search]
@@ -474,7 +495,7 @@ paths:
       parameters:
         - { in: query, name: q, required: true, schema: { type: string, minLength: 1, maxLength: 100 }, description: "Kata kunci. Case-insensitive, ignore spasi/tanda baca, typo-tolerant via pg_trgm." }
         - { in: query, name: folder_id, schema: { type: string, format: uuid }, description: "Filter ke satu folder (UUID)." }
-        - { in: query, name: folder_path, schema: { type: string, maxLength: 500 }, description: "Filter ke folder by path (e.g. /Laporan/2024). 404 jika folder tidak ada." }
+        - { in: query, name: folder_path, schema: { type: string, maxLength: 500 }, description: "Filter ke folder by path (e.g. /Laporan/2024). Bila folder tidak ada → HTTP 200 dengan meta.not_found=true." }
         - { in: query, name: recursive, schema: { type: boolean, default: false }, description: "Jika true, scan seluruh subtree folder (folder_id/folder_path)." }
         - { in: query, name: type, schema: { type: string, enum: [image, pdf, doc, video, audio] } }
         - { in: query, name: mime_type, schema: { type: string } }
@@ -529,7 +550,7 @@ paths:
                           properties:
                             name: { type: string }
                             score: { type: number }
-        '404': { description: Folder tidak ditemukan (saat folder_path/folder_id tidak valid) }
+        '200-not-found': { description: "Folder tidak ditemukan (folder_path/folder_id tidak valid) → envelope sukses HTTP 200 dengan meta.not_found=true." }
         '422': { description: Query kosong setelah normalisasi }
 
 components:
@@ -555,10 +576,15 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Envelope' }
     NotFound:
-      description: Resource tidak ditemukan
+      description: |
+        Resource tidak ditemukan.
+
+        Sengaja dibalas HTTP 200 (bukan 4xx): API tidak mengembalikan response
+        error untuk resource yang tidak ada. Konsumen mendeteksi lewat
+        `meta.not_found = true`, bukan lewat status HTTP.
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Envelope' }
+          schema: { $ref: '#/components/schemas/NotFoundEnvelope' }
   schemas:
     Envelope:
       type: object
@@ -567,6 +593,18 @@ components:
         data: { nullable: true }
         message: { type: string }
         meta: { type: object, additionalProperties: true }
+    NotFoundEnvelope:
+      type: object
+      description: Envelope sukses untuk resource yang tidak ditemukan (HTTP 200).
+      properties:
+        success: { type: boolean, enum: [true] }
+        data: { nullable: true, description: "Selalu null." }
+        message: { type: string }
+        meta:
+          type: object
+          properties:
+            not_found: { type: boolean, enum: [true] }
+          additionalProperties: true
     RegisterRequest:
       type: object
       required: [name, email, password, password_confirmation]

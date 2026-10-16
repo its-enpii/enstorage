@@ -212,7 +212,7 @@ class GDriveScopePickerTest extends TestCase
 
         Sanctum::actingAs($intruder);
 
-        $this->getJson('/api/v1/google-accounts/'.$account->id.'/picker-config')->assertNotFound();
+        $this->getJson('/api/v1/google-accounts/'.$account->id.'/picker-config')->assertStatus(200)->assertJsonPath('meta.not_found', true);
     }
 
     // ------------------------------------------------------------------

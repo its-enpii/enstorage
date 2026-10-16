@@ -68,7 +68,7 @@ class ApiKeyController extends Controller
             ->first();
 
         if (! $apiKey) {
-            return $this->fail(__('API key tidak ditemukan.'), 404);
+            return $this->notFound(__('API key tidak ditemukan.'));
         }
 
         $label = $apiKey->label;

@@ -140,10 +140,10 @@ class ShareLinkExpiryTest extends TestCase
         Sanctum::actingAs($intruder);
 
         $response = $this->postJson("/api/v1/files/{$file->id}/share-links");
-        $response->assertNotFound();
+        $response->assertStatus(200)->assertJsonPath('meta.not_found', true);
 
         $response = $this->getJson("/api/v1/files/{$file->id}/share-links");
-        $response->assertNotFound();
+        $response->assertStatus(200)->assertJsonPath('meta.not_found', true);
     }
 
     // ─── View by token (resolveActive + increment) ───────────────────
@@ -257,7 +257,7 @@ class ShareLinkExpiryTest extends TestCase
 
         Sanctum::actingAs($intruder);
         $response = $this->deleteJson("/api/v1/share-links/{$link->id}");
-        $response->assertNotFound();
+        $response->assertStatus(200)->assertJsonPath('meta.not_found', true);
 
         $this->assertNull($link->fresh()->revoked_at);
     }

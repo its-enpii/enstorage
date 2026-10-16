@@ -68,7 +68,7 @@ class SearchController extends Controller
                 ->where('user_id', $userId)
                 ->first();
             if (! $folder) {
-                return $this->fail(__('Folder tidak ditemukan.'), 404);
+                return $this->notFound(__('Folder tidak ditemukan.'));
             }
             if ($blocked = $this->lockGuardResponse($request, $folder)) {
                 return $blocked;
@@ -84,7 +84,7 @@ class SearchController extends Controller
                 ->where('path', $data['folder_path'])
                 ->first();
             if (! $folder) {
-                return $this->fail(__('Folder dengan path tersebut tidak ditemukan.'), 404);
+                return $this->notFound(__('Folder dengan path tersebut tidak ditemukan.'));
             }
             if ($blocked = $this->lockGuardResponse($request, $folder)) {
                 return $blocked;

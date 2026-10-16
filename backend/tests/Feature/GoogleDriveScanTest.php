@@ -403,6 +403,6 @@ class GoogleDriveScanTest extends TestCase
         $user = User::factory()->create();
         Sanctum::actingAs($user);
 
-        $this->postJson('/api/v1/google-accounts/scan')->assertNotFound();
+        $this->postJson('/api/v1/google-accounts/scan')->assertStatus(200)->assertJsonPath('meta.not_found', true);
     }
 }

@@ -134,7 +134,10 @@ class FolderSlugRoutingTest extends TestCase
         $this->actingUser();
 
         $this->getJson('/api/v1/folders/resolve?path='.urlencode('/does/not/exist'))
-            ->assertStatus(404);
+            ->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data', null)
+            ->assertJsonPath('meta.not_found', true);
     }
 
     public function test_resolve_does_not_leak_other_users_folder(): void
@@ -145,7 +148,10 @@ class FolderSlugRoutingTest extends TestCase
         $this->actingUser();
 
         $this->getJson('/api/v1/folders/resolve?path='.urlencode('/private'))
-            ->assertStatus(404);
+            ->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data', null)
+            ->assertJsonPath('meta.not_found', true);
     }
 
     // ---------------------------------------------------------------------

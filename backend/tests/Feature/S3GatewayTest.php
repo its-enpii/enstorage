@@ -207,7 +207,7 @@ class S3GatewayTest extends TestCase
 
         $response = $this->get('/api/v1/s3/nobucket/missing.txt', ['X-API-Key' => $plaintext]);
 
-        $response->assertStatus(404);
+        $response->assertStatus(200);
         $this->assertStringContainsString('<Code>NoSuchKey</Code>', $response->getContent());
     }
 
