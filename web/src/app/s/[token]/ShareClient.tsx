@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import { usePageTitle } from '@/lib/usePageTitle';
 import { FileViewer } from '@/components/FileViewer';
@@ -12,6 +13,7 @@ import { Alert } from '@/components/Alert';
 import { Input, Field } from '@/components/Input';
 import { Spinner } from '@/components/Spinner';
 import { EmptyState } from '@/components/EmptyState';
+import { PublicShell } from '@/components/PublicShell';
 import type { FileItem } from '@/lib/api';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080/api/v1';
@@ -68,6 +70,74 @@ type ListingState =
   | { status: 'locked'; folderName: string | null; message: string | null }
   | { status: 'ready'; listing: FolderListing | FileListing };
 
+/** Page rhythm shared with the other public surfaces (see LandingClient/DocsClient). */
+const SHELL_CONTENT = 'mx-auto w-full max-w-2xl px-4 py-10 sm:px-6';
+
+type DownloadAllState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'error'; kind: 'not_found' | 'failed' };
+
+/** Probe-based ZIP download for folder shares via `GET /s/{token}/download`. */
+function useDownloadAll(token: string) {
+  const { t } = useTranslation();
+  const [state, setState] = useState<DownloadAllState>({ status: 'idle' });
+
+  const downloadAll = useCallback(
+    async (filename: string) => {
+      setState({ status: 'loading' });
+      try {
+        const res = await fetch(`${API_BASE}/s/${token}/download`, {
+          headers: { Accept: 'application/zip, application/json' },
+          credentials: 'include',
+        });
+        const ct = res.headers.get('content-type') ?? '';
+        if (ct.includes('application/json')) {
+          let notFound = false;
+          try {
+            const env = await res.json();
+            notFound = Boolean(env?.meta?.not_found);
+          } catch {
+            // non-JSON body: treat as generic failure
+          }
+          setState({ status: 'error', kind: notFound ? 'not_found' : 'failed' });
+          return;
+        }
+        if (!res.ok) {
+          setState({ status: 'error', kind: 'failed' });
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        triggerDirectDownload(url, filename);
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        setState({ status: 'idle' });
+      } catch {
+        setState({ status: 'error', kind: 'failed' });
+      }
+    },
+    [token],
+  );
+
+  const message =
+    state.status === 'error'
+      ? state.kind === 'not_found'
+        ? t('share.downloadAllNotFound')
+        : t('share.downloadAllFailed')
+      : null;
+
+  return { state, downloadAll, message };
+}
+
+function DownloadAllAlert({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <Alert tone="danger" className="mt-3">
+      {message}
+    </Alert>
+  );
+}
+
 export type ShareClientMode = 'landing' | 'viewer';
 
 export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMode }) {
@@ -80,6 +150,11 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
   // Bumped after a successful unlock to re-run the listing fetch.
   const [reloadKey, setReloadKey] = useState(0);
+  const {
+    state: downloadState,
+    downloadAll,
+    message: downloadMessage,
+  } = useDownloadAll(token);
 
   usePageTitle(
     mode === 'viewer'
@@ -262,17 +337,19 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
 
   if (state.status === 'error') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-sm !p-8 text-center">
+      <PublicShell>
+        <div className={clsx(SHELL_CONTENT, 'flex justify-center')}>
+        <Card className="w-full max-w-sm text-center">
           <div className="w-16 h-16 rounded-2xl bg-error-container flex items-center justify-center mx-auto mb-4">
             <span className="material-symbols-outlined !text-4xl text-on-error-container">error</span>
           </div>
           <h1 className="font-display text-lg font-semibold text-on-surface mb-2">
             {t('share.sharedNotFound')}
           </h1>
-          <p className="text-metadata text-outline">{state.message}</p>
+          <p className="text-metadata text-on-surface-variant">{state.message}</p>
         </Card>
-      </div>
+        </div>
+      </PublicShell>
     );
   }
 
@@ -316,8 +393,9 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
   const isInsideSubfolder = currentFolderId !== null && currentFolderId !== rootId;
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <Card as="main" className="max-w-2xl mx-auto !p-6 sm:!p-8">
+    <PublicShell>
+      <div className={SHELL_CONTENT}>
+      <Card as="main">
         {/* Header Folder Info */}
         <div className="flex items-center gap-3 mb-4">
           {isInsideSubfolder && (
@@ -337,18 +415,34 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
             <span className="material-symbols-outlined !text-3xl fill text-on-primary-container">folder</span>
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="font-display text-xl font-semibold text-on-surface truncate">
+            <h1 className="font-display text-headline-lg-mobile text-on-surface truncate">
               {folder.name}
             </h1>
-            <p className="text-metadata text-outline truncate">{t('share.sharedFolderDesc')}</p>
+            <p className="text-metadata text-on-surface-variant truncate">
+              {t('share.sharedFolderDesc')}
+            </p>
           </div>
+          {!isInsideSubfolder && (
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => downloadAll(`${folder.name}.zip`)}
+              loading={downloadState.status === 'loading'}
+              className="shrink-0"
+              leftIcon={<span className="material-symbols-outlined !text-lg">folder_zip</span>}
+              aria-label={t('share.downloadAllLabel')}
+            >
+              <span className="hidden sm:inline">{t('share.downloadAll')}</span>
+            </Button>
+          )}
         </div>
+        {!isInsideSubfolder && <DownloadAllAlert message={downloadMessage} />}
 
         {/* Breadcrumb Navigation */}
         {breadcrumbs && breadcrumbs.length > 1 && (
           <nav
             aria-label={t('share.breadcrumbLabel')}
-            className="flex items-center gap-1.5 overflow-x-auto py-2 mb-4 text-sm text-outline border-b border-outline-variant/10 [-ms-overflow-style:none] [scrollbar-width:none]"
+            className="flex items-center gap-1.5 overflow-x-auto py-2 mb-4 text-metadata text-on-surface-variant border-b border-outline-variant/20 [-ms-overflow-style:none] [scrollbar-width:none]"
           >
             {breadcrumbs.map((crumb, idx) => {
               const isLast = idx === breadcrumbs.length - 1;
@@ -385,7 +479,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
 
         {/* Navigation Indicator / Loading overlay */}
         {isNavigating && (
-          <div className="flex items-center justify-center py-4 text-xs text-outline gap-2">
+          <div className="flex items-center justify-center py-4 text-metadata text-on-surface-variant gap-2">
             <span className="material-symbols-outlined animate-spin !text-sm">progress_activity</span>
             <span>{t('share.sharedLoading')}</span>
           </div>
@@ -394,7 +488,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
         {/* Subfolders list */}
         {subfolders.length > 0 && (
           <section className="mt-4">
-            <h2 className="sticky top-0 z-10 bg-background/95 backdrop-blur text-label-sm text-outline mb-2 py-2 uppercase tracking-wider">
+            <h2 className="sticky top-0 z-10 bg-surface/95 backdrop-blur text-label-sm text-on-surface-variant mb-2 py-2 uppercase tracking-[0.14em]">
               {t('share.sharedFolders')}
             </h2>
             <ul className="divide-y divide-outline/10 rounded-2xl bg-surface-container overflow-hidden">
@@ -425,7 +519,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
         {/* Files list */}
         {files.length > 0 && (
           <section className="mt-6">
-            <h2 className="sticky top-0 z-10 bg-background/95 backdrop-blur text-label-sm text-outline mb-2 py-2 uppercase tracking-wider">
+            <h2 className="sticky top-0 z-10 bg-surface/95 backdrop-blur text-label-sm text-on-surface-variant mb-2 py-2 uppercase tracking-[0.14em]">
               {t('share.sharedFiles')}
             </h2>
             <ul className="divide-y divide-outline/10 rounded-2xl bg-surface-container overflow-hidden">
@@ -453,7 +547,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
                       <span className="block text-sm font-medium text-on-surface truncate group-hover:text-primary transition-colors">
                         {f.name}
                       </span>
-                      <span className="block text-xs text-outline tabular-nums truncate">
+                      <span className="block text-metadata text-on-surface-variant tabular-nums truncate">
                         {formatBytes(f.size)}
                       </span>
                     </div>
@@ -525,9 +619,12 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
           />
         )}
 
-        <p className="mt-6 text-xs text-outline text-center">{t('share.sharedVia')}</p>
+        <p className="mt-6 text-metadata text-on-surface-variant text-center">
+          {t('share.sharedVia')}
+        </p>
       </Card>
-    </div>
+      </div>
+    </PublicShell>
   );
 }
 
@@ -592,15 +689,16 @@ function ShareUnlockPanel({
   }, [password, token, onUnlocked, t]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-sm !p-8">
+    <PublicShell>
+      <div className={clsx(SHELL_CONTENT, 'flex justify-center')}>
+      <Card className="w-full max-w-sm">
         <div className="w-16 h-16 rounded-2xl bg-secondary-container/30 flex items-center justify-center mx-auto mb-4">
           <span className="material-symbols-outlined !text-4xl text-secondary">lock</span>
         </div>
         <h1 className="font-display text-lg font-semibold text-on-surface text-center mb-2">
           {t('share.locked.title')}
         </h1>
-        <p className="text-metadata text-outline text-center mb-6">
+        <p className="text-metadata text-on-surface-variant text-center mb-6">
           {folderName
             ? t('share.locked.descNamed', { name: folderName })
             : t('share.locked.desc')}
@@ -633,9 +731,12 @@ function ShareUnlockPanel({
         >
           {t('share.locked.submit')}
         </Button>
-        <p className="mt-6 text-xs text-outline text-center">{t('share.sharedVia')}</p>
+        <p className="mt-6 text-metadata text-on-surface-variant text-center">
+          {t('share.sharedVia')}
+        </p>
       </Card>
-    </div>
+      </div>
+    </PublicShell>
   );
 }
 
@@ -706,8 +807,9 @@ function FilePreview({
   const canPreview = isPreviewable(listing.mime_type);
 
   return (
-    <div className="min-h-screen bg-background p-4 flex items-center justify-center">
-      <div className="w-full max-w-md bg-surface rounded-card shadow-ambient p-6 sm:p-8">
+    <PublicShell>
+      <div className={clsx(SHELL_CONTENT, 'flex justify-center')}>
+      <Card className="w-full max-w-md">
         <div className="flex flex-col items-center text-center">
           <div className="w-16 h-16 rounded-2xl bg-primary-container flex items-center justify-center mb-4">
             <span className="material-symbols-outlined !text-4xl fill text-on-primary-container">
@@ -725,11 +827,11 @@ function FilePreview({
             </span>
           </div>
 
-          <h1 className="font-display text-lg sm:text-xl font-semibold text-on-surface break-words [overflow-wrap:anywhere] [text-wrap:balance] min-w-0 w-full">
+          <h1 className="font-display text-headline-lg-mobile sm:text-headline-lg-mobile text-on-surface break-words [overflow-wrap:anywhere] [text-wrap:balance] min-w-0 w-full">
             {listing.original_name}
           </h1>
 
-          <div className="mt-1 flex items-center justify-center gap-2 text-metadata text-outline min-w-0 max-w-full truncate">
+          <div className="mt-1 flex items-center justify-center gap-2 text-metadata text-on-surface-variant min-w-0 max-w-full truncate">
             {listing.size > 0 && <span className="shrink-0">{formatBytes(listing.size)}</span>}
             {listing.size > 0 && listing.mime_type && (
               <span aria-hidden="true" className="shrink-0">•</span>
@@ -773,7 +875,7 @@ function FilePreview({
           )}
 
           {!canPreview && (
-            <p className="mt-4 text-metadata text-outline">{t('share.sharedDesc')}</p>
+            <p className="mt-4 text-metadata text-on-surface-variant">{t('share.sharedDesc')}</p>
           )}
 
           <div className="mt-6 flex flex-row flex-wrap items-stretch justify-center gap-3 w-full">
@@ -800,8 +902,9 @@ function FilePreview({
             </LinkButton>
           </div>
         </div>
+      </Card>
       </div>
-    </div>
+    </PublicShell>
   );
 }
 
@@ -953,7 +1056,7 @@ function TextPreview({ streamUrl }: { streamUrl: string }) {
   return (
     <div className="rounded-2xl overflow-hidden bg-surface-container border border-outline-variant/20 mb-4">
       {content === null && error === null && (
-        <p className="text-sm text-outline p-4">{t('common.loading')}</p>
+        <p className="text-metadata text-on-surface-variant p-4">{t('common.loading')}</p>
       )}
       {error && <p className="text-sm text-error p-4">{error}</p>}
       {content !== null && (

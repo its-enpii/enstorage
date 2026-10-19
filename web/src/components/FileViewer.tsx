@@ -13,6 +13,7 @@ import { getFileDownloadUrl } from '@/lib/download';
 import { DropdownMenu, type MenuItem } from '@/components/DropdownMenu';
 import { Tabs } from '@/components/Tabs';
 import { Button, IconButton, LinkButton, TextAction } from '@/components/Button';
+import { Tooltip } from '@/components/Tooltip';
 
 type Props = {
   file: FileItem;
@@ -68,6 +69,7 @@ function mimeCategory(file: FileItem): MimeCategory {
 }
 
 function ImageViewer({ file }: { file: FileItem }) {
+  const { t } = useTranslation();
   const [scale, setScale] = useState(1);
 
   const zoomIn = () => setScale((s) => Math.min(s + 0.25, 3));
@@ -86,19 +88,18 @@ function ImageViewer({ file }: { file: FileItem }) {
         />
       </div>
       <div className="absolute bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-surface-container/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-outline-variant/20 shadow-lg">
-        <IconButton onClick={zoomOut} title="Zoom out" aria-label="Zoom out" className="!w-8 !h-8">
+        <IconButton onClick={zoomOut} aria-label={t('preview.zoomOut')} className="!w-11 !h-11">
           <Remove className="!text-sm" />
         </IconButton>
         <TextAction
           onClick={resetZoom}
           size="sm"
           className="!px-2 font-mono"
-          aria-label="Reset zoom"
-          title="Reset zoom"
+          aria-label={t('preview.resetZoom')}
         >
           {Math.round(scale * 100)}%
         </TextAction>
-        <IconButton onClick={zoomIn} title="Zoom in" aria-label="Zoom in" className="!w-8 !h-8">
+        <IconButton onClick={zoomIn} aria-label={t('preview.zoomIn')} className="!w-11 !h-11">
           <Add className="!text-sm" />
         </IconButton>
       </div>
@@ -200,7 +201,7 @@ async function parsePptxWithJSZip(buffer: ArrayBuffer): Promise<SlideData[]> {
     const textNodes = Array.from(xmlDoc.getElementsByTagName('a:t'));
     const allTexts = textNodes.map((n) => n.textContent?.trim() ?? '').filter((t) => t.length > 0);
 
-    const title = allTexts.length > 0 ? allTexts[0] : `Slide ${i + 1}`;
+    const title = allTexts.length > 0 ? allTexts[0] : String(i + 1);
     const bodyTexts = allTexts.length > 1 ? allTexts.slice(1) : [];
 
     // Extract exact slide images referenced in this slide XML
@@ -230,6 +231,7 @@ async function parsePptxWithJSZip(buffer: ArrayBuffer): Promise<SlideData[]> {
 }
 
 function PptxSlidePresenter({ file }: { file: FileItem }) {
+  const { t } = useTranslation();
   const [slides, setSlides] = useState<SlideData[]>([]);
   const [activeSlide, setActiveSlide] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -313,7 +315,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 text-outline">
         <span className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-        <p className="text-base font-medium">Memuat Slide Presentasi ({bytes(file.size)})...</p>
+        <p className="text-base font-medium">{t('preview.loadingPptx', { size: bytes(file.size) })}</p>
       </div>
     );
   }
@@ -334,7 +336,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
             leftIcon={<Download className="!text-base" />}
             className="!bg-primary !text-on-primary hover:!bg-primary/90 shadow-md"
           >
-            Download PPTX
+            {t('preview.downloadPptx')}
           </LinkButton>
         </div>
       </div>
@@ -355,7 +357,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={current.images[0]}
-            alt={`Slide ${activeSlide + 1}`}
+            alt={String(activeSlide + 1)}
             className="w-full h-full object-contain"
             draggable={false}
           />
@@ -383,8 +385,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
           size="lg"
           onClick={toggleFullscreen}
           className="absolute top-4 right-4 z-30 !bg-media-backdrop/60 !text-on-media opacity-100 hover:!bg-media-backdrop/80 transition-colors duration-300 backdrop-blur"
-          title="Keluar Fullscreen (Esc)"
-          aria-label="Keluar Fullscreen (Esc)"
+          aria-label={t('preview.exitFullscreen')}
         >
           <FullscreenExit className="!text-xl" />
         </IconButton>
@@ -408,9 +409,9 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
           onClick={toggleFullscreen}
           leftIcon={<Fullscreen className="!text-lg" />}
           className="absolute top-4 right-4 z-20 !px-3.5 !py-1.5 !h-auto backdrop-blur shadow-md"
-          title="Mode Presentasi Layar Penuh"
+          aria-label={t('preview.presentationMode')}
         >
-          Mode Presentasi
+          {t('preview.presentationMode')}
         </Button>
 
         {/* Pure Direct Slide Visual Canvas (No outer white box frame, no inner black padding bars) */}
@@ -418,7 +419,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={current.images[0]}
-            alt={`Slide ${activeSlide + 1}`}
+            alt={String(activeSlide + 1)}
             className="max-w-full max-h-[82vh] object-contain rounded-xl sm:rounded-2xl shadow-2xl select-none"
             draggable={false}
           />
@@ -468,7 +469,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
                   >
                     {s.images && s.images.length > 0 ? (
                       /* eslint-disable-next-line @next/next/no-img-element */
-                      <img src={s.images[0]} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-contain rounded" />
+                      <img src={s.images[0]} alt={String(idx + 1)} className="w-full h-full object-contain rounded" />
                     ) : (
                       <div className="flex flex-col justify-center items-center text-center p-0.5">
                         <p className="text-[8px] sm:text-[10px] font-bold text-slide-ink line-clamp-2 leading-tight">
@@ -487,6 +488,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
   );
 }
 function MarkdownViewer({ file }: { file: FileItem }) {
+  const { t } = useTranslation();
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'preview' | 'code'>('preview');
@@ -495,34 +497,40 @@ function MarkdownViewer({ file }: { file: FileItem }) {
     fetch(fileUrl(file))
       .then((r) => r.text())
       .then(setContent)
-      .catch(() => setContent('Gagal memuat konten markdown.'))
+      .catch(() => setContent(t('preview.errorText')))
       .finally(() => setLoading(false));
-  }, [file.id]);
+  }, [file.id, t]);
 
-  if (loading) return <div className="flex-1 flex items-center justify-center text-outline">Loading markdown...</div>;
+  if (loading) return <TextSurfaceLoading label={t('preview.loadingText')} />;
 
   const htmlContent = marked.parse(content, { gfm: true, breaks: true }) as string;
 
+  // Single surface: the overlay is already the backdrop — no inner card/frame.
   return (
-    <div className="flex-1 flex flex-col overflow-hidden min-h-0 h-full max-w-5xl w-full mx-auto p-4" onClick={(e) => e.stopPropagation()}>
-      <div className="flex items-center justify-between mb-3 bg-surface-container/60 p-2 rounded-xl border border-outline-variant/20 shrink-0">
+    <div
+      data-testid="file-text-viewer"
+      data-viewer-kind="markdown"
+      className="flex-1 flex flex-col overflow-hidden min-h-0 h-full w-full max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center mb-2 shrink-0">
         <Tabs
           tabs={[
-            { value: 'preview', label: 'Preview' },
-            { value: 'code', label: 'Raw Markdown' },
+            { value: 'preview', label: t('preview.tabPreview') },
+            { value: 'code', label: t('preview.tabRawMarkdown') },
           ]}
           value={tab}
           onChange={(v: string) => setTab(v as 'preview' | 'code')}
         />
       </div>
-      <div className="flex-1 min-h-0 overflow-auto bg-surface-container/30 border border-outline-variant/20 rounded-2xl p-6 sm:p-8 shadow-inner">
+      <div className="flex-1 min-h-0 overflow-auto">
         {tab === 'preview' ? (
           <div
             className="prose markdown-body max-w-none text-on-surface leading-relaxed text-sm"
             dangerouslySetInnerHTML={{ __html: htmlContent }}
           />
         ) : (
-          <pre className="text-sm text-on-surface font-mono whitespace-pre-wrap break-words">{content}</pre>
+          <pre className="m-0 p-0 min-w-0 bg-transparent border-0 text-sm text-on-surface font-mono whitespace-pre-wrap [overflow-wrap:anywhere] break-words">{content}</pre>
         )}
       </div>
     </div>
@@ -530,6 +538,7 @@ function MarkdownViewer({ file }: { file: FileItem }) {
 }
 
 function CodeTextViewer({ file }: { file: FileItem }) {
+  const { t } = useTranslation();
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -538,9 +547,9 @@ function CodeTextViewer({ file }: { file: FileItem }) {
     fetch(fileUrl(file))
       .then((r) => r.text())
       .then(setContent)
-      .catch(() => setContent('Gagal memuat konten.'))
+      .catch(() => setContent(t('preview.errorText')))
       .finally(() => setLoading(false));
-  }, [file.id]);
+  }, [file.id, t]);
 
   const copyToClipboard = () => {
     void navigator.clipboard.writeText(content);
@@ -548,14 +557,23 @@ function CodeTextViewer({ file }: { file: FileItem }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (loading) return <div className="flex-1 flex items-center justify-center text-outline">Loading text...</div>;
+  if (loading) return <TextSurfaceLoading label={t('preview.loadingText')} />;
 
   const lines = content.split('\n');
 
+  // Single surface: no inner card/frame/padding — the overlay is the backdrop.
   return (
-    <div className="flex-1 flex flex-col overflow-hidden min-h-0 h-full max-w-5xl w-full mx-auto p-4" onClick={(e) => e.stopPropagation()}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-outline font-mono">{lines.length} lines</span>
+    <div
+      data-testid="file-text-viewer"
+      data-viewer-kind="code"
+      className="flex-1 flex flex-col overflow-hidden min-h-0 h-full w-full max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
+        <span className="text-xs text-outline font-mono truncate">
+          {t('viewer.textViewerLabel')}
+          <span className="sr-only">{t('preview.lineCount', { count: lines.length })}</span>
+        </span>
         <Button
           variant="secondary"
           size="sm"
@@ -563,16 +581,16 @@ function CodeTextViewer({ file }: { file: FileItem }) {
           className="!px-3 !py-1.5 !h-auto text-xs"
           leftIcon={copied ? <Check className="!text-sm text-primary" /> : <ContentCopy className="!text-sm" />}
         >
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? t('preview.copied') : t('preview.copy')}
         </Button>
       </div>
-      <div className="flex-1 min-h-0 overflow-auto bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-4 font-mono text-sm shadow-xl flex">
-        <div className="select-none text-right pr-4 text-outline/40 border-r border-outline-variant/20 mr-4 font-mono text-xs leading-relaxed">
+      <div className="flex-1 min-h-0 overflow-auto font-mono text-sm flex">
+        <div className="select-none text-right pr-3 sm:pr-4 text-outline/40 border-r border-outline-variant/20 mr-3 sm:mr-4 font-mono text-xs leading-relaxed shrink-0">
           {lines.map((_, i) => (
             <div key={i}>{i + 1}</div>
           ))}
         </div>
-        <pre className="text-on-surface whitespace-pre break-words leading-relaxed flex-1 overflow-x-auto">
+        <pre className="m-0 p-0 min-w-0 bg-transparent border-0 text-on-surface whitespace-pre break-words leading-relaxed flex-1 overflow-x-auto">
           {content}
         </pre>
       </div>
@@ -621,6 +639,19 @@ function isPlainText(file: FileItem): boolean {
   );
 }
 
+function TextSurfaceLoading({ label }: { label: string }) {
+  return (
+    <div className="flex-1 flex items-center justify-center text-outline px-4" role="status">
+      {label}
+    </div>
+  );
+}
+
+/**
+ * Plain-text / code / log previews. The overlay is the only surface: the text
+ * sits directly on it with symmetric horizontal padding (no inner card frame),
+ * so the rendered chain is body > overlay > text container > PRE.
+ */
 function PlainTextViewer({ file, downloadUrl, onClose }: { file: FileItem; downloadUrl: string; onClose: () => void }) {
   const { t } = useTranslation();
   const [content, setContent] = useState<string | null>(null);
@@ -687,8 +718,9 @@ function PlainTextViewer({ file, downloadUrl, onClose }: { file: FileItem; downl
       </div>
     );
   } else {
+    // Single surface: transparent PRE, symmetric padding, no inner frame.
     body = (
-      <pre className="flex-1 min-h-0 overflow-auto whitespace-pre-wrap break-words bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-4 sm:p-6 font-mono text-sm leading-relaxed text-on-surface">
+      <pre className="m-0 p-0 min-w-0 flex-1 min-h-0 overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] break-words bg-transparent border-0 font-mono text-sm leading-relaxed text-on-surface">
         {content}
       </pre>
     );
@@ -696,11 +728,13 @@ function PlainTextViewer({ file, downloadUrl, onClose }: { file: FileItem; downl
 
   return (
     <div
-      className="flex flex-col overflow-hidden min-h-0 h-full max-w-5xl w-full mx-auto px-4 pt-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6"
+      data-testid="file-text-viewer"
+      data-viewer-kind="plain"
+      className="flex flex-col overflow-hidden min-h-0 h-full w-full max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
-        <span className="text-xs text-outline font-mono truncate">{file.mime_type || 'text/plain'}</span>
+        <span className="text-xs text-outline font-mono truncate">{t('viewer.textViewerLabel')}</span>
         <div className="flex items-center gap-1.5">
           {content !== null && !tooLarge && (
             <Button
@@ -710,7 +744,7 @@ function PlainTextViewer({ file, downloadUrl, onClose }: { file: FileItem; downl
               className="!px-3 !py-1.5 !h-auto text-xs"
               leftIcon={copied ? <Check className="!text-sm text-primary" /> : <ContentCopy className="!text-sm" />}
             >
-              {copied ? 'Copied' : 'Copy'}
+              {copied ? t('preview.copied') : t('preview.copy')}
             </Button>
           )}
           <LinkButton
@@ -723,16 +757,17 @@ function PlainTextViewer({ file, downloadUrl, onClose }: { file: FileItem; downl
           >
             {t('preview.downloadFile')}
           </LinkButton>
-          <IconButton
-            size="xl"
-            shape="circle"
-            onClick={onClose}
-            title={t('preview.close')}
-            aria-label={t('preview.close')}
-            className="!bg-surface-container/80 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest"
-          >
-            <Close className="!text-xl" />
-          </IconButton>
+          <Tooltip label={t('preview.close')}>
+            <IconButton
+              size="xl"
+              shape="circle"
+              onClick={onClose}
+              aria-label={t('preview.close')}
+              className="!bg-surface-container/80 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest"
+            >
+              <Close className="!text-xl" />
+            </IconButton>
+          </Tooltip>
         </div>
       </div>
       {body}
@@ -778,6 +813,7 @@ function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props)
 
   return (
     <div
+      data-testid="file-viewer-overlay"
       className="fixed inset-0 z-[1000] flex flex-col bg-background/90 backdrop-blur-md"
       onClick={onClose}
     >
@@ -792,29 +828,31 @@ function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props)
             <DropdownMenu
               align="right"
               trigger={
-                <IconButton
-                  bare
-                  shape="circle"
-                  size="lg"
-                  title={t('files.actions.menu')}
-                  aria-label={t('preview.menu')}
-                >
-                  <span className="material-symbols-outlined !text-xl">more_vert</span>
-                </IconButton>
+                <Tooltip label={t('preview.menu')} placement="bottom">
+                  <IconButton
+                    bare
+                    shape="circle"
+                    size="xl"
+                    aria-label={t('preview.menu')}
+                  >
+                    <span className="material-symbols-outlined !text-xl" aria-hidden>more_vert</span>
+                  </IconButton>
+                </Tooltip>
               }
               items={actions}
             />
           )}
-          <IconButton
-            shape="circle"
-            size="xl"
-            onClick={onClose}
-            title={t('preview.close')}
-            aria-label={t('preview.close')}
-            className="!bg-surface-container/80 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest"
-          >
-            <Close className="!text-xl" />
-          </IconButton>
+          <Tooltip label={t('preview.close')} placement="bottom">
+            <IconButton
+              shape="circle"
+              size="xl"
+              onClick={onClose}
+              aria-label={t('preview.close')}
+              className="!bg-surface-container/80 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest"
+            >
+              <Close className="!text-xl" />
+            </IconButton>
+          </Tooltip>
         </div>
       </div>
 
@@ -829,7 +867,6 @@ function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props)
               onNavigate?.(files![currentIndex - 1]);
             }}
             className="absolute left-2 sm:left-4 z-10 !bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest shadow-lg"
-            title={t('preview.prev')}
             aria-label={t('preview.prev')}
           >
             <ChevronLeft />
@@ -847,7 +884,6 @@ function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props)
               onNavigate?.(files![currentIndex + 1]);
             }}
             className="absolute right-2 sm:right-4 z-10 !bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest shadow-lg"
-            title={t('preview.next')}
             aria-label={t('preview.next')}
           >
             <ChevronRight />

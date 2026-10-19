@@ -4,6 +4,7 @@ namespace App\Http;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\JsonResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 trait ApiResponse
 {
@@ -42,6 +43,45 @@ trait ApiResponse
     protected function notFound(string $message, array $meta = []): JsonResponse
     {
         return $this->ok(null, $message, array_merge(['not_found' => true], $meta));
+    }
+
+    /**
+     * Respons unduhan stream dengan header lengkap (Content-Type,
+     * Content-Disposition attachment + filename*, Cache-Control).
+     *
+     * Header dipasang pada properti respons sebelum middleware berjalan,
+     * jadi header X-RateLimit dan Vary ikut terkirim. Callback body dipanggil saat
+     * StreamedResponse::sendContent() pada request nyata.
+     *
+     * @param  \Closure(): void  $body
+     */
+    protected function streamDownloadResponse(
+        \Closure $body,
+        string $contentType,
+        string $contentDisposition,
+        string $cacheControl = 'no-cache, private',
+    ): StreamedResponse {
+        $response = new StreamedResponse($body, 200);
+        $response->headers->set('Content-Type', $contentType);
+        $response->headers->set('Content-Disposition', $contentDisposition);
+        $response->headers->set('Cache-Control', $cacheControl);
+
+        return $response;
+    }
+
+    /**
+     * Header Content-Disposition untuk unduhan berkas/folder:
+     * `attachment; filename="<fallback>"; filename*=UTF-8''<encoded>`.
+     *
+     * Fallback ASCII membuang karakter non-ASCII/kutip/CR/LF supaya header
+     * sah; nama asli dikirim lewat parameter RFC 5987 `filename*`.
+     */
+    protected function downloadDisposition(string $name, string $fallbackName): string
+    {
+        $safe = str_replace(['"', "\r", "\n"], '', $fallbackName);
+        $encoded = rawurlencode($name !== '' ? $name : $fallbackName);
+
+        return 'attachment; filename="'.$safe.'"; filename*=UTF-8\'\''.$encoded;
     }
 
     /**

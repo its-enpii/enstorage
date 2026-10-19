@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 
 export type MenuItem = {
   label: string;
+  /** Accessible name for the menu item (icon text is otherwise merged with the label). */
+  ariaLabel?: string;
   icon?: ReactNode;
   onClick: () => void;
   variant?: 'default' | 'danger';
@@ -102,6 +104,8 @@ export function DropdownMenu({ trigger, items, align = 'right', header }: Props)
           {items.map((item, i) => (
             <div key={i}>
               <button
+                role="menuitem"
+                aria-label={item.ariaLabel ?? item.label}
                 onClick={() => { item.onClick(); setOpen(false); }}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors ${
                   item.variant === 'danger'

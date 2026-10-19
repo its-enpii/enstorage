@@ -15,6 +15,7 @@ use App\Models\ShareLink;
 use App\Services\ActivityLogService;
 use App\Services\ArchiveExtractor;
 use App\Services\FolderLockGuard;
+use App\Services\FolderZipStreamer;
 use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleDriveUploader;
@@ -522,15 +523,17 @@ class FileController extends Controller
             $response = $drive->files->get($file->gdrive_file_id, ['alt' => 'media']);
             $body = $response->getBody();
 
-            return response()->stream(function () use ($body) {
-                // Batas waktu + cek koneksi putus: worker dilepas walau klien
-                // mati di tengah transfer (lihat App\Support\StreamPump).
-                StreamPump::copy($body);
-            }, 200, [
-                'Content-Type' => $file->mime_type,
-                'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
-                'Content-Length' => (string) $file->size,
-            ]);
+            // Header (termasuk hasil middleware) dipasang pada object respons
+            // ini, bukan di dalam closure, supaya selalu terkirim utuh.
+            $stream = $this->streamDownloadResponse(
+                fn () => StreamPump::copy($body),
+                $file->mime_type,
+                $this->makeContentDisposition($disposition, $file),
+                'no-cache, private',
+            );
+            $stream->headers->set('Content-Length', (string) $file->size);
+
+            return $stream;
         } catch (Throwable $e) {
             if ($this->isDriveAccessError($e)) {
                 $file->markGdriveUnreachable();
@@ -1060,6 +1063,90 @@ class FileController extends Controller
         return $this->fail(
             __('Link share tidak ditemukan, sudah kadaluarsa, atau sudah di-revoke.'),
             410,
+        );
+    }
+
+    /**
+     * GET /s/{token}/download — public (no auth). Unduh seluruh isi folder
+     * share (rekursif) sebagai ZIP, atau berkas tunggal bila subject-nya file.
+     * Lewat jalur resmi ShareLink::resolveActive() sehingga expiry/max_views
+     * dihormati; kunci folder mengikuti publicLockResponse().
+     */
+    public function downloadByToken(Request $request, string $token): StreamedResponse|JsonResponse|BinaryFileResponse
+    {
+        $link = ShareLink::resolveActive($token);
+
+        if ($link && $link->shareable instanceof FileModel) {
+            $file = $link->shareable;
+            if ($blocked = $this->publicLockResponse($request, $token, $this->lockGuard->gateForPublicFile($file, $this->shareUnlockToken($request, $token)))) {
+                return $blocked;
+            }
+
+            return $this->resolveFileResponse($request->duplicate(['download' => true]), $file);
+        }
+
+        if ($link && $link->shareable instanceof Folder) {
+            $folder = $link->shareable;
+
+            return $this->downloadSharedFolder($request, $token, $folder, $this->lockGuard->gateForPublicFolder($folder, $this->shareUnlockToken($request, $token)));
+        }
+
+        // Legacy: file token → unduh berkas tunggal.
+        $file = FileModel::where('share_token', $token)->first();
+        if ($file) {
+            if ($blocked = $this->publicLockResponse($request, $token, $this->lockGuard->gateForPublicFile($file, $this->shareUnlockToken($request, $token)))) {
+                return $blocked;
+            }
+
+            return $this->resolveFileResponse($request->duplicate(['download' => true]), $file);
+        }
+
+        // Legacy: folder token → ZIP seluruh isi folder.
+        $folder = Folder::where('share_token', $token)->first();
+        if ($folder) {
+            return $this->downloadSharedFolder($request, $token, $folder, $this->lockGuard->gateForPublicFolder($folder, $this->shareUnlockToken($request, $token)));
+        }
+
+        return $this->notFound(__('Link share tidak ditemukan, sudah kadaluarsa, atau sudah di-revoke.'));
+    }
+
+    /**
+     * Guard kunci + bangun ZIP folder share. Dipakai downloadByToken().
+     */
+    private function downloadSharedFolder(Request $request, string $token, Folder $folder, ?Folder $locked): StreamedResponse|JsonResponse
+    {
+        if ($blocked = $this->publicLockResponse($request, $token, $locked)) {
+            return $blocked;
+        }
+
+        $streamer = app(FolderZipStreamer::class);
+        $tree = $streamer->collect($folder);
+
+        if ($tree['entries'] === 0) {
+            return $this->notFound(__('Folder kosong, tidak ada yang bisa di-download.'));
+        }
+
+        if ($streamer->exceedsLimits($tree)) {
+            return $this->notFound(__('Isi folder terlalu besar untuk diunduh sebagai satu arsip.'));
+        }
+
+        $zipPath = $streamer->build($tree);
+        if ($zipPath === null) {
+            return $this->fail(
+                __('Gagal menyiapkan arsip ZIP, silakan coba lagi.'),
+                500,
+                null,
+                ['code' => 'zip_build_failed'],
+            );
+        }
+
+        // Header dipasang di sini (bukan di dalam trait) supaya helper
+        // downloadDisposition() dari ApiResponse ikut dipakai.
+        return $this->streamDownloadResponse(
+            $streamer->bodyFor($zipPath),
+            FolderZipStreamer::CONTENT_TYPE,
+            $this->downloadDisposition($streamer->zipName((string) $folder->name), $streamer->zipName((string) $folder->name)),
+            'no-store, no-cache, must-revalidate',
         );
     }
 

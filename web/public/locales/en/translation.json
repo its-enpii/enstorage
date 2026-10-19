@@ -88,6 +88,10 @@
       "delete": "Delete",
       "menu": "Menu"
     },
+    "selection": {
+      "selectAll": "Select all",
+      "clearSelection": "Clear selection"
+    },
     "confirmDelete": {
       "title": "Delete File?",
       "body": "The file is removed from Google Drive and the local database.",
@@ -229,7 +233,8 @@
     },
     "moveFolder": "Move",
     "moveFolderTitle": "Move Folder",
-    "moveFolderTitleBulk": "Move {{count}} Folders"
+    "moveFolderTitleBulk": "Move {{count}} Folders",
+    "emptyItems": "Empty folder"
   },
   "profile": {
     "title": "Profile",
@@ -535,7 +540,11 @@
       "wrong": "Wrong password.",
       "passwordRequired": "Password is required.",
       "error": "Could not unlock the folder. Please try again."
-    }
+    },
+    "downloadAll": "Download all",
+    "downloadAllLabel": "Download all as ZIP",
+    "downloadAllNotFound": "This share link is no longer available.",
+    "downloadAllFailed": "Could not download the folder. Please try again."
   },
   "preview": {
     "loadingPdf": "Loading PDF document...",
@@ -547,7 +556,19 @@
     "menu": "File menu",
     "loadingText": "Loading text...",
     "errorText": "Failed to load text content.",
-    "tooLargeText": "File is too large to preview as text. Use download instead."
+    "tooLargeText": "File is too large to preview as text. Use download instead.",
+    "tabPreview": "Preview",
+    "tabRawMarkdown": "Raw Markdown",
+    "copy": "Copy",
+    "copied": "Copied",
+    "lineCount": "{{count}} lines",
+    "plainTextMime": "text/plain",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "resetZoom": "Reset zoom",
+    "presentationMode": "Presentation mode",
+    "exitFullscreen": "Exit fullscreen",
+    "downloadPptx": "Download PPTX"
   },
   "auth": {
     "login": {
@@ -600,7 +621,9 @@
     "newFolder": "New Folder",
     "uploadFile": "Upload File",
     "uploadFolder": "Upload Folder",
-    "selectMode": "Select Mode"
+    "selectMode": "Select Mode",
+    "openMenu": "Open actions",
+    "closeMenu": "Close actions"
   },
   "legal": {
     "pageTitle": "Legal",
@@ -1951,5 +1974,8 @@
       "alreadyLocked": "This folder is already locked.",
       "generic": "Something went wrong. Please try again."
     }
+  },
+  "viewer": {
+    "textViewerLabel": "Text"
   }
 }

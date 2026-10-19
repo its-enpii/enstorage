@@ -20,6 +20,7 @@ use App\Models\ShareLink;
 use App\Services\ActivityLogService;
 use App\Services\Folder\FolderPathService;
 use App\Services\FolderLockGuard;
+use App\Services\FolderZipStreamer;
 use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleDriveUploader;
@@ -27,7 +28,6 @@ use App\Services\Google\GoogleTokenService;
 use App\Services\Google\QuotaManager;
 use App\Services\WebhookService;
 use App\Support\StreamPump;
-use Google\Service\Drive;
 use Google\Service\Drive\DriveFile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,7 +37,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
-use ZipArchive;
 
 class FolderController extends Controller
 {
@@ -816,8 +815,8 @@ class FolderController extends Controller
     /**
      * GET /folders/{id}/download — stream seluruh isi folder sebagai ZIP archive.
      *
-     * Streaming on-the-fly via ZipArchive + output buffering (memory-efficient).
-     * File binary di-stream langsung dari Google Drive per akun.
+     * ZIP dibangun ke berkas temp lalu dialirkan; pengumpulan isi folder
+     * dilakukan di FolderZipStreamer. File binary diambil dari Drive per akun.
      */
     public function download(Request $request, string $id): StreamedResponse|JsonResponse
     {
@@ -830,112 +829,37 @@ class FolderController extends Controller
             return $blocked;
         }
 
-        $files = File::where('folder_id', $folder->id)
-            ->where('user_id', $folder->user_id)
-            ->where('upload_status', File::STATUS_DONE)
-            ->orderBy('original_name')
-            ->get();
+        // Logika ZIP di-share dengan unduhan folder publik (/s/{token}/download)
+        // lewat App\Services\FolderZipStreamer agar tidak ada duplikasi.
+        $streamer = app(FolderZipStreamer::class);
+        $tree = $streamer->collect($folder);
 
-        $subfolders = Folder::where('parent_id', $folder->id)
-            ->where('user_id', $folder->user_id)
-            ->orderBy('name')
-            ->get();
-
-        if ($files->isEmpty() && $subfolders->isEmpty()) {
+        if ($tree['entries'] === 0) {
             return $this->fail(__('Folder kosong, tidak ada yang bisa di-download.'), 409);
         }
 
-        // Pre-resolve Drive streams per file. Pakai satu client per akun Google
-        // untuk batch — supaya upload_job yang sama tidak diulang antar file.
-        $factory = app(GoogleClientFactory::class);
-        $tokenSvc = app(GoogleTokenService::class);
-        $clients = []; // google_account_id => Drive
+        if ($streamer->exceedsLimits($tree)) {
+            return $this->fail(__('Isi folder terlalu besar untuk diunduh sebagai satu arsip.'), 409);
+        }
 
-        $safeName = preg_replace('/[\\\\\/:*?"<>|]/', '_', $folder->name) ?: 'folder';
-        $zipName = $safeName.'.zip';
+        // Bangun ZIP sebelum stream dimulai agar kegagalan bisa dibalas
+        // envelope JSON (bukan 500 setelah kepala respons terkirim).
+        $zipPath = $streamer->build($tree);
+        if ($zipPath === null) {
+            return $this->fail(
+                __('Gagal menyiapkan arsip ZIP, silakan coba lagi.'),
+                500,
+                null,
+                ['code' => 'zip_build_failed'],
+            );
+        }
 
-        return response()->stream(function () use ($files, $subfolders, $factory, $tokenSvc, &$clients, $safeName) {
-            // Bangun banyak berkas sekaligus berpotensi memakan waktu lama.
-            // Dua pengaman (lihat App\Support\StreamPump):
-            //  - deadline TOTAL: keluar dari loop antrean file saat terlampaui;
-            //  - deadline PER FILE: satu klien mati tidak membakar waktu
-            //    seluruh proses, karena baca body dibatasi per berkas.
-            $deadline = microtime(true) + self::STREAM_LIMIT_SECONDS;
-            StreamPump::flushOutput();
-
-            $zip = new ZipArchive;
-            $zip->open('php://output', ZipArchive::CREATE | ZipArchive::OVERWRITE);
-
-            // Subfolder → direktori kosong di zip (placeholder struktur).
-            foreach ($subfolders as $sub) {
-                $entry = $safeName.'/'.preg_replace('/[\\\\\/:*?"<>|]/', '_', $sub->name).'/';
-                $zip->addEmptyDir($entry);
-            }
-
-            // Kumpulkan tmp file yang harus di-unlink setelah zip->close()
-            // (ZipArchive::addFile() baca sekarang, boleh hapus setelahnya).
-            $tmpFiles = [];
-            try {
-                foreach ($files as $file) {
-                    // Deadline total: klien sudah menutup koneksi atau proses
-                    // sudah terlalu lama → lepaskan worker, jangan lanjut
-                    // membaca sisa berkas.
-                    if (StreamPump::aborted() || StreamPump::deadlineReached($deadline)) {
-                        break;
-                    }
-
-                    $account = $file->googleAccount;
-                    if (! $account || ! $file->gdrive_file_id) {
-                        continue;
-                    }
-
-                    if (! isset($clients[$account->id])) {
-                        $tokenSvc->ensureFreshToken($account);
-                        $client = $factory->makeFor($account);
-                        $client->setAccessToken($account->access_token);
-                        $clients[$account->id] = new Drive($client);
-                    }
-
-                    $drive = $clients[$account->id];
-                    $tmpPath = tempnam(sys_get_temp_dir(), 'ens_zip_');
-                    $tmpFiles[] = $tmpPath;
-
-                    // Stream body ke temporary file dengan batas per berkas,
-                    // lalu tutup stream sumbernya supaya koneksi tidak
-                    // tertahan sampai body habis tanpa batas.
-                    $out = fopen($tmpPath, 'wb');
-                    $response = $drive->files->get($file->gdrive_file_id, [
-                        'alt' => 'media',
-                    ]);
-                    $body = $response->getBody();
-                    try {
-                        StreamPump::copyPsrTo($body, $out);
-                    } finally {
-                        if (is_resource($out)) {
-                            fclose($out);
-                        }
-                        if (method_exists($body, 'close')) {
-                            $body->close();
-                        }
-                    }
-
-                    $entryName = $safeName.'/'.($file->original_name ?: $file->name);
-                    $zip->addFile($tmpPath, $entryName);
-                }
-
-                $zip->close();
-            } finally {
-                foreach ($tmpFiles as $tmp) {
-                    if (file_exists($tmp)) {
-                        @unlink($tmp);
-                    }
-                }
-            }
-        }, 200, [
-            'Content-Type' => 'application/zip',
-            'Content-Disposition' => 'attachment; filename="'.$zipName.'"',
-            'Cache-Control' => 'no-store, no-cache, must-revalidate',
-        ]);
+        return $this->streamDownloadResponse(
+            $streamer->bodyFor($zipPath),
+            FolderZipStreamer::CONTENT_TYPE,
+            $this->downloadDisposition($streamer->zipName((string) $folder->name), $streamer->zipName((string) $folder->name)),
+            'no-store, no-cache, must-revalidate',
+        );
     }
 
     // =========================================================================

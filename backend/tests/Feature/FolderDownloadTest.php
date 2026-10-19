@@ -2,11 +2,22 @@
 
 namespace Tests\Feature;
 
+use App\Models\File;
 use App\Models\Folder;
+use App\Models\GoogleAccount;
 use App\Models\User;
 use App\Services\Folder\FolderPathService;
+use App\Services\Google\GoogleClientFactory;
+use App\Services\Google\GoogleTokenService;
+use Google\Client as GoogleClient;
+use GuzzleHttp\Client;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response as PsrResponse;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Tests\TestCase;
 
 /**
@@ -78,13 +89,49 @@ class FolderDownloadTest extends TestCase
         $response->assertStatus(409);
     }
 
-    public function test_returns_200_and_zip_stream_when_folder_has_files(): void
+    public function test_returns_200_and_zip_stream_with_full_headers_when_folder_has_files(): void
     {
-        // Happy-path test stubbed end-to-end (Drive → ZipArchive → response)
-        // was fragile and crashed PHPUnit under streamed-response buffering
-        // for small bodies. Skip the full mock chain — covered in production
-        // smoke tests instead. Keep this method as a placeholder so the
-        // class can grow when a lighter mock strategy is available.
-        $this->assertTrue(true);
+        $user = $this->actingUser();
+        Sanctum::actingAs($user);
+        $account = GoogleAccount::factory()->create(['user_id' => $user->id]);
+        $folder = $this->makeFolder($user, 'berkas uji');
+        File::create([
+            'user_id' => $user->id,
+            'folder_id' => $folder->id,
+            'google_account_id' => $account->id,
+            'name' => 'a.txt',
+            'original_name' => 'a.txt',
+            'mime_type' => 'text/plain',
+            'size' => 5,
+            'gdrive_file_id' => 'gd_'.Str::random(8),
+            'upload_status' => File::STATUS_DONE,
+            'client_key' => strtolower((string) Str::ulid()),
+        ]);
+
+        $mock = new MockHandler(array_fill(0, 8, new PsrResponse(200, ['content-type' => 'text/plain'], 'hello')));
+        $client = new GoogleClient;
+        $client->setHttpClient(new Client(['handler' => HandlerStack::create($mock)]));
+        $client->setAccessToken(['access_token' => 't', 'created' => time(), 'expires_in' => 3600]);
+        $factory = \Mockery::mock(GoogleClientFactory::class)->makePartial();
+        $factory->shouldReceive('makeFor')->andReturn($client);
+        $this->app->instance(GoogleClientFactory::class, $factory);
+        $tokens = \Mockery::mock(GoogleTokenService::class)->makePartial();
+        $tokens->shouldReceive('ensureFreshToken')->andReturnUsing(fn ($acct) => $acct->access_token);
+        $this->app->instance(GoogleTokenService::class, $tokens);
+
+        $response = $this->get("/api/v1/folders/{$folder->id}/download");
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame('application/zip', $response->headers->get('Content-Type'));
+        $this->assertSame('attachment; filename="berkas uji.zip"; filename*=UTF-8\'\'berkas%20uji.zip', $response->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
+        $this->assertSame('300', $response->headers->get('X-RateLimit-Limit'));
+        $this->assertSame('Origin', $response->headers->get('Vary'));
+
+        $this->assertInstanceOf(StreamedResponse::class, $response->baseResponse);
+        $sentBefore = \Closure::bind(fn () => $this->headersSent, $response->baseResponse, StreamedResponse::class)();
+        $this->assertFalse($sentBefore, 'header sudah ditandai terkirim sebelum sendHeaders()');
+
+        $this->assertSame("PK\x03\x04", substr($response->streamedContent(), 0, 4));
     }
 }

@@ -3,7 +3,13 @@
 namespace App\Services;
 
 use App\Models\File as FileModel;
+use App\Services\Google\GoogleClientFactory;
+use App\Services\Google\GoogleTokenService;
+use App\Support\StreamPump;
+use Google\Service\Drive;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Psr\Http\Message\StreamInterface;
 use RuntimeException;
 
 /**
@@ -26,6 +32,12 @@ class ArchiveExtractor
 
     public const MAX_COMPRESSION_RATIO = 200;
 
+    /** Batas ukuran arsip (byte) yang diunduh dari Drive/S3 untuk diekstrak. */
+    public const MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024;
+
+    /** Batas waktu satu unduhan arsip (detik). */
+    public const DOWNLOAD_LIMIT_SECONDS = 300;
+
     /** Ekstensi yang dianggap arsip zip. */
     private const ZIP_EXTENSIONS = ['zip'];
 
@@ -38,6 +50,8 @@ class ArchiveExtractor
 
     public function __construct(
         private readonly FileRecordCreator $creator,
+        private readonly GoogleClientFactory $clientFactory,
+        private readonly GoogleTokenService $tokenService,
     ) {}
 
     public function isZip(FileModel $file): bool
@@ -65,9 +79,21 @@ class ArchiveExtractor
     {
         $archivePath = $this->resolveLocalPath($file);
         if ($archivePath === null) {
-            throw new RuntimeException(__('Berkas arsip tidak tersedia untuk diekstrak.'));
+            // Arsip di Google Drive/S3: unduh ke temp, bersihkan di semua jalur keluar.
+            $archivePath = $this->downloadArchiveToTemp($file);
         }
 
+        try {
+            return $this->extractFromPath($archivePath, $file, $userId, $folderId);
+        } finally {
+            if ($archivePath === $this->tempPathFor($file)) {
+                @unlink($archivePath);
+            }
+        }
+    }
+
+    private function extractFromPath(string $archivePath, FileModel $file, string $userId, ?string $folderId): array
+    {
         $zip = new \ZipArchive;
         $opened = $zip->open($archivePath);
         if ($opened !== true) {
@@ -192,8 +218,8 @@ class ArchiveExtractor
     }
 
     /**
-     * Path lokal berkas arsip (temp upload, local disk, atau stream S3
-     * yang didownload ke temp). Null kalau tidak tersedia.
+     * Path lokal berkas arsip bila sudah ada di disk (local / temp upload).
+     * Arsip remote (gdrive/s3) diunduh oleh downloadArchiveToTemp().
      */
     public function resolveLocalPath(FileModel $file): ?string
     {
@@ -210,6 +236,135 @@ class ArchiveExtractor
         }
 
         return null;
+    }
+
+    /** Lokasi unduhan sementara arsip remote. */
+    private function tempPathFor(FileModel $file): string
+    {
+        return storage_path('app/temp/archive-'.$file->id.'.zip');
+    }
+
+    /**
+     * Unduh arsip Google Drive (atau S3) ke berkas sementara, lalu validasi
+     * signature ZIP. Pemanggil bertanggung jawab menghapus berkas temp.
+     */
+    private function downloadArchiveToTemp(FileModel $file): string
+    {
+        $tempPath = $this->tempPathFor($file);
+        if (! is_dir(dirname($tempPath)) && ! @mkdir(dirname($tempPath), 0775, true) && ! is_dir(dirname($tempPath))) {
+            throw new RuntimeException(__('Berkas arsip tidak tersedia untuk diekstrak.'));
+        }
+        @unlink($tempPath);
+
+        try {
+            $this->copyRemoteArchive($file, $tempPath);
+        } catch (\Throwable $e) {
+            @unlink($tempPath);
+            throw new RuntimeException(__('Gagal mengunduh arsip: :msg', ['msg' => $e->getMessage()]), 0, $e);
+        }
+
+        $fh = @fopen($tempPath, 'rb');
+        $sig = $fh ? (string) fread($fh, 4) : '';
+        if ($fh) {
+            fclose($fh);
+        }
+        if ($sig !== "PK\x03\x04" && $sig !== "PK\x05\x06") {
+            @unlink($tempPath);
+            throw new UnsupportedArchiveException(__('Format arsip tidak didukung.'));
+        }
+
+        return $tempPath;
+    }
+
+    /**
+     * Salin isi arsip remote ke $tempPath dengan batas MAX_DOWNLOAD_BYTES.
+     * Pola sama dengan FolderZipStreamer::copyFileTo().
+     */
+    private function copyRemoteArchive(FileModel $file, string $tempPath): void
+    {
+        $driver = (string) $file->storage_driver;
+
+        if ($driver === 's3' && $file->storage_path) {
+            $out = fopen($tempPath, 'wb');
+            if ($out === false) {
+                throw new RuntimeException('Tidak bisa membuat berkas sementara.');
+            }
+            try {
+                $source = Storage::disk('s3')->readStream($file->storage_path);
+                if (! is_resource($source)) {
+                    throw new RuntimeException(__('Berkas tidak ditemukan di storage.'));
+                }
+                try {
+                    $this->copyWithLimit($source, $out);
+                } finally {
+                    fclose($source);
+                }
+            } finally {
+                fclose($out);
+            }
+
+            return;
+        }
+
+        $account = $file->googleAccount;
+        if (! $account || ! $file->gdrive_file_id) {
+            throw new RuntimeException(__('Akun Google tidak ditemukan.'));
+        }
+
+        $this->tokenService->ensureFreshToken($account);
+        $client = $this->clientFactory->makeFor($account);
+        $client->setAccessToken($account->access_token);
+
+        $out = fopen($tempPath, 'wb');
+        if ($out === false) {
+            throw new RuntimeException('Tidak bisa membuat berkas sementara.');
+        }
+        try {
+            $response = (new Drive($client))->files->get($file->gdrive_file_id, ['alt' => 'media']);
+            $body = $response->getBody();
+            $declared = (int) ($response->getHeaderLine('Content-Length') ?: 0);
+            if ($declared > self::MAX_DOWNLOAD_BYTES) {
+                throw new RuntimeException(__('Ukuran arsip melebihi batas unduhan.'));
+            }
+            try {
+                $this->copyWithLimit($body, $out);
+            } finally {
+                if (method_exists($body, 'close')) {
+                    $body->close();
+                }
+            }
+        } finally {
+            fclose($out);
+        }
+    }
+
+    /**
+     * @param  resource|StreamInterface  $source
+     * @param  resource  $out
+     */
+    private function copyWithLimit($source, $out): void
+    {
+        $isPsr = $source instanceof StreamInterface;
+        $deadline = microtime(true) + self::DOWNLOAD_LIMIT_SECONDS;
+        $written = 0;
+
+        while (true) {
+            if ($isPsr ? $source->eof() : feof($source)) {
+                break;
+            }
+            $chunk = $isPsr ? $source->read(StreamPump::CHUNK_BYTES) : fread($source, StreamPump::CHUNK_BYTES);
+            if ($chunk === false || $chunk === '') {
+                break;
+            }
+            $written += strlen($chunk);
+            if ($written > self::MAX_DOWNLOAD_BYTES) {
+                throw new RuntimeException(__('Ukuran arsip melebihi batas unduhan.'));
+            }
+            fwrite($out, $chunk);
+            if (microtime(true) >= $deadline) {
+                throw new RuntimeException(__('Unduhan arsip melebihi batas waktu.'));
+            }
+        }
     }
 
     private function readLocalSignatureIsZip(FileModel $file): ?bool

@@ -68,25 +68,29 @@
       "showAll": "Semua",
       "showFolders": "Folder",
       "showFiles": "File",
-      "reset": "Reset",
+      "reset": "Atur ulang",
       "apply": "Terapkan",
       "summary": "{{folders}} folder • {{files}} file",
       "typeLockedHint": "Pilih 'Tampilkan: Semua' dulu untuk filter tipe",
       "showLockedHint": "Reset filter tipe dulu untuk lihat folder saja"
     },
     "actions": {
-      "star": "Star",
+      "star": "Bintang",
       "unstar": "Hapus Star",
       "unstarred": "Hapus dari Starred",
       "starred": "Tambah ke Starred",
-      "preview": "Preview",
-      "rename": "Rename",
+      "preview": "Pratinjau",
+      "rename": "Ganti nama",
       "moveTo": "Pindahkan",
-      "download": "Download",
-      "share": "Share Link",
-      "copy": "Copy File",
+      "download": "Unduh",
+      "share": "Bagikan Tautan",
+      "copy": "Salin File",
       "delete": "Hapus",
       "menu": "Menu"
+    },
+    "selection": {
+      "selectAll": "Pilih semua",
+      "clearSelection": "Hapus pilihan"
     },
     "confirmDelete": {
       "title": "Hapus File?",
@@ -99,14 +103,14 @@
       "confirm": "Hapus Semua"
     },
     "selected": "{{count}} dipilih",
-    "downloadAll": "Download",
+    "downloadAll": "Unduh semua",
     "moveAll": "Pindahkan",
     "deleteAll": "Hapus",
-    "starSuccess": "Star berhasil diupdate.",
-    "renameSuccess": "File berhasil direname.",
-    "copySuccess": "File tersalin ke clipboard.",
+    "starSuccess": "Bintang berhasil diperbarui.",
+    "renameSuccess": "Nama file berhasil diganti.",
+    "copySuccess": "File disalin ke clipboard.",
     "copyFailed": "Gagal copy file.",
-    "renameTitle": "Rename File",
+    "renameTitle": "Ganti Nama File",
     "renameDesc": "Masukkan nama baru.",
     "loadingLabel": "Memuat file",
     "errors": {
@@ -129,7 +133,7 @@
     "move": {
       "titleSingle": "Pindahkan File",
       "titleBulk": "Pindahkan {{count}} File",
-      "root": "Root (My Files)",
+      "root": "Root (File Saya)",
       "pickTarget": "Pilih folder tujuan.",
       "toLabel": "Dipindahkan ke: {{target}}",
       "noFolders": "Belum ada folder lain.",
@@ -152,7 +156,7 @@
       "uploaded": "Diupload",
       "width": "Dimensi",
       "camera": "Kamera",
-      "software": "Software",
+      "software": "Perangkat Lunak",
       "datetimeOriginal": "Tanggal Asli",
       "gps": "GPS",
       "duration": "Durasi",
@@ -229,7 +233,8 @@
     },
     "moveFolder": "Pindahkan",
     "moveFolderTitle": "Pindahkan Folder",
-    "moveFolderTitleBulk": "Pindahkan {{count}} Folder"
+    "moveFolderTitleBulk": "Pindahkan {{count}} Folder",
+    "emptyItems": "Folder kosong"
   },
   "profile": {
     "title": "Profil",
@@ -535,7 +540,11 @@
       "wrong": "Password salah.",
       "passwordRequired": "Password wajib diisi.",
       "error": "Gagal membuka folder. Coba lagi."
-    }
+    },
+    "downloadAll": "Unduh semua",
+    "downloadAllLabel": "Unduh semua sebagai ZIP",
+    "downloadAllNotFound": "Link share ini sudah tidak tersedia.",
+    "downloadAllFailed": "Gagal mengunduh folder. Coba lagi."
   },
   "preview": {
     "loadingPdf": "Memuat dokumen PDF...",
@@ -547,7 +556,19 @@
     "menu": "Menu file",
     "loadingText": "Memuat teks...",
     "errorText": "Gagal memuat isi teks.",
-    "tooLargeText": "File terlalu besar untuk dipreview sebagai teks. Gunakan unduh."
+    "tooLargeText": "File terlalu besar untuk dipreview sebagai teks. Gunakan unduh.",
+    "tabPreview": "Pratinjau",
+    "tabRawMarkdown": "Markdown mentah",
+    "copy": "Salin",
+    "copied": "Tersalin",
+    "lineCount": "{{count}} baris",
+    "plainTextMime": "teks/plain",
+    "zoomIn": "Perbesar",
+    "zoomOut": "Perkecil",
+    "resetZoom": "Reset zoom",
+    "presentationMode": "Mode Presentasi",
+    "exitFullscreen": "Keluar layar penuh",
+    "downloadPptx": "Unduh PPTX"
   },
   "auth": {
     "login": {
@@ -600,7 +621,9 @@
     "newFolder": "Folder Baru",
     "uploadFile": "Upload File",
     "uploadFolder": "Upload Folder",
-    "selectMode": "Select Mode"
+    "selectMode": "Mode Pilih",
+    "openMenu": "Buka menu aksi",
+    "closeMenu": "Tutup menu aksi"
   },
   "legal": {
     "pageTitle": "Legal",
@@ -1951,5 +1974,8 @@
       "alreadyLocked": "Folder ini sudah terkunci.",
       "generic": "Terjadi kesalahan. Coba lagi."
     }
+  },
+  "viewer": {
+    "textViewerLabel": "Teks"
   }
 }

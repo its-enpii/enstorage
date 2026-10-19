@@ -18,7 +18,7 @@ import {
 } from '@/lib/icons';
 import { AppShell } from '@/components/AppShell';
 import { Breadcrumb } from '@/components/Breadcrumb';
-import { Button, IconButton, TextAction } from '@/components/Button';
+import { Button, IconButton } from '@/components/Button';
 import { Dialog } from '@/components/Dialog';
 import { DropdownMenu, type MenuItem } from '@/components/DropdownMenu';
 import { FileViewer } from '@/components/FileViewer';
@@ -33,6 +33,7 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { FilesStoreProvider, useFilesStore } from '@/lib/filesStore';;
 import { FilesStoreBinder, useRealtime } from '@/lib/realtime/realtimeProvider';
 import { UploadToolbar } from '@/components/UploadToolbar';
+import { Tooltip } from '@/components/Tooltip';
 import { UploadProgress, type UploadJob } from '@/components/UploadProgress';
 import { EmptyDropZone } from '@/components/EmptyDropZone';
 import { Loading } from '@/components/Loading';
@@ -54,6 +55,21 @@ function statusLabel(t: (key: string) => string, s: FileItem['upload_status']) {
   if (s === 'failed') return t('starred.statusFailed');
   if (s === 'uploading') return t('starred.statusUploading');
   return t('starred.statusPending');
+}
+
+/**
+ * Archive detection for the "Extract" action. Mirrors the archive pattern used
+ * by FileCard so the icon/label never disagree with the action. Note: the
+ * backend extractor only truly supports ZIP (isZip), hence we additionally
+ * require a `.zip`-recognisable name or a ZIP mime type.
+ */
+const ARCHIVE_MIME_PATTERN = /zip|rar|tar|7z|gzip|compressed|archive/;
+
+function isExtractableArchive(file: FileItem): boolean {
+  const name = file.name.toLowerCase();
+  const mime = (file.mime_type ?? '').toLowerCase();
+  if (ARCHIVE_MIME_PATTERN.test(mime)) return true;
+  return /(?:^|[\/])\.(?:zip|rar|7z|tar|tar\.gz|tgz|gz)$/.test(name);
 }
 
 type MetadataRow = { key: string; label: string; value: string };
@@ -1473,37 +1489,44 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     return [
       {
         label: f.is_starred ? t('files.actions.unstar') : t('files.actions.star'),
+        ariaLabel: f.is_starred ? t('files.actions.unstar') : t('files.actions.star'),
         icon: <span className="material-symbols-outlined !text-base fill">{f.is_starred ? 'star' : 'star_border'}</span>,
         onClick: () => toggleStarFolder(f.id, f.is_starred),
       },
       {
         label: t('files.actions.rename'),
+        ariaLabel: t('files.actions.rename'),
         icon: <span className="material-symbols-outlined !text-base">edit</span>,
         onClick: () => renameFolderHandler(f),
       },
       {
         label: t('folders.moveFolder'),
+        ariaLabel: t('folders.moveFolder'),
         icon: <DriveFileMoveIcon />,
         onClick: () => setMoveFolders([f]),
       },
       {
         label: t('folders.downloadFolder') || t('files.actions.download'),
+        ariaLabel: t('folders.downloadFolder') || t('files.actions.download'),
         icon: <span className="material-symbols-outlined !text-base">download</span>,
         onClick: () => downloadFolder(f.id),
       },
       {
         label: t('files.actions.share'),
+        ariaLabel: t('files.actions.share'),
         icon: <span className="material-symbols-outlined !text-base">link</span>,
         onClick: () => setShareFolder(f),
       },
       f.is_locked
         ? {
             label: t('lock.menu.change'),
+            ariaLabel: t('lock.menu.change'),
             icon: <span className="material-symbols-outlined !text-base">key</span>,
             onClick: () => setLockTarget({ folder: f, mode: 'change' }),
           }
         : {
             label: t('lock.menu.set'),
+            ariaLabel: t('lock.menu.set'),
             icon: <span className="material-symbols-outlined !text-base">lock</span>,
             onClick: () => setLockTarget({ folder: f, mode: 'set' }),
           },
@@ -1511,6 +1534,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         ? [
             {
               label: t('lock.menu.remove'),
+              ariaLabel: t('lock.menu.remove'),
               icon: <span className="material-symbols-outlined !text-base">lock_open</span>,
               onClick: () => setLockTarget({ folder: f, mode: 'remove' }),
             } as MenuItem,
@@ -1518,6 +1542,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         : []),
       {
         label: t('files.actions.delete'),
+        ariaLabel: t('files.actions.delete'),
         icon: <span className="material-symbols-outlined !text-base">delete</span>,
         onClick: () => setDeleteFolderTarget(f),
         variant: 'danger' as const,
@@ -1529,6 +1554,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     const items: MenuItem[] = [
       {
         label: f.is_starred ? t('files.actions.unstar') : t('files.actions.star'),
+        ariaLabel: f.is_starred ? t('files.actions.unstar') : t('files.actions.star'),
         icon: <span className="material-symbols-outlined !text-base fill">{f.is_starred ? 'star' : 'star_border'}</span>,
         onClick: () => toggleStarFile(f.id, f.is_starred),
       },
@@ -1536,11 +1562,13 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     if (opts.includePreview) {
       items.push({
         label: t('files.actions.preview'),
+        ariaLabel: t('files.actions.preview'),
         icon: <span className="material-symbols-outlined !text-base">visibility</span>,
         onClick: () => setViewerFile(f),
       });
       items.push({
         label: t('files.action.details'),
+        ariaLabel: t('files.action.details'),
         icon: <span className="material-symbols-outlined !text-base">info</span>,
         onClick: () => {
           setViewerFile(f);
@@ -1551,33 +1579,39 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     items.push(
       {
         label: t('files.actions.rename'),
+        ariaLabel: t('files.actions.rename'),
         icon: <span className="material-symbols-outlined !text-base">edit</span>,
         onClick: () => renameFile(f),
       },
       {
         label: t('files.actions.moveTo'),
+        ariaLabel: t('files.actions.moveTo'),
         icon: <DriveFileMoveIcon />,
         onClick: () => openMoveDialog([f]),
       },
       {
         label: t('files.actions.download'),
+        ariaLabel: t('files.actions.download'),
         icon: <span className="material-symbols-outlined !text-base">download</span>,
         onClick: () => downloadFile(f.id),
       },
       {
         label: t('files.actions.share'),
+        ariaLabel: t('files.actions.share'),
         icon: <span className="material-symbols-outlined !text-base">link</span>,
         onClick: () => setShareFile(f),
       },
       {
         label: t('files.actions.copy'),
+        ariaLabel: t('files.actions.copy'),
         icon: <span className="material-symbols-outlined !text-base">content_copy</span>,
         onClick: () => copyFileToClipboard(f),
       },
-      ...(f.name.toLowerCase().endsWith('.zip')
+      ...(isExtractableArchive(f)
         ? [
             {
               label: t('files.extract.action'),
+              ariaLabel: t('files.extract.action'),
               icon: <span className="material-symbols-outlined !text-base">unarchive</span>,
               onClick: () => void extractArchive(f),
             } as MenuItem,
@@ -1585,6 +1619,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         : []),
       {
         label: t('files.actions.delete'),
+        ariaLabel: t('files.actions.delete'),
         icon: <span className="material-symbols-outlined !text-base">delete</span>,
         onClick: () => deleteFile(f.id),
         variant: 'danger' as const,
@@ -1595,10 +1630,17 @@ function FilesContent({ currentPath }: { currentPath: string }) {
 
   return (
     <>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-6">
-        <h1 className="font-display text-3xl font-semibold min-w-0">
+      {/* Compact header: one row on mobile/tablet, breadcrumb truncated (never
+          wraps to a second line) and the actions collapse to icon-only buttons
+          labelled by tooltips. */}
+      <div
+        data-testid="files-header"
+        className="flex items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-6 min-h-11"
+      >
+        <h1 className="font-display text-xl sm:text-2xl lg:text-3xl font-semibold min-w-0 flex-1">
           <Breadcrumb
             size="lg"
+            className="!text-xl sm:!text-2xl lg:!text-3xl flex-nowrap overflow-hidden"
             items={[
               { id: null, label: t('files.title'), href: '/files' },
               ...folderCrumbs.map((c) => ({
@@ -1609,40 +1651,42 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             ]}
           />
         </h1>
-        <div className="flex flex-wrap items-center gap-3 justify-between sm:justify-end">
-          <span className="text-metadata text-outline tabular-nums sm:mr-auto">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <span className="hidden md:inline text-metadata text-outline tabular-nums whitespace-nowrap">
             {t('files.filter.summary', { folders: totalFolders, files: totalFiles })}
           </span>
-          <div className="flex items-center justify-end gap-2 ml-auto sm:ml-0">
-            {folderId && (
-              <Button
-                variant="tonal"
-                size="toolbar"
-                className="min-h-11"
+          {folderId && (
+            <Tooltip label={t('folders.downloadFolder')}>
+              <IconButton
+                variant="default"
+                size="xl"
+                shape="circle"
                 onClick={() => void downloadFolder(folderId)}
                 aria-label={t('folders.downloadFolder')}
-                leftIcon={<span className="material-symbols-outlined !text-lg">folder_zip</span>}
               >
-                <span>{t('folders.downloadFolder')}</span>
-              </Button>
-            )}
-            <Button
-              variant="tonal"
-              size="toolbar"
+                <span className="material-symbols-outlined !text-xl" aria-hidden>folder_zip</span>
+              </IconButton>
+            </Tooltip>
+          )}
+          <Tooltip label={filterActive ? t('files.filter.activeBadge') : t('files.filter.button')}>
+            <IconButton
+              variant={filterActive ? 'default' : 'default'}
+              active={filterActive}
+              size="xl"
+              shape="circle"
               onClick={openFilter}
               aria-label={filterActive ? t('files.filter.activeBadge') : t('files.filter.button')}
-              className="relative min-h-11"
-              leftIcon={<Tune className="!text-lg" />}
+              className="relative"
             >
-              <span>{t('files.filter.button')}</span>
+              <Tune className="!text-xl" />
               {filterActive && (
                 <span
                   aria-hidden
-                  className="absolute top-2 right-2 w-2 h-2 rounded-full bg-primary"
+                  className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary ring-2 ring-surface"
                 />
               )}
-            </Button>
-          </div>
+            </IconButton>
+          </Tooltip>
         </div>
       </div>
 
@@ -1722,6 +1766,16 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         <Loading label={t('files.loadingLabel')} />
       ) : (
         <div className="space-y-3">
+          {!selectMode && (
+            <div
+              className="flex items-center justify-between gap-2 h-11 min-h-11"
+              data-testid="files-summary-row"
+            >
+              <span className="text-metadata text-outline tabular-nums truncate min-w-0">
+                {t('files.filter.summary', { folders: totalFolders, files: totalFiles })}
+              </span>
+            </div>
+          )}
           {/* Drop-to-root zone: visible whenever the view is inside a folder.
               Drop a file/selected files here to move them to root (folder_id = null). */}
           {folderId && (
@@ -1747,6 +1801,46 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               <span>{t('files.move.dropToRoot')}</span>
             </div>
           )}
+          {/* Selection bar: compact single row that replaces the summary line
+              above the grid, so entering select mode never pushes the cards. */}
+          <div
+            className="flex items-center justify-between gap-2 h-11 min-h-11 rounded-xl border border-outline-variant/20 bg-surface-container/60 pl-3 pr-1.5"
+            data-testid="files-selection-toolbar"
+          >
+            <span className="text-metadata text-outline tabular-nums truncate min-w-0">
+              {t('files.selected', { count: selected.size })}
+            </span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {(visibleFolders.length > 0 || visibleFiles.length > 0) && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={allVisibleSelected ? clearSelection : selectAllVisible}
+                  aria-label={allVisibleSelected ? t('files.selection.clearSelection') : t('files.selection.selectAll')}
+                  data-testid="files-select-all"
+                  className="!h-11 min-h-11"
+                  leftIcon={
+                    <span className="material-symbols-outlined !text-base" aria-hidden>
+                      {allVisibleSelected ? 'deselect' : 'select_all'}
+                    </span>
+                  }
+                >
+                  {allVisibleSelected ? t('files.selection.clearSelection') : t('files.selection.selectAll')}
+                </Button>
+              )}
+              <Tooltip label={t('common.cancel')}>
+                <IconButton
+                  bare
+                  size="xl"
+                  shape="circle"
+                  onClick={clearSelection}
+                  aria-label={t('common.cancel')}
+                >
+                  <span className="material-symbols-outlined !text-xl" aria-hidden>close</span>
+                </IconButton>
+              </Tooltip>
+            </div>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-card-gap">
           {visibleFolders.map((f) => {
             const items = (f.files_count ?? 0) + (f.folders_count ?? 0);
@@ -1780,9 +1874,11 @@ function FilesContent({ currentPath }: { currentPath: string }) {
                   <DropdownMenu
                     align="right"
                     trigger={
-                      <IconButton title={t('files.actions.menu')}>
-                        <span className="material-symbols-outlined !text-base">more_vert</span>
-                      </IconButton>
+                      <Tooltip label={t('files.actions.menu')} placement="bottom">
+                        <IconButton size="xl" shape="circle" aria-label={t('files.actions.menu')}>
+                          <span className="material-symbols-outlined !text-xl" aria-hidden>more_vert</span>
+                        </IconButton>
+                      </Tooltip>
                     }
                     items={buildFolderMenuItems(f)}
                   />
@@ -1816,9 +1912,11 @@ function FilesContent({ currentPath }: { currentPath: string }) {
                   <DropdownMenu
                     align="right"
                     trigger={
-                      <IconButton title={t('files.actions.menu')}>
-                        <span className="material-symbols-outlined !text-base">more_vert</span>
-                      </IconButton>
+                      <Tooltip label={t('files.actions.menu')} placement="bottom">
+                        <IconButton size="xl" shape="circle" aria-label={t('files.actions.menu')}>
+                          <span className="material-symbols-outlined !text-xl" aria-hidden>more_vert</span>
+                        </IconButton>
+                      </Tooltip>
                     }
                     items={buildFileMenuItems(f)}
                   />
@@ -1854,56 +1952,50 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         </div>
       )}
 
-      {!loading && (visibleFolders.length > 0 || visibleFiles.length > 0) && (
-        <div className="fixed bottom-28 sm:bottom-32 right-4 sm:right-8 z-50">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={allVisibleSelected ? clearSelection : selectAllVisible}
-            leftIcon={
-              <span className="material-symbols-outlined !text-base">
-                {allVisibleSelected ? 'deselect' : 'select_all'}
-              </span>
-            }
-          >
-            {allVisibleSelected ? t('files.clearSelection') : t('files.selectAll')}
-          </Button>
-        </div>
-      )}
-
       {selectMode ? (
-        <div className="fixed bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100vw-2rem)]">
-          <div className="glass-toolbar rounded-full h-14 sm:h-16 px-6 flex items-center gap-4 border border-outline-variant/30 shadow-2xl shadow-black/40 backdrop-blur-xl bg-surface-container-low/80">
-            <span className="text-sm text-on-surface font-medium whitespace-nowrap">{t('files.selected', { count: selected.size })}</span>
-            <div className="h-6 w-px bg-outline-variant/30" />
+        <div className="fixed bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 z-[70] max-w-[calc(100vw-1rem)]">
+          <div className="glass-toolbar rounded-full h-14 sm:h-16 pl-3 pr-2 flex items-center gap-1.5 sm:gap-3 border border-outline-variant/30 shadow-2xl shadow-black/40 backdrop-blur-xl bg-surface-container-low/90">
+            <span className="hidden md:inline text-sm text-on-surface font-medium whitespace-nowrap pl-1">{t('files.selected', { count: selected.size })}</span>
+            <div className="hidden md:block h-6 w-px bg-outline-variant/30" />
             {visibleFolders.length > 0 && (
-              <Button size="sm" onClick={() => setMoveFolders(visibleFolders.filter((f) => selected.has(f.id)))}>
-                <DriveFileMoveIcon /> {t('folders.moveFolder')}
-              </Button>
+              <Tooltip label={t('folders.moveFolder')}>
+                <IconButton size="xl" shape="circle" onClick={() => setMoveFolders(visibleFolders.filter((f) => selected.has(f.id)))} aria-label={t('folders.moveFolder')}>
+                  <DriveFileMoveIcon />
+                </IconButton>
+              </Tooltip>
             )}
-            <Button
-              size="sm"
-              onClick={() =>
-                openMoveDialog(visibleFiles.filter((f) => selected.has(f.id)))
-              }
-              disabled={visibleFiles.filter((f) => selected.has(f.id)).length === 0}
-            >
-              <DriveFileMoveIcon /> {t('files.moveAll')}
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => downloadMultiple(Array.from(selected))}
-            >
-              <CloudDoneIcon /> {t('files.downloadAll')}
-            </Button>
-            <Button
-              variant="danger-soft"
-              size="sm"
-              onClick={bulkDelete}
-            >
-              <CloudOffIcon /> {t('files.deleteAll')}
-            </Button>
-            <TextAction onClick={clearSelection}>{t('common.cancel')}</TextAction>
+            <Tooltip label={t('files.moveAll')}>
+              <IconButton
+                size="xl"
+                shape="circle"
+                onClick={() => openMoveDialog(visibleFiles.filter((f) => selected.has(f.id)))}
+                disabled={visibleFiles.filter((f) => selected.has(f.id)).length === 0}
+                aria-label={t('files.moveAll')}
+              >
+                <DriveFileMoveIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip label={t('files.downloadAll')}>
+              <IconButton size="xl" shape="circle" onClick={() => downloadMultiple(Array.from(selected))} aria-label={t('files.downloadAll')}>
+                <CloudDoneIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip label={t('files.deleteAll')}>
+              <IconButton variant="danger" size="xl" shape="circle" onClick={bulkDelete} aria-label={t('files.deleteAll')}>
+                <CloudOffIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip label={t('common.cancel')}>
+              <IconButton
+                bare
+                size="xl"
+                shape="circle"
+                onClick={clearSelection}
+                aria-label={t('common.cancel')}
+              >
+                <span className="material-symbols-outlined !text-xl" aria-hidden>close</span>
+              </IconButton>
+            </Tooltip>
           </div>
         </div>
       ) : (

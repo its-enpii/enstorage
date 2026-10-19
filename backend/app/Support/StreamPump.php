@@ -12,10 +12,11 @@ use Psr\Http\Message\StreamInterface;
  * benar-benar putus (`max_execution_time=0` pada worker) → pool habis →
  * nginx memotong request berikutnya di 60 detik (504).
  *
- * Pola ini identik dengan `S3GatewayController::pumpToOutput()` yang sudah
- * teruji: keluar saat `connection_aborted() !== 0`, saat melewati deadline,
- * dan flush hanya bila ada buffer aktif (`ob_get_level() > 0`, dibungkus `@`
- * supaya tidak pernah memicu peringatan "failed to flush buffer").
+ * PENTING: tidak boleh menulis/mem-flush apa pun sebelum response header
+ * sudah dikirim. SAPI CGI/FPM membuang header PHP saat byte pertama keluar
+ * (termasuk flush buffer kosong) — respons lalu memakai `default_mimetype`
+ * `text/html` dan `sendHeaders()` ditolak ("headers already sent"). Karena
+ * itu flush terkunci sampai `headers_sent()` bernilai true.
  */
 final class StreamPump
 {
@@ -38,8 +39,6 @@ final class StreamPump
      */
     public static function copy($source, ?float $limitSeconds = null): void
     {
-        self::flushOutput();
-
         $deadline = microtime(true) + ($limitSeconds ?? self::DEFAULT_LIMIT_SECONDS);
         $isPsrStream = $source instanceof StreamInterface;
 
@@ -120,9 +119,17 @@ final class StreamPump
      * Flush buffer level teratas (kalau ada) supaya data mengalir ke klien
      * tanpa membongkar buffer milik framework/harness dan tanpa memicu
      * peringatan "failed to flush buffer".
+     *
+     * Tidak melakukan apa pun sebelum `headers_sent()`: flush (bahkan dengan
+     * buffer kosong) memaksa SAPI mengirim header yang berlaku saat itu —
+     * pada CGI/FPM itu header default `text/html` tanpa header aplikasi.
      */
     public static function flushOutput(): void
     {
+        if (! headers_sent()) {
+            return;
+        }
+
         if (ob_get_level() > 0) {
             @ob_flush();
         }

@@ -38,6 +38,7 @@ Route::get('docs/openapi.yaml', [DocsController::class, 'spec']);
 // Public share link (tanpa auth)
 Route::get('s/{token}', [FileController::class, 'viewByToken']);
 Route::get('s/{token}/view', [FileController::class, 'view']);
+Route::get('s/{token}/download', [FileController::class, 'downloadByToken']);
 Route::post('s/{token}/unlock', [FileController::class, 'unlockByToken']);
 
 // S3-Compatible Gateway (drop-in replacement untuk S3 SDK / Laravel

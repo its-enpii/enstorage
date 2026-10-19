@@ -1,10 +1,9 @@
 'use client';
 
-import clsx from 'clsx';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FolderIcon, FolderSpecialIcon, StarIcon } from '@/lib/icons';
-import { Chip } from '@/components/Chip';
+import { CardMedia, CardTile, CardTileMeta, CardTileTitle } from '@/components/Card';
 
 export type FolderCardProps = {
   name: string;
@@ -22,15 +21,17 @@ export type FolderCardProps = {
   onClick?: () => void;
   /** Slot swapped in place of the title while inline-renaming. */
   editSlot?: ReactNode;
-  /** Action slot rendered top-right (menu trigger, edit buttons, …). */
+  /** Action slot rendered top-right of the media stage (menu trigger, …). */
   actions?: ReactNode;
   className?: string;
   'data-testid'?: string;
 };
 
 /**
- * Folder card — a directory container rendered as a depth-aware tile with a
- * squircle folder glyph, metadata pills and a bottom divider.
+ * Folder card — rendered through the same `CardTile` grid as `FileCard`
+ * (media stage / title / meta), so a folders-and-files grid never jumps.
+ * The folder glyph sits inside the shared 16:10 stage; drop-target and
+ * lock/star affordances are preserved.
  */
 export function FolderCard({
   name,
@@ -49,83 +50,72 @@ export function FolderCard({
   'data-testid': dataTestId,
 }: FolderCardProps) {
   const { t } = useTranslation();
-  const hasMeta = itemCount !== undefined || totalSize != null;
+  const metaLabel = itemCount !== undefined
+    ? `${itemCount} ${itemsLabel ?? ''}`.trim()
+    : t('folders.emptyItems');
 
   return (
-    <div
+    <CardTile
       data-testid={dataTestId}
       onClick={onClick}
-      className={clsx(
-        'rounded-card bg-surface/90 hover:bg-surface-container/80 border border-outline-variant/40 hover:border-primary/50 backdrop-blur-sm p-4 transition-all duration-200 shadow-md shadow-black/20 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-0.5 group cursor-pointer relative shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] flex flex-col justify-between gap-3',
-        selected && '!border-primary ring-2 ring-primary/40 bg-primary/5 shadow-selected-glow',
-        isDropTarget && 'ring-2 ring-primary bg-primary/10 scale-[1.02]',
-        className,
-      )}
+      selected={selected}
+      isDropTarget={isDropTarget}
+      className={className}
     >
-      <div className="flex items-start justify-between gap-2">
-        {icon ?? (
-          <div
-            className={clsx(
-              'w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-105 transition-all duration-200 shrink-0',
-              isStarred
-                ? 'bg-secondary-container/30 text-secondary border border-secondary/30 shadow-sm shadow-secondary/15'
-                : 'bg-primary-container/50 text-primary border border-primary/25 shadow-sm shadow-primary/15 group-hover:bg-primary-container/80',
-            )}
-          >
-            {isStarred ? (
-              <FolderSpecialIcon className="!text-2xl" />
-            ) : (
-              <FolderIcon className="!text-2xl" />
-            )}
-          </div>
+      <CardMedia className="bg-surface-container/40">
+        <div className="absolute inset-0 bg-gradient-to-b from-surface-container/60 to-surface-container-lowest/90" aria-hidden />
+
+        <div
+          className={
+            'relative flex items-center justify-center rounded-2xl shadow-sm group-hover:scale-105 transition-transform duration-200 w-14 h-14 ' +
+            (isStarred
+              ? 'bg-secondary-container/30 text-secondary border border-secondary/30'
+              : 'bg-primary-container/60 text-primary border border-primary/25 group-hover:bg-primary-container/80')
+          }
+        >
+          {icon ?? (isStarred ? <FolderSpecialIcon className="!text-3xl" /> : <FolderIcon className="!text-3xl" />)}
+        </div>
+
+        {isLocked && (
+          <span className="absolute bottom-2 right-2 inline-flex items-center justify-center gap-1 px-2 py-0.5 rounded-md bg-background/85 text-secondary border border-secondary/40 backdrop-blur-md text-[10px] font-semibold">
+            <span className="material-symbols-outlined !text-sm" aria-hidden>lock</span>
+            <span className="sr-only">{t('lock.badge')}</span>
+          </span>
         )}
 
-        <div className="shrink-0 flex items-center gap-1">
-          {isLocked && (
-            <Chip variant="warning" className="!py-1 gap-1">
-              <span className="material-symbols-outlined !text-sm">lock</span>
-              <span className="sr-only">{t('lock.badge')}</span>
-            </Chip>
-          )}
-          {isStarred && (
-            <span className="p-1 rounded-lg bg-secondary/10 border border-secondary/25 text-secondary flex items-center justify-center">
-              <StarIcon className="!text-sm" />
-            </span>
-          )}
-          {actions && (
-            <div className="hover-actions flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-              {actions}
-            </div>
-          )}
-        </div>
-      </div>
+        {isStarred && (
+          <span className="absolute top-2 left-2 p-1 rounded-lg bg-background/80 backdrop-blur-md border border-secondary/30 text-secondary shadow-sm flex items-center justify-center">
+            <StarIcon className="!text-sm" />
+          </span>
+        )}
 
-      <div className="min-w-0 flex-1">
-        {editSlot ?? (
-          <span
-            title={name}
-            className="font-semibold text-body-md text-on-surface truncate block min-w-0 flex-1 overflow-hidden group-hover:text-primary transition-colors"
+        {actions && (
+          <div
+            className="absolute top-1 right-1 backdrop-blur-md bg-background/70 hover:bg-background border border-outline-variant/25 rounded-lg transition-all"
+            onClick={(e) => e.stopPropagation()}
           >
+            {actions}
+          </div>
+        )}
+      </CardMedia>
+
+      <div className="min-w-0 px-1">
+        {editSlot ?? (
+          <span className="font-semibold text-body-sm text-on-surface truncate block min-w-0 w-full group-hover:text-primary transition-colors">
             {name}
           </span>
         )}
       </div>
 
-      {hasMeta && (
-        <div className="border-t border-outline-variant/25 pt-2.5 flex items-center justify-between gap-2 text-metadata text-on-surface-variant">
-          {itemCount !== undefined && (
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-container-highest/60 text-xs font-medium text-on-surface-variant border border-outline-variant/25 truncate">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-              <span className="truncate">
-                {itemCount} {itemsLabel}
-              </span>
-            </span>
-          )}
-          {totalSize != null && (
-            <span className="shrink-0 tabular-nums">{totalSize}</span>
-          )}
-        </div>
-      )}
-    </div>
+      <CardTileMeta>
+        <span className="inline-flex items-center gap-1.5 min-w-0 truncate text-xs font-medium">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" aria-hidden />
+          <span className="truncate">
+            {metaLabel}
+          </span>
+        </span>
+        <span className="shrink-0 tabular-nums truncate text-xs">{totalSize}</span>
+      </CardTileMeta>
+    </CardTile>
   );
 }

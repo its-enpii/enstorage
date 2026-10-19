@@ -54,7 +54,7 @@ export function Breadcrumb({
   return (
     <nav
       aria-label="Breadcrumb"
-      className={clsx('flex items-center gap-2 flex-wrap', className)}
+      className={clsx('flex items-center gap-1.5 sm:gap-2 flex-nowrap min-w-0', className)}
     >
       {items.map((c, i) => {
         const isLast = i === lastIndex;
@@ -65,8 +65,12 @@ export function Breadcrumb({
               ?? (hrefForIndex ? hrefForIndex(c, i) : undefined)
               ?? (hrefFor ? hrefFor(c.id) : `/files/${c.id}`));
 
+        // Earlier crumbs collapse first (shrink), the current page keeps more room.
         return (
-          <span key={`${c.label}-${i}`} className="flex items-center gap-2">
+          <span
+            key={`${c.label}-${i}`}
+            className={clsx('flex items-center gap-1.5 sm:gap-2 min-w-0', isLast ? 'shrink-[3]' : 'shrink')}
+          >
             {i > 0 && (
               <ChevronRight className={clsx('text-outline shrink-0', chevronSize)} aria-hidden />
             )}
@@ -74,7 +78,7 @@ export function Breadcrumb({
               <span
                 aria-current="page"
                 className={clsx(
-                  'font-semibold text-on-surface truncate',
+                  'font-semibold text-on-surface truncate block',
                   isHeading ? 'font-display' : '',
                   sizeClass[size],
                 )}
@@ -86,7 +90,7 @@ export function Breadcrumb({
                 href={href}
                 prefetch
                 className={clsx(
-                  'text-outline hover:text-on-surface transition-colors truncate',
+                  'text-outline hover:text-on-surface transition-colors truncate block',
                   sizeClass[size],
                 )}
               >

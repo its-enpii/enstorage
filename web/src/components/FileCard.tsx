@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import type { ReactNode } from 'react';
 import { StarIcon } from '@/lib/icons';
 import { SelectionIndicator } from '@/components/Checkbox';
+import { CardMedia, CardTile, CardTileMeta, CardTileTitle } from '@/components/Card';
 
 export type FileCardProps = {
   name: string;
@@ -106,17 +107,9 @@ export function FileCard({
   const isDone = uploadStatus === 'done';
 
   return (
-    <div
-      data-testid={dataTestId}
-      onClick={onClick}
-      className={clsx(
-        'rounded-card bg-surface/90 hover:bg-surface-container/80 border border-outline-variant/40 hover:border-primary/50 backdrop-blur-sm p-3 transition-all duration-200 shadow-md shadow-black/20 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-0.5 group cursor-pointer relative flex flex-col justify-between shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]',
-        selected && '!border-primary ring-2 ring-primary/40 bg-primary/5 shadow-selected-glow',
-        className,
-      )}
-    >
-      <div className="w-full aspect-[16/10] rounded-xl overflow-hidden bg-surface-container-lowest/80 border border-outline-variant/30 relative flex items-center justify-center group-hover:border-primary/30 transition-colors">
-        <div className="absolute inset-0 bg-gradient-to-b from-surface-container/60 to-surface-container-lowest/90" />
+    <CardTile data-testid={dataTestId} onClick={onClick} selected={selected} className={className}>
+      <CardMedia>
+        <div className="absolute inset-0 bg-gradient-to-b from-surface-container/60 to-surface-container-lowest/90" aria-hidden />
 
         {thumbnailUrl ? (
           <>
@@ -159,31 +152,27 @@ export function FileCard({
 
         {actions && (
           <div
-            className="absolute top-2 right-2 backdrop-blur-md bg-background/70 hover:bg-background border border-outline-variant/25 rounded-lg transition-all opacity-0 group-hover:opacity-100 sm:opacity-80"
+            className="absolute top-1 right-1 backdrop-blur-md bg-background/70 hover:bg-background border border-outline-variant/25 rounded-lg transition-all"
             onClick={(e) => e.stopPropagation()}
           >
             {actions}
           </div>
         )}
+      </CardMedia>
+
+      <div className="min-w-0 px-1">
+        <CardTileTitle>{name}</CardTileTitle>
       </div>
 
-      <div className="pt-3 px-1 pb-1 flex flex-col gap-1">
-        <span
-          title={name}
-          className="font-semibold text-body-sm text-on-surface truncate block min-w-0 group-hover:text-primary transition-colors"
-        >
-          {name}
-        </span>
-        <div className="flex items-center justify-between gap-2 text-metadata text-on-surface-variant">
-          {size != null && <span className="tabular-nums truncate">{size}</span>}
-          {!isDone && uploadStatusLabel && (
-            <span className="shrink-0 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium bg-surface-container-high text-on-surface-variant border border-outline-variant/30">
-              <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
-              {uploadStatusLabel}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
+      <CardTileMeta>
+        <span className="tabular-nums truncate text-xs min-w-0">{size}</span>
+        {!isDone && uploadStatusLabel && (
+          <span className="shrink-0 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium bg-surface-container-high text-on-surface-variant border border-outline-variant/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
+            {uploadStatusLabel}
+          </span>
+        )}
+      </CardTileMeta>
+    </CardTile>
   );
 }

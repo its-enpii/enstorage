@@ -35,6 +35,88 @@ export function Card({
   );
 }
 
+/**
+ * File/folder tile frame. `FolderCard` and `FileCard` both render through this
+ * single shell (same radius, padding, border and — most importantly — the same
+ * three-row grid: media stage / title / meta). Keeping the grid here is what
+ * guarantees identical heights when folders and files share a grid.
+ */
+export function CardTile({
+  children,
+  className,
+  onClick,
+  selected,
+  isDropTarget,
+  hoverable = true,
+  'data-testid': dataTestId,
+}: {
+  children: ReactNode;
+  className?: string;
+  onClick?: () => void;
+  selected?: boolean;
+  isDropTarget?: boolean;
+  hoverable?: boolean;
+  'data-testid'?: string;
+}) {
+  return (
+    <div
+      data-testid={dataTestId}
+      onClick={onClick}
+      className={clsx(
+        'group relative grid grid-rows-[auto_auto_auto] gap-2.5 rounded-card bg-surface/90 border border-outline-variant/40 backdrop-blur-sm p-3 transition-all duration-200 shadow-md shadow-black/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]',
+        hoverable && 'hover:bg-surface-container/80 hover:border-primary/50 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-0.5',
+        onClick && 'cursor-pointer',
+        selected && '!border-primary ring-2 ring-primary/40 bg-primary/5 shadow-selected-glow',
+        isDropTarget && 'ring-2 ring-primary bg-primary/10 scale-[1.02]',
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Shared preview stage — identical aspect ratio on folders and files, so the
+ * media row of every tile is exactly the same height at every breakpoint.
+ */
+export function CardMedia({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={clsx(
+        'relative w-full aspect-[16/10] rounded-xl overflow-hidden bg-surface-container-lowest/80 border border-outline-variant/30 flex items-center justify-center group-hover:border-primary/30 transition-colors',
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Shared title row (single line, truncated). */
+export function CardTileTitle({ children }: { children: ReactNode }) {
+  return (
+    <span className="font-semibold text-body-sm text-on-surface truncate block min-w-0 w-full group-hover:text-primary transition-colors">
+      {children}
+    </span>
+  );
+}
+
+/** Shared meta row — fixed height so a missing size/status never shifts the tile. */
+export function CardTileMeta({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2 h-6 min-w-0 text-metadata text-on-surface-variant">
+      {children}
+    </div>
+  );
+}
+
 export function CardIconBox({
   children,
   variant = 'primary',

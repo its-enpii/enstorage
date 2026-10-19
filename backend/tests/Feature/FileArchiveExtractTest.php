@@ -5,8 +5,17 @@ namespace Tests\Feature;
 use App\Jobs\UploadFileJob;
 use App\Models\File;
 use App\Models\Folder;
+use App\Models\GoogleAccount;
 use App\Models\User;
 use App\Services\ArchiveExtractor;
+use App\Services\Google\GoogleClientFactory;
+use App\Services\Google\GoogleTokenService;
+use Google\Client as GoogleClient;
+use GuzzleHttp\Client;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
+use GuzzleHttp\Psr7\Response as PsrResponse;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Storage;
@@ -209,6 +218,130 @@ class FileArchiveExtractTest extends TestCase
         $skipped = $response->json('data.skipped');
         $this->assertCount(1, $skipped);
         $this->assertSame('aman.txt', File::where('name', 'like', '%aman%')->first()->name);
+    }
+
+    /**
+     * Buat arsip ZIP di tmp dir dan kembalikan isi biner-nya.
+     */
+    private function zipBytes(array $entries): string
+    {
+        $zipPath = $this->tmpDir.'/'.bin2hex(random_bytes(4)).'.zip';
+        $zip = new ZipArchive;
+        $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+        foreach ($entries as $entryName => $content) {
+            $zip->addFromString($entryName, $content);
+        }
+        $zip->close();
+        $bytes = (string) file_get_contents($zipPath);
+        @unlink($zipPath);
+
+        return $bytes;
+    }
+
+    /**
+     * Record File ber-storage_driver=gdrive yang terhubung ke akun Google.
+     */
+    private function makeGDriveArchive(User $user, GoogleAccount $account, string $name = 'arsip-uji.zip'): File
+    {
+        return File::create([
+            'user_id' => $user->id,
+            'google_account_id' => $account->id,
+            'name' => $name,
+            'original_name' => $name,
+            'mime_type' => 'application/zip',
+            'size' => 271,
+            'client_key' => strtolower((string) Str::ulid()),
+            'gdrive_file_id' => 'gdrive-'.uniqid(),
+            'upload_status' => File::STATUS_DONE,
+            'storage_driver' => 'gdrive',
+            'storage_path' => null,
+        ]);
+    }
+
+    /**
+     * Ganti GoogleClientFactory + GoogleTokenService di container dengan
+     * handler Guzzle palsu (tidak ada koneksi internet nyata).
+     */
+    private function fakeGoogleDrive(array $queue, array &$history): void
+    {
+        $history = [];
+        $stack = HandlerStack::create(new MockHandler($queue));
+        $stack->push(Middleware::history($history));
+        $client = new GoogleClient;
+        $client->setHttpClient(new Client(['handler' => $stack]));
+
+        $factory = \Mockery::mock(GoogleClientFactory::class)->makePartial();
+        $factory->shouldReceive('makeFor')->andReturn($client);
+        $this->app->instance(GoogleClientFactory::class, $factory);
+
+        $tokens = \Mockery::mock(GoogleTokenService::class)->makePartial();
+        $tokens->shouldReceive('ensureFreshToken')->andReturnUsing(fn ($acct) => (string) $acct->access_token);
+        $this->app->instance(GoogleTokenService::class, $tokens);
+    }
+
+    public function test_extract_downloads_gdrive_archive_and_cleans_temp_file(): void
+    {
+        $user = $this->actingUser();
+        $account = GoogleAccount::factory()->create(['user_id' => $user->id, 'email' => 'drive@example.test']);
+        $archive = $this->makeGDriveArchive($user, $account);
+        $bytes = $this->zipBytes(['docs/a.txt' => 'alpha', 'b.txt' => 'bravo']);
+
+        $history = [];
+        $this->fakeGoogleDrive([new PsrResponse(200, ['Content-Type' => 'application/zip'], $bytes)], $history);
+
+        $this->postJson('/api/v1/files/'.$archive->id.'/extract')
+            ->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.entries', 2)
+            ->assertJsonCount(2, 'data.files');
+
+        $this->assertSame(2, File::where('user_id', $user->id)->where('id', '!=', $archive->id)->count());
+
+        // Bukti jalur Drive benar-benar dipanggil: request media ke file id.
+        $this->assertCount(1, $history);
+        $uri = (string) $history[0]['request']->getUri();
+        $this->assertStringContainsString('/files/'.$archive->gdrive_file_id, $uri);
+        $this->assertStringContainsString('alt=media', $uri);
+
+        // Berkas sementara (unduhan) dibersihkan.
+        $this->assertFileDoesNotExist(storage_path('app/temp/archive-'.$archive->id.'.zip'));
+    }
+
+    public function test_extract_gdrive_reports_clear_error_when_drive_unavailable(): void
+    {
+        $user = $this->actingUser();
+        $account = GoogleAccount::factory()->create(['user_id' => $user->id, 'email' => 'drive@example.test']);
+        $archive = $this->makeGDriveArchive($user, $account);
+
+        $history = [];
+        $this->fakeGoogleDrive([], $history);
+
+        $response = $this->postJson('/api/v1/files/'.$archive->id.'/extract');
+
+        $response->assertStatus(422)->assertJsonPath('success', false);
+        $message = (string) $response->json('message');
+        $this->assertStringContainsString('Gagal mengunduh arsip', $message);
+
+        $this->assertSame(1, File::where('user_id', $user->id)->count());
+        $this->assertFileDoesNotExist(storage_path('app/temp/archive-'.$archive->id.'.zip'));
+    }
+
+    public function test_extract_gdrive_rejects_non_zip_payload(): void
+    {
+        $user = $this->actingUser();
+        $account = GoogleAccount::factory()->create(['user_id' => $user->id, 'email' => 'drive@example.test']);
+        $archive = $this->makeGDriveArchive($user, $account);
+
+        $history = [];
+        $this->fakeGoogleDrive([new PsrResponse(200, [], 'bukan zip')], $history);
+
+        $this->postJson('/api/v1/files/'.$archive->id.'/extract')
+            ->assertStatus(200)
+            ->assertJsonPath('data', null)
+            ->assertJsonPath('meta.not_found', true)
+            ->assertJsonPath('meta.reason', 'unsupported_archive');
+
+        $this->assertFileDoesNotExist(storage_path('app/temp/archive-'.$archive->id.'.zip'));
     }
 
     public function test_extract_is_forbidden_for_other_users_file(): void
