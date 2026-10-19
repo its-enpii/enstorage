@@ -7,10 +7,17 @@ import { DriveFileMoveIcon } from '@/lib/icons';
 import { apiRequest, type FileItem, type Folder as FolderType } from '@/lib/api';
 import { Dialog } from '@/components/Dialog';
 import { Button } from '@/components/Button';
+import { useFilesStore } from '@/lib/filesStore';
 
 type Props = {
   files: FileItem[];                 // file yang akan dipindah (satu atau banyak)
-  folders: FolderType[];             // semua folder user (flat list — endpoint tidak dipagination untuk picker ini)
+  /** [Deprecated] Folder level-view saat ini; hanya dipakai sebagai fallback bila `allFolders` kosong. */
+  folders?: FolderType[];
+  /**
+   * Seluruh folder user (flat, semua level) dari `useFilesStore().allFolders`.
+   * Inilah sumber utama picker supaya tidak ikut kosong saat view sedang difilter.
+   */
+  allFolders?: FolderType[];
   currentFolderId: string | null;    // folder tempat file berada sekarang (untuk disable)
   open: boolean;
   onClose: () => void;
@@ -26,6 +33,10 @@ export type MovedFileResult = FileItem & { renamed: boolean; previous_name: stri
 
 /**
  * Dialog "Move to..." dengan tree folder picker (flat list, dengan indent).
+ * - Sumber daftar: `allFolders` (seluruh pohon, dari store). Kalau tidak
+ *   dioper, ambil langsung dari `useFilesStore()`; `folders` hanya fallback.
+ *   Karena tidak bergantung pada view/search, picker tidak pernah kosong
+ *   hanya gara-gara halaman sedang difilter.
  * - Tampilkan folder user (selain folderId sumber dan descendant-nya, supaya
  *   tidak terjadi move ke dirinya sendiri atau ke isinya).
  * - "Root (My Files)" selalu di atas sebagai opsi null.
@@ -35,13 +46,20 @@ export type MovedFileResult = FileItem & { renamed: boolean; previous_name: stri
  */
 export function MoveDialog({
   files,
-  folders,
+  folders: viewFolders,
+  allFolders: allFoldersProp,
   currentFolderId,
   open,
   onClose,
   onMoved,
 }: Props) {
   const { t } = useTranslation();
+  const store = useFilesStore();
+  const treeFolders = useMemo(() => {
+    const source = allFoldersProp ?? store.allFolders;
+    if (source && source.length > 0) return source;
+    return viewFolders ?? store.folders;
+  }, [allFoldersProp, viewFolders, store]);
   const [pickedFolderId, setPickedFolderId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +74,7 @@ export function MoveDialog({
   }, [open, files.map((f) => f.id).join(',')]);
 
   // Bangun map descendants dari setiap folder (untuk disable move ke diri sendiri/child).
-  const descendantsById = useMemo(() => buildDescendants(folders), [folders]);
+  const descendantsById = useMemo(() => buildDescendants(treeFolders), [treeFolders]);
 
   // Folder yang boleh jadi tujuan: semua folder user KECUALI folderId sumber
   // (kalau ada file yang sedang di folder itu) + descendant descendantnya.
@@ -79,24 +97,49 @@ export function MoveDialog({
         }
       }
     }
-    return folders.filter((f) => !excluded.has(f.id));
-  }, [folders, currentFolderId, descendantsById]);
+    return treeFolders.filter((f) => !excluded.has(f.id));
+  }, [treeFolders, currentFolderId, descendantsById]);
 
   const folderById = useMemo(() => {
     const map = new Map<string, FolderType>();
-    for (const f of folders) map.set(f.id, f);
+    for (const f of treeFolders) map.set(f.id, f);
     return map;
-  }, [folders]);
+  }, [treeFolders]);
 
-  /** Sort by path lalu nama supaya tree order konsisten dengan sidebar. */
+  /**
+   * Urutkan path-nya agar parent tepat sebelum anak-anaknya (sort string
+   * path biasa bisa menaruh "B/ac" sebelum "B" karena '/' < akhir string).
+   * Fallback: path lalu nama.
+   */
   const sortedFolders = useMemo(() => {
+    const depthOf = (f: FolderType): number =>
+      (f.path || '').split('/').filter(Boolean).length;
     return [...reachableFolders].sort((a, b) => {
-      const pa = a.path || '/';
-      const pb = b.path || '/';
+      const da = depthOf(a);
+      const db = depthOf(b);
+      // Bandingkan path ancestor pada kedalaman yang sama.
+      const pa = (a.path || '/').split('/').filter(Boolean).slice(0, Math.min(da, db)).join('/');
+      const pb = (b.path || '/').split('/').filter(Boolean).slice(0, Math.min(da, db)).join('/');
       if (pa !== pb) return pa.localeCompare(pb);
+      if (da !== db) return da - db;
       return a.name.localeCompare(b.name);
     });
   }, [reachableFolders]);
+
+  /** Kedalaman untuk indentasi (root-level = 0). Dibatasi supaya tiap level ~16px. */
+  const depthOf = (f: FolderType): number => {
+    const byPath = (f.path || '').split('/').filter(Boolean).length;
+    if (byPath > 0) return byPath;
+    let depth = 0;
+    let cur = f.parent_id;
+    const guard = new Set<string>();
+    while (cur && !guard.has(cur)) {
+      guard.add(cur);
+      depth += 1;
+      cur = folderById.get(cur)?.parent_id ?? null;
+    }
+    return depth;
+  };
 
   async function handleMove() {
     if (files.length === 0) return;
@@ -134,6 +177,7 @@ export function MoveDialog({
   const targetName = pickedFolderId
     ? folderById.get(pickedFolderId)?.name
     : t('files.move.root');
+  const treeLoading = allFoldersProp === undefined && store.loadingAllFolders && sortedFolders.length === 0;
 
   const isMulti = files.length > 1;
   const titleLabel = isMulti
@@ -187,7 +231,11 @@ export function MoveDialog({
         >
           <span className="truncate">{t('files.move.root')}</span>
         </Button>
-        {sortedFolders.length === 0 ? (
+        {sortedFolders.length === 0 && treeLoading ? (
+          <div className="px-4 py-3 text-sm text-on-surface-variant font-medium">
+            {t('common.loading')}
+          </div>
+        ) : sortedFolders.length === 0 ? (
           <div className="px-4 py-3 text-sm text-on-surface-variant font-medium">
             {t('files.move.noFolders')}
           </div>
@@ -209,7 +257,9 @@ export function MoveDialog({
               data-testid={`move-folder-${f.id}`}
               leftIcon={<span className="material-symbols-outlined !text-base">folder</span>}
             >
-              <span className="truncate">{f.name}</span>
+              <span className={clsx('truncate block text-left', indentClass(depthOf(f)))}>
+                {f.name}
+              </span>
             </Button>
           ))
         )}
@@ -222,6 +272,20 @@ export function MoveDialog({
       )}
     </Dialog>
   );
+}
+
+const INDENT_STEPS = [
+  'pl-0', 'pl-4', 'pl-8', 'pl-12', 'pl-16', 'pl-20',
+  'pl-24', 'pl-28', 'pl-32', 'pl-36', 'pl-40', 'pl-44',
+] as const;
+
+/**
+ * Indentasi per level memakai utility class Tailwind (bukan style inline /
+ * hex), sehingga ikut theme & tidak melanggar aturan styling. Kedalaman
+ * lebih dari 11 level di-clamp ke level terakhir.
+ */
+function indentClass(depth: number): string {
+  return INDENT_STEPS[Math.min(Math.max(depth, 0), INDENT_STEPS.length - 1)];
 }
 
 /**

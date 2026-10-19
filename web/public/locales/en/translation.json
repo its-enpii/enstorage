@@ -123,7 +123,8 @@
       "warningTitle": "Warning",
       "oauthStartFailed": "Failed to start OAuth.",
       "syncFailed": "Sync failed.",
-      "disconnectFailed": "Failed to disconnect."
+      "disconnectFailed": "Failed to disconnect.",
+      "uploadNetwork": "Network error while uploading."
     },
     "move": {
       "titleSingle": "Move File",
@@ -169,10 +170,28 @@
       "uncompressedSize": "Uncompressed Size",
       "lineCount": "Line Count",
       "characterCount": "Character Count",
-      "extractedAt": "Extracted"
+      "extractedAt": "Extracted",
+      "folder": "Folder",
+      "lock": "Parent folder",
+      "locked": "Locked",
+      "pages": "Pages",
+      "loadingMetadata": "Loading metadata…",
+      "noMetadata": "No additional metadata for this file.",
+      "metadataUnavailable": "Could not load metadata from the server; showing cached values."
     },
     "action": {
       "details": "File Details"
+    },
+    "selectAll": "Select all",
+    "clearSelection": "Clear selection",
+    "extract": {
+      "action": "Extract",
+      "title": "Extract Archive",
+      "success": "Archive extracted: {{entries}} file(s) created.",
+      "partial": "Archive extracted: {{entries}} file(s) created, {{failed}} entr(y/ies) failed:\\\\n{{reasons}}",
+      "unsupported": "This file is not a supported archive (ZIP only).",
+      "notFound": "File or archive not found.",
+      "failed": "Failed to extract archive."
     }
   },
   "folders": {
@@ -205,8 +224,12 @@
       "starFailed": "Failed to update star.",
       "deleteFailed": "Failed to delete.",
       "moveFailed": "Failed to move.",
-      "empty": "Folder is empty, nothing to download."
-    }
+      "empty": "Folder is empty, nothing to download.",
+      "moveFolderFailed": "{{count}} folder(s) failed to move."
+    },
+    "moveFolder": "Move",
+    "moveFolderTitle": "Move Folder",
+    "moveFolderTitleBulk": "Move {{count}} Folders"
   },
   "profile": {
     "title": "Profile",
@@ -521,7 +544,10 @@
     "errorPptx": "Failed to load PPTX presentation.",
     "downloadFile": "Download File",
     "close": "Close preview",
-    "menu": "File menu"
+    "menu": "File menu",
+    "loadingText": "Loading text...",
+    "errorText": "Failed to load text content.",
+    "tooLargeText": "File is too large to preview as text. Use download instead."
   },
   "auth": {
     "login": {

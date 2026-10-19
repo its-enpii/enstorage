@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Close, ChevronLeft, ChevronRight, Download, ContentCopy, Check, Slideshow, Add, Remove, Fullscreen, FullscreenExit } from '@mui/icons-material';
 import JSZip from 'jszip';
@@ -84,7 +85,7 @@ function ImageViewer({ file }: { file: FileItem }) {
           className="max-w-full max-h-full object-contain rounded-lg select-none transition-transform duration-150 ease-out"
         />
       </div>
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-surface-container/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-outline-variant/20 shadow-lg">
+      <div className="absolute bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-surface-container/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-outline-variant/20 shadow-lg">
         <IconButton onClick={zoomOut} title="Zoom out" aria-label="Zoom out" className="!w-8 !h-8">
           <Remove className="!text-sm" />
         </IconButton>
@@ -381,7 +382,7 @@ function PptxSlidePresenter({ file }: { file: FileItem }) {
           shape="circle"
           size="lg"
           onClick={toggleFullscreen}
-          className="absolute top-4 right-4 z-30 !bg-media-backdrop/60 !text-on-media opacity-100 sm:opacity-0 sm:hover:!opacity-100 hover:!bg-media-backdrop/80 transition-opacity duration-300 backdrop-blur"
+          className="absolute top-4 right-4 z-30 !bg-media-backdrop/60 !text-on-media opacity-100 hover:!bg-media-backdrop/80 transition-colors duration-300 backdrop-blur"
           title="Keluar Fullscreen (Esc)"
           aria-label="Keluar Fullscreen (Esc)"
         >
@@ -604,7 +605,142 @@ function OtherViewer({ file, downloadUrl }: { file: FileItem; downloadUrl: strin
   );
 }
 
-export function FileViewer({ file, files, onClose, onNavigate, actions }: Props) {
+const PLAIN_TEXT_MAX_BYTES = 2 * 1024 * 1024;
+function isPlainText(file: FileItem): boolean {
+  const mime = (file.mime_type.split(';')[0] ?? '').trim().toLowerCase();
+  const name = file.name.toLowerCase();
+  return (
+    mime.startsWith('text/') ||
+    mime === 'application/json' ||
+    mime === 'application/xml' ||
+    name.endsWith('.txt') ||
+    name.endsWith('.log') ||
+    name.endsWith('.csv') ||
+    name.endsWith('.json') ||
+    name.endsWith('.xml')
+  );
+}
+
+function PlainTextViewer({ file, downloadUrl, onClose }: { file: FileItem; downloadUrl: string; onClose: () => void }) {
+  const { t } = useTranslation();
+  const [content, setContent] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const tooLarge = file.size > PLAIN_TEXT_MAX_BYTES;
+
+  useEffect(() => {
+    if (tooLarge) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+    setContent(null);
+    setError(null);
+    setLoading(true);
+    fetch(fileUrl(file), { signal: controller.signal })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.text();
+      })
+      .then((text) => {
+        if (!cancelled) setContent(text);
+      })
+      .catch((err: unknown) => {
+        if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return;
+        setError(t('preview.errorText'));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [file.id, tooLarge, t]);
+
+  const copyToClipboard = () => {
+    if (!content) return;
+    void navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  let body: ReactNode;
+  if (tooLarge) {
+    body = (
+      <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center p-6">
+        <span className="material-symbols-outlined !text-4xl text-outline">draft</span>
+        <p className="text-on-surface font-medium">{t('preview.tooLargeText')}</p>
+        <p className="text-outline text-sm">{bytes(file.size)}</p>
+      </div>
+    );
+  } else if (loading) {
+    body = <div className="flex-1 flex items-center justify-center text-outline">{t('preview.loadingText')}</div>;
+  } else if (error) {
+    body = (
+      <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center p-6">
+        <span className="material-symbols-outlined !text-4xl text-error">error</span>
+        <p className="text-on-surface font-medium">{error}</p>
+        <p className="text-outline text-sm break-all">{file.name}</p>
+      </div>
+    );
+  } else {
+    body = (
+      <pre className="flex-1 min-h-0 overflow-auto whitespace-pre-wrap break-words bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-4 sm:p-6 font-mono text-sm leading-relaxed text-on-surface">
+        {content}
+      </pre>
+    );
+  }
+
+  return (
+    <div
+      className="flex flex-col overflow-hidden min-h-0 h-full max-w-5xl w-full mx-auto px-4 pt-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
+        <span className="text-xs text-outline font-mono truncate">{file.mime_type || 'text/plain'}</span>
+        <div className="flex items-center gap-1.5">
+          {content !== null && !tooLarge && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={copyToClipboard}
+              className="!px-3 !py-1.5 !h-auto text-xs"
+              leftIcon={copied ? <Check className="!text-sm text-primary" /> : <ContentCopy className="!text-sm" />}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+          )}
+          <LinkButton
+            variant="secondary"
+            size="sm"
+            href={downloadUrl}
+            download
+            leftIcon={<Download className="!text-base" />}
+            className="!px-3 !py-1.5 !h-auto text-xs"
+          >
+            {t('preview.downloadFile')}
+          </LinkButton>
+          <IconButton
+            size="xl"
+            shape="circle"
+            onClick={onClose}
+            title={t('preview.close')}
+            aria-label={t('preview.close')}
+            className="!bg-surface-container/80 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest"
+          >
+            <Close className="!text-xl" />
+          </IconButton>
+        </div>
+      </div>
+      {body}
+    </div>
+  );
+}
+
+function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props) {
   const { t } = useTranslation();
   const category = mimeCategory(file);
   const downloadUrl = file.download_url || getFileDownloadUrl(file);
@@ -635,12 +771,14 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
     case 'markdown': viewer = <MarkdownViewer file={file} />; break;
     case 'code':
     case 'text':     viewer = <CodeTextViewer file={file} />; break;
-    default:         viewer = <OtherViewer file={file} downloadUrl={downloadUrl} />; break;
+    default:         viewer = isPlainText(file)
+      ? <PlainTextViewer file={file} downloadUrl={downloadUrl} onClose={onClose} />
+      : <OtherViewer file={file} downloadUrl={downloadUrl} />; break;
   }
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex flex-col bg-background/90 backdrop-blur-md"
+      className="fixed inset-0 z-[1000] flex flex-col bg-background/90 backdrop-blur-md"
       onClick={onClose}
     >
       {/* Header */}
@@ -668,12 +806,12 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
             />
           )}
           <IconButton
-            bare
             shape="circle"
-            size="lg"
+            size="xl"
             onClick={onClose}
             title={t('preview.close')}
             aria-label={t('preview.close')}
+            className="!bg-surface-container/80 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest"
           >
             <Close className="!text-xl" />
           </IconButton>
@@ -720,5 +858,11 @@ export function FileViewer({ file, files, onClose, onNavigate, actions }: Props)
   );
 }
 
-
-
+export function FileViewer(props: Props) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  // Portal keluar dari stacking context `relative z-10` milik AppShell,
+  // sehingga overlay tidak lagi terkunci di bawah TopBar (z-40) / Sidebar (z-50).
+  if (!mounted) return null;
+  return createPortal(<FileViewerOverlay {...props} />, document.body);
+}

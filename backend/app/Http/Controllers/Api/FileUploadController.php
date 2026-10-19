@@ -7,6 +7,7 @@ use App\Jobs\UploadFileJob;
 use App\Models\File as FileModel;
 use App\Models\Folder;
 use App\Models\ShareLink;
+use App\Services\FileRecordCreator;
 use App\Services\FolderLockGuard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,6 +24,7 @@ class FileUploadController extends Controller
 
     public function __construct(
         private readonly FolderLockGuard $lockGuard,
+        private readonly FileRecordCreator $creator,
     ) {}
 
     /**
@@ -152,10 +154,7 @@ class FileUploadController extends Controller
             ]);
         }
 
-        $tempDir = storage_path('app/temp');
-        if (! is_dir($tempDir)) {
-            mkdir($tempDir, 0775, true);
-        }
+        $this->creator->tempDir();
 
         $created = [];
         $rejected = [];
@@ -173,76 +172,28 @@ class FileUploadController extends Controller
                     continue;
                 }
 
-                $originalName = $uploadedFile->getClientOriginalName();
-                $mimeType = $uploadedFile->getMimeType() ?? 'application/octet-stream';
-                $size = $uploadedFile->getSize();
+                $localPath = $uploadedFile->getPathname();
+                $file = $this->creator->createFromPath(
+                    $userId,
+                    $folderId,
+                    $uploadedFile->getClientOriginalName(),
+                    $uploadedFile->getMimeType() ?? 'application/octet-stream',
+                    (int) $uploadedFile->getSize(),
+                    $localPath,
+                    $userKeys[$index],
+                    $origin,
+                    [
+                        'shareable' => $shareable,
+                        'share_expires_at' => $shareExpiresAt,
+                        'share_max_views' => $shareMaxViews,
+                        'content_hash' => $contentHash,
+                        'original_path' => $originalPath,
+                        'original_mtime_ms' => $originalMtime,
+                        'original_size' => $originalSize,
+                    ],
+                );
 
-                // Nama unik per direktori: kalau sudah ada file dengan nama
-                // sama di folder (atau root) milik user ini, auto-suffix
-                // " (1)", " (2)", ... sebelum ekstensi.
-                $storedName = $this->uniqueFileName($userId, $folderId, $originalName);
-
-                // Stream upload ke local storage
-                // share_token legacy di-set dulu agar response shape
-                // tidak berubah untuk client existing; pivot row dibuat
-                // setelahnya dengan token yang sama supaya viewByToken
-                // resolve ke pivot (expiry/max_views enforce).
-                $shareToken = $shareable ? bin2hex(random_bytes(16)) : null;
-                $file = FileModel::create([
-                    'user_id' => $userId,
-                    'folder_id' => $folderId,
-                    'google_account_id' => null, // di-set saat UploadJob memilih akun
-                    'name' => $storedName,
-                    'original_name' => $storedName,
-                    'mime_type' => $mimeType,
-                    'size' => $size,
-                    'gdrive_file_id' => 'pending-'.Str::uuid(),
-                    'upload_status' => FileModel::STATUS_PENDING,
-                    'share_token' => $shareToken,
-                    'client_key' => $userKeys[$index],
-                    'client_key_origin' => $origin,
-                    'content_hash' => $contentHash,
-                    'original_path' => $originalPath,
-                    'original_mtime_ms' => $originalMtime,
-                    'original_size' => $originalSize,
-                ]);
-
-                // Override gdrive_file_id dengan uuid asli
-                $file->gdrive_file_id = $file->id;
-                $file->save();
-
-                // Buat pivot row share_links kalau shareable. expires_at
-                // null default = aktif selamanya (tidak akan kena
-                // ExpireShareLinksJob). max_views null = unlimited.
-                if ($shareable) {
-                    ShareLink::create([
-                        'user_id' => $userId,
-                        'shareable_type' => FileModel::class,
-                        'shareable_id' => $file->id,
-                        'token' => $shareToken,
-                        'expires_at' => $shareExpiresAt,
-                        'max_views' => $shareMaxViews,
-                    ]);
-                }
-
-                // Stream ke temp (pakai move, tidak buffer)
-                $uploadedFile->move($tempDir, $file->id);
-
-                // Dispatch job
-                UploadFileJob::dispatch($file->id);
-
-                $created[] = [
-                    'file_id' => $file->id,
-                    'client_key' => $file->client_key,
-                    'name' => $file->name,
-                    'size' => $file->size,
-                    'status' => $file->upload_status,
-                    'shareable' => (bool) $file->share_token,
-                    'share_token' => $file->share_token,
-                    'share_url' => $file->share_token ? $shareBaseUrl.'/s/'.$file->share_token : null,
-                    'share_expires_at' => $shareExpiresAt,
-                    'share_max_views' => $shareMaxViews !== null ? (int) $shareMaxViews : null,
-                ];
+                $created[] = $this->creator->summary($file, $shareBaseUrl, $shareExpiresAt, $shareMaxViews);
             } catch (Throwable $e) {
                 $rejected[] = ['name' => $uploadedFile->getClientOriginalName() ?? 'unknown', 'reason' => $e->getMessage()];
             }
@@ -253,6 +204,119 @@ class FileUploadController extends Controller
             'rejected' => $rejected,
             'count' => count($created),
         ], __('File berhasil diupload.'));
+    }
+
+    /**
+     * POST /files/bulk-upload
+     * Multipart: files[] (many), folder_id (optional), shareable (default ON).
+     *
+     * Tiap file diproses lewat FileRecordCreator yang sama dengan
+     * /files/upload. Kegagalan satu file hanya dicatat di `results`
+     * (index itu), file lain tetap diproses. Selalu balas 200 dengan
+     * ringkasan per index.
+     */
+    public function bulkUpload(Request $request): JsonResponse
+    {
+        $userId = $request->user()->id;
+
+        if (! $request->hasFile('files') && ! $request->hasFile('file')) {
+            throw ValidationException::withMessages(['files' => __('Tidak ada file yang diupload.')]);
+        }
+
+        $files = $request->file('files') ?? $request->file('file');
+        if (! is_array($files)) {
+            $files = [$files];
+        }
+        if (count($files) > self::MAX_FILES) {
+            throw ValidationException::withMessages(['files' => __('Maksimal :max file per upload.', ['max' => self::MAX_FILES])]);
+        }
+
+        $folderId = $request->input('folder_id') ?: null;
+        if ($folderId) {
+            $folder = Folder::where('id', $folderId)->where('user_id', $userId)->first();
+            if (! $folder) {
+                throw ValidationException::withMessages(['folder_id' => __('Folder tidak ditemukan.')]);
+            }
+            if ($locked = $this->lockGuard->gateForFolder($folder, $userId)) {
+                return $this->lockGuardFail($locked);
+            }
+        }
+
+        $shareable = $request->boolean('shareable', true);
+        $shareExpiresAt = $request->input('share_expires_at');
+        $shareMaxViews = $request->input('share_max_views');
+        if ($shareable) {
+            $this->validateShareOptions($shareExpiresAt, $shareMaxViews);
+        }
+
+        $rawKey = $request->input('client_key');
+        $userKeys = $this->normalizeClientKeys($rawKey, count($files));
+        foreach ($userKeys as $k) {
+            if (! preg_match('/^[A-Za-z0-9._:-]{1,128}$/', $k)) {
+                throw ValidationException::withMessages(['client_key' => __('client_key hanya boleh berisi huruf, angka, ".", "_", "-", ":" (maks 128 karakter).')]);
+            }
+        }
+
+        $origin = ($rawKey !== null && $rawKey !== '') ? 'client' : 'server';
+        $shareBaseUrl = rtrim(config('app.frontend_url', config('app.url')), '/');
+
+        $results = [];
+        $succeeded = 0;
+        $failed = 0;
+
+        foreach ($files as $index => $uploadedFile) {
+            $name = $uploadedFile?->getClientOriginalName();
+            try {
+                if (! $uploadedFile || ! $uploadedFile->isValid()) {
+                    throw new ValidationException(['Upload tidak valid.']);
+                }
+                if ($uploadedFile->getSize() > self::MAX_FILE_SIZE_BYTES) {
+                    throw new ValidationException(['File melebihi 1GB']);
+                }
+                if (FileModel::where('user_id', $userId)->where('client_key', $userKeys[$index])->exists()) {
+                    throw new ValidationException([__('client_key sudah dipakai.')]);
+                }
+
+                $file = $this->creator->createFromPath(
+                    $userId,
+                    $folderId,
+                    (string) $name,
+                    $uploadedFile->getMimeType() ?? 'application/octet-stream',
+                    (int) $uploadedFile->getSize(),
+                    $uploadedFile->getPathname(),
+                    $userKeys[$index],
+                    $origin,
+                    [
+                        'shareable' => $shareable,
+                        'share_expires_at' => $shareExpiresAt,
+                        'share_max_views' => $shareMaxViews,
+                    ],
+                );
+
+                $succeeded++;
+                $results[] = [
+                    'index' => $index,
+                    'success' => true,
+                    'name' => $file->name,
+                    'file' => $this->creator->summary($file, $shareBaseUrl, $shareExpiresAt, $shareMaxViews),
+                ];
+            } catch (Throwable $e) {
+                $failed++;
+                $results[] = [
+                    'index' => $index,
+                    'success' => false,
+                    'name' => $name,
+                    'reason' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return $this->ok([
+            'total' => count($files),
+            'succeeded' => $succeeded,
+            'failed' => $failed,
+            'results' => $results,
+        ], __('Bulk upload selesai.'));
     }
 
     /**
@@ -905,31 +969,7 @@ class FileUploadController extends Controller
      */
     private function uniqueFileName(string $userId, ?string $folderId, string $originalName): string
     {
-        $exists = fn (string $name): bool => FileModel::where('user_id', $userId)
-            ->where('folder_id', $folderId)
-            ->where('name', $name)
-            ->exists();
-
-        if (! $exists($originalName)) {
-            return $originalName;
-        }
-
-        // Pisahkan stem + ekstensi (dot terakhir, kecuali dot di posisi awal).
-        $dotPos = strrpos($originalName, '.');
-        if ($dotPos === false || $dotPos === 0) {
-            $stem = $originalName;
-            $ext = '';
-        } else {
-            $stem = substr($originalName, 0, $dotPos);
-            $ext = substr($originalName, $dotPos);
-        }
-
-        $i = 1;
-        while ($exists($stem.' ('.$i.')'.$ext)) {
-            $i++;
-        }
-
-        return $stem.' ('.$i.')'.$ext;
+        return $this->creator->uniqueFileName($userId, $folderId, $originalName);
     }
 
     private function resolveHost(string $host): array
