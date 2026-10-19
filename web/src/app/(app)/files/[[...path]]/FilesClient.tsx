@@ -1801,46 +1801,49 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               <span>{t('files.move.dropToRoot')}</span>
             </div>
           )}
-          {/* Selection bar: compact single row that replaces the summary line
-              above the grid, so entering select mode never pushes the cards. */}
-          <div
-            className="flex items-center justify-between gap-2 h-11 min-h-11 rounded-xl border border-outline-variant/20 bg-surface-container/60 pl-3 pr-1.5"
-            data-testid="files-selection-toolbar"
-          >
-            <span className="text-metadata text-outline tabular-nums truncate min-w-0">
-              {t('files.selected', { count: selected.size })}
-            </span>
-            <div className="flex items-center gap-1.5 shrink-0">
-              {(visibleFolders.length > 0 || visibleFiles.length > 0) && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={allVisibleSelected ? clearSelection : selectAllVisible}
-                  aria-label={allVisibleSelected ? t('files.selection.clearSelection') : t('files.selection.selectAll')}
-                  data-testid="files-select-all"
-                  className="!h-11 min-h-11"
-                  leftIcon={
-                    <span className="material-symbols-outlined !text-base" aria-hidden>
-                      {allVisibleSelected ? 'deselect' : 'select_all'}
-                    </span>
-                  }
-                >
-                  {allVisibleSelected ? t('files.selection.clearSelection') : t('files.selection.selectAll')}
-                </Button>
-              )}
-              <Tooltip label={t('common.cancel')}>
-                <IconButton
-                  bare
-                  size="xl"
-                  shape="circle"
-                  onClick={clearSelection}
-                  aria-label={t('common.cancel')}
-                >
-                  <span className="material-symbols-outlined !text-xl" aria-hidden>close</span>
-                </IconButton>
-              </Tooltip>
+          {/* Selection bar: only rendered while select mode is active. It replaces
+              the summary line above the grid, so entering select mode swaps the
+              row in place instead of stacking a second permanent row. */}
+          {selectMode && (
+            <div
+              className="flex items-center justify-between gap-2 h-11 min-h-11 rounded-xl border border-outline-variant/20 bg-surface-container/60 pl-3 pr-1.5"
+              data-testid="files-selection-toolbar"
+            >
+              <span className="text-metadata text-outline tabular-nums truncate min-w-0">
+                {t('files.selected', { count: selected.size })}
+              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {(visibleFolders.length > 0 || visibleFiles.length > 0) && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={allVisibleSelected ? clearSelection : selectAllVisible}
+                    aria-label={allVisibleSelected ? t('files.selection.clearSelection') : t('files.selection.selectAll')}
+                    data-testid="files-select-all"
+                    className="!h-11 min-h-11"
+                    leftIcon={
+                      <span className="material-symbols-outlined !text-base" aria-hidden>
+                        {allVisibleSelected ? 'deselect' : 'select_all'}
+                      </span>
+                    }
+                  >
+                    {allVisibleSelected ? t('files.selection.clearSelection') : t('files.selection.selectAll')}
+                  </Button>
+                )}
+                <Tooltip label={t('common.cancel')}>
+                  <IconButton
+                    bare
+                    size="xl"
+                    shape="circle"
+                    onClick={clearSelection}
+                    aria-label={t('common.cancel')}
+                  >
+                    <span className="material-symbols-outlined !text-xl" aria-hidden>close</span>
+                  </IconButton>
+                </Tooltip>
+              </div>
             </div>
-          </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-card-gap">
           {visibleFolders.map((f) => {
             const items = (f.files_count ?? 0) + (f.folders_count ?? 0);
