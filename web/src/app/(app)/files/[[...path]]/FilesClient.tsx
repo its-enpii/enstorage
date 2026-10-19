@@ -6,7 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { Tune, Link as LinkIcon } from '@mui/icons-material';
-import { apiRequest, ApiError, getToken, isUuid, type FileItem, type Folder, type Folder as FolderType, type ResolvedFolder } from '@/lib/api';
+import { apiRequest, apiRequestEnvelope, ApiError, getToken, isUuid, type FileItem, type Folder, type Folder as FolderType, type ResolvedFolder } from '@/lib/api';
 import { cacheInvalidatePrefix } from '@/lib/cache';
 import { getLocalUserId } from '@/lib/filesStore';
 import {
@@ -182,11 +182,76 @@ function buildMetadataRows(
   return rows;
 }
 
-/** Semantic detail list for a single file (name/type/size/upload + metadata). */
+type FileDetailData = {
+  metadata?: Record<string, unknown> | null;
+  folder?: { id: string; name: string; path: string } | null;
+  lock?: { locked?: boolean } | null;
+  dimensions?: { width?: number; height?: number } | null;
+  pages?: number | null;
+  is_archive?: boolean;
+};
+
+const EMPTY_DETAIL_METADATA: Record<string, unknown> = {};
+
+/** Serialize raw detail extras (folder, lock, page alias) into rows. */
+function buildDetailExtras(detail: FileDetailData | null, isPdf: boolean): MetadataRow[] {
+  if (!detail) return [];
+  const rows: MetadataRow[] = [];
+  if (detail.folder?.name) {
+    rows.push({ key: 'folder', label: 'files.details.folder', value: detail.folder.path || detail.folder.name });
+  }
+  if (detail.lock?.locked) {
+    rows.push({ key: 'lock', label: 'files.details.lock', value: 'files.details.locked' });
+  }
+  const meta = detail.metadata ?? {};
+  // `pages` is the detail-level alias of metadata.page_count.
+  if (detail.pages != null && !meta.page_count) {
+    rows.push({ key: 'pages', label: isPdf ? 'files.details.pageCount' : 'files.details.pages', value: detail.pages.toLocaleString() });
+  }
+  return rows;
+}
+
+/**
+ * Semantic detail list for a single file (name/type/size/upload + metadata).
+ * Metadata comes from `GET /files/{id}/detail`; it falls back to the list
+ * row while loading and when the detail call fails.
+ */
 function FileDetailsList({ file }: { file: FileItem }) {
   const { t, i18n } = useTranslation();
+  const [detail, setDetail] = useState<FileDetailData | null>(null);
+  const [detailState, setDetailState] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  useEffect(() => {
+    let cancelled = false;
+    setDetail(null);
+    setDetailState('loading');
+    apiRequest<FileDetailData>(`/files/${file.id}/detail`)
+      .then((d) => {
+        if (cancelled) return;
+        setDetail(d ?? null);
+        setDetailState('ready');
+      })
+      .catch(() => {
+        if (!cancelled) setDetailState('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [file.id]);
+
   const isPdf = file.mime_type === 'application/pdf';
-  const metadataRows = buildMetadataRows(file.metadata, isPdf);
+  const hasDetailMetadata = detailState === 'ready' && !!detail
+    && Object.keys(detail.metadata ?? {}).length > 0;
+  // Prefer the detail payload; fall back to the list row while loading or on error.
+  const metadata = hasDetailMetadata
+    ? detail?.metadata
+    : detailState !== 'ready'
+      ? file.metadata
+      : EMPTY_DETAIL_METADATA;
+  const metadataRows = [
+    ...buildMetadataRows(metadata, isPdf),
+    ...buildDetailExtras(detailState === 'ready' ? detail : null, isPdf),
+  ];
   const uploadedAt = file.uploaded_at ? new Date(file.uploaded_at) : null;
   const uploadedLabel =
     uploadedAt && !Number.isNaN(uploadedAt.getTime())
@@ -201,17 +266,33 @@ function FileDetailsList({ file }: { file: FileItem }) {
     ...metadataRows,
   ];
 
+  const metadataHint =
+    detailState === 'loading'
+      ? t('files.details.loadingMetadata')
+      : detailState === 'error'
+        ? t('files.details.metadataUnavailable')
+        : metadataRows.length === 0
+          ? t('files.details.noMetadata')
+          : null;
+
   return (
-    <dl className="divide-y divide-outline-variant/15">
-      {rows.map((row) => (
-        <div key={row.key} className="flex items-start justify-between gap-4 py-2">
-          <dt className="text-body-sm text-outline shrink-0">{t(row.label)}</dt>
-          <dd className="text-body-sm text-on-surface text-right tabular-nums break-words min-w-0">
-            {row.value}
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <div className="space-y-2">
+      <dl className="divide-y divide-outline-variant/15">
+        {rows.map((row) => (
+          <div key={row.key} className="flex items-start justify-between gap-4 py-2">
+            <dt className="text-body-sm text-outline shrink-0">{t(row.label)}</dt>
+            <dd className="text-body-sm text-on-surface text-right tabular-nums break-words min-w-0">
+              {row.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {metadataHint && (
+        <p className={`text-body-sm ${detailState === 'error' ? 'text-error' : 'text-outline'}`}>
+          {metadataHint}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -579,6 +660,8 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     renameFolder,
     updateFolderCounts,
     invalidateCurrentCache,
+    allFolders,
+    reloadAllFolders,
   } = store;
 
   const [tab, setTab] = useState<Tab>(() => {
@@ -601,6 +684,17 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   const [lockTarget, setLockTarget] = useState<{ folder: FolderType; mode: FolderLockMode } | null>(null);
   const [moveFiles, setMoveFiles] = useState<FileItem[] | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [moveFolders, setMoveFolders] = useState<FolderType[] | null>(null);
+
+  /**
+   * Drag internal (card file / spreadsheet-like app) membawa mime custom
+   * `text/x-file-ids`. Listener window upload harus mengabaikannya supaya
+   * niat "move" tidak berubah jadi "upload".
+   */
+  const isInternalDrag = (dt: DataTransfer | null): boolean =>
+    !!dt?.types?.includes('text/x-file-ids');
+  const hasExternalFiles = (dt: DataTransfer | null): boolean =>
+    !!dt?.types?.includes('Files') && !isInternalDrag(dt);
 
   // Map<fileId, setInterval handle>. When WS is connected, we don't
   // allocate a timer — files complete via FileUploadedBroadcast — and
@@ -634,7 +728,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   // Global drag/drop overlay — works whether the page is empty or not
   useEffect(() => {
     const onDragEnter = (e: DragEvent) => {
-      if (!e.dataTransfer?.types?.includes('Files')) return;
+      if (!hasExternalFiles(e.dataTransfer)) return;
       dragCounter.current += 1;
       setDragOver(true);
     };
@@ -646,9 +740,13 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       }
     };
     const onDragOver = (e: DragEvent) => {
-      if (e.dataTransfer?.types?.includes('Files')) e.preventDefault();
+      // Jalur internal: biarkan handler folder/root yang menangani.
+      if (!hasExternalFiles(e.dataTransfer)) return;
+      e.preventDefault();
     };
     const onDrop = (e: DragEvent) => {
+      // Drop internal (move) bukan urusan upload.
+      if (isInternalDrag(e.dataTransfer) || !hasExternalFiles(e.dataTransfer)) return;
       e.preventDefault();
       dragCounter.current = 0;
       setDragOver(false);
@@ -747,16 +845,22 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     }
   }
 
+  /**
+   * Upload via `POST /files/bulk-upload` (one multipart request, `files[]`).
+   * The server caps each request at MAX_FILES (10, FileUploadController::
+   * MAX_FILES), so larger batches are split into sequential chunks of 10 —
+   * this keeps the 10-file limit as a chunk size, not a rejection.
+   * Progress is honest: we only learn per-file outcomes when the request
+   * finishes, so files stay at 0% ("uploading") until then.
+   * A failure of one file only marks that job as failed.
+   */
   async function uploadFiles(fileList: FileList) {
     dragCounter.current = 0;
     setDragOver(false);
     const filesArr = Array.from(fileList);
-    if (filesArr.length > 10) {
-      await alert(t('files.errors.maxFiles'), { title: t('common.error') });
-      return;
-    }
+    if (filesArr.length === 0) return;
 
-    // Filter oversize upfront, add rejected jobs
+    // Filter oversize upfront (same 1GB rule as the server); no double check.
     const accepted: File[] = [];
     for (const file of filesArr) {
       if (file.size > 1024 * 1024 * 1024) {
@@ -775,8 +879,9 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         accepted.push(file);
       }
     }
+    if (accepted.length === 0) return;
 
-    // Seed jobs for all accepted files
+    // Seed jobs for all accepted files up front so the user sees each one.
     setJobs((prev) => [
       ...prev,
       ...accepted.map<UploadJob>((f) => ({
@@ -788,76 +893,64 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       })),
     ]);
 
-    // Track completion to fire a single revalidate() at the end
-    let pending = accepted.length;
-    const onOneDone = () => {
-      pending -= 1;
-      if (pending <= 0) void revalidate();
-    };
+    const CHUNK_SIZE = 10;
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE ?? '';
+    const authToken = getToken();
 
-    for (const file of accepted) {
+    for (let offset = 0; offset < accepted.length; offset += CHUNK_SIZE) {
+      const chunk = accepted.slice(offset, offset + CHUNK_SIZE);
       const fd = new FormData();
-      fd.append('file', file);
+      chunk.forEach((f) => fd.append('files[]', f));
       if (folderId) fd.append('folder_id', folderId);
 
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${process.env.NEXT_PUBLIC_API_BASE}/files/upload`);
-      const authToken = getToken();
-      if (authToken) xhr.setRequestHeader('Authorization', `Bearer ${authToken}`);
-
-      xhr.upload.onprogress = (ev) => {
-        if (ev.lengthComputable) {
-          setJobs((js) =>
-            js.map((j) => (j.name === file.name ? { ...j, loaded: ev.loaded } : j)),
-          );
-        }
-      };
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const res = JSON.parse(xhr.responseText);
-            const fileId = res?.data?.accepted?.[0]?.file_id;
-            if (fileId) {
-              setJobs((js) =>
-                js.map((j) =>
-                  j.name === file.name ? { ...j, fileId, status: 'uploading' } : j,
-                ),
-              );
-              pollStatus(file.name, fileId, onOneDone);
-              return;
-            }
-          } catch {}
-          // Accepted but no file_id (sync finish)
-          setJobs((js) =>
-            js.map((j) =>
-              j.name === file.name ? { ...j, status: 'done', loaded: j.total } : j,
-            ),
-          );
-          onOneDone();
-        } else {
-          let msg = `HTTP ${xhr.status}`;
-          try {
-            const res = JSON.parse(xhr.responseText);
-            if (res?.message) msg = res.message;
-          } catch {}
-          setJobs((js) =>
-            js.map((j) =>
-              j.name === file.name ? { ...j, status: 'failed', error: msg } : j,
-            ),
-          );
-          onOneDone();
-        }
-      };
-      xhr.onerror = () => {
+      const failChunk = (reason: string) => {
         setJobs((js) =>
           js.map((j) =>
-            j.name === file.name ? { ...j, status: 'failed', error: 'Network error' } : j,
+            chunk.some((f) => f.name === j.name) && j.status === 'uploading'
+              ? { ...j, status: 'failed', error: reason }
+              : j,
           ),
         );
-        onOneDone();
       };
-      xhr.send(fd);
+
+      try {
+        const res = await fetch(`${baseUrl}/files/bulk-upload`, {
+          method: 'POST',
+          headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+          credentials: 'omit',
+          body: fd,
+        });
+        const body = (await res.json().catch(() => null)) as {
+          message?: string;
+          data?: {
+            results?: { index: number; success: boolean; name?: string; reason?: string }[];
+          };
+        } | null;
+        if (!res.ok) {
+          failChunk(body?.message ?? `HTTP ${res.status}`);
+          continue;
+        }
+        const results = body?.data?.results ?? [];
+        const byIndex = new Map(results.map((r) => [r.index, r]));
+        setJobs((js) =>
+          js.map((j) => {
+            // Match by name within this chunk; duplicates share the same outcome bucket.
+            const match = chunk
+              .map((f, i) => ({ f, r: byIndex.get(i) }))
+              .find((entry) => entry.f.name === j.name);
+            if (!match || j.status !== 'uploading') return j;
+            if (match.r?.success) return { ...j, status: 'done', loaded: j.total };
+            if (match.r) return { ...j, status: 'failed', error: match.r.reason ?? t('files.errors.uploadFailed') };
+            return { ...j, status: 'failed', error: t('files.errors.uploadFailed') };
+          }),
+        );
+      } catch {
+        failChunk(t('files.errors.uploadNetwork'));
+      }
     }
+
+    // Single refresh once every chunk has been processed.
+    void revalidate();
   }
 
   // Track file IDs whose completion we're waiting on (via WS). Read by
@@ -953,6 +1046,11 @@ function FilesContent({ currentPath }: { currentPath: string }) {
 
   function clearSelection() {
     setSelected(new Set());
+  }
+
+  /** Pilih semua item pada tab/filter aktif (folder + file yang tampil). */
+  function selectAllVisible() {
+    setSelected(new Set([...visibleFolders.map((f) => f.id), ...visibleFiles.map((f) => f.id)]));
   }
 
   async function bulkDelete() {
@@ -1229,6 +1327,12 @@ function FilesContent({ currentPath }: { currentPath: string }) {
 
   const visibleFolders = tab === 'files' ? [] : folders;
   const visibleFiles = tab === 'folders' ? [] : files;
+  const visibleCount = visibleFolders.length + visibleFiles.length;
+  const allVisibleSelected =
+    visibleCount > 0 &&
+    selected.size === visibleCount &&
+    visibleFolders.every((f) => selected.has(f.id)) &&
+    visibleFiles.every((f) => selected.has(f.id));
 
   // Determine if more pages are available for the currently visible list
   const hasMore = tab === 'files' ? hasMoreFiles : hasMoreFolders;
@@ -1320,6 +1424,51 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     void revalidate();
   }
 
+  /**
+   * POST /files/{id}/extract — backend replies with envelope 200
+   * `meta.not_found:true` (no HTTP error) for non-ZIP / unsupported archives.
+   * On success show entry summary, then refresh the current listing.
+   */
+  async function extractArchive(f: FileItem) {
+    try {
+      const { data, meta } = await apiRequestEnvelope<{
+        entries?: number;
+        skipped?: { name: string; reason: string }[];
+      } | null>(`/files/${f.id}/extract`, { method: 'POST', body: {} });
+      const envelopeMeta = meta as { not_found?: boolean; reason?: string } | undefined;
+      if (envelopeMeta?.not_found) {
+        await alert(
+          envelopeMeta.reason === 'unsupported_archive'
+            ? t('files.extract.unsupported')
+            : t('files.extract.notFound'),
+          { title: t('files.extract.title') },
+        );
+        return;
+      }
+      const entries = data?.entries ?? 0;
+      const skipped = data?.skipped ?? [];
+      const body =
+        skipped.length > 0
+          ? t('files.extract.partial', {
+              entries,
+              failed: skipped.length,
+              reasons: skipped
+                .slice(0, 5)
+                .map((s) => `${s.name}: ${s.reason}`)
+                .join('\n'),
+            })
+          : t('files.extract.success', { entries });
+      await alert(body, { title: t('files.extract.title') });
+      invalidateFolderCache(folderIdRef.current);
+      invalidateFoldersPageCache();
+      void revalidate();
+    } catch (e) {
+      await alert(e instanceof ApiError ? e.message : t('files.extract.failed'), {
+        title: t('files.extract.title'),
+      });
+    }
+  }
+
   function buildFolderMenuItems(f: FolderType): MenuItem[] {
     return [
       {
@@ -1331,6 +1480,11 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         label: t('files.actions.rename'),
         icon: <span className="material-symbols-outlined !text-base">edit</span>,
         onClick: () => renameFolderHandler(f),
+      },
+      {
+        label: t('folders.moveFolder'),
+        icon: <DriveFileMoveIcon />,
+        onClick: () => setMoveFolders([f]),
       },
       {
         label: t('folders.downloadFolder') || t('files.actions.download'),
@@ -1420,6 +1574,15 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         icon: <span className="material-symbols-outlined !text-base">content_copy</span>,
         onClick: () => copyFileToClipboard(f),
       },
+      ...(f.name.toLowerCase().endsWith('.zip')
+        ? [
+            {
+              label: t('files.extract.action'),
+              icon: <span className="material-symbols-outlined !text-base">unarchive</span>,
+              onClick: () => void extractArchive(f),
+            } as MenuItem,
+          ]
+        : []),
       {
         label: t('files.actions.delete'),
         icon: <span className="material-symbols-outlined !text-base">delete</span>,
@@ -1691,11 +1854,33 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         </div>
       )}
 
+      {!loading && (visibleFolders.length > 0 || visibleFiles.length > 0) && (
+        <div className="fixed bottom-28 sm:bottom-32 right-4 sm:right-8 z-50">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={allVisibleSelected ? clearSelection : selectAllVisible}
+            leftIcon={
+              <span className="material-symbols-outlined !text-base">
+                {allVisibleSelected ? 'deselect' : 'select_all'}
+              </span>
+            }
+          >
+            {allVisibleSelected ? t('files.clearSelection') : t('files.selectAll')}
+          </Button>
+        </div>
+      )}
+
       {selectMode ? (
         <div className="fixed bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100vw-2rem)]">
           <div className="glass-toolbar rounded-full h-14 sm:h-16 px-6 flex items-center gap-4 border border-outline-variant/30 shadow-2xl shadow-black/40 backdrop-blur-xl bg-surface-container-low/80">
             <span className="text-sm text-on-surface font-medium whitespace-nowrap">{t('files.selected', { count: selected.size })}</span>
             <div className="h-6 w-px bg-outline-variant/30" />
+            {visibleFolders.length > 0 && (
+              <Button size="sm" onClick={() => setMoveFolders(visibleFolders.filter((f) => selected.has(f.id)))}>
+                <DriveFileMoveIcon /> {t('folders.moveFolder')}
+              </Button>
+            )}
             <Button
               size="sm"
               onClick={() =>
@@ -1727,7 +1912,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           onUploadFiles={uploadFiles}
           onUploadFolder={(files) => uploadFiles(files)}
           onSelectMode={() => {
-            // Enter select mode by selecting the first file
+            // Enter select mode by selecting the first visible file
             if (visibleFiles.length > 0) {
               setSelected(new Set([visibleFiles[0].id]));
             }
@@ -1809,6 +1994,21 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         />
       )}
 
+      {moveFolders && (
+        <MoveFolderDialog
+          folders={moveFolders}
+          allFolders={allFolders}
+          onClose={() => setMoveFolders(null)}
+          onMoved={() => {
+            setMoveFolders(null);
+            clearSelection();
+            void reloadAllFolders();
+            void revalidate();
+            invalidateFoldersPageCache();
+          }}
+        />
+      )}
+
       {dragOver && (
         <div className="fixed inset-0 z-[60] pointer-events-none flex items-center justify-center bg-primary/10 backdrop-blur-sm">
           <div className="border-4 border-dashed border-primary rounded-3xl px-16 py-12 flex flex-col items-center gap-4 bg-surface/80 shadow-2xl">
@@ -1823,5 +2023,159 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Dialog pemindahan folder. MoveDialog yang ada dikontrak khusus file
+ * (memanggil PUT /files/{id}/move), jadi dibuat varian kontrak yang sama
+ * untuk folder: picker folder flat dengan indentasi, exclude diri sendiri
+ * + seluruh descendant, lalu PUT /folders/{id}/move per folder.
+ */
+function MoveFolderDialog({
+  folders,
+  allFolders,
+  onClose,
+  onMoved,
+}: {
+  folders: FolderType[];
+  allFolders: FolderType[];
+  onClose: () => void;
+  onMoved: () => void;
+}) {
+  const { t } = useTranslation();
+  const { alert } = usePrompt();
+  const [pickedFolderId, setPickedFolderId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Folders yang tidak boleh jadi tujuan: diri sendiri, seluruh
+  // descendant-nya, dan folder yang ikut dipindah.
+  const excluded = new Set<string>(folders.map((f) => f.id));
+  const stack = folders.map((f) => f.id);
+  // BFS descendant dari seluruh sumber via parent_id.
+  const childrenOf = new Map<string, FolderType[]>();
+  for (const f of allFolders) {
+    if (!f.parent_id) continue;
+    const list = childrenOf.get(f.parent_id) ?? [];
+    list.push(f);
+    childrenOf.set(f.parent_id, list);
+  }
+  while (stack.length) {
+    const id = stack.pop()!;
+    for (const kid of childrenOf.get(id) ?? []) {
+      if (!excluded.has(kid.id)) {
+        excluded.add(kid.id);
+        stack.push(kid.id);
+      }
+    }
+  }
+
+  const depthOf = (f: FolderType): number =>
+    (f.path || '').split('/').filter(Boolean).length;
+  const options = [...allFolders]
+    .filter((f) => !excluded.has(f.id))
+    .sort((a, b) => (a.path || '').localeCompare(b.path || '') || a.name.localeCompare(b.name));
+
+  const targetName = pickedFolderId
+    ? allFolders.find((f) => f.id === pickedFolderId)?.name
+    : t('files.move.root');
+
+  async function handleMove() {
+    setSubmitting(true);
+    let failed = 0;
+    for (const f of folders) {
+      try {
+        await apiRequest<FolderType>(`/folders/${f.id}/move`, {
+          method: 'PUT',
+          body: { parent_id: pickedFolderId },
+        });
+      } catch {
+        failed += 1;
+      }
+    }
+    setSubmitting(false);
+    if (failed > 0) {
+      await alert(t('folders.errors.moveFolderFailed', { count: failed }), { title: t('common.error') });
+      return;
+    }
+    onMoved();
+  }
+
+  function indentClass(depth: number): string {
+    const steps = ['pl-0', 'pl-4', 'pl-8', 'pl-12', 'pl-16', 'pl-20', 'pl-24', 'pl-28', 'pl-32'];
+    return steps[Math.min(Math.max(depth, 0), steps.length - 1)];
+  }
+
+  const title =
+    folders.length > 1
+      ? t('folders.moveFolderTitleBulk', { count: folders.length })
+      : t('folders.moveFolderTitle');
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={title}
+      icon={<DriveFileMoveIcon />}
+      actions={
+        <>
+          <Button variant="ghost" size="md" onClick={onClose} disabled={submitting}>
+            {t('common.cancel')}
+          </Button>
+          <Button variant="primary" size="md" onClick={() => void handleMove()} disabled={submitting}>
+            {submitting ? t('files.move.moving') : t('files.move.confirm', { count: folders.length })}
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-on-surface-variant mb-3">
+        {pickedFolderId
+          ? t('files.move.toLabel', { target: targetName })
+          : t('files.move.pickTarget')}
+      </p>
+      <div className="max-h-52 sm:max-h-64 md:max-h-72 overflow-y-auto rounded-2xl border border-outline-variant/30 bg-surface-container-low">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          fullWidth
+          className={
+            'justify-start text-left ' +
+            (pickedFolderId === null
+              ? '!bg-primary/20 !text-primary border border-primary/40 font-medium'
+              : '!text-on-surface')
+          }
+          onClick={() => setPickedFolderId(null)}
+          leftIcon={<span className="material-symbols-outlined !text-base">home</span>}
+        >
+          <span className="truncate">{t('files.move.root')}</span>
+        </Button>
+        {options.length === 0 ? (
+          <div className="px-4 py-3 text-sm text-on-surface-variant font-medium">
+            {t('files.move.noFolders')}
+          </div>
+        ) : (
+          options.map((f) => (
+            <Button
+              key={f.id}
+              type="button"
+              variant="ghost"
+              size="sm"
+              fullWidth
+              className={
+                'justify-start text-left ' +
+                (pickedFolderId === f.id
+                  ? '!bg-primary/20 !text-primary border border-primary/40 font-medium'
+                  : '!text-on-surface')
+              }
+              onClick={() => setPickedFolderId(f.id)}
+              leftIcon={<span className="material-symbols-outlined !text-base">folder</span>}
+            >
+              <span className={'truncate block text-left ' + indentClass(depthOf(f))}>{f.name}</span>
+            </Button>
+          ))
+        )}
+      </div>
+    </Dialog>
   );
 }

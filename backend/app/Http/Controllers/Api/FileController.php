@@ -13,12 +13,14 @@ use App\Models\File as FileModel;
 use App\Models\Folder;
 use App\Models\ShareLink;
 use App\Services\ActivityLogService;
+use App\Services\ArchiveExtractor;
 use App\Services\FolderLockGuard;
 use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
 use App\Services\Google\QuotaManager;
+use App\Services\UnsupportedArchiveException;
 use App\Services\WebhookService;
 use App\Support\StreamPump;
 use Google\Service\Drive;
@@ -43,6 +45,7 @@ class FileController extends Controller
         private readonly GoogleDriveUploader $uploader,
         private readonly WebhookService $webhooks,
         private readonly FolderLockGuard $lockGuard,
+        private readonly ArchiveExtractor $archiveExtractor,
     ) {}
 
     /**
@@ -324,6 +327,124 @@ class FileController extends Controller
         }
 
         return $this->ok(new FileResource($file->load('thumbnail')), __('Detail file.'));
+    }
+
+    /**
+     * GET /files/{id}/detail — metadata lengkap satu file.
+     *
+     * Menggabungkan kolom FileResource dengan info folder (nama + path),
+     * lock folder induk, dan isi `files.metadata` hasil
+     * FileMetadataExtractor (dimensi, jumlah halaman PDF, dll).
+     */
+    public function detail(Request $request, string $id): JsonResponse
+    {
+        $file = $this->findOwned($request, $id);
+        if (! $file) {
+            return $this->notFound(__('File tidak ditemukan.'));
+        }
+
+        if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
+            return $blocked;
+        }
+
+        $file->load(['folder:id,name,parent_id,user_id', 'thumbnail']);
+        $metadata = is_array($file->metadata) ? $file->metadata : [];
+        $folder = $file->folder;
+
+        $dimensions = null;
+        if (isset($metadata['width'], $metadata['height'])) {
+            $dimensions = ['width' => (int) $metadata['width'], 'height' => (int) $metadata['height']];
+        }
+
+        $pages = is_numeric($metadata['pages'] ?? null) ? (int) $metadata['pages'] : null;
+
+        return $this->ok([
+            'id' => $file->id,
+            'name' => $file->name,
+            'original_name' => $file->original_name,
+            'mime_type' => $file->mime_type,
+            'extension' => $file->name ? strtolower(pathinfo($file->name, PATHINFO_EXTENSION)) : null,
+            'size' => (int) $file->size,
+            'size_bytes' => (int) $file->size,
+            'created_at' => $file->created_at?->toIso8601String(),
+            'updated_at' => $file->updated_at?->toIso8601String(),
+            'uploaded_at' => $file->uploaded_at?->toIso8601String(),
+            'upload_status' => $file->upload_status,
+            'dimensions' => $dimensions,
+            'pages' => $pages,
+            'is_archive' => $this->archiveExtractor->isZip($file),
+            'folder' => $folder ? [
+                'id' => $folder->id,
+                'name' => $folder->name,
+                'path' => $this->buildFolderPath($folder),
+            ] : null,
+            'folder_id' => $file->folder_id,
+            'owner' => [
+                'id' => $file->user_id,
+                'name' => $request->user()->name,
+            ],
+            'is_starred' => (bool) $file->is_starred,
+            'lock' => [
+                'locked' => (bool) ($folder?->is_locked ?? false),
+            ],
+            'has_thumbnail' => $file->thumbnail !== null,
+            'storage' => [
+                'driver' => $file->storage_driver,
+                'driver_file_id' => $file->gdrive_file_id,
+                'shareable_link' => $file->shareable_link,
+            ],
+            'metadata' => (object) $metadata,
+        ], __('Detail file.'));
+    }
+
+    /**
+     * POST /files/{id}/extract — ekstrak arsip ZIP jadi file baru.
+     *
+     * Body opsional: folder_id tujuan (default = folder file arsip).
+     * Format tidak didukung / bukan arsip → envelope not_found.
+     */
+    public function extract(Request $request, string $id): JsonResponse
+    {
+        $file = $this->findOwned($request, $id);
+        if (! $file) {
+            return $this->notFound(__('File tidak ditemukan.'));
+        }
+
+        if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
+            return $blocked;
+        }
+
+        if (! $this->archiveExtractor->isZip($file)) {
+            return $this->notFound(__('Format arsip tidak didukung.'), ['reason' => 'unsupported_archive']);
+        }
+
+        $userId = $request->user()->id;
+        $folderId = $request->input('folder_id') ?: $file->folder_id;
+        if ($folderId) {
+            $folder = Folder::where('id', $folderId)->where('user_id', $userId)->first();
+            if (! $folder) {
+                return $this->notFound(__('Folder tujuan tidak ditemukan.'), ['reason' => 'folder_not_found']);
+            }
+            if ($blocked = $this->lockGuardResponse($request, $folder)) {
+                return $blocked;
+            }
+        }
+
+        try {
+            $result = $this->archiveExtractor->extract($file, $userId, $folderId);
+        } catch (UnsupportedArchiveException $e) {
+            return $this->notFound($e->getMessage(), ['reason' => 'unsupported_archive']);
+        } catch (Throwable $e) {
+            return $this->fail(__('Ekstrak gagal: ').$e->getMessage(), 422);
+        }
+
+        return $this->ok([
+            'archive_file_id' => $file->id,
+            'folder_id' => $folderId,
+            'entries' => $result['entries'],
+            'files' => $result['files'],
+            'skipped' => $result['skipped'],
+        ], __('Arsip berhasil diekstrak.'));
     }
 
     /**

@@ -123,7 +123,8 @@
       "warningTitle": "Peringatan",
       "oauthStartFailed": "Gagal mulai OAuth.",
       "syncFailed": "Sync gagal.",
-      "disconnectFailed": "Gagal menghapus."
+      "disconnectFailed": "Gagal menghapus.",
+      "uploadNetwork": "Kesalahan jaringan saat mengupload."
     },
     "move": {
       "titleSingle": "Pindahkan File",
@@ -169,10 +170,28 @@
       "uncompressedSize": "Ukuran Terurai",
       "lineCount": "Jumlah Baris",
       "characterCount": "Jumlah Karakter",
-      "extractedAt": "Diekstrak"
+      "extractedAt": "Diekstrak",
+      "folder": "Folder",
+      "lock": "Folder induk",
+      "locked": "Terkunci",
+      "pages": "Jumlah Halaman",
+      "loadingMetadata": "Memuat metadata…",
+      "noMetadata": "Tidak ada metadata tambahan untuk file ini.",
+      "metadataUnavailable": "Gagal memuat metadata dari server; menampilkan nilai cache."
     },
     "action": {
       "details": "Detail File"
+    },
+    "selectAll": "Pilih semua",
+    "clearSelection": "Hapus pilihan",
+    "extract": {
+      "action": "Ekstrak",
+      "title": "Ekstrak Arsip",
+      "success": "Arsip diekstrak: {{entries}} file dibuat.",
+      "partial": "Arsip diekstrak: {{entries}} file dibuat, {{failed}} entri gagal:\\\\n{{reasons}}",
+      "unsupported": "File ini bukan arsip yang didukung (hanya ZIP).",
+      "notFound": "File atau arsip tidak ditemukan.",
+      "failed": "Gagal mengekstrak arsip."
     }
   },
   "folders": {
@@ -204,9 +223,13 @@
       "renameFailed": "Gagal rename.",
       "starFailed": "Gagal update star.",
       "deleteFailed": "Gagal hapus.",
-      "moveFailed": "Gagal pindah.",
-      "empty": "Folder kosong, tidak ada yang bisa di-download."
-    }
+      "moveFailed": "Gagal memindahkan.",
+      "empty": "Folder kosong, tidak ada yang bisa di-download.",
+      "moveFolderFailed": "{{count}} folder gagal dipindahkan."
+    },
+    "moveFolder": "Pindahkan",
+    "moveFolderTitle": "Pindahkan Folder",
+    "moveFolderTitleBulk": "Pindahkan {{count}} Folder"
   },
   "profile": {
     "title": "Profil",
@@ -521,7 +544,10 @@
     "errorPptx": "Gagal memuat presentasi PPTX.",
     "downloadFile": "Download File",
     "close": "Tutup preview",
-    "menu": "Menu file"
+    "menu": "Menu file",
+    "loadingText": "Memuat teks...",
+    "errorText": "Gagal memuat isi teks.",
+    "tooLargeText": "File terlalu besar untuk dipreview sebagai teks. Gunakan unduh."
   },
   "auth": {
     "login": {
