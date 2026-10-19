@@ -177,7 +177,10 @@ class SearchFilesTest extends TestCase
 
         $response = $this->getJson('/api/v1/search/files?q=test&folder_path=/Tidak/Ada');
 
-        $response->assertStatus(404);
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data', null)
+            ->assertJsonPath('meta.not_found', true);
     }
 
     public function test_recursive_search_finds_files_in_subtree(): void

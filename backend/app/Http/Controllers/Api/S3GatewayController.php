@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Psr\Http\Message\StreamInterface;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -58,6 +59,27 @@ class S3GatewayController extends Controller
      * Bucket yang boleh dibaca publik tanpa autentikasi.
      */
     public const PUBLIC_BUCKET = 'public';
+
+    /**
+     * Batas waktu (detik) satu loop streaming ke klien. Worker PHP dipakai
+     * selama transfer berlangsung; tanpa batas ini, worker yang klien-nya
+     * sudah menutup koneksi tidak pernah dilepas (max_execution_time=0 pada
+     * worker) → pool habis → nginx memotong request berikutnya di 60 detik
+     * (504). Loop juga berhenti lebih awal saat `connection_aborted()`.
+     */
+    public const STREAM_LIMIT_SECONDS = 30;
+
+    /**
+     * Ukuran maksimum berkas yang disimpan ke cache lokal `storage/app/s3cache`.
+     * Berkas di atas ambang ini di-stream langsung tanpa caching, supaya disk
+     * tidak membengkak karena berkas besar.
+     */
+    public const CACHE_MAX_BYTES = 25 * 1024 * 1024; // 25MB
+
+    /**
+     * Chunk size untuk tiap iterasi loop streaming.
+     */
+    private const STREAM_CHUNK_BYTES = 8192;
 
     /*
     |--------------------------------------------------------------------------
@@ -254,7 +276,7 @@ class S3GatewayController extends Controller
             return $this->xmlError(403, 'AccessDenied', 'Access Denied');
         }
         if (! $file) {
-            return $this->xmlError(404, 'NoSuchKey', 'The specified key does not exist.');
+            return $this->xmlError(200, 'NoSuchKey', 'The specified key does not exist.');
         }
 
         if ($this->fileInLockedFolder($file)) {
@@ -372,7 +394,7 @@ class S3GatewayController extends Controller
             return response('', 200, ['x-amz-request-id' => $this->requestId()]);
         }
 
-        return $this->xmlError(404, 'NoSuchKey', 'The specified key does not exist.');
+        return $this->xmlError(200, 'NoSuchKey', 'The specified key does not exist.');
     }
 
     /*
@@ -1088,13 +1110,11 @@ class S3GatewayController extends Controller
         $size = (int) (@filesize($tempPath) ?: $file->size);
 
         return response()->stream(function () use ($tempPath) {
-            $out = fopen('php://output', 'wb');
             $in = fopen($tempPath, 'rb');
             if ($in !== false) {
-                stream_copy_to_stream($in, $out);
+                $this->pumpToOutput($in);
                 fclose($in);
             }
-            fclose($out);
         }, 200, array_merge($this->metadataHeaders($file), [
             'Content-Length' => (string) $size,
         ]));
@@ -1112,12 +1132,10 @@ class S3GatewayController extends Controller
             }
 
             return response()->stream(function () use ($stream) {
-                $out = fopen('php://output', 'wb');
                 if (is_resource($stream)) {
-                    stream_copy_to_stream($stream, $out);
+                    $this->pumpToOutput($stream);
                     fclose($stream);
                 }
-                fclose($out);
             }, 200, array_merge($this->metadataHeaders($file), [
                 'Content-Length' => (string) $file->size,
             ]));
@@ -1128,12 +1146,19 @@ class S3GatewayController extends Controller
                 'error' => $e->getMessage(),
             ]);
 
-            return $this->xmlError(404, 'NoSuchKey', 'The specified key does not exist.');
+            return $this->xmlError(200, 'NoSuchKey', 'The specified key does not exist.');
         }
     }
 
     private function streamFromDrive(FileModel $file): StreamedResponse|Response
     {
+        // 1) Cache lokal: kalau entri ada dan ukurannya cocok, tidak perlu
+        //    menyentuh Drive sama sekali.
+        $cachePath = $this->cachePathFor($file);
+        if ($cachePath !== null && is_file($cachePath) && (int) @filesize($cachePath) === (int) $file->size) {
+            return $this->streamFromPath($file, $cachePath);
+        }
+
         try {
             $account = $file->googleAccount;
             if (! $account) {
@@ -1148,11 +1173,18 @@ class S3GatewayController extends Controller
             $response = $drive->files->get($file->gdrive_file_id, ['alt' => 'media']);
             $body = $response->getBody();
 
-            return response()->stream(function () use ($body) {
-                while (! $body->eof()) {
-                    echo $body->read(8192);
-                    flush();
+            // 2) Berkas di bawah ambang → unduh penuh ke cache, lalu stream
+            //    dari cache. GET berikutnya tidak menyentuh Drive.
+            if ($cachePath !== null) {
+                $this->writeDriveBodyToCache($file, $body, $cachePath);
+                if (is_file($cachePath) && (int) @filesize($cachePath) === (int) $file->size) {
+                    return $this->streamFromPath($file, $cachePath);
                 }
+            }
+
+            // 3) Berkas besar (di atas ambang) → stream langsung tanpa cache.
+            return response()->stream(function () use ($body) {
+                $this->pumpToOutput($body);
             }, 200, $this->metadataHeaders($file));
         } catch (Throwable $e) {
             Log::warning('S3 Gateway: stream dari GDrive gagal', [
@@ -1160,7 +1192,132 @@ class S3GatewayController extends Controller
                 'error' => $e->getMessage(),
             ]);
 
-            return $this->xmlError(404, 'NoSuchKey', 'The specified key does not exist.');
+            return $this->xmlError(200, 'NoSuchKey', 'The specified key does not exist.');
+        }
+    }
+
+    /**
+     * Salin isi stream Drive ke cache lokal (atomic via file sementara),
+     * hanya kalau ukuran file di bawah ambang `CACHE_MAX_BYTES`. Best-effort:
+     * kegagalan menulis cache tidak menggagalkan respons.
+     *
+     * @param  StreamInterface  $body
+     */
+    private function writeDriveBodyToCache(FileModel $file, $body, string $cachePath): void
+    {
+        if ((int) $file->size <= 0 || (int) $file->size > self::CACHE_MAX_BYTES) {
+            return;
+        }
+
+        $dir = dirname($cachePath);
+        if (! is_dir($dir) && ! @mkdir($dir, 0775, true) && ! is_dir($dir)) {
+            return;
+        }
+
+        $tmp = $cachePath.'.'.bin2hex(random_bytes(6)).'.part';
+        $out = @fopen($tmp, 'wb');
+        if ($out === false) {
+            return;
+        }
+
+        try {
+            while (! $body->eof()) {
+                fwrite($out, $body->read(self::STREAM_CHUNK_BYTES));
+            }
+        } catch (Throwable $e) {
+            fclose($out);
+            @unlink($tmp);
+            Log::warning('S3 Gateway: gagal menulis cache lokal', [
+                'file_id' => $file->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return;
+        }
+
+        fclose($out);
+
+        // Simpan hanya kalau ukurannya persis seperti yang diharapkan; kalau
+        // tidak, buang supaya tidak menyajikan data terpotong dari cache.
+        if ((int) @filesize($tmp) !== (int) $file->size) {
+            @unlink($tmp);
+
+            return;
+        }
+
+        @rename($tmp, $cachePath);
+    }
+
+    /**
+     * Path cache lokal untuk sebuah file, atau null kalau file tidak layak
+     * di-cache (mis. tanpa id). Kunci = md5(id file).
+     */
+    private function cachePathFor(FileModel $file): ?string
+    {
+        $id = (string) $file->id;
+        if ($id === '') {
+            return null;
+        }
+
+        return storage_path('app/s3cache/'.md5($id));
+    }
+
+    /**
+     * Salin isi resource stream PHP ke output klien, dengan dua pengaman:
+     * berhenti saat klien menutup koneksi (`connection_aborted()`) dan
+     * berhenti saat melewati `STREAM_LIMIT_SECONDS`. Worker tidak pernah
+     * tertahan lebih lama dari itu. Flush dijaga `ob_get_level()` supaya
+     * tidak pernah memicu peringatan "failed to flush buffer".
+     *
+     * @param  resource|StreamInterface  $source
+     */
+    private function pumpToOutput($source): void
+    {
+        // Jangan bongkar buffer milik framework/harness: cukup flush buffer
+        // level teratas (kalau ada) supaya data mengalir ke klien tanpa
+        // memicu peringatan "failed to flush buffer".
+        if (ob_get_level() > 0) {
+            @ob_flush();
+        }
+        @flush();
+
+        $deadline = microtime(true) + self::STREAM_LIMIT_SECONDS;
+
+        $isPsrStream = $source instanceof StreamInterface;
+
+        while (true) {
+            if (connection_aborted() !== 0) {
+                break;
+            }
+
+            if ($isPsrStream) {
+                if ($source->eof()) {
+                    break;
+                }
+                $chunk = $source->read(self::STREAM_CHUNK_BYTES);
+            } else {
+                if (feof($source)) {
+                    break;
+                }
+                $chunk = fread($source, self::STREAM_CHUNK_BYTES);
+            }
+
+            if ($chunk === false || $chunk === '') {
+                break;
+            }
+
+            echo $chunk;
+
+            // Flush ke klien bila ada buffer aktif; aman saat tidak ada buffer
+            // (dijaga `ob_get_level()`), jadi tidak pernah muncul peringatan.
+            if (ob_get_level() > 0) {
+                @ob_flush();
+            }
+            @flush();
+
+            if (connection_aborted() !== 0 || microtime(true) >= $deadline) {
+                break;
+            }
         }
     }
 
@@ -1176,6 +1333,7 @@ class S3GatewayController extends Controller
         }
 
         @unlink(storage_path('app/temp/'.$file->id));
+        @unlink(storage_path('app/s3cache/'.md5((string) $file->id)));
 
         $file->delete();
 

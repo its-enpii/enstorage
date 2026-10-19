@@ -373,7 +373,7 @@ class FileUploadController extends Controller
 
         $file = FileModel::where('id', $fileId)->where('user_id', $userId)->first();
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
         if (! $file->is_chunked) {
             return $this->fail(__('File ini bukan chunked upload.'), 422);
@@ -437,7 +437,7 @@ class FileUploadController extends Controller
 
         $file = FileModel::where('id', $fileId)->where('user_id', $userId)->first();
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
         if (! $file->is_chunked) {
             return $this->fail(__('File ini bukan chunked upload.'), 422);

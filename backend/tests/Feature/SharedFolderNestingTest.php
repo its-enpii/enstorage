@@ -261,8 +261,8 @@ class SharedFolderNestingTest extends TestCase
             'client_key' => strtolower((string) Str::ulid()),
         ]);
 
-        $this->get('/api/v1/s/'.$this->token.'?file_id='.$intruderFile->id)->assertNotFound();
-        $this->getJson('/api/v1/s/'.$this->token.'?info=1&folder_id='.$intruderFolder->id)->assertNotFound();
+        $this->get('/api/v1/s/'.$this->token.'?file_id='.$intruderFile->id)->assertStatus(200)->assertJsonPath('meta.not_found', true);
+        $this->getJson('/api/v1/s/'.$this->token.'?info=1&folder_id='.$intruderFolder->id)->assertStatus(200)->assertJsonPath('meta.not_found', true);
     }
 
     public function test_file_owned_by_another_user_inside_shared_folder_is_rejected(): void
@@ -287,8 +287,8 @@ class SharedFolderNestingTest extends TestCase
             'client_key' => strtolower((string) Str::ulid()),
         ]);
 
-        $this->get('/api/v1/s/'.$this->token.'?file_id='.$stolen->id)->assertNotFound();
-        $this->getJson('/api/v1/s/'.$this->token.'?file_id='.$stolen->id.'&info=1')->assertNotFound();
+        $this->get('/api/v1/s/'.$this->token.'?file_id='.$stolen->id)->assertStatus(200)->assertJsonPath('meta.not_found', true);
+        $this->getJson('/api/v1/s/'.$this->token.'?file_id='.$stolen->id.'&info=1')->assertStatus(200)->assertJsonPath('meta.not_found', true);
 
         // dan tidak muncul di listing folder share
         $listing = $this->getJson('/api/v1/s/'.$this->token.'?info=1&folder_id='.$this->sub->id)->assertOk();
@@ -304,8 +304,8 @@ class SharedFolderNestingTest extends TestCase
         $sibling = $this->makeFolder('Tetangga', null);
         $outside = $this->makeFile('luar.txt', $sibling);
 
-        $this->get('/api/v1/s/'.$this->token.'?file_id='.$outside->id)->assertNotFound();
-        $this->getJson('/api/v1/s/'.$this->token.'?info=1&folder_id='.$sibling->id)->assertNotFound();
+        $this->get('/api/v1/s/'.$this->token.'?file_id='.$outside->id)->assertStatus(200)->assertJsonPath('meta.not_found', true);
+        $this->getJson('/api/v1/s/'.$this->token.'?info=1&folder_id='.$sibling->id)->assertStatus(200)->assertJsonPath('meta.not_found', true);
     }
 
     public function test_file_in_root_storage_is_not_part_of_share(): void
@@ -315,7 +315,7 @@ class SharedFolderNestingTest extends TestCase
         $loose->folder_id = null;
         $loose->save();
 
-        $this->get('/api/v1/s/'.$this->token.'?file_id='.$loose->id)->assertNotFound();
+        $this->get('/api/v1/s/'.$this->token.'?file_id='.$loose->id)->assertStatus(200)->assertJsonPath('meta.not_found', true);
     }
 
     public function test_incomplete_file_is_not_served(): void
@@ -324,7 +324,7 @@ class SharedFolderNestingTest extends TestCase
         $pending->upload_status = File::STATUS_UPLOADING;
         $pending->save();
 
-        $this->get('/api/v1/s/'.$this->token.'?file_id='.$pending->id)->assertNotFound();
+        $this->get('/api/v1/s/'.$this->token.'?file_id='.$pending->id)->assertStatus(200)->assertJsonPath('meta.not_found', true);
     }
 
     // ------------------------------------------------------------------
@@ -353,6 +353,6 @@ class SharedFolderNestingTest extends TestCase
     public function test_unknown_file_id_returns_404(): void
     {
         $this->get('/api/v1/s/'.$this->token.'?file_id=00000000-0000-0000-0000-000000000000')
-            ->assertNotFound();
+            ->assertStatus(200)->assertJsonPath('meta.not_found', true);
     }
 }

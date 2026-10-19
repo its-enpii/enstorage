@@ -20,6 +20,7 @@ use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
 use App\Services\Google\QuotaManager;
 use App\Services\WebhookService;
+use App\Support\StreamPump;
 use Google\Service\Drive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -45,6 +46,19 @@ class FileController extends Controller
     ) {}
 
     /**
+     * Batas waktu (detik) satu loop streaming ke klien. Worker PHP dipakai
+     * selama transfer berlangsung; tanpa batas ini, worker yang klien-nya
+     * sudah menutup koneksi tidak pernah dilepas (max_execution_time=0 pada
+     * worker) → pool habis → nginx memotong request berikutnya di 60 detik
+     * (504). Loop juga berhenti lebih awal saat `connection_aborted()`.
+     *
+     * Nilainya diambil dari `App\Support\StreamPump` supaya perilaku
+     * pelepasan worker konsisten di seluruh jalur download (sama dengan
+     * `S3GatewayController::STREAM_LIMIT_SECONDS`).
+     */
+    public const STREAM_LIMIT_SECONDS = StreamPump::DEFAULT_LIMIT_SECONDS;
+
+    /**
      * GET /files — list dengan filter, sort, pagination.
      */
     public function index(Request $request): JsonResponse
@@ -63,7 +77,7 @@ class FileController extends Controller
             if ($fid !== null) {
                 $folder = Folder::where('id', $fid)->where('user_id', $userId)->first();
                 if (! $folder) {
-                    return $this->fail(__('Folder tidak ditemukan.'), 404);
+                    return $this->notFound(__('Folder tidak ditemukan.'));
                 }
                 if ($blocked = $this->lockGuardResponse($request, $folder)) {
                     return $blocked;
@@ -302,7 +316,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
@@ -319,7 +333,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
@@ -340,7 +354,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
@@ -388,10 +402,9 @@ class FileController extends Controller
             $body = $response->getBody();
 
             return response()->stream(function () use ($body) {
-                while (! $body->eof()) {
-                    echo $body->read(8192);
-                    flush();
-                }
+                // Batas waktu + cek koneksi putus: worker dilepas walau klien
+                // mati di tengah transfer (lihat App\Support\StreamPump).
+                StreamPump::copy($body);
             }, 200, [
                 'Content-Type' => $file->mime_type,
                 'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
@@ -419,7 +432,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
@@ -428,12 +441,12 @@ class FileController extends Controller
 
         $thumb = $file->thumbnail;
         if (! $thumb) {
-            return $this->fail(__('Thumbnail belum tersedia.'), 404);
+            return $this->notFound(__('Thumbnail belum tersedia.'));
         }
 
         $path = storage_path('app/'.$thumb->path);
         if (! file_exists($path)) {
-            return $this->fail(__('File thumbnail tidak ditemukan di storage.'), 404);
+            return $this->notFound(__('File thumbnail tidak ditemukan di storage.'));
         }
 
         return response()->file($path, [
@@ -449,7 +462,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
@@ -517,7 +530,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
@@ -534,7 +547,7 @@ class FileController extends Controller
                 ->where('user_id', $file->user_id)
                 ->exists();
             if (! $folderExists) {
-                return $this->fail(__('Folder tujuan tidak ditemukan.'), 404);
+                return $this->notFound(__('Folder tujuan tidak ditemukan.'));
             }
 
             $targetFolder = Folder::where('id', $newFolderId)
@@ -679,7 +692,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponseForFile($request, $file)) {
@@ -757,7 +770,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
         if (! $file->isDone()) {
             return $this->fail(__('File belum selesai di-upload.'), 409);
@@ -820,7 +833,7 @@ class FileController extends Controller
     {
         $file = $this->findOwned($request, $id);
         if (! $file) {
-            return $this->fail(__('File tidak ditemukan.'), 404);
+            return $this->notFound(__('File tidak ditemukan.'));
         }
 
         $file->share_token = null;
@@ -1075,7 +1088,7 @@ class FileController extends Controller
      * GET /s/{token}/view — public (no auth).
      * Redirect ke FE preview page (FE handle rendering UI preview).
      */
-    public function view(string $token): RedirectResponse
+    public function view(string $token): RedirectResponse|JsonResponse
     {
         // Cek pivot dulu, lalu legacy. Status (active vs expired) tidak
         // dicek di sini — FE yang akan render error state kalau token
@@ -1085,7 +1098,7 @@ class FileController extends Controller
             || Folder::where('share_token', $token)->exists();
 
         if (! $exists) {
-            abort(404, __('Link share tidak ditemukan atau tidak valid.'));
+            return $this->notFound(__('Link share tidak ditemukan atau tidak valid.'));
         }
 
         return redirect(WebhookService::shareUrlFor($token, true), 302);
@@ -1104,7 +1117,7 @@ class FileController extends Controller
                 return $this->streamLocalTempFile($request, $file, $tempPath);
             }
 
-            return $this->fail(__('File tidak ditemukan atau belum siap.'), 404);
+            return $this->notFound(__('File tidak ditemukan atau belum siap.'));
         }
 
         $disposition = $request->boolean('download') ? 'attachment' : 'inline';
@@ -1133,10 +1146,9 @@ class FileController extends Controller
             $body = $response->getBody();
 
             return response()->stream(function () use ($body) {
-                while (! $body->eof()) {
-                    echo $body->read(8192);
-                    flush();
-                }
+                // Batas waktu + cek koneksi putus: worker dilepas walau klien
+                // mati di tengah transfer (lihat App\Support\StreamPump).
+                StreamPump::copy($body);
             }, 200, [
                 'Content-Type' => $file->mime_type,
                 'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
@@ -1338,7 +1350,7 @@ class FileController extends Controller
             $file = $this->findFileInSharedFolder($request, $folder, (string) $request->query('file_id'));
 
             if (! $file) {
-                return $this->fail(__('File tidak ditemukan pada folder share ini.'), 404);
+                return $this->notFound(__('File tidak ditemukan pada folder share ini.'));
             }
 
             // info=1 / thumbnail=1 / download=1 / stream ditangani satu
@@ -1350,7 +1362,7 @@ class FileController extends Controller
         if ($request->filled('folder_id')) {
             $requested = $this->findFolderInSharedFolder($request, $folder, (string) $request->query('folder_id'));
             if (! $requested) {
-                return $this->fail(__('Folder tidak ditemukan pada folder share ini.'), 404);
+                return $this->notFound(__('Folder tidak ditemukan pada folder share ini.'));
             }
             $targetFolder = $requested;
         }
@@ -1510,13 +1522,13 @@ class FileController extends Controller
         $size = (int) (@filesize($tempPath) ?: $file->size);
 
         return response()->stream(function () use ($tempPath) {
-            $out = fopen('php://output', 'wb');
+            // Batas waktu + cek koneksi putus supaya worker tidak terkunci
+            // saat klien mati di tengah transfer.
             $in = fopen($tempPath, 'rb');
             if ($in !== false) {
-                stream_copy_to_stream($in, $out);
+                StreamPump::copy($in);
                 fclose($in);
             }
-            fclose($out);
         }, 200, [
             'Content-Type' => $file->mime_type,
             'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
@@ -1537,12 +1549,12 @@ class FileController extends Controller
         $size = (int) ($file->size ?: 0);
 
         return response()->stream(function () use ($stream) {
-            $out = fopen('php://output', 'wb');
+            // Batas waktu + cek koneksi putus supaya worker tidak terkunci
+            // saat klien mati di tengah transfer.
             if (is_resource($stream)) {
-                stream_copy_to_stream($stream, $out);
+                StreamPump::copy($stream);
                 fclose($stream);
             }
-            fclose($out);
         }, 200, [
             'Content-Type' => $file->mime_type,
             'Content-Disposition' => $this->makeContentDisposition($disposition, $file),

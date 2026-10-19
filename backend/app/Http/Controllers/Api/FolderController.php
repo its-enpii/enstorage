@@ -26,6 +26,7 @@ use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
 use App\Services\Google\QuotaManager;
 use App\Services\WebhookService;
+use App\Support\StreamPump;
 use Google\Service\Drive;
 use Google\Service\Drive\DriveFile;
 use Illuminate\Http\JsonResponse;
@@ -48,6 +49,17 @@ class FolderController extends Controller
         private readonly GoogleDriveFolderService $folders,
         private readonly FolderLockGuard $lockGuard,
     ) {}
+
+    /**
+     * Batas waktu (detik) membangun ZIP seluruh isi folder. Worker PHP dipakai
+     * selama archive dibangun; tanpa batas ini satu klien yang mati mengunci
+     * worker sampai seluruh berkas selesai dibaca (max_execution_time=0 pada
+     * worker) → pool habis → nginx memotong 60 detik (504). Loop juga berhenti
+     * lebih awal saat `connection_aborted()`. Nilainya menyamai
+     * `App\Support\StreamPump::DEFAULT_LIMIT_SECONDS` dan
+     * `S3GatewayController::STREAM_LIMIT_SECONDS`.
+     */
+    public const STREAM_LIMIT_SECONDS = StreamPump::DEFAULT_LIMIT_SECONDS;
 
     /**
      * GET /folders — list root folders milik user.
@@ -95,7 +107,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponse($request, $folder)) {
@@ -168,7 +180,7 @@ class FolderController extends Controller
             ->first();
 
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponse($request, $folder)) {
@@ -206,7 +218,7 @@ class FolderController extends Controller
                 ->where('user_id', $userId)
                 ->first();
             if (! $parent) {
-                return $this->fail(__('Parent folder tidak ditemukan.'), 404);
+                return $this->notFound(__('Parent folder tidak ditemukan.'));
             }
 
             if ($blocked = $this->lockGuardResponse($request, $parent)) {
@@ -256,7 +268,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponse($request, $folder)) {
@@ -351,7 +363,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponse($request, $folder)) {
@@ -376,7 +388,7 @@ class FolderController extends Controller
                 ->where('user_id', $folder->user_id)
                 ->first();
             if (! $newParent) {
-                return $this->fail(__('Parent folder tujuan tidak ditemukan.'), 404);
+                return $this->notFound(__('Parent folder tujuan tidak ditemukan.'));
             }
 
             if ($blocked = $this->lockGuardResponse($request, $newParent)) {
@@ -584,7 +596,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponse($request, $folder)) {
@@ -709,7 +721,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         $expiresAt = $request->input('expires_at');
@@ -768,7 +780,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         // Revoke semua active links untuk folder ini. Kolom pivot polymorphic
@@ -811,7 +823,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if ($blocked = $this->lockGuardResponse($request, $folder)) {
@@ -843,6 +855,14 @@ class FolderController extends Controller
         $zipName = $safeName.'.zip';
 
         return response()->stream(function () use ($files, $subfolders, $factory, $tokenSvc, &$clients, $safeName) {
+            // Bangun banyak berkas sekaligus berpotensi memakan waktu lama.
+            // Dua pengaman (lihat App\Support\StreamPump):
+            //  - deadline TOTAL: keluar dari loop antrean file saat terlampaui;
+            //  - deadline PER FILE: satu klien mati tidak membakar waktu
+            //    seluruh proses, karena baca body dibatasi per berkas.
+            $deadline = microtime(true) + self::STREAM_LIMIT_SECONDS;
+            StreamPump::flushOutput();
+
             $zip = new ZipArchive;
             $zip->open('php://output', ZipArchive::CREATE | ZipArchive::OVERWRITE);
 
@@ -857,6 +877,13 @@ class FolderController extends Controller
             $tmpFiles = [];
             try {
                 foreach ($files as $file) {
+                    // Deadline total: klien sudah menutup koneksi atau proses
+                    // sudah terlalu lama → lepaskan worker, jangan lanjut
+                    // membaca sisa berkas.
+                    if (StreamPump::aborted() || StreamPump::deadlineReached($deadline)) {
+                        break;
+                    }
+
                     $account = $file->googleAccount;
                     if (! $account || ! $file->gdrive_file_id) {
                         continue;
@@ -873,11 +900,24 @@ class FolderController extends Controller
                     $tmpPath = tempnam(sys_get_temp_dir(), 'ens_zip_');
                     $tmpFiles[] = $tmpPath;
 
-                    // Stream langsung ke temporary file
+                    // Stream body ke temporary file dengan batas per berkas,
+                    // lalu tutup stream sumbernya supaya koneksi tidak
+                    // tertahan sampai body habis tanpa batas.
+                    $out = fopen($tmpPath, 'wb');
                     $response = $drive->files->get($file->gdrive_file_id, [
                         'alt' => 'media',
                     ]);
-                    file_put_contents($tmpPath, $response->getBody()->getContents());
+                    $body = $response->getBody();
+                    try {
+                        StreamPump::copyPsrTo($body, $out);
+                    } finally {
+                        if (is_resource($out)) {
+                            fclose($out);
+                        }
+                        if (method_exists($body, 'close')) {
+                            $body->close();
+                        }
+                    }
 
                     $entryName = $safeName.'/'.($file->original_name ?: $file->name);
                     $zip->addFile($tmpPath, $entryName);
@@ -1029,7 +1069,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         // Kunci folder sendiri selalu boleh (tidak dijaga).
@@ -1059,7 +1099,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if (! (bool) $folder->is_locked) {
@@ -1097,7 +1137,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if (! (bool) $folder->is_locked) {
@@ -1136,7 +1176,7 @@ class FolderController extends Controller
     {
         $folder = $this->findOwned($request, $id);
         if (! $folder) {
-            return $this->fail(__('Folder tidak ditemukan.'), 404);
+            return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
         if (! (bool) $folder->is_locked) {

@@ -189,7 +189,7 @@ class FolderGDriveDeleteTest extends TestCase
 
         Sanctum::actingAs($attacker);
 
-        $this->deleteJson('/api/v1/folders/'.$root->id.'?delete_files=true')->assertNotFound();
+        $this->deleteJson('/api/v1/folders/'.$root->id.'?delete_files=true')->assertStatus(200)->assertJsonPath('meta.not_found', true);
 
         $this->assertSame([], $this->drive->deletedFolders);
         $this->assertDatabaseHas('folders', ['id' => $root->id]);

@@ -532,7 +532,7 @@ HTML;
     {
         $account = $this->findOwned($request, $id);
         if (! $account) {
-            return $this->fail(__('Akun tidak ditemukan.'), 404);
+            return $this->notFound(__('Akun tidak ditemukan.'));
         }
 
         $resource = GoogleAccountResource::make($account)->additional(['with_quota' => true]);
@@ -544,7 +544,7 @@ HTML;
     {
         $account = $this->findOwned($request, $id);
         if (! $account) {
-            return $this->fail(__('Akun tidak ditemukan.'), 404);
+            return $this->notFound(__('Akun tidak ditemukan.'));
         }
 
         $data = $request->validate([
@@ -561,7 +561,7 @@ HTML;
     {
         $account = $this->findOwned($request, $id);
         if (! $account) {
-            return $this->fail(__('Akun tidak ditemukan.'), 404);
+            return $this->notFound(__('Akun tidak ditemukan.'));
         }
 
         // Akun utama (parent) = identitas pemilik vault. Tidak boleh dicabut
@@ -610,7 +610,7 @@ HTML;
     {
         $account = $this->findOwned($request, $id);
         if (! $account) {
-            return $this->fail(__('Akun tidak ditemukan.'), 404);
+            return $this->notFound(__('Akun tidak ditemukan.'));
         }
 
         try {
@@ -647,7 +647,7 @@ HTML;
         $accounts = $query->get();
 
         if ($accounts->isEmpty()) {
-            return $this->fail(__('Tidak ada akun Google aktif yang terhubung.'), 404);
+            return $this->notFound(__('Tidak ada akun Google aktif yang terhubung.'));
         }
 
         $folderService = app(GoogleDriveFolderService::class);
@@ -709,7 +709,7 @@ HTML;
     {
         $account = $this->findOwned($request, $id);
         if (! $account) {
-            return $this->fail(__('Akun tidak ditemukan.'), 404);
+            return $this->notFound(__('Akun tidak ditemukan.'));
         }
 
         $developerKey = config('services.google.picker_api_key');
@@ -753,7 +753,7 @@ HTML;
     {
         $account = $this->findOwned($request, $id);
         if (! $account) {
-            return $this->fail(__('Akun tidak ditemukan.'), 404);
+            return $this->notFound(__('Akun tidak ditemukan.'));
         }
 
         $data = $request->validate([
@@ -788,7 +788,7 @@ HTML;
     {
         $account = $this->findOwned($request, $id);
         if (! $account) {
-            return $this->fail(__('Akun tidak ditemukan.'), 404);
+            return $this->notFound(__('Akun tidak ditemukan.'));
         }
 
         $files = FileModel::where('user_id', $request->user()->id)

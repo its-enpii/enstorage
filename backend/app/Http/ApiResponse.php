@@ -33,6 +33,18 @@ trait ApiResponse
     }
 
     /**
+     * Resource tidak ditemukan.
+     *
+     * Sengaja TIDAK memakai status 4xx: pemilik produk meminta API tidak
+     * mengembalikan response error untuk resource yang tidak ada.
+     * Konsumen mendeteksi lewat meta.not_found, bukan lewat status HTTP.
+     */
+    protected function notFound(string $message, array $meta = []): JsonResponse
+    {
+        return $this->ok(null, $message, array_merge(['not_found' => true], $meta));
+    }
+
+    /**
      * Bungkus response dengan envelope standar.
      *
      * @param  array{page?:int, per_page?:int, total?:int, last_page?:int}  $meta

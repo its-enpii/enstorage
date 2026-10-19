@@ -198,7 +198,9 @@ class WebhookSharePayloadTest extends TestCase
     public function test_view_route_404_for_unknown_token(): void
     {
         $response = $this->get('/api/v1/s/no-such-token/view');
-        $response->assertNotFound();
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('meta.not_found', true);
     }
 
     public function test_view_by_token_with_info_flag_returns_json_metadata(): void
