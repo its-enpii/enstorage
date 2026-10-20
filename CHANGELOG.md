@@ -9,7 +9,11 @@ project ini adheres ke [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+- **Docs API (`/docs`)**: dua endpoint sebelumnya tak tercatat kini ada di referensi + contoh cURL — `POST /files/bulk-upload` (multipart, `files[]` maks 10 × 1GB, `folder_id`, `shareable` default true, `client_key` idempoten; respons `total/succeeded/failed` + `results[]` per item, partial success = 200) dan `POST /files/{id}/extract` (`folder_id` opsional, respons `archive_file_id/folder_id/entries/files/skipped`, hanya ZIP, errors 404/422). Sumber katalog `apiCatalog.ts` + i18n id/en.
+
 ### Changed
+- **UI /files — breadcrumb tak lagi terpotong di mobile** (F6): nav 256 → 358px @390 / 524px @768, ikon aksi turun baris, segmen "File Saya" & "Backup" `trunc: false`, header 88/44px, overflow 0 — sebelumnya semua segmen jadi `My... / si... / I...`.
 - **UI /files — baris "Pilih semua" hanya tampil saat Mode Pilih** (sebelumnya baris permanen di atas grid, semua segmen terpotong). Di luar mode pilih grid naik ~56px; irisan toolbar↔kartu tetap 0.
 - **UI /files — kartu seragam & header kompak**: tinggi kartu folder=file (selisih 0), header 44px di semua viewport, toolbar/tombol icon-only dengan `<Tooltip>` + `aria-label`.
 - **API key prefix hard switch**: `enp_` → `en_`. Semua key lama dianggap invalid; tabel `api_keys` & `api_key_logs` di-truncate via migration `2026_06_30_000000_truncate_api_keys_for_prefix_change`. User harus generate key baru di `/api-keys`.
