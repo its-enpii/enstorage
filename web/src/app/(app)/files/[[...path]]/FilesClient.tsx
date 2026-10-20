@@ -1630,31 +1630,34 @@ function FilesContent({ currentPath }: { currentPath: string }) {
 
   return (
     <>
-      {/* Compact header: one row on mobile/tablet, breadcrumb truncated (never
-          wraps to a second line) and the actions collapse to icon-only buttons
-          labelled by tooltips. */}
+      {/* Header: one row from `md` up. On phones the breadcrumb keeps the
+          full row (so the current folder is never clipped) and the actions
+          drop to their own row underneath. */}
       <div
         data-testid="files-header"
-        className="flex items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-6 min-h-11"
+        className="mb-1 md:mb-6"
       >
-        <h1 className="font-display text-xl sm:text-2xl lg:text-3xl font-semibold min-w-0 flex-1">
-          <Breadcrumb
-            size="lg"
-            className="!text-xl sm:!text-2xl lg:!text-3xl flex-nowrap overflow-hidden"
-            items={[
-              { id: null, label: t('files.title'), href: '/files' },
-              ...folderCrumbs.map((c) => ({
-                id: c.id,
-                label: c.name,
-                href: `/files${c.path}`,
-              })),
-            ]}
-          />
-        </h1>
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <span className="hidden md:inline text-metadata text-outline tabular-nums whitespace-nowrap">
-            {t('files.filter.summary', { folders: totalFolders, files: totalFiles })}
-          </span>
+        <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:justify-between md:gap-3">
+          <h1 className="min-w-0 flex-1">
+            <Breadcrumb
+              size="lg"
+              className="!text-xl sm:!text-2xl lg:!text-3xl flex flex-wrap items-center gap-1.5"
+              items={[
+                { id: null, label: t('files.title'), href: '/files' },
+                ...folderCrumbs.map((c, i) => ({
+                  id: c.id,
+                  label: c.name,
+                  href: `/files${c.path}`,
+                  trail: i < folderCrumbs.length - 1,
+                })),
+              ]}
+            />
+          </h1>
+          {/* On phones the actions sit on their own row, aligned to the
+              trailing edge. From md up they stay beside the breadcrumb;
+              the reserved height keeps summary positions stable whether or
+              not the download button is available. */}
+          <div className="flex items-center justify-end gap-1.5 md:gap-2 shrink-0 md:min-h-11">
           {folderId && (
             <Tooltip label={t('folders.downloadFolder')}>
               <IconButton
@@ -1687,6 +1690,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               )}
             </IconButton>
           </Tooltip>
+          </div>
         </div>
       </div>
 

@@ -1180,6 +1180,7 @@
     },
     "endpoints": {
       "bulkDelete": "Hapus banyak berkas dalam satu permintaan.",
+      "bulkUpload": "Unggah hingga 10 berkas sekaligus lewat multipart, dengan ringkasan hasil per berkas.",
       "byHashes": "Cocokkan banyak hash berkas sekaligus untuk cek duplikat.",
       "byMetadata": "Cari berkas lewat kondisi metadata di badan permintaan.",
       "changePassword": "Ganti kata sandi dengan konfirmasi sandi lama.",
@@ -1194,6 +1195,7 @@
       "destroyAccount": "Lepas akun; berkas yang tersimpan tidak ikut terhapus.",
       "downloadFile": "Alirkan isi berkas dari Google Drive.",
       "downloadFolder": "Kemas folder menjadi ZIP dan kirim sebagai unduhan.",
+      "extract": "Ekstrak arsip ZIP menjadi berkas-berkas baru di folder tujuan.",
       "eyebrow": "Referensi",
       "fileStatus": "Status proses upload, untuk memolling hasil akhir.",
       "googleAuth": "Tukar kode Google Sign-In native menjadi token Sanctum.",
@@ -1442,6 +1444,8 @@
         "rangeNote": "Streamer memakai proxy langsung, jadi pemutar HTML5 bisa seek tanpa mengekspos tautan Drive.",
         "renameOnMoveNote": "Bila nama sudah dipakai di folder tujuan, EnStorage memberi akhiran otomatis (`laporan (1).pdf`) dan melaporkan lewat `renamed`.",
         "permanentNote": "Tidak ada trash bin di sisi EnStorage: yang hilang hilang dari Google Drive juga.",
+        "extractZipNote": "Hanya arsip `.zip` yang didukung; format lain (termasuk berkas yang ekstensi/MIME-nya tampak arsip tapi bukan ZIP) dijawab `404` dengan `reason: unsupported_archive`. Ekstraksi bisa gagal `422` untuk arsip rusak atau terlalu besar.",
+        "bulkPartialNote": "Sebagian bisa berhasil: respons tetap `200` meski ada item gagal. Periksa `success` pada setiap item `results` dan cocokkan lewat `index`, jangan hanya mengandalkan kode status. `client_key` berlaku per berkas dan membuat pengiriman ulang aman.",
         "batchStarNote": "Batch move dan star memakai `PATCH /files/{id}` per berkas; hanya batch delete yang punya rute tersendiri.",
         "publicUrlNote": "URL harus publik: server menolak alamat privat, port bukan 80/443, dan redirect mencurigakan.",
         "resumeNote": "Kirim ulang chunk yang sudah diterima aman: server membalas `200` tanpa menduplikasi byte.",
@@ -1471,6 +1475,14 @@
         "bulkDelete": {
           "title": "Hapus massal",
           "body": "Hapus hingga 50 berkas sekaligus."
+        },
+        "bulkUpload": {
+          "title": "Unggah massal",
+          "body": "Unggah beberapa berkas dalam satu permintaan; hasil dilaporkan per berkas sehingga satu kegagalan tidak menggagalkan yang lain."
+        },
+        "extract": {
+          "title": "Ekstrak arsip",
+          "body": "Bongkar arsip ZIP menjadi berkas terpisah dan laporkan isi yang dibuat maupun yang dilewati."
         },
         "byHashes": {
           "title": "Cek duplikat via hash",
@@ -1821,6 +1833,10 @@
       "shareable": "Buatkan tautan berbagi begitu upload diterima.",
       "shareExpiresField": "Batas waktu tautan yang dibuat bersama upload ini.",
       "shareMaxViewsField": "1–10000 kunjungan; kosongkan tanpa batas.",
+      "extractFolderIdField": "Folder tujuan; default ke folder asal berkas arsip.",
+      "bulkClientKey": "Idempotensi per berkas, `A-Za-z0-9._:-`, maks 128 karakter; berkas dengan `client_key` yang sudah dipakai dilaporkan gagal.",
+      "bulkFolderIdField": "Folder tujuan untuk semua berkas; kosongkan untuk root.",
+      "filesBulkField": "1–10 berkas, masing-masing maksimal 1 GB. Kirim sebagai `files[]=@…`.",
       "contentHash": "SHA-256 hex (64 karakter) untuk dedup di sisi klien.",
       "folderIdQuery": "`null` atau kosong = root; kirim `folder_id=` kosong untuk semua folder.",
       "searchQuery": "Cocok substring pada nama, tanpa peka huruf besar.",

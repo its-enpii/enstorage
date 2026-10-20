@@ -1,8 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight } from '@mui/icons-material';
+import { ChevronRight, MoreHoriz } from '@mui/icons-material';
 import clsx from 'clsx';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import { IconButton } from '@/components/Button';
+import { Tooltip } from '@/components/Tooltip';
 
 export type Crumb = {
   id: string | null; // null = root
@@ -14,6 +17,11 @@ export type Crumb = {
    * rather than a UUID.
    */
   href?: string;
+  /**
+   * Ancestors of the current page (e.g. the trail returned by folder
+   * resolution). They are the first to give up room on narrow headers.
+   */
+  trail?: boolean;
 };
 
 type Props = {
@@ -48,38 +56,86 @@ export function Breadcrumb({
   className,
 }: Props) {
   const isHeading = size === 'lg';
-  const lastIndex = items.length - 1;
   const chevronSize = isHeading ? '!text-2xl' : '!text-base';
+  const lastIndex = items.length - 1;
+  // When there are intermediate crumbs (beyond root + current page), the
+  // middle run is collapsed into a single "…" once the header runs out of
+  // room. Root and the current page are never collapsed.
+  const hasMiddle = lastIndex > 1;
+  const middle = hasMiddle ? items.slice(1, lastIndex) : [];
+  const navRef = useRef<HTMLElement | null>(null);
+  const [expandedMiddle, setExpandedMiddle] = useState(false);
+  const showMiddle = hasMiddle && expandedMiddle;
+  const middleLabel = middle.map((m) => m.label).join(' / ');
+
+  // Collapse the middle run back to "…" as soon as it would no longer fit —
+  // the current page must always keep its full label on screen.
+  useEffect(() => {
+    if (!showMiddle) return;
+    const nav = navRef.current;
+    if (!nav || typeof ResizeObserver === 'undefined') return;
+    const collapseIfOverflowing = () => {
+      if (nav.scrollWidth > nav.clientWidth + 1) setExpandedMiddle(false);
+    };
+    const ro = new ResizeObserver(collapseIfOverflowing);
+    ro.observe(nav);
+    return () => ro.disconnect();
+  }, [showMiddle]);
+
+  const hrefOf = (c: Crumb, i: number) =>
+    c.id === null
+      ? rootHref
+      : (c.href
+        ?? (hrefForIndex ? hrefForIndex(c, i) : undefined)
+        ?? (hrefFor ? hrefFor(c.id) : `/files/${c.id}`));
 
   return (
     <nav
+      ref={navRef}
       aria-label="Breadcrumb"
-      className={clsx('flex items-center gap-1.5 sm:gap-2 flex-nowrap min-w-0', className)}
+      className={clsx('min-w-0', className)}
     >
       {items.map((c, i) => {
         const isLast = i === lastIndex;
-        const href =
-          c.id === null
-            ? rootHref
-            : (c.href
-              ?? (hrefForIndex ? hrefForIndex(c, i) : undefined)
-              ?? (hrefFor ? hrefFor(c.id) : `/files/${c.id}`));
+        const isMiddle = hasMiddle && i > 0 && i < lastIndex;
+        const isCollapsedStart = isMiddle && !showMiddle && i === 1;
 
-        // Earlier crumbs collapse first (shrink), the current page keeps more room.
+        if (isMiddle && !isCollapsedStart) return null;
+
+        const href = hrefOf(c, i);
+
+        // Earlier crumbs are secondary: they truncate (root) or collapse (trail),
+        // the current page keeps its full label and may wrap to a second line.
         return (
-          <span
-            key={`${c.label}-${i}`}
-            className={clsx('flex items-center gap-1.5 sm:gap-2 min-w-0', isLast ? 'shrink-[3]' : 'shrink')}
-          >
-            {i > 0 && (
+          <Fragment key={`${c.label}-${i}`}>
+            {i > 0 && !isCollapsedStart && (
               <ChevronRight className={clsx('text-outline shrink-0', chevronSize)} aria-hidden />
             )}
+            {isCollapsedStart ? (
+              <>
+                <ChevronRight className={clsx('text-outline shrink-0', chevronSize)} aria-hidden />
+                <Tooltip label={middleLabel}>
+                  <IconButton
+                    type="button"
+                    size="sm"
+                    shape="circle"
+                    aria-label={middleLabel}
+                    aria-expanded={showMiddle}
+                    onClick={() => setExpandedMiddle(true)}
+                    className="shrink-0 font-bold"
+                  >
+                    <MoreHoriz className={chevronSize} />
+                  </IconButton>
+                </Tooltip>
+                <ChevronRight className={clsx('text-outline shrink-0', chevronSize)} aria-hidden />
+              </>
+            ) : null}
             {isLast ? (
               <span
                 aria-current="page"
                 className={clsx(
-                  'font-semibold text-on-surface truncate block',
-                  isHeading ? 'font-display' : '',
+                  'min-w-0 break-words text-on-surface font-semibold',
+                  isHeading ? 'font-display leading-tight' : '',
                   sizeClass[size],
                 )}
               >
@@ -90,14 +146,15 @@ export function Breadcrumb({
                 href={href}
                 prefetch
                 className={clsx(
-                  'text-outline hover:text-on-surface transition-colors truncate block',
+                  'shrink truncate text-outline hover:text-on-surface transition-colors',
+                  isMiddle && showMiddle ? 'shrink-[3]' : '',
                   sizeClass[size],
                 )}
               >
                 {c.label}
               </Link>
             )}
-          </span>
+          </Fragment>
         );
       })}
     </nav>

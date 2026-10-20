@@ -119,6 +119,8 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
       { method: 'PUT', path: '/files/{id}/move', scope: 'write', key: 'moveFile' },
       { method: 'DELETE', path: '/files/{id}', scope: 'delete', key: 'deleteFile' },
       { method: 'POST', path: '/files/bulk-delete', scope: 'delete', key: 'bulkDelete' },
+      { method: 'POST', path: '/files/bulk-upload', scope: 'write', key: 'bulkUpload' },
+      { method: 'POST', path: '/files/{id}/extract', scope: 'write', key: 'extract' },
       { method: 'POST', path: '/files/{id}/share', scope: 'read', key: 'shareFile' },
       { method: 'DELETE', path: '/files/{id}/share', scope: 'delete', key: 'unshareFile' },
       { method: 'GET', path: '/files/{id}/share-links', scope: 'read', key: 'listFileShareLinks' },
@@ -1257,6 +1259,128 @@ Content-Length: 18244
     },
     errors: ['403', '422'],
     noteKey: 'batchStarNote',
+  },
+  {
+    id: 'files-bulk-upload',
+    group: 'files',
+    method: 'POST',
+    path: '/files/bulk-upload',
+    scope: 'write',
+    key: 'bulkUpload',
+    call: {
+      method: 'POST',
+      path: '/files/bulk-upload',
+      files: [
+        { field: 'files[]', path: './laporan-q3.pdf', type: 'application/pdf' },
+        { field: 'files[]', path: './lampiran-a.xlsx', type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+      ],
+      fields: {
+        folder_id: '4d0cbe31-0a58-4c6f-9d2b-7f1e5a3c8b64',
+        shareable: 'true',
+        client_key: 'batch-2026-08-14-a',
+      },
+      expect: '200 OK',
+      notes: [
+        'Multipart batch upload: up to 10 files at 1 GB each, routed per file like',
+        'POST /files/upload. Partial success is normal and still answers 200 —',
+        'inspect `success` on every item in `results` instead of trusting the status code.',
+      ],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    bodyRows: [
+      { name: 'files', type: 'file[]', required: true, key: 'filesBulkField' },
+      { name: 'folder_id', type: 'uuid', key: 'bulkFolderIdField' },
+      { name: 'shareable', type: 'boolean', key: 'shareable', default: 'true' },
+      { name: 'share_expires_at', type: 'ISO-8601', key: 'shareExpiresField' },
+      { name: 'share_max_views', type: 'integer', key: 'shareMaxViewsField' },
+      { name: 'client_key', type: 'string', key: 'bulkClientKey' },
+    ],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "total": 2,
+    "succeeded": 1,
+    "failed": 1,
+    "results": [
+      {
+        "index": 0,
+        "success": true,
+        "name": "laporan-q3.pdf",
+        "file": {
+          "id": "9f1c2b64-77e5-4a10-8ad3-5c0b2e9d41f7",
+          "name": "laporan-q3.pdf",
+          "size": 820341,
+          "status": "pending",
+          "shareable": true,
+          "share_url": "https://vault.example.com/s/3f9a1c7e5b2d48af90c6e1d7a3b5c8f0"
+        }
+      },
+      {
+        "index": 1,
+        "success": false,
+        "name": "too-large.bin",
+        "reason": "File melebihi 1GB"
+      }
+    ]
+  },
+  "message": "Bulk upload selesai.",
+  "meta": {}
+}`,
+    },
+    errors: ['401', '403', '413', '422'],
+    noteKey: 'bulkPartialNote',
+  },
+  {
+    id: 'files-extract',
+    group: 'files',
+    method: 'POST',
+    path: '/files/{id}/extract',
+    scope: 'write',
+    key: 'extract',
+    call: {
+      method: 'POST',
+      path: '/files/{id}/extract',
+      body: { folder_id: '4d0cbe31-0a58-4c6f-9d2b-7f1e5a3c8b64' },
+      expect: '200 OK',
+      notes: [
+        'Unpack a ZIP archive into new files. Omit `folder_id` to extract next to',
+        'the archive; entries that are directories or hidden are not counted.',
+      ],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    bodyRows: [
+      { name: 'folder_id', type: 'uuid', key: 'extractFolderIdField' },
+    ],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "archive_file_id": "b2f7d914-3c6a-4f0d-8e51-6a2d9c7b4f10",
+    "folder_id": "4d0cbe31-0a58-4c6f-9d2b-7f1e5a3c8b64",
+    "entries": 3,
+    "files": [
+      {
+        "name": "laporan-q3.pdf",
+        "size": 820341,
+        "file_id": "9f1c2b64-77e5-4a10-8ad3-5c0b2e9d41f7"
+      }
+    ],
+    "skipped": [
+      {
+        "name": "../etc/passwd",
+        "reason": "Path entry tidak aman."
+      }
+    ]
+  },
+  "message": "Arsip berhasil diekstrak.",
+  "meta": {}
+}`,
+    },
+    errors: ['404', '422'],
+    noteKey: 'extractZipNote',
   },
   {
     id: 'files-upload-url',

@@ -1180,6 +1180,7 @@
     },
     "endpoints": {
       "bulkDelete": "Delete many files in a single request.",
+      "bulkUpload": "Upload up to 10 files in one multipart request, with a per-file result summary.",
       "byHashes": "Match many file hashes at once to detect duplicates.",
       "byMetadata": "Search files using metadata conditions in the request body.",
       "changePassword": "Change the password after confirming the current one.",
@@ -1194,6 +1195,7 @@
       "destroyAccount": "Disconnect an account; stored files are not deleted.",
       "downloadFile": "Stream file bytes from Google Drive.",
       "downloadFolder": "Package a folder into a ZIP and stream it as a download.",
+      "extract": "Extract a ZIP archive into new files inside a destination folder.",
       "eyebrow": "Reference",
       "fileStatus": "Upload processing status, for polling the final result.",
       "googleAuth": "Exchange a native Google Sign-In code for a Sanctum token.",
@@ -1442,6 +1444,8 @@
         "rangeNote": "The proxy streams the response, so HTML5 players can seek without exposing a Drive link.",
         "renameOnMoveNote": "If the name is taken in the destination folder, EnStorage appends a suffix (`laporan (1).pdf`) and reports it in `renamed`.",
         "permanentNote": "There is no EnStorage trash bin: once gone, the object is gone from Google Drive too.",
+        "extractZipNote": "Only `.zip` archives are supported; anything else (including a file whose extension/MIME looks like an archive but is not a ZIP) answers `404` with `reason: unsupported_archive`. Corrupt or oversized archives can fail with `422`.",
+        "bulkPartialNote": "Partial success is normal: the response stays `200` even when some items fail. Inspect `success` on every item in `results` (match by `index`) instead of relying on the status code alone. `client_key` applies per file and makes retries safe.",
         "batchStarNote": "Batch move and batch star run as repeated `PATCH /files/{id}` calls; only batch delete has its own route.",
         "publicUrlNote": "The URL must be public: private hosts, non-80/443 ports, and suspicious redirects are rejected.",
         "resumeNote": "Re-sending a chunk you already delivered is safe: the server answers `200` without duplicating bytes.",
@@ -1471,6 +1475,14 @@
         "bulkDelete": {
           "title": "Batch delete",
           "body": "Remove up to 50 files in one request."
+        },
+        "bulkUpload": {
+          "title": "Bulk upload",
+          "body": "Upload several files in one request; results are reported per file, so one failure does not sink the rest."
+        },
+        "extract": {
+          "title": "Extract archive",
+          "body": "Unpack a ZIP archive into separate files and report both the created and the skipped entries."
         },
         "byHashes": {
           "title": "Duplicate check by hash",
@@ -1821,6 +1833,10 @@
       "shareable": "Create a public link as soon as the upload is accepted.",
       "shareExpiresField": "Expiry for the link created with this upload.",
       "shareMaxViewsField": "1–10000 visits; empty means unlimited.",
+      "extractFolderIdField": "Destination folder; defaults to the archive file's own folder.",
+      "bulkClientKey": "Per-file idempotency key, `A-Za-z0-9._:-`, up to 128 characters; a file whose `client_key` was already used is reported as failed.",
+      "bulkFolderIdField": "Destination folder for every file; omit for the root.",
+      "filesBulkField": "1–10 files, 1 GB each. Send as `files[]=@…`.",
       "contentHash": "SHA-256 hex (64 characters) for client-side dedup.",
       "folderIdQuery": "`null` or empty means the root; send `folder_id=` empty for every folder.",
       "searchQuery": "Substring match on the name, case-insensitive.",
