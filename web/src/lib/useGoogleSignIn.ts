@@ -7,7 +7,7 @@ import { useAuth } from '@/components/AuthProvider';
 /**
  * Shared "Masuk / Dashboard" behaviour for every public surface (header CTA,
  * hero CTA). Signed-in visitors go to the dashboard; everyone else starts the
- * Google OAuth flow and falls back to the password login page on failure.
+ * Google OAuth flow and falls back to the email + password login page (`/login`) on failure.
  */
 export function useGoogleSignIn() {
   const { user, googleLogin } = useAuth();
@@ -24,7 +24,7 @@ export function useGoogleSignIn() {
       await googleLogin();
     } catch {
       setSigningIn(false);
-      router.push('/');
+      router.push('/login');
     }
   }, [user, googleLogin, router]);
 

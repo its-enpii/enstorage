@@ -277,7 +277,10 @@
     "pwMinLen": "New password must be at least 8 characters.",
     "pwFailed": "Failed to change password.",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "createPassword": "Create password",
+    "passwordSetSuccess": "Password created successfully.",
+    "passwordNotSet": "This account has no password yet. Create one to sign in with email and password while still using Google."
   },
   "apikeys": {
     "title": "API Keys",
@@ -590,7 +593,10 @@
       "tagline": "Never Leaves Your Drive.",
       "feature1": "Encrypted and secure",
       "feature2": "Multi-account Google Drive",
-      "feature3": "Access from anywhere"
+      "feature3": "Access from anywhere",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "Your password",
+      "invalidCredentials": "Incorrect email or password."
     },
     "register": {
       "title": "Sign Up for EnStorage",
@@ -1186,7 +1192,7 @@
       "bulkUpload": "Upload up to 10 files in one multipart request, with a per-file result summary.",
       "byHashes": "Match many file hashes at once to detect duplicates.",
       "byMetadata": "Search files using metadata conditions in the request body.",
-      "changePassword": "Change the password after confirming the current one.",
+      "changePassword": "Change the password; omit `current_password` to create the first password (OAuth accounts).",
       "createFileShareLink": "Create an additional share link with view limits.",
       "createFolder": "Create a folder under a given parent.",
       "createFolderShareLink": "Create an additional share link for a folder.",
@@ -1212,7 +1218,7 @@
       "listKeys": "List the user's API keys without exposing any secret.",
       "listWebhooks": "List webhook endpoints and the events they follow.",
       "locale": "Set the interface language preference (`id` or `en`).",
-      "login": "Sign in with email and password; returns a Sanctum token.",
+      "login": "Sign in with email and password; returns a Sanctum token. `has_password=false` marks an OAuth account with no password yet.",
       "logout": "Revoke the Sanctum token currently in use.",
       "me": "Current user profile plus asset counts.",
       "moveFile": "Move a file to another folder, even across accounts.",
@@ -1225,7 +1231,6 @@
       "publicShare": "Public access to a file or folder listing through a token.",
       "publicShareView": "Public preview page for a share token.",
       "recent": "Mixed recent folders and files with cursor pagination.",
-      "register": "Create a new account, protected by an anti-spam throttle.",
       "registerToken": "Store a device FCM token for push notifications.",
       "removeToken": "Remove a device token when the user signs out.",
       "revokeKey": "Revoke one API key by id.",
@@ -1565,7 +1570,7 @@
         },
         "login": {
           "title": "Sign in with email",
-          "body": "Exchange an email and password for a Sanctum session."
+          "body": "Exchange an email and password for a Sanctum session. `user.has_password` tells whether the user has already set their own password."
         },
         "me": {
           "title": "Current session",
@@ -1727,10 +1732,6 @@
           "title": "Delete account",
           "body": "Permanently removes the account together with its files and folders."
         },
-        "register": {
-          "title": "Register a new account",
-          "body": "Creates a new user account and returns a Sanctum token."
-        },
         "logout": {
           "title": "Log out",
           "body": "Revokes the token sent with this request and clears the session cookie."
@@ -1740,8 +1741,8 @@
           "body": "Changes the name or email of the signed-in user."
         },
         "changePassword": {
-          "title": "Change password",
-          "body": "Sets a new password without ending other sessions."
+          "title": "Change / create password",
+          "body": "`current_password` is required when `has_password=true`. When `false`, send only the new password to create it."
         },
         "locale": {
           "title": "Change language",

@@ -37,40 +37,6 @@ class AuthController extends Controller
         private readonly NotificationService $notifications,
     ) {}
 
-    public function register(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
-        ]);
-
-        $user = DB::transaction(function () use ($data) {
-            return User::create([
-                'name' => $data['name'],
-                'email' => $data['email'],
-                'password' => $data['password'],
-                'role' => User::ROLE_MEMBER,
-                'is_active' => true,
-            ]);
-        });
-
-        $token = $user->createToken('api', ['*'])->plainTextToken;
-
-        $this->activityLog->log(
-            ActivityLog::ACTION_USER_REGISTER,
-            userId: $user->id,
-            subject: $user,
-            metadata: ['email' => $user->email],
-            request: $request,
-        );
-
-        return $this->created([
-            'user' => $this->userPayload($user),
-            'token' => $token,
-        ], __('Registrasi berhasil.'));
-    }
-
     public function login(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -664,16 +630,19 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
+        $isFirstTime = $user->password_set_at === null;
+
         $data = $request->validate([
-            'current_password' => ['required', 'string'],
+            'current_password' => [$isFirstTime ? 'nullable' : 'required', 'string'],
             'new_password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        if (! Hash::check($data['current_password'], $user->password)) {
+        if (! $isFirstTime && ! Hash::check((string) ($data['current_password'] ?? ''), $user->password)) {
             return $this->fail(__('Kata sandi saat ini salah.'), 422);
         }
 
         $user->password = $data['new_password'];
+        $user->password_set_at = now();
         $user->save();
 
         $this->activityLog->log(
@@ -707,6 +676,7 @@ class AuthController extends Controller
             'email' => $user->email,
             'role' => $user->role,
             'is_active' => (bool) $user->is_active,
+            'has_password' => ! is_null($user->password_set_at),
             'email_verified_at' => $user->email_verified_at?->toIso8601String(),
             'locale' => $user->locale ?? config('app.locale', 'id'),
             'created_at' => $user->created_at?->toIso8601String(),

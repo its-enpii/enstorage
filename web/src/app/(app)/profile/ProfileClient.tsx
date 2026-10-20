@@ -73,9 +73,12 @@ function ProfileContent() {
     setEditing(false);
   }
 
+  // OAuth-only accounts have no password yet: offer "create" (no current).
+  const firstTimePassword = user?.has_password === false;
+
   async function changePassword() {
     setPwError(null);
-    if (!pwForm.current || !pwForm.next) {
+    if ((!firstTimePassword && !pwForm.current) || !pwForm.next) {
       setPwError(t('profile.pwFillAll'));
       return;
     }
@@ -92,13 +95,18 @@ function ProfileContent() {
       await apiRequest<null>('/auth/change-password', {
         method: 'POST',
         body: {
-          current_password: pwForm.current,
+          // Omitted entirely for first-time setup (no password exists yet).
+          ...(firstTimePassword ? {} : { current_password: pwForm.current }),
           new_password: pwForm.next,
           new_password_confirmation: pwForm.confirm,
         },
       });
       setPwForm({ current: '', next: '', confirm: '' });
-      await alert(t('profile.pwSuccess'), { title: t('profile.success') });
+      await refresh();
+      await alert(
+        t(firstTimePassword ? 'profile.passwordSetSuccess' : 'profile.pwSuccess'),
+        { title: t('profile.success') },
+      );
     } catch (e) {
       setPwError(e instanceof ApiError ? e.message : t('profile.pwFailed'));
     } finally {
@@ -203,14 +211,18 @@ function ProfileContent() {
         {/* Keamanan */}
         <Card as="section" className="flex flex-col gap-4">
           <h2 className="font-body text-body-lg font-semibold text-on-surface">{t('profile.security')}</h2>
-          <Field label={t('profile.currentPassword')}>
-            <Input
-              type="password"
-              value={pwForm.current}
-              onChange={(e) => setPwForm((f) => ({ ...f, current: e.target.value }))}
-              autoComplete="current-password"
-            />
-          </Field>
+          {firstTimePassword ? (
+            <Alert tone="info" className="!text-metadata">{t('profile.passwordNotSet')}</Alert>
+          ) : (
+            <Field label={t('profile.currentPassword')}>
+              <Input
+                type="password"
+                value={pwForm.current}
+                onChange={(e) => setPwForm((f) => ({ ...f, current: e.target.value }))}
+                autoComplete="current-password"
+              />
+            </Field>
+          )}
           <Field label={t('profile.newPassword')} hint={t('profile.pwMinHint')}>
             <Input
               type="password"
@@ -234,9 +246,11 @@ function ProfileContent() {
             <Button
               onClick={changePassword}
               loading={pwSaving}
-              disabled={!pwForm.current || !pwForm.next || !pwForm.confirm}
+              disabled={
+                (!firstTimePassword && !pwForm.current) || !pwForm.next || !pwForm.confirm
+              }
             >
-              {t('profile.changePassword')}
+              {firstTimePassword ? t('profile.createPassword') : t('profile.changePassword')}
             </Button>
           </div>
         </Card>

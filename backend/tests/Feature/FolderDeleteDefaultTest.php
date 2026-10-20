@@ -186,4 +186,31 @@ class FolderDeleteDefaultTest extends TestCase
         $this->assertNull($direct->fresh()->folder_id);
         $this->assertNull($nested->fresh()->folder_id, 'file di subfolder ikut ke root, tidak yatim');
     }
+
+    public function test_delete_deeply_nested_folders_removes_all_files_from_db(): void
+    {
+        Event::fake([FileDeletedBroadcast::class, FileMovedBroadcast::class]);
+
+        $user = User::factory()->create();
+        $account = GoogleAccount::factory()->create(['user_id' => $user->id]);
+
+        $a = $this->makeFolder($user, 'A');
+        $b = $this->makeFolder($user, 'B', $a);
+        $c = $this->makeFolder($user, 'C', $b);
+        $fileA = $this->makeFile($user, $a, $account);
+        $fileB = $this->makeFile($user, $b, $account);
+        $fileC = $this->makeFile($user, $c, $account);
+
+        Sanctum::actingAs($user);
+
+        $this->deleteJson('/api/v1/folders/'.$a->id)->assertOk();
+
+        foreach ([$a, $b, $c] as $folder) {
+            $this->assertDatabaseMissing('folders', ['id' => $folder->id]);
+        }
+        foreach ([$fileA, $fileB, $fileC] as $file) {
+            $this->assertDatabaseMissing('files', ['id' => $file->id]);
+        }
+        $this->assertSame(0, File::where('user_id', $user->id)->count());
+    }
 }

@@ -14,6 +14,8 @@ export type User = {
   role: 'owner' | 'member';
   is_active: boolean;
   email_verified_at: string | null;
+  /** False for OAuth-only users that never set their own password. */
+  has_password?: boolean;
   locale: 'id' | 'en';
   created_at: string;
   counts?: {

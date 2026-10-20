@@ -277,7 +277,10 @@
     "pwMinLen": "Kata sandi baru minimal 8 karakter.",
     "pwFailed": "Gagal mengganti kata sandi.",
     "save": "Simpan",
-    "cancel": "Batal"
+    "cancel": "Batal",
+    "createPassword": "Buat kata sandi",
+    "passwordSetSuccess": "Kata sandi berhasil dibuat.",
+    "passwordNotSet": "Akun ini belum punya kata sandi. Buat kata sandi agar bisa masuk dengan email dan password, sekaligus tetap bisa pakai Google."
   },
   "apikeys": {
     "title": "API Key",
@@ -590,7 +593,10 @@
       "tagline": "Tidak Pernah Meninggalkan Drive Kamu.",
       "feature1": "Terenkripsi & aman",
       "feature2": "Multi-akun Google Drive",
-      "feature3": "Akses dari mana saja"
+      "feature3": "Akses dari mana saja",
+      "emailPlaceholder": "nama@contoh.com",
+      "passwordPlaceholder": "Kata sandi kamu",
+      "invalidCredentials": "Email atau kata sandi salah."
     },
     "register": {
       "title": "Daftar EnStorage",
@@ -1186,7 +1192,7 @@
       "bulkUpload": "Unggah hingga 10 berkas sekaligus lewat multipart, dengan ringkasan hasil per berkas.",
       "byHashes": "Cocokkan banyak hash berkas sekaligus untuk cek duplikat.",
       "byMetadata": "Cari berkas lewat kondisi metadata di badan permintaan.",
-      "changePassword": "Ganti kata sandi dengan konfirmasi sandi lama.",
+      "changePassword": "Ubah kata sandi; kosongkan `current_password` untuk membuat kata sandi pertama kali (akun OAuth).",
       "createFileShareLink": "Buat tautan berbagi tambahan dengan batas tayang.",
       "createFolder": "Buat folder baru di bawah induk tertentu.",
       "createFolderShareLink": "Buat tautan berbagi tambahan untuk folder.",
@@ -1212,7 +1218,7 @@
       "listKeys": "Daftar API key milik user tanpa membuka secret.",
       "listWebhooks": "Daftar endpoint webhook beserta event yang dipantau.",
       "locale": "Set preferensi bahasa antar muka (`id` atau `en`).",
-      "login": "Masuk dengan email dan kata sandi; mengembalikan token Sanctum.",
+      "login": "Masuk dengan email dan kata sandi; mengembalikan token Sanctum. `has_password=false` menandai akun OAuth yang belum punya kata sandi.",
       "logout": "Mencabut token Sanctum yang sedang dipakai.",
       "me": "Profil user saat ini beserta ringkasan jumlah aset.",
       "moveFile": "Pindahkan berkas ke folder lain, antar akun sekalipun.",
@@ -1225,7 +1231,6 @@
       "publicShare": "Akses publik berkas atau daftar folder lewat token.",
       "publicShareView": "Halaman pratinjau publik untuk sebuah token berbagi.",
       "recent": "Campuran folder dan berkas terbaru dengan kursor halaman.",
-      "register": "Buat akun baru. Dilindungi throttle anti-spam.",
       "registerToken": "Simpan token FCM perangkat untuk notifikasi push.",
       "removeToken": "Cabut token perangkat saat user keluar.",
       "revokeKey": "Cabut satu API key berdasarkan id.",
@@ -1565,7 +1570,7 @@
         },
         "login": {
           "title": "Masuk dengan email",
-          "body": "Tukar email + kata sandi dengan sesi Sanctum."
+          "body": "Tukar email + kata sandi dengan sesi Sanctum. `user.has_password` menunjukkan apakah user sudah punya kata sandi sendiri."
         },
         "me": {
           "title": "Profil sesi",
@@ -1727,10 +1732,6 @@
           "title": "Hapus akun",
           "body": "Menghapus akun secara permanen beserta semua berkas dan foldernya."
         },
-        "register": {
-          "title": "Daftar akun baru",
-          "body": "Membuat akun pengguna baru dan mengembalikan token Sanctum."
-        },
         "logout": {
           "title": "Keluar (logout)",
           "body": "Mencabut token permintaan ini dan membersihkan sesi cookie."
@@ -1740,8 +1741,8 @@
           "body": "Mengubah nama atau email pengguna yang sedang login."
         },
         "changePassword": {
-          "title": "Ganti kata sandi",
-          "body": "Mengatur kata sandi baru tanpa memutuskan sesi lain."
+          "title": "Ganti / buat kata sandi",
+          "body": "`current_password` wajib bila `has_password=true`. Bila `false`, kirim hanya kata sandi baru untuk membuatnya."
         },
         "locale": {
           "title": "Ubah bahasa",

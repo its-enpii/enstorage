@@ -24,7 +24,6 @@ use Illuminate\Support\Facades\Route;
 
 // Public auth
 Route::prefix('auth')->middleware('throttle:auth')->group(function () {
-    Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
     Route::post('google', [AuthController::class, 'googleAuth']);
     Route::get('google/redirect', [AuthController::class, 'googleRedirect']);

@@ -36,7 +36,6 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
     id: 'auth',
     key: 'auth',
     endpoints: [
-      { method: 'POST', path: '/auth/register', scope: 'public', key: 'register' },
       { method: 'POST', path: '/auth/login', scope: 'public', key: 'login' },
       { method: 'POST', path: '/auth/logout', scope: 'sanctum', key: 'logout' },
       { method: 'DELETE', path: '/auth/account', scope: 'sanctum', key: 'deleteAccount' },
@@ -499,7 +498,10 @@ export const REFERENCE: ReferenceEntry[] = [
       public: true,
       body: { email: 'arafi@example.com', password: 'secret12345' },
       expect: '200 OK',
-      notes: ['Email + password login. Returns a Sanctum token and sets an httpOnly cookie.'],
+      notes: [
+        'Email + password login. Returns a Sanctum token and sets an httpOnly cookie.',
+        '`user.has_password` is `false` for OAuth-only accounts that never set their own password.',
+      ],
     },
     bodyRows: [
       { name: 'email', type: 'string', required: true, key: 'email' },
@@ -510,7 +512,7 @@ export const REFERENCE: ReferenceEntry[] = [
       code: `{
   "success": true,
   "data": {
-    "user": { "id": "01j9zq8h4m", "name": "Arafi", "email": "arafi@example.com", "role": "owner", "locale": "id" },
+    "user": { "id": "01j9zq8h4m", "name": "Arafi", "email": "arafi@example.com", "role": "owner", "locale": "id", "has_password": true },
     "token": "1|sdo9fj29sdfo..."
   },
   "message": "Login berhasil.",
@@ -655,41 +657,6 @@ export const REFERENCE: ReferenceEntry[] = [
     errors: ['401', '404'],
   },
   {
-    id: 'auth-register',
-    group: 'auth',
-    method: 'POST',
-    path: '/auth/register',
-    scope: 'public',
-    key: 'register',
-    call: {
-      method: 'POST',
-      path: '/auth/register',
-      public: true,
-      body: { name: 'Arafi', email: 'arafi@example.com', password: 'password123', password_confirmation: 'password123' },
-      expect: '201 Created',
-      notes: ['Create an account. Throttled to slow down scripted sign-up floods.'],
-    },
-    bodyRows: [
-      { name: 'name', type: 'string', required: true, key: 'name' },
-      { name: 'email', type: 'string', required: true, key: 'email' },
-      { name: 'password', type: 'string', required: true, key: 'password' },
-      { name: 'password_confirmation', type: 'string', required: true, key: 'passwordConfirmation' },
-    ],
-    response: {
-      status: '201',
-      code: `{
-  "success": true,
-  "data": {
-    "user": { "id": "01j9zq8h4m", "name": "Arafi", "email": "arafi@example.com", "role": "owner", "locale": "id" },
-    "token": "2|sd9f8sd9f8sd9f..."
-  },
-  "message": "Registrasi berhasil.",
-  "meta": {}
-}`,
-    },
-    errors: ['422'],
-  },
-  {
     id: 'auth-logout',
     group: 'auth',
     method: 'POST',
@@ -758,11 +725,14 @@ export const REFERENCE: ReferenceEntry[] = [
       path: '/auth/change-password',
       body: { current_password: 'oldpassword123', password: 'newpassword123', password_confirmation: 'newpassword123' },
       expect: '200 OK',
-      notes: ['The new password must differ from the current one. Other sessions keep working.'],
+      notes: [
+        'The new password must differ from the current one. Other sessions keep working.',
+        'First-time setup: when `user.has_password` is `false`, omit `current_password` to create a password. Once set, `current_password` is required.',
+      ],
     },
     headerRows: [AUTH_ROW, CT_JSON_ROW],
     bodyRows: [
-      { name: 'current_password', type: 'string', required: true, key: 'currentPassword' },
+      { name: 'current_password', type: 'string', required: false, key: 'currentPassword' },
       { name: 'password', type: 'string', required: true, key: 'newPassword' },
       { name: 'password_confirmation', type: 'string', required: true, key: 'passwordConfirmation' },
     ],
