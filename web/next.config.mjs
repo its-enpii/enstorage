@@ -30,15 +30,6 @@ const nextConfig = {
   //   * `/s/:token/view`  — the RAW BYTES stream. Hands off to the
   //     backend via the rewrite below for bots / link previews / API
   //     consumers that need the file itself, not an HTML page.
-  async redirects() {
-    return [
-      {
-        source: '/login',
-        destination: '/',
-        permanent: false,
-      },
-    ];
-  },
   async rewrites() {
     const apiBase =
       process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080/api/v1';
