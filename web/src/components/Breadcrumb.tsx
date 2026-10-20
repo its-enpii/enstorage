@@ -41,10 +41,13 @@ type Props = {
   className?: string;
 };
 
+// `lg` is the page-heading size. On phones it steps down to 18px so the
+// breadcrumb + trailing actions can share a single row; from `sm` up (640px+)
+// it keeps the original 30px display size.
 const sizeClass: Record<NonNullable<Props['size']>, string> = {
   sm: 'text-sm',
   md: 'text-base',
-  lg: 'text-3xl',
+  lg: 'text-lg sm:text-3xl',
 };
 
 export function Breadcrumb({
@@ -135,7 +138,7 @@ export function Breadcrumb({
                 aria-current="page"
                 className={clsx(
                   'min-w-0 break-words text-on-surface font-semibold',
-                  isHeading ? 'font-display leading-tight' : '',
+                  isHeading ? 'sm:font-display leading-tight' : '',
                   sizeClass[size],
                 )}
               >

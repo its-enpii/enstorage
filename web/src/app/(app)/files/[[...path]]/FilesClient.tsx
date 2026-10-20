@@ -1630,18 +1630,19 @@ function FilesContent({ currentPath }: { currentPath: string }) {
 
   return (
     <>
-      {/* Header: one row from `md` up. On phones the breadcrumb keeps the
-          full row (so the current folder is never clipped) and the actions
-          drop to their own row underneath. */}
+      {/* Header: breadcrumb + actions share one row at every width. The
+          breadcrumb takes the free space (`flex-1` + `min-w-0`) and wraps
+          its own segments instead of pushing the action cluster onto a
+          second line. 44px touch targets on phones. */}
       <div
         data-testid="files-header"
         className="mb-1 md:mb-6"
       >
-        <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:justify-between md:gap-3">
+        <div className="flex flex-nowrap items-center gap-2 md:gap-3">
           <h1 className="min-w-0 flex-1">
             <Breadcrumb
               size="lg"
-              className="!text-xl sm:!text-2xl lg:!text-3xl flex flex-wrap items-center gap-1.5"
+              className="flex flex-wrap items-center gap-1.5"
               items={[
                 { id: null, label: t('files.title'), href: '/files' },
                 ...folderCrumbs.map((c, i) => ({
@@ -1653,11 +1654,9 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               ]}
             />
           </h1>
-          {/* On phones the actions sit on their own row, aligned to the
-              trailing edge. From md up they stay beside the breadcrumb;
-              the reserved height keeps summary positions stable whether or
-              not the download button is available. */}
-          <div className="flex items-center justify-end gap-1.5 md:gap-2 shrink-0 md:min-h-11">
+          {/* Always beside the breadcrumb (never its own row unless the
+              width truly cannot fit). 44px targets on phones. */}
+          <div className="flex items-center justify-end gap-1.5 md:gap-2 shrink-0 self-start md:self-auto md:min-h-11">
           {folderId && (
             <Tooltip label={t('folders.downloadFolder')}>
               <IconButton
