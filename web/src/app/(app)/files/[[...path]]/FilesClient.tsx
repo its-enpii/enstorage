@@ -675,6 +675,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     upsertFile,
     renameFolder,
     updateFolderCounts,
+    moveFolder,
     invalidateCurrentCache,
     allFolders,
     reloadAllFolders,
@@ -1097,27 +1098,78 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   async function openMoveDialog(filesToMove: FileItem[]) {
     if (filesToMove.length === 0) return;
     setMoveFiles(filesToMove);
+    // Pastikan picker punya SEMUA folder. Kalau pohon belum termuat (atau
+    // hasilnya kosong padahal ada folder root), muat ulang di belakang layar;
+    // dialog menampilkan state loading sampai daftar tiba.
+    if (allFolders.length === 0 && folders.length > 0) void reloadAllFolders();
+  }
+
+  function openFolderMoveDialog(foldersToMove: FolderType[]) {
+    if (foldersToMove.length === 0) return;
+    setMoveFolders(foldersToMove);
+    if (allFolders.length === 0) void reloadAllFolders();
   }
 
   /**
-   * Drag-and-drop file ke folder card.
-   * Pakai HTML5 drag-and-drop: file card set `text/x-file-ids` = JSON array
-   * of ids; folder card on dragover cek dataTransfer.types. onDrop lookup
-   * file objects dari state lalu buka MoveDialog (single-step confirmation).
+   * Payload drag internal (move). Satu format untuk file DAN folder:
+   * `text/x-move-payload` = JSON `{ files: string[], folders: string[] }`.
+   * `text/x-file-ids` tetap dikirim untuk folder/file (kompatibilitas), dan
+   * `text/x-folder-ids` khusus folder agar picker lama tetap mengenali.
+   * Kehadiran salah satu tipe ini menandai drag INTERNAL — dropzone upload
+   * global hanya menerima drag dari LUAR (types berisi `Files`).
    */
-  function handleFileDragStart(e: React.DragEvent, file: FileItem) {
-    if (selectMode) {
-      // Bulk mode: serialize semua selected ids.
-      e.dataTransfer.setData('text/x-file-ids', JSON.stringify(Array.from(selected)));
-      e.dataTransfer.setData('text/x-bulk', '1');
-    } else {
-      e.dataTransfer.setData('text/x-file-ids', JSON.stringify([file.id]));
+  function readMovePayload(dt: DataTransfer | null): { files: string[]; folders: string[] } | null {
+    if (!dt) return null;
+    const raw = dt.getData('text/x-move-payload');
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as Partial<{ files: string[]; folders: string[] }>;
+        return {
+          files: Array.isArray(parsed.files) ? parsed.files : [],
+          folders: Array.isArray(parsed.folders) ? parsed.folders : [],
+        };
+      } catch {
+        return null;
+      }
     }
+    const idsJson = dt.getData('text/x-file-ids');
+    if (!idsJson) return null;
+    try {
+      const ids = JSON.parse(idsJson) as string[];
+      return { files: Array.isArray(ids) ? ids : [], folders: [] };
+    } catch {
+      return null;
+    }
+  }
+
+  function handleFileDragStart(e: React.DragEvent, file: FileItem) {
+    const fileIds = selectMode && selected.has(file.id) ? Array.from(selected) : [file.id];
+    const ids = fileIds.filter((id) => files.some((f) => f.id === id));
+    const payload = JSON.stringify({ files: ids, folders: [] });
+    e.dataTransfer.setData('text/x-move-payload', payload);
+    e.dataTransfer.setData('text/x-file-ids', JSON.stringify(ids));
+    if (selectMode) e.dataTransfer.setData('text/x-bulk', '1');
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  /**
+   * Folder card bisa di-drag ke folder lain = MOVE folder (bukan upload,
+   * bukan buka folder). Menyeret folder yang ikut terseleksi memindahkan
+   * semua folder terpilih sekaligus.
+   */
+  function handleFolderDragStart(e: React.DragEvent, folder: FolderType) {
+    const folderIds = selectMode && selected.has(folder.id)
+      ? Array.from(selected).filter((id) => visibleFolders.some((f) => f.id === id))
+      : [folder.id];
+    const payload = JSON.stringify({ files: [], folders: folderIds });
+    e.dataTransfer.setData('text/x-move-payload', payload);
+    e.dataTransfer.setData('text/x-folder-ids', JSON.stringify(folderIds));
+    e.dataTransfer.setData('text/x-file-ids', JSON.stringify([]));
     e.dataTransfer.effectAllowed = 'move';
   }
 
   function handleFolderDragOver(e: React.DragEvent, folderId: string) {
-    if (e.dataTransfer.types.includes('text/x-file-ids')) {
+    if (e.dataTransfer.types.includes('text/x-move-payload') || e.dataTransfer.types.includes('text/x-file-ids')) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
       setDragOverFolderId(folderId);
@@ -1129,30 +1181,95 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   }
 
   function handleFolderDrop(e: React.DragEvent, targetFolderId: string | null) {
-    if (!e.dataTransfer.types.includes('text/x-file-ids')) return;
+    const internal =
+      e.dataTransfer.types.includes('text/x-move-payload') ||
+      e.dataTransfer.types.includes('text/x-folder-ids') ||
+      e.dataTransfer.types.includes('text/x-file-ids');
+    if (!internal) return;
     e.preventDefault();
     e.stopPropagation();
     setDragOverFolderId(null);
-    const idsJson = e.dataTransfer.getData('text/x-file-ids');
-    if (!idsJson) return;
-    let ids: string[];
-    try {
-      ids = JSON.parse(idsJson) as string[];
-    } catch {
-      return;
-    }
-    if (ids.length === 0) return;
-    const targets = files.filter((f) => ids.includes(f.id));
-    if (targets.length === 0) return;
+    const payload = readMovePayload(e.dataTransfer);
+    if (!payload) return;
+    const { files: fileIds, folders: folderIds } = payload;
+    if (fileIds.length === 0 && folderIds.length === 0) return;
 
-    // Cegah drop ke diri sendiri (kalau currentFolderId === target).
-    if (targetFolderId && targetFolderId === folderId) {
-      void alert(t('files.move.errors.sameFolder'), { title: t('common.error') });
+    const targetFiles = files.filter((f) => fileIds.includes(f.id));
+    const targetFolders = folders.filter((f) => folderIds.includes(f.id));
+
+    // Tidak boleh memindahkan item ke folder asalnya sendiri. Folder yang
+    // sudah ada di tujuan dilewati (bukan kegagalan); file dari folder yang
+    // sama diabaikan.
+    const fileFromTarget = targetFiles.length > 0 && targetFolderId === folderId;
+    const effectiveFolders = targetFolders.filter((f) => (f.parent_id ?? null) !== targetFolderId);
+    const noopFolders = effectiveFolders.length === 0 && targetFolders.length > 0;
+    const effectiveFiles = fileFromTarget ? [] : targetFiles;
+
+    if (noopFolders && effectiveFiles.length === 0) {
+      void alert(
+        targetFolders[0] && targetFolderId === null && (targetFolders[0].parent_id ?? null) === null
+          ? t('folders.errors.sameParent')
+          : t('files.move.errors.sameFolder'),
+        { title: t('common.error') },
+      );
       return;
     }
+
+    if (effectiveFolders.length > 0) {
+      void runDirectFolderMove(effectiveFolders, targetFolderId, effectiveFiles);
+      return;
+    }
+    if (effectiveFiles.length === 0) return;
 
     // Direct move (skip dialog) — fires optimistic update via onMoved handler.
-    void runDirectMove(targets, targetFolderId);
+    void runDirectMove(effectiveFiles, targetFolderId);
+  }
+
+  /**
+   * Drag-drop folder → folder lain: PUT /folders/{id}/move per folder, lalu
+   * PUT /files/{id}/move untuk file yang ikut terseret (kalau ada). Folder
+   * yang gagal dipindah dikembalikan ke posisi lamanya.
+   */
+  async function runDirectFolderMove(
+    targetFolders: FolderType[],
+    targetFolderId: string | null,
+    extraFiles: FileItem[] = [],
+  ) {
+    const snapshot = targetFolders.map((f) => ({ ...f }));
+    // Optimistik: folder pindah keluar dari view ini.
+    for (const f of snapshot) removeFolder(f.id);
+    clearSelection();
+    invalidateCurrentCache();
+    invalidateFolderCache(targetFolderId);
+    invalidateFoldersPageCache();
+    let failed = 0;
+    let lastMessage: string | null = null;
+    for (const f of snapshot) {
+      try {
+        await apiRequest<FolderType>(`/folders/${f.id}/move`, {
+          method: 'PUT',
+          body: { parent_id: targetFolderId },
+        });
+      } catch (e) {
+        failed += 1;
+        if (e instanceof ApiError && e.message) lastMessage = e.message;
+        upsertFolder(f);
+      }
+    }
+    // File yang ikut terseret dipindah ke folder tujuan yang sama.
+    if (extraFiles.length > 0 && failed === 0) {
+      await runDirectMove(extraFiles, targetFolderId);
+    }
+    void reloadAllFolders();
+    void revalidate();
+    if (failed > 0) {
+      await alert(
+        lastMessage && failed === snapshot.length
+          ? lastMessage
+          : t('folders.errors.moveFolderFailed', { count: failed }),
+        { title: t('common.error') },
+      );
+    }
   }
 
   async function runDirectMove(targets: FileItem[], targetFolderId: string | null) {
@@ -1248,6 +1365,29 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     }
     // Suppress unused warning.
     void targetIds;
+  }
+
+  /**
+   * Hasil MoveDialog untuk folder: update optimistik parent_id di store,
+   * lepas dari view ini, lalu sinkronkan pohon + view dari server.
+   */
+  function handleFolderMoved(results: FolderType[]) {
+    const movedIds = new Set(results.map((r) => r.id));
+    for (const r of results) {
+      if (r.parent_id !== folderId) moveFolder(r.id, r.parent_id);
+    }
+    if (movedIds.size > 0) {
+      // Folder yang pindah ke luar view ini hilang dari grid.
+      const movedOut = results.some((r) => (r.parent_id ?? null) !== (folderId ?? null));
+      if (movedOut) {
+        for (const id of movedIds) removeFolder(id);
+        clearSelection();
+        invalidateCurrentCache();
+      }
+    }
+    invalidateFoldersPageCache();
+    void reloadAllFolders();
+    void revalidate();
   }
 
   async function renameFile(file: FileItem) {
@@ -1503,7 +1643,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         label: t('folders.moveFolder'),
         ariaLabel: t('folders.moveFolder'),
         icon: <DriveFileMoveIcon />,
-        onClick: () => setMoveFolders([f]),
+        onClick: () => openFolderMoveDialog([f]),
       },
       {
         label: t('folders.downloadFolder') || t('files.actions.download'),
@@ -1855,7 +1995,8 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             return (
               <div
                 key={f.id}
-                draggable={false}
+                draggable={!selectMode}
+                onDragStart={(e) => handleFolderDragStart(e, f)}
                 onDragOver={(e) => handleFolderDragOver(e, f.id)}
                 onDragLeave={handleFolderDragLeave}
                 onDrop={(e) => handleFolderDrop(e, f.id)}
@@ -1965,7 +2106,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             <div className="hidden md:block h-6 w-px bg-outline-variant/30" />
             {visibleFolders.length > 0 && (
               <Tooltip label={t('folders.moveFolder')}>
-                <IconButton size="xl" shape="circle" onClick={() => setMoveFolders(visibleFolders.filter((f) => selected.has(f.id)))} aria-label={t('folders.moveFolder')}>
+                <IconButton size="xl" shape="circle" onClick={() => openFolderMoveDialog(visibleFolders.filter((f) => selected.has(f.id)))} aria-label={t('folders.moveFolder')}>
                   <DriveFileMoveIcon />
                 </IconButton>
               </Tooltip>
@@ -2083,8 +2224,10 @@ function FilesContent({ currentPath }: { currentPath: string }) {
 
       {moveFiles && (
         <MoveDialog
-          files={moveFiles}
+          kind="file"
+          items={moveFiles}
           folders={folders}
+          allFolders={allFolders}
           currentFolderId={folderId}
           open={true}
           onClose={() => setMoveFiles(null)}
@@ -2093,17 +2236,14 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       )}
 
       {moveFolders && (
-        <MoveFolderDialog
-          folders={moveFolders}
+        <MoveDialog
+          kind="folder"
+          items={moveFolders}
+          folders={folders}
           allFolders={allFolders}
+          open={true}
           onClose={() => setMoveFolders(null)}
-          onMoved={() => {
-            setMoveFolders(null);
-            clearSelection();
-            void reloadAllFolders();
-            void revalidate();
-            invalidateFoldersPageCache();
-          }}
+          onMoved={(results) => handleFolderMoved(results as unknown as FolderType[])}
         />
       )}
 
@@ -2121,159 +2261,5 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         </div>
       )}
     </>
-  );
-}
-
-/**
- * Dialog pemindahan folder. MoveDialog yang ada dikontrak khusus file
- * (memanggil PUT /files/{id}/move), jadi dibuat varian kontrak yang sama
- * untuk folder: picker folder flat dengan indentasi, exclude diri sendiri
- * + seluruh descendant, lalu PUT /folders/{id}/move per folder.
- */
-function MoveFolderDialog({
-  folders,
-  allFolders,
-  onClose,
-  onMoved,
-}: {
-  folders: FolderType[];
-  allFolders: FolderType[];
-  onClose: () => void;
-  onMoved: () => void;
-}) {
-  const { t } = useTranslation();
-  const { alert } = usePrompt();
-  const [pickedFolderId, setPickedFolderId] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  // Folders yang tidak boleh jadi tujuan: diri sendiri, seluruh
-  // descendant-nya, dan folder yang ikut dipindah.
-  const excluded = new Set<string>(folders.map((f) => f.id));
-  const stack = folders.map((f) => f.id);
-  // BFS descendant dari seluruh sumber via parent_id.
-  const childrenOf = new Map<string, FolderType[]>();
-  for (const f of allFolders) {
-    if (!f.parent_id) continue;
-    const list = childrenOf.get(f.parent_id) ?? [];
-    list.push(f);
-    childrenOf.set(f.parent_id, list);
-  }
-  while (stack.length) {
-    const id = stack.pop()!;
-    for (const kid of childrenOf.get(id) ?? []) {
-      if (!excluded.has(kid.id)) {
-        excluded.add(kid.id);
-        stack.push(kid.id);
-      }
-    }
-  }
-
-  const depthOf = (f: FolderType): number =>
-    (f.path || '').split('/').filter(Boolean).length;
-  const options = [...allFolders]
-    .filter((f) => !excluded.has(f.id))
-    .sort((a, b) => (a.path || '').localeCompare(b.path || '') || a.name.localeCompare(b.name));
-
-  const targetName = pickedFolderId
-    ? allFolders.find((f) => f.id === pickedFolderId)?.name
-    : t('files.move.root');
-
-  async function handleMove() {
-    setSubmitting(true);
-    let failed = 0;
-    for (const f of folders) {
-      try {
-        await apiRequest<FolderType>(`/folders/${f.id}/move`, {
-          method: 'PUT',
-          body: { parent_id: pickedFolderId },
-        });
-      } catch {
-        failed += 1;
-      }
-    }
-    setSubmitting(false);
-    if (failed > 0) {
-      await alert(t('folders.errors.moveFolderFailed', { count: failed }), { title: t('common.error') });
-      return;
-    }
-    onMoved();
-  }
-
-  function indentClass(depth: number): string {
-    const steps = ['pl-0', 'pl-4', 'pl-8', 'pl-12', 'pl-16', 'pl-20', 'pl-24', 'pl-28', 'pl-32'];
-    return steps[Math.min(Math.max(depth, 0), steps.length - 1)];
-  }
-
-  const title =
-    folders.length > 1
-      ? t('folders.moveFolderTitleBulk', { count: folders.length })
-      : t('folders.moveFolderTitle');
-
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={title}
-      icon={<DriveFileMoveIcon />}
-      actions={
-        <>
-          <Button variant="ghost" size="md" onClick={onClose} disabled={submitting}>
-            {t('common.cancel')}
-          </Button>
-          <Button variant="primary" size="md" onClick={() => void handleMove()} disabled={submitting}>
-            {submitting ? t('files.move.moving') : t('files.move.confirm', { count: folders.length })}
-          </Button>
-        </>
-      }
-    >
-      <p className="text-sm text-on-surface-variant mb-3">
-        {pickedFolderId
-          ? t('files.move.toLabel', { target: targetName })
-          : t('files.move.pickTarget')}
-      </p>
-      <div className="max-h-52 sm:max-h-64 md:max-h-72 overflow-y-auto rounded-2xl border border-outline-variant/30 bg-surface-container-low">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          fullWidth
-          className={
-            'justify-start text-left ' +
-            (pickedFolderId === null
-              ? '!bg-primary/20 !text-primary border border-primary/40 font-medium'
-              : '!text-on-surface')
-          }
-          onClick={() => setPickedFolderId(null)}
-          leftIcon={<span className="material-symbols-outlined !text-base">home</span>}
-        >
-          <span className="truncate">{t('files.move.root')}</span>
-        </Button>
-        {options.length === 0 ? (
-          <div className="px-4 py-3 text-sm text-on-surface-variant font-medium">
-            {t('files.move.noFolders')}
-          </div>
-        ) : (
-          options.map((f) => (
-            <Button
-              key={f.id}
-              type="button"
-              variant="ghost"
-              size="sm"
-              fullWidth
-              className={
-                'justify-start text-left ' +
-                (pickedFolderId === f.id
-                  ? '!bg-primary/20 !text-primary border border-primary/40 font-medium'
-                  : '!text-on-surface')
-              }
-              onClick={() => setPickedFolderId(f.id)}
-              leftIcon={<span className="material-symbols-outlined !text-base">folder</span>}
-            >
-              <span className={'truncate block text-left ' + indentClass(depthOf(f))}>{f.name}</span>
-            </Button>
-          ))
-        )}
-      </div>
-    </Dialog>
   );
 }

@@ -62,11 +62,21 @@ class FolderController extends Controller
 
     /**
      * GET /folders — list root folders milik user.
-     * Query: parent_id (optional, untuk list children of specific folder)
+     * Query: parent_id (optional, untuk list children of specific folder),
+     *        tree=1 (semua folder user, flat, tanpa pagination).
+     *
+     * Mode `tree=1` dipakai picker MoveDialog agar SEMUA folder (semua level)
+     * tersedia dalam satu request — tanpa ini klien harus BFS satu request per
+     * parent dan rawan kehilangan subtree (mis. folder tanpa children count).
+     * Urutan: hierarkis (parent dulu, lalu anak), tiap tingkat by name.
      */
     public function index(Request $request): JsonResponse
     {
         $userId = $request->user()->id;
+
+        if ($request->boolean('tree')) {
+            return $this->folderTree($userId);
+        }
 
         $query = Folder::where('user_id', $userId);
         if ($request->has('parent_id')) {
@@ -97,6 +107,49 @@ class FolderController extends Controller
         $page = max(1, (int) $request->query('page', 1));
 
         return $this->paginated($folders->paginate($perPage, ['*'], 'page', $page), FolderResource::class, __('Daftar folder.'));
+    }
+
+    /**
+     * Respons flat seluruh folder user untuk mode `?tree=1` (tanpa
+     * pagination). Hitungan children/files dihitung agregat dalam dua
+     * subquery, jadi tidak ada query per folder (N+1).
+     */
+    private function folderTree(string $userId): JsonResponse
+    {
+        $folders = Folder::where('user_id', $userId)
+            ->withCount(['files', 'children as folders_count'])
+            ->withSum('files', 'size')
+            ->get();
+
+        $byParent = [];
+        foreach ($folders as $folder) {
+            $byParent[$folder->parent_id ?? ''][] = $folder;
+        }
+
+        $ordered = [];
+        $visited = [];
+
+        $walk = function (string $parentKey) use (&$walk, &$ordered, &$visited, $byParent) {
+            $siblings = collect($byParent[$parentKey] ?? [])->sortBy(fn ($f) => mb_strtolower($f->name));
+            foreach ($siblings as $folder) {
+                if (isset($visited[$folder->id])) {
+                    continue;
+                }
+                $visited[$folder->id] = true;
+                $ordered[] = $folder;
+                $walk($folder->id);
+            }
+        };
+        $walk('');
+
+        // Sisa (data dengan parent hilang / siklus) tetap disertakan.
+        foreach ($folders as $folder) {
+            if (! isset($visited[$folder->id])) {
+                $ordered[] = $folder;
+            }
+        }
+
+        return $this->ok(FolderResource::collection($ordered), __('Daftar folder.'));
     }
 
     /**

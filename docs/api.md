@@ -649,13 +649,14 @@ ini perlu dipilih ulang lewat Picker untuk memulihkan akses.
 
 #### `GET /folders` — Scope: `read`
 
-List folder. Default: root folder (parent_id = null). Query: `parent_id`, `search`, `starred`, `page`, `per_page`.
+List folder. Default: root folder (parent_id = null). Query: `parent_id`, `tree`, `search`, `starred`, `page`, `per_page`.
 
 **Query params:**
 
 | Param | Tipe | Keterangan |
 |-------|------|------------|
 | `parent_id` | uuid \| `null` \| `""` | Folder parent. Kosong/`null` = root |
+| `tree` | bool | `1` = SEMUA folder user, flat & hierarkis (parent sebelum anak), tanpa pagination (meta kosong). Dipakai picker pindah folder. `parent_id`/`search`/`starred` diabaikan |
 | `search` | string | Filter nama (ILIKE) |
 | `starred` | bool | Filter is_starred=true |
 | `page` | int | Default 1 |

@@ -87,7 +87,10 @@ function ImageViewer({ file }: { file: FileItem }) {
           className="max-w-full max-h-full object-contain rounded-lg select-none transition-transform duration-150 ease-out"
         />
       </div>
-      <div className="absolute bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-surface-container/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-outline-variant/20 shadow-lg">
+      <div
+        data-testid="viewer-zoom-controls"
+        className="absolute bottom-[calc(5.5rem+env(safe-area-inset-bottom))] sm:bottom-[calc(3.75rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-surface-container/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-outline-variant/20 shadow-lg"
+      >
         <IconButton onClick={zoomOut} aria-label={t('preview.zoomOut')} className="!w-11 !h-11">
           <Remove className="!text-sm" />
         </IconButton>
@@ -814,11 +817,31 @@ function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props)
   return (
     <div
       data-testid="file-viewer-overlay"
-      className="fixed inset-0 z-[1000] flex flex-col bg-background/90 backdrop-blur-md"
+      className="fixed inset-0 z-viewer flex flex-col bg-background/90 backdrop-blur-md"
       onClick={onClose}
     >
+      {/*
+        Tombol X di pojok kanan-atas overlay. Header sudah punya tombol tutup
+        untuk desktop; X ini selalu terlihat di pojok (termasuk di atas
+        viewer media) supaya menutup tidak pernah bergantung pada header.
+      */}
+      <Tooltip label={t('preview.close')} placement="bottom">
+        <IconButton
+          shape="circle"
+          size="xl"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          aria-label={t('preview.close')}
+          data-testid="file-viewer-close"
+          className="absolute top-2 right-2 sm:top-3 sm:right-3 z-20 !bg-surface-container/80 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest shadow-lg"
+        >
+          <Close className="!text-xl" />
+        </IconButton>
+      </Tooltip>
       {/* Header */}
-      <div className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 shrink-0 border-b border-outline-variant/10">
+      <div className="flex items-center justify-between pl-3 pr-14 sm:pl-6 sm:pr-20 py-2 sm:py-3 shrink-0 border-b border-outline-variant/10">
         <div className="flex items-center gap-3 min-w-0">
           <p className="text-on-surface font-display text-base truncate">{file.name}</p>
           <span className="text-outline text-sm shrink-0">{bytes(file.size)}</span>
@@ -897,8 +920,10 @@ function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props)
 export function FileViewer(props: Props) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  // Portal keluar dari stacking context `relative z-10` milik AppShell,
-  // sehingga overlay tidak lagi terkunci di bawah TopBar (z-40) / Sidebar (z-50).
-  if (!mounted) return null;
+  // Portal ke ROOT (`document.body`), keluar dari stacking context
+  // `relative z-10` milik AppShell — overlay tidak lagi terkunci di bawah
+  // TopBar (z-40) / Sidebar (z-50) / drawer (z-70). `z-viewer` (token di
+  // globals.css) menaruhnya di lapisan paling atas.
+  if (!mounted || typeof document === 'undefined') return null;
   return createPortal(<FileViewerOverlay {...props} />, document.body);
 }

@@ -145,8 +145,10 @@
       "errors": {
         "allFailed": "Gagal memindahkan semua file.",
         "partial": "{{count}} file gagal dipindahkan.",
-        "sameFolder": "File sudah berada di folder ini."
-      }
+        "sameFolder": "File sudah berada di folder ini.",
+        "allFailedWithReason": "Gagal memindahkan: {{reason}}"
+      },
+      "disabledReason": "Tidak bisa dipilih: folder ini adalah sumber atau isinya."
     },
     "details": {
       "title": "Judul",
@@ -229,7 +231,8 @@
       "deleteFailed": "Gagal hapus.",
       "moveFailed": "Gagal memindahkan.",
       "empty": "Folder kosong, tidak ada yang bisa di-download.",
-      "moveFolderFailed": "{{count}} folder gagal dipindahkan."
+      "moveFolderFailed": "{{count}} folder gagal dipindahkan.",
+      "sameParent": "Folder sudah berada di lokasi ini."
     },
     "moveFolder": "Pindahkan",
     "moveFolderTitle": "Pindahkan Folder",
