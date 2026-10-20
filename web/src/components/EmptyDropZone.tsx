@@ -21,11 +21,16 @@ export function EmptyDropZone({
     <div
       onClick={() => pickerRef.current?.open()}
       onDragOver={(e) => {
+        // Drag internal (pindah file/folder) bukan upload — biarkan handler
+        // folder/root yang menangani.
+        if (!e.dataTransfer.types.includes('Files')) return;
         e.preventDefault();
         setOver(true);
       }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => {
+        // Hanya drag dari LUAR browser (types `Files`) yang jadi upload.
+        if (!e.dataTransfer.types.includes('Files')) return;
         e.preventDefault();
         e.stopPropagation();
         setOver(false);

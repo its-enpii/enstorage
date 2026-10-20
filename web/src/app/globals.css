@@ -201,6 +201,18 @@
   --shadow-ambient: 0px 4px 16px rgba(0, 0, 0, 0.08);
   --shadow-inner-glow: inset 0 1px 1px rgba(255, 255, 255, 0.6);
   --shadow-selected-glow: 0 0 0 2px #e4dfff, 0px 0px 12px rgba(91, 83, 170, 0.2);
+
+  /* === Z-INDEX TOKENS ===
+     Urutan lapisan aplikasi (dari bawah): konten (z-10 di AppShell) → TopBar
+     z-40 → Sidebar z-50 → drawer mobile z-70 → dialog/modal z-90 → viewer
+     z-viewer. Overlay viewer WAJIB di atas sidebar & navbar; kalau butuh
+     lapisan baru, tambahkan token di sini, jangan pakai angka acak. */
+  --z-viewer: 1000;
+}
+
+/* Overlay viewer file (portal ke <body>): selalu di atas sidebar/navbar. */
+@utility z-viewer {
+  z-index: var(--z-viewer);
 }
 
 /* === ROOT + BODY === */

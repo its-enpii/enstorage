@@ -43,16 +43,22 @@ function keyOf({ folderId, search, typeFilter }: ViewKey): string {
 const PER_PAGE = 50;
 
 /**
- * Endpoint `GET /folders` membatasi hasil ke SATU level (`parent_id` kosong →
- * hanya root; `parent_id=x` → hanya anak x) dan ber-pagination (per_page maks
- * 100). Tidak ada parameter flat di backend, jadi pohon penuh dibangun dengan
- * BFS: root dulu, lalu tiap folder yang ditemukan di-query anaknya.
+ * Sumber `allFolders` (pohon penuh) punya dua jalur:
+ * 1. `GET /folders?tree=1` — backend mengembalikan SELURUH folder user dalam
+ *    satu respons flat (tanpa pagination). Ini jalur utama; satu request,
+ *    tidak ada folder yang tertinggal karena batas halaman.
+ * 2. Fallback BFS (`GET /folders?parent_id=…` per level) untuk backend lama
+ *    yang belum mengenal `?tree=1` — respons-nya sama-sama array Folder,
+ *    jadi kalau ternyata hanya berisi root (parent_id null) kita lanjut
+ *    query anak-anaknya. Folder tanpa `folders_count` (tree mode) tetap
+ *    di-query supaya tidak ada subtree yang hilang.
  * Cache key terpisah dari cache per-view; TTL pendek karena isi pohon bisa
  * berubah (create/rename/move/delete).
  */
 const ALL_FOLDERS_CACHE_KEY = 'all-folders';
 const ALL_FOLDERS_TTL_MS = 60_000;
 const ALL_FOLDERS_PER_PAGE = 100;
+const ALL_FOLDERS_TREE_PER_PAGE = 500;
 
 type CacheShape = {
   folders: FolderType[];
@@ -101,6 +107,12 @@ type Ctx = {
   setFileStarred: (id: string, starred: boolean) => void;
   removeFolder: (id: string) => void;
   removeFile: (id: string) => void;
+  /**
+   * Pindahkan folder (optimistik) ke parent baru (`null` = root) di
+   * `allFolders` dan `folders` view. Server tetap sumber kebenaran — caller
+   * memanggil `reloadAllFolders()` setelah PUT /folders/{id}/move sukses.
+   */
+  moveFolder: (id: string, newParentId: string | null) => void;
   upsertFolder: (f: FolderType) => void;
   upsertFile: (f: FileItem) => void;
   renameFolder: (id: string, name: string) => void;
@@ -173,7 +185,6 @@ export function FilesStoreProvider({
     return cached ?? [];
   });
   const [loadingAllFolders, setLoadingAllFolders] = useState(false);
-  const allFoldersLoadedRef = useRef(false);
   const allFoldersInFlightRef = useRef<Promise<void> | null>(null);
   /** Bumped on reload; stale in-flight builds are discarded. */
   const allFoldersSeqRef = useRef(0);
@@ -390,23 +401,55 @@ export function FilesStoreProvider({
     [],
   );
 
-  /** Bangun seluruh pohon folder via BFS (satu request per parent + halaman). */
+  /**
+   * Coba satu request flat `GET /folders?tree=1`. Backend baru mengabaikan
+   * `parent_id` di mode ini dan mengembalikan semua folder user.
+   */
+  const fetchFolderTreeFlat = useCallback(async (): Promise<FolderType[] | null> => {
+    const params = new URLSearchParams();
+    params.set('tree', '1');
+    params.set('per_page', String(ALL_FOLDERS_TREE_PER_PAGE));
+    const res = await apiRequestEnvelope<FolderType[]>(`/folders?${params.toString()}`);
+    const items = res.data ?? [];
+    const last = res.meta?.pagination?.last_page ?? 1;
+    // Kalau backend belum mendukung `tree` dan masih mem-paginate per level,
+    // respons ini hanya halaman root (biasanya 1 halaman) → kembalikan null
+    // supaya caller memakai BFS.
+    if (last > 1) return null;
+    const hasNested = items.some((f) => !!f.parent_id);
+    if (!hasNested && items.some((f) => (f.folders_count ?? 0) > 0)) return null;
+    return items;
+  }, []);
+
+  /** Bangun seluruh pohon folder: `?tree=1` dulu, fallback BFS per parent. */
   const buildAllFolders = useCallback(async () => {
     if (!userId) return;
     const seq = ++allFoldersSeqRef.current;
     setLoadingAllFolders(true);
     try {
-      const collected: FolderType[] = [];
-      const seen = new Set<string>();
-      const queue: (string | null)[] = [null];
-      while (queue.length) {
-        const parentId = queue.shift() ?? null;
-        const children = await fetchFoldersByParent(parentId);
-        for (const folder of children) {
-          if (seen.has(folder.id)) continue;
-          seen.add(folder.id);
-          collected.push(folder);
-          if ((folder.folders_count ?? 0) > 0) queue.push(folder.id);
+      let collected: FolderType[] | null = null;
+      try {
+        collected = await fetchFolderTreeFlat();
+      } catch {
+        collected = null;
+      }
+      if (collected === null) {
+        collected = [];
+        const seen = new Set<string>();
+        const queue: (string | null)[] = [null];
+        while (queue.length) {
+          const parentId = queue.shift() ?? null;
+          const children = await fetchFoldersByParent(parentId);
+          for (const folder of children) {
+            if (seen.has(folder.id)) continue;
+            seen.add(folder.id);
+            collected.push(folder);
+            // `folders_count` undefined di mode tree → tetap query anaknya;
+            // BFS membayar satu request ekstra per folder, bukan kehilangan data.
+            if (folder.folders_count === undefined || (folder.folders_count ?? 0) > 0) {
+              queue.push(folder.id);
+            }
+          }
         }
       }
       if (seq !== allFoldersSeqRef.current) return;
@@ -415,10 +458,13 @@ export function FilesStoreProvider({
     } catch {
       // Picker tetap memakai data cache/terakhir yang ada; grid tidak terpengaruh.
     } finally {
-      if (seq === allFoldersSeqRef.current) setLoadingAllFolders(false);
+      if (seq === allFoldersSeqRef.current) {
+        setLoadingAllFolders(false);
+      }
     }
-  }, [userId, fetchFoldersByParent]);
+  }, [userId, fetchFolderTreeFlat, fetchFoldersByParent]);
 
+  // On-demand: dipanggil picker (MoveDialog) saat `allFolders` kosong.
   const reloadAllFolders = useCallback(() => {
     const running = allFoldersInFlightRef.current;
     if (running) return running;
@@ -431,9 +477,9 @@ export function FilesStoreProvider({
 
   // Muat sekali per user; cache localStorage dipakai sebagai seed instan.
   useEffect(() => {
-    if (!userId || allFoldersLoadedRef.current) return;
-    allFoldersLoadedRef.current = true;
-    setAllFoldersRaw(cacheGet<FolderType[]>(userId, ALL_FOLDERS_CACHE_KEY) ?? []);
+    if (!userId) return;
+    const cached = cacheGet<FolderType[]>(userId, ALL_FOLDERS_CACHE_KEY) ?? [];
+    setAllFoldersRaw(cached);
     void reloadAllFolders();
   }, [userId, reloadAllFolders]);
 
@@ -479,6 +525,13 @@ export function FilesStoreProvider({
 
   const removeFile = useCallback((id: string) => {
     setFiles((prev) => prev.filter((f) => f.id !== id));
+  }, []);
+
+  const moveFolder = useCallback((id: string, newParentId: string | null) => {
+    const patch = (prev: FolderType[]) =>
+      prev.map((f) => (f.id === id ? { ...f, parent_id: newParentId } : f));
+    setAllFoldersRaw(patch);
+    setFolders(patch);
   }, []);
 
   const upsertFolder = useCallback((f: FolderType) => {
@@ -549,6 +602,7 @@ export function FilesStoreProvider({
     setFileStarred,
     removeFolder,
     removeFile,
+    moveFolder,
     upsertFolder,
     upsertFile,
     renameFolder,
@@ -576,31 +630,36 @@ export function useFilesStore(): Ctx {
  */
 function sortFolderTree(list: FolderType[]): FolderType[] {
   if (list.length === 0) return [];
+  // Root = parent_id kosong ATAU parent-nya tidak ada di himpunan (data
+  // terpotong). Tanpa fallback ini, folder seperti itu hilang dari picker
+  // karena tidak pernah masuk bucket null.
   const byId = new Map(list.map((f) => [f.id, f]));
   const children = new Map<string | null, FolderType[]>();
-  const orphans: FolderType[] = [];
   for (const f of list) {
-    const parent = f.parent_id && byId.has(f.parent_id) ? f.parent_id : null;
-    if (!parent && f.parent_id) orphans.push(f);
+    const parent = f.parent_id && byId.has(f.parent_id) && f.parent_id !== f.id ? f.parent_id : null;
     const bucket = children.get(parent) ?? [];
     bucket.push(f);
     children.set(parent, bucket);
   }
   const out: FolderType[] = [];
-  const stack: FolderType[] = [...(children.get(null) ?? [])].sort(compareFolder);
   const visited = new Set<string>();
-  while (stack.length > 0 || orphans.length > 0) {
-    if (stack.length === 0) {
-      const rest = orphans.splice(0).sort(compareFolder);
-      stack.push(...rest);
+  // DFS iteratif; tiap folder muncul tepat sekali. Kalau ada siklus data
+  // (A→B→A), `visited` mencegah infinite loop, lalu sisa folder tak
+  // terjangkau ditambahkan di akhir supaya tidak hilang.
+  const walk = (roots: FolderType[]) => {
+    const stack: FolderType[] = [...roots].sort(compareFolder).reverse();
+    while (stack.length > 0) {
+      const folder = stack.pop()!;
+      if (visited.has(folder.id)) continue;
+      visited.add(folder.id);
+      out.push(folder);
+      const kids = (children.get(folder.id) ?? []).filter((k) => !visited.has(k.id)).sort(compareFolder).reverse();
+      stack.push(...kids);
     }
-    const folder = stack.shift()!;
-    if (visited.has(folder.id)) continue;
-    visited.add(folder.id);
-    out.push(folder);
-    const kids = (children.get(folder.id) ?? []).filter((k) => !visited.has(k.id)).sort(compareFolder);
-    stack.unshift(...kids);
-  }
+  };
+  walk(children.get(null) ?? []);
+  const leftovers = list.filter((f) => !visited.has(f.id)).sort(compareFolder);
+  if (leftovers.length > 0) walk(leftovers);
   return out;
 }
 

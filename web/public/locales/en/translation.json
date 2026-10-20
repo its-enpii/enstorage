@@ -145,8 +145,10 @@
       "errors": {
         "allFailed": "Failed to move all files.",
         "partial": "{{count}} file(s) failed to move.",
-        "sameFolder": "The file is already in this folder."
-      }
+        "sameFolder": "The file is already in this folder.",
+        "allFailedWithReason": "Failed to move: {{reason}}"
+      },
+      "disabledReason": "Can't pick this: it is the source folder (or inside it)."
     },
     "details": {
       "title": "Title",
@@ -229,7 +231,8 @@
       "deleteFailed": "Failed to delete.",
       "moveFailed": "Failed to move.",
       "empty": "Folder is empty, nothing to download.",
-      "moveFolderFailed": "{{count}} folder(s) failed to move."
+      "moveFolderFailed": "{{count}} folder(s) failed to move.",
+      "sameParent": "The folder is already in this location."
     },
     "moveFolder": "Move",
     "moveFolderTitle": "Move Folder",
