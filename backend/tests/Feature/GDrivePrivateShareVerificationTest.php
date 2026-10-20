@@ -460,7 +460,7 @@ class GDrivePrivateShareVerificationTest extends TestCase
             'name' => 'legacy.txt',
             'original_name' => 'legacy.txt',
             'mime_type' => 'text/plain',
-            'size' => 5,
+            'size' => 6, // 'legacy'
             'gdrive_file_id' => 'gd_legacy',
             'upload_status' => File::STATUS_DONE,
             'share_token' => 'legacyfiletoken',

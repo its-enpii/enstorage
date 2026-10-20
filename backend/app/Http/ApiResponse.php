@@ -60,8 +60,9 @@ trait ApiResponse
         string $contentType,
         string $contentDisposition,
         string $cacheControl = 'no-cache, private',
+        int $status = 200,
     ): StreamedResponse {
-        $response = new StreamedResponse($body, 200);
+        $response = new StreamedResponse($body, $status);
         $response->headers->set('Content-Type', $contentType);
         $response->headers->set('Content-Disposition', $contentDisposition);
         $response->headers->set('Cache-Control', $cacheControl);

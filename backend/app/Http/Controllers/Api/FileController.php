@@ -23,6 +23,8 @@ use App\Services\Google\GoogleTokenService;
 use App\Services\Google\QuotaManager;
 use App\Services\UnsupportedArchiveException;
 use App\Services\WebhookService;
+use App\Support\ByteRange;
+use App\Support\ClosureStream;
 use App\Support\StreamPump;
 use Google\Service\Drive;
 use Illuminate\Http\JsonResponse;
@@ -35,6 +37,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Psr\Http\Message\StreamInterface;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
@@ -500,10 +503,17 @@ class FileController extends Controller
             ? 'inline'
             : 'attachment';
 
+        // HTTP Range (single) supaya browser bisa seek video & tidak
+        // mengunduh seluruh berkas untuk menonton sebagian.
+        $range = ByteRange::resolve($request, (int) $file->size);
+        if ($range['invalid']) {
+            return $this->rangeNotSatisfiable($range, $file, $disposition);
+        }
+
         // Multi-driver: S3 / local disk stream langsung dari disk backend.
         if ($file->storage_driver === 's3' || $file->storage_driver === 'local') {
             try {
-                return $this->streamFromDisk($file, $file->storage_driver, $disposition);
+                return $this->streamFromDiskRange($file, $file->storage_driver, $disposition, $range);
             } catch (Throwable $e) {
                 return $this->fail(__('Download gagal: ').$e->getMessage(), 502);
             }
@@ -525,13 +535,18 @@ class FileController extends Controller
 
             // Header (termasuk hasil middleware) dipasang pada object respons
             // ini, bukan di dalam closure, supaya selalu terkirim utuh.
+            // Drive alt=media tidak mendukung Range: stream penuh lalu
+            // buang `offset` byte pertama dan berhenti setelah `length`.
+            $source = $this->sliceDriveStream($body, $range['offset'], $range['length']);
+
             $stream = $this->streamDownloadResponse(
-                fn () => StreamPump::copy($body),
+                fn () => StreamPump::copy($source),
                 $file->mime_type,
                 $this->makeContentDisposition($disposition, $file),
                 'no-cache, private',
+                $range['status'],
             );
-            $stream->headers->set('Content-Length', (string) $file->size);
+            $this->applyRangeHeaders($stream, $range);
 
             return $stream;
         } catch (Throwable $e) {
@@ -1330,10 +1345,15 @@ class FileController extends Controller
 
         $disposition = $request->boolean('download') ? 'attachment' : 'inline';
 
+        $range = ByteRange::resolve($request, (int) $file->size);
+        if ($range['invalid']) {
+            return $this->rangeNotSatisfiable($range, $file, $disposition, __('Gagal memuat file.'));
+        }
+
         // Multi-driver: S3 / local disk stream langsung dari disk backend.
         if ($file->storage_driver === 's3' || $file->storage_driver === 'local') {
             try {
-                return $this->streamFromDisk($file, $file->storage_driver, $disposition);
+                return $this->streamFromDiskRange($file, $file->storage_driver, $disposition, $range);
             } catch (Throwable $e) {
                 return $this->fail(__('Gagal memuat file: ').$e->getMessage(), 502);
             }
@@ -1353,15 +1373,13 @@ class FileController extends Controller
             $response = $drive->files->get($file->gdrive_file_id, ['alt' => 'media']);
             $body = $response->getBody();
 
-            return response()->stream(function () use ($body) {
+            $source = $this->sliceDriveStream($body, $range['offset'], $range['length']);
+
+            return response()->stream(function () use ($source) {
                 // Batas waktu + cek koneksi putus: worker dilepas walau klien
                 // mati di tengah transfer (lihat App\Support\StreamPump).
-                StreamPump::copy($body);
-            }, 200, [
-                'Content-Type' => $file->mime_type,
-                'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
-                'Content-Length' => (string) $file->size,
-            ]);
+                StreamPump::copy($source);
+            }, $range['status'], $this->rangeHeaders($file, $disposition, $range));
         } catch (Throwable $e) {
             if ($this->isDriveAccessError($e)) {
                 $file->markGdriveUnreachable();
@@ -1729,19 +1747,23 @@ class FileController extends Controller
 
         $size = (int) (@filesize($tempPath) ?: $file->size);
 
-        return response()->stream(function () use ($tempPath) {
+        $range = ByteRange::resolve($request, $size);
+        if ($range['invalid']) {
+            return $this->rangeNotSatisfiable($range, $file, $disposition);
+        }
+
+        return response()->stream(function () use ($tempPath, $range) {
             // Batas waktu + cek koneksi putus supaya worker tidak terkunci
             // saat klien mati di tengah transfer.
             $in = fopen($tempPath, 'rb');
             if ($in !== false) {
-                StreamPump::copy($in);
+                if ($range['offset'] > 0) {
+                    fseek($in, $range['offset']);
+                }
+                StreamPump::copy($this->limitReadStream($in, $range['length'], $range['offset']));
                 fclose($in);
             }
-        }, 200, [
-            'Content-Type' => $file->mime_type,
-            'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
-            'Content-Length' => (string) $size,
-        ]);
+        }, $range['status'], $this->rangeHeaders($file, $disposition, $range));
     }
 
     /**
@@ -1767,6 +1789,181 @@ class FileController extends Controller
             'Content-Type' => $file->mime_type,
             'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
             'Content-Length' => (string) $size,
+        ]);
+    }
+
+    /**
+     * streamFromDisk() + dukungan HTTP Range single.
+     *
+     * Dibaca dari offset asli kalau stream backend bersifat seekable/
+     * berposisi (local disk); kalau tidak (S3 stream), byte awal dibuang
+     * per chunk besar. Method lama streamFromDisk() tetap utuh.
+     *
+     * @param  array{status:int, offset:int, length:int, size:int, content_range:?string, invalid:bool}  $range
+     */
+    private function streamFromDiskRange(FileModel $file, string $disk, string $disposition, array $range): StreamedResponse
+    {
+        $stream = Storage::disk($disk)->readStream($file->storage_path);
+        if ($stream === false || $stream === null) {
+            throw new \RuntimeException('Berkas tidak ditemukan di storage backend.');
+        }
+
+        $source = $this->sliceReadStream($stream, $range['offset'], $range['length']);
+
+        return response()->stream(function () use ($source, $stream) {
+            // Batas waktu + cek koneksi putus supaya worker tidak terkunci
+            // saat klien mati di tengah transfer.
+            StreamPump::copy($source);
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }, $range['status'], $this->rangeHeaders($file, $disposition, $range));
+    }
+
+    /**
+     * Potong resource baca lokal: seek ke offset asli bila memungkinkan
+     * (local disk), fallback buang byte awal per-chunk (S3), lalu batasi
+     * ke length byte. Dibungkus ClosureStream supaya StreamPump tetap
+     * menerima PSR stream tanpa perubahan.
+     *
+     * @param  resource  $in
+     */
+    private function limitReadStream($in, int $length, int $offset = 0): ClosureStream
+    {
+        if ($offset > 0 && @fseek($in, $offset, SEEK_SET) !== 0) {
+            $this->skipBytes($in, $offset);
+        }
+
+        $remaining = max(0, $length);
+
+        return new ClosureStream(function (int $max) use ($in, &$remaining): ?string {
+            if ($remaining <= 0 || ! is_resource($in) || feof($in)) {
+                return null;
+            }
+
+            $chunk = fread($in, min($max, $remaining));
+            if ($chunk === false || $chunk === '') {
+                return null;
+            }
+
+            $remaining -= strlen($chunk);
+
+            return $chunk;
+        }, $length);
+    }
+
+    /**
+     * Buang $bytes byte pertama dari PSR stream per-chunk besar.
+     */
+    private function skipBytesPsr($stream, int $bytes): void
+    {
+        while ($bytes > 0 && ! $stream->eof()) {
+            $chunk = $stream->read(min(65536, $bytes));
+            if ($chunk === '' || $chunk === null) {
+                break;
+            }
+            $bytes -= strlen($chunk);
+        }
+    }
+
+    /**
+     * Buang $bytes byte pertama dari resource lokal per-chunk besar.
+     *
+     * @param  resource  $stream
+     */
+    private function skipBytes($stream, int $bytes): void
+    {
+        while ($bytes > 0 && ! feof($stream)) {
+            $chunk = fread($stream, min(65536, $bytes));
+            if ($chunk === false || $chunk === '') {
+                break;
+            }
+            $bytes -= strlen($chunk);
+        }
+    }
+
+    /**
+     * Bungkus stream Drive (sudah full dari alt=media) menjadi potongan
+     * [offset, offset+length).
+     */
+    private function sliceDriveStream($body, int $offset, int $length): ClosureStream
+    {
+        if ($offset > 0) {
+            $this->skipBytesPsr($body, $offset);
+        }
+
+        return new ClosureStream(function (int $max) use ($body): ?string {
+            if ($body->eof()) {
+                return null;
+            }
+
+            return $body->read(min(StreamPump::CHUNK_BYTES, $max));
+        }, $length);
+    }
+
+    /**
+     * Potong resource (local) atau PSR stream (S3) menjadi [offset, +length).
+     */
+    private function sliceReadStream($stream, int $offset, int $length): ClosureStream
+    {
+        if ($stream instanceof StreamInterface) {
+            return $this->sliceDriveStream($stream, $offset, $length);
+        }
+
+        return $this->limitReadStream($stream, $length, $offset);
+    }
+
+    /**
+     * Header umum untuk response stream + Accept-Ranges, Content-Length
+     * sesuai panjang potongan, dan Content-Range untuk 206.
+     *
+     * @param  array{status:int, offset:int, length:int, size:int, content_range:?string, invalid:bool}  $range
+     * @return array<string, string>
+     */
+    private function rangeHeaders(FileModel $file, string $disposition, array $range): array
+    {
+        $headers = [
+            'Content-Type' => $file->mime_type,
+            'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
+            'Accept-Ranges' => 'bytes',
+            'Content-Length' => (string) $range['length'],
+        ];
+
+        if ($range['content_range'] !== null) {
+            $headers['Content-Range'] = $range['content_range'];
+        }
+
+        return $headers;
+    }
+
+    /**
+     * Terapkan Accept-Ranges/Content-Length/Content-Range ke response yang
+     * sudah punya header (jalur Drive di download()).
+     *
+     * @param  array{status:int, offset:int, length:int, size:int, content_range:?string, invalid:bool}  $range
+     */
+    private function applyRangeHeaders(StreamedResponse $response, array $range): void
+    {
+        $response->headers->set('Accept-Ranges', 'bytes');
+        $response->headers->set('Content-Length', (string) $range['length']);
+        if ($range['content_range'] !== null) {
+            $response->headers->set('Content-Range', $range['content_range']);
+        }
+    }
+
+    /**
+     * Respons 416 (Range tidak valid / multi-range) + `Content-Range: bytes * /size`.
+     *
+     * @param  array{status:int, offset:int, length:int, size:int, content_range:?string, invalid:bool}  $range
+     */
+    private function rangeNotSatisfiable(array $range, FileModel $file, string $disposition, string $message = 'Range tidak valid.'): StreamedResponse
+    {
+        return response()->stream(fn () => null, 416, [
+            'Content-Type' => $file->mime_type,
+            'Content-Disposition' => $this->makeContentDisposition($disposition, $file),
+            'Accept-Ranges' => 'bytes',
+            'Content-Range' => $range['content_range'],
+            'Content-Length' => '0',
         ]);
     }
 

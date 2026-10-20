@@ -192,6 +192,7 @@ class PublicFolderDownloadTest extends TestCase
         $this->fakeDriveMedia('isi-berkas');
 
         $file = $this->makeFile('laporan.txt', $this->sub);
+        $file->update(['size' => strlen('isi-berkas')]);
         $token = 'singlefile'.Str::random(8);
         ShareLink::create([
             'user_id' => $this->owner->id,

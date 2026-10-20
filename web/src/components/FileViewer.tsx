@@ -41,10 +41,13 @@ function mimeCategory(file: FileItem): MimeCategory {
   if (mime.startsWith('image/')) return 'image';
   // Browsers render AVIF; WebP is the default thumbnail format. Backends that
   // fall back to `application/octet-stream` for unknown extensions still need
-  // these to open in the image viewer rather than the generic "other" card.
+  // image/video/audio files to open in their viewers rather than the generic
+  // "other" card.
   if (/\.(webp|avif|svg|bmp|ico|tiff?)$/i.test(name)) return 'image';
   if (mime.startsWith('video/')) return 'video';
+  if (/\.(mp4|webm|mkv|mov|m4v|avi|ogv|3gp|flv|wmv)$/i.test(name)) return 'video';
   if (mime.startsWith('audio/')) return 'audio';
+  if (/\.(mp3|wav|ogg|flac|m4a|aac|opus|wma)$/i.test(name)) return 'audio';
   if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
   if (
     name.endsWith('.pptx') ||

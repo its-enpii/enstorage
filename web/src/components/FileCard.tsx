@@ -46,13 +46,13 @@ function fileVisual(mimeType: string, name?: string): { tone: FileTone; symbol: 
       symbol: 'picture_as_pdf',
     };
   }
-  if (mime.startsWith('video/')) {
+  if (mime.startsWith('video/') || /\.(mp4|webm|mkv|mov|m4v|avi|ogv|3gp|flv|wmv)$/i.test(name ?? '')) {
     return {
       tone: { box: 'bg-violet-500/10 text-violet-400 border border-violet-500/25', icon: '' },
       symbol: 'movie',
     };
   }
-  if (mime.startsWith('audio/')) {
+  if (mime.startsWith('audio/') || /\.(mp3|wav|ogg|flac|m4a|aac|opus|wma)$/i.test(name ?? '')) {
     return {
       tone: { box: 'bg-pink-500/10 text-pink-400 border border-pink-500/25', icon: '' },
       symbol: 'audio_file',
