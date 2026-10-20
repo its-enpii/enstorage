@@ -10,9 +10,16 @@ project ini adheres ke [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Changed
+- **UI /files — baris "Pilih semua" hanya tampil saat Mode Pilih** (sebelumnya baris permanen di atas grid, semua segmen terpotong). Di luar mode pilih grid naik ~56px; irisan toolbar↔kartu tetap 0.
+- **UI /files — kartu seragam & header kompak**: tinggi kartu folder=file (selisih 0), header 44px di semua viewport, toolbar/tombol icon-only dengan `<Tooltip>` + `aria-label`.
 - **API key prefix hard switch**: `enp_` → `en_`. Semua key lama dianggap invalid; tabel `api_keys` & `api_key_logs` di-truncate via migration `2026_06_30_000000_truncate_api_keys_for_prefix_change`. User harus generate key baru di `/api-keys`.
 
 ### Fixed
+- **ZIP folder — header kembali terkirim** (bug "Unduh semua (.zip)" membalas `text/html`): akar `FolderZipStreamer::copyFileTo()` menulis byte ke klien sebelum `sendHeaders()` (via `StreamPump::copy()`). Kini `copyPsrTo()` menulis ke file temp; `StreamPump` tidak flush/echo sebelum `headers_sent()`. Respons ZIP folder kini `application/zip` + `Content-Disposition` + `X-RateLimit-*` + `Vary: Origin`.
+- **Pratinjau teks**: `file-text-viewer` tampil satu lapis permukaan (sebelumnya terbungkus kartu + panel ganda).
+- **Ekstrak arsip Google Drive**: file dari Drive ter-ekstrak; sebelumnya gagal saat file berada di Drive bukan lokal.
+- **Aksesibilitas tombol icon-only**: `aria-label` di FAB, pill desktop, dan tombol viewer (sebelumnya ikon tanpa nama).
+- **UI /files — 4 cacat layout & overlap**: irisan elemen 4572 px² → 0; tombol mengambang tidak lagi tertimpa item (item 48×48, 0 tertimpa).
 - **API Key copy feedback**: tombol copy di reveal modal sekarang swap icon `ContentCopy` → `Check` (warna primary) selama 2 detik setelah `navigator.clipboard.writeText()` sukses. Pakai key i18n `apikeys.copied`. Gagal copy tidak menampilkan feedback palsu.
 
 ---
