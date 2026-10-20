@@ -37,7 +37,7 @@ type FileTone = {
  * Icons render via the Material Symbols font so the visual language stays
  * consistent with the rest of the app (no mixed icon families).
  */
-function fileVisual(mimeType: string): { tone: FileTone; symbol: string } {
+function fileVisual(mimeType: string, name?: string): { tone: FileTone; symbol: string } {
   const mime = mimeType.toLowerCase();
 
   if (mime === 'application/pdf' || mime.includes('pdf')) {
@@ -70,7 +70,14 @@ function fileVisual(mimeType: string): { tone: FileTone; symbol: string } {
       symbol: 'code',
     };
   }
-  if (mime.startsWith('image/')) {
+  // WebP/AVIF/SVG sometimes arrive as `application/octet-stream` from
+  // clients that only sniff by extension — keep the image glyph for them.
+  if (
+    mime.startsWith('image/') ||
+    mime.includes('image/webp') ||
+    mime.includes('image/avif') ||
+    /\.(webp|avif|svg)$/i.test(name ?? '')
+  ) {
     return {
       tone: { box: 'bg-primary-container/40 text-primary border border-primary/25', icon: '' },
       symbol: 'image',
@@ -102,7 +109,7 @@ export function FileCard({
   className,
   'data-testid': dataTestId,
 }: FileCardProps) {
-  const { tone, symbol } = fileVisual(mimeType);
+  const { tone, symbol } = fileVisual(mimeType, name);
   const showSelection = Boolean(selectMode || selected);
   const isDone = uploadStatus === 'done';
 

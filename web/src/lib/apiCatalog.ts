@@ -1718,16 +1718,18 @@ Content-Disposition: attachment; filename="Laporan-2026.zip"
     call: {
       method: 'DELETE',
       path: '/folders/{folderId}',
-      query: { delete_files: 1 },
       expect: '200 OK',
       notes: [
-        'Subfolders always go with the parent. `delete_files=1` also removes the files',
-        'inside Drive; without it they survive and move to the root.',
+        'Default (no query, or `delete_files=1`) is recursive: the folder, every',
+        'subfolder, and all files inside them are deleted from the DB and Drive.',
+        'Pass `delete_files=0` or `keep_files=1` to keep the files: files in the',
+        'folder and in every subfolder are lifted to the parent folder (or root',
+        'when the folder has no parent) before the subfolders are removed.',
       ],
     },
     headerRows: [AUTH_ROW],
     pathRows: [{ name: 'folderId', type: 'uuid', required: true, key: 'folderId' }],
-    queryRows: [{ name: 'delete_files', type: 'boolean', key: 'deleteFiles', default: 'false' }],
+    queryRows: [{ name: 'delete_files', type: 'boolean', key: 'deleteFiles', default: 'true' }],
     response: {
       status: '200',
       code: `{

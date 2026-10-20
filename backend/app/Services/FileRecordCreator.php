@@ -17,6 +17,19 @@ class FileRecordCreator
 {
     public const MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
 
+    /**
+     * Extension → MIME for image formats that PHP's fileinfo (libmagic on the
+     * worker image) occasionally reports as `application/octet-stream`
+     * (notably AVIF, and WebP on older libmagic builds). Without this the
+     * thumbnail generator and the web viewer both skip the file.
+     */
+    private const IMAGE_MIME_BY_EXTENSION = [
+        'webp' => 'image/webp',
+        'avif' => 'image/avif',
+        'svg' => 'image/svg+xml',
+        'avifs' => 'image/avif',
+    ];
+
     public function tempDir(): string
     {
         $dir = storage_path('app/temp');
@@ -25,6 +38,23 @@ class FileRecordCreator
         }
 
         return $dir;
+    }
+
+    /**
+     * Correct a generic/unknown MIME for known image extensions so preview
+     * (FileController::download inline) and thumbnails (UploadFileJob checks
+     * `str_starts_with(mime_type, 'image/')`) both work.
+     */
+    public function normalizeImageMime(string $mimeType, string $originalName): string
+    {
+        $mimeType = strtolower(trim(explode(';', $mimeType)[0] ?? ''));
+        if ($mimeType !== '' && $mimeType !== 'application/octet-stream' && $mimeType !== 'binary/octet-stream') {
+            return $mimeType;
+        }
+
+        $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+
+        return self::IMAGE_MIME_BY_EXTENSION[$ext] ?? ($mimeType !== '' ? $mimeType : 'application/octet-stream');
     }
 
     /**
@@ -47,6 +77,8 @@ class FileRecordCreator
         if ($size > self::MAX_FILE_SIZE_BYTES) {
             throw new RuntimeException(__('File melebihi 1GB'));
         }
+
+        $mimeType = $this->normalizeImageMime($mimeType, $originalName);
 
         $shareable = $options['shareable'] ?? true;
         $shareExpiresAt = $options['share_expires_at'] ?? null;

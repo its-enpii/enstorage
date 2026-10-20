@@ -461,6 +461,14 @@ function FilesRoute() {
   const typeFilter = searchParams.get('type') ?? '';
 
   const [resolved, setResolved] = useState<ResolvedRoute | null>(null);
+  /**
+   * Last successfully resolved view. Kept during in-app navigation so the
+   * previous folder (and its store / any open preview) stays mounted until
+   * the destination id arrives — remounting the provider per resolved path
+   * used to drop the file preview mid-animation on every breadcrumb click.
+   */
+  const [view, setView] = useState<ResolvedRoute | null>(null);
+  const rendered = resolved !== null;
   const [error, setError] = useState<string | null>(null);
   // Set when the resolve/show fetch returns HTTP 423 `folder_locked`. Kept
   // separate from `error` so we render an unlock prompt instead of falling
@@ -474,13 +482,18 @@ function FilesRoute() {
 
     // Root directory — no lookup needed.
     if (!legacyId && currentPath === '/') {
-      setResolved({ folderId: null, currentPath: '/', crumbs: [] });
+      const root: ResolvedRoute = { folderId: null, currentPath: '/', crumbs: [] };
+      setResolved(root);
+      setView(root);
       setError(null);
       setLocked(null);
       return;
     }
 
-    setResolved(null);
+    // Keep the current view mounted while the new path resolves: unmounting
+    // it tears down the FilesStoreProvider (and the file preview overlay)
+    // before the destination id is known. The cache then re-renders the new
+    // folder instantly; without a cache entry the store shows its spinner.
     setError(null);
 
     const request = legacyId
@@ -488,7 +501,7 @@ function FilesRoute() {
           .then((f) => {
             if (cancelled) return null;
             // Rewrite the URL to the canonical slug-based URL.
-            router.replace(`/files${f.folder.path}`);
+            router.replace(`/files${f.folder.path}`, { scroll: false });
             return null;
           })
       : apiRequest<ResolvedFolder>(`/folders/resolve`, { query: { path: currentPath } })
@@ -508,6 +521,7 @@ function FilesRoute() {
         if (value) {
           setLocked(null);
           setResolved(value);
+          setView(value);
         }
       })
       .catch((e) => {
@@ -552,19 +566,25 @@ function FilesRoute() {
     );
   }
 
-  if (!resolved) {
+  // Only show the loader when there is nothing to render yet (hard load).
+  // During in-app navigation the previous view stays mounted (see above).
+  if (!resolved && !rendered) {
     return <Loading label="Memuat folder…" />;
   }
 
+  // `view` (not `resolved`) feeds the gate: it is the last *complete* route,
+  // so the previous folder stays interactive for the few ms of resolve.
+  const active = view ?? resolved!;
   return (
     <FilesStoreGate
-      folderId={resolved.folderId}
-      currentPath={resolved.currentPath}
-      crumbs={resolved.crumbs}
+      folderId={active.folderId}
+      currentPath={active.currentPath}
+      crumbs={active.crumbs}
       search={search}
       typeFilter={typeFilter}
+      pending={resolved === null}
     >
-      <FilesContent currentPath={resolved.currentPath} />
+      <FilesContent currentPath={active.currentPath} />
     </FilesStoreGate>
   );
 }
@@ -576,6 +596,7 @@ function FilesStoreGate({
   crumbs,
   search,
   typeFilter,
+  pending = false,
 }: {
   children: React.ReactNode;
   folderId: string | null;
@@ -583,6 +604,8 @@ function FilesStoreGate({
   crumbs: { id: string; name: string; path: string }[];
   search: string;
   typeFilter: string;
+  /** True while the next path is still resolving (shows a thin top bar). */
+  pending?: boolean;
 }) {
   // Force a fresh provider mount on every view change so the store reads
   // the right cache key and renders instantly with no stale-data flash.
@@ -665,6 +688,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     totalFolders,
     totalFiles,
     revalidate,
+    refreshReplace,
     loadMoreFolders,
     loadMoreFiles,
     setFolderStarred,
@@ -797,7 +821,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
 
   function replaceQuery(p: URLSearchParams) {
     const qs = p.toString();
-    router.replace(`/files${basePath}${qs ? '?' + qs : ''}`);
+    router.replace(`/files${basePath}${qs ? '?' + qs : ''}`, { scroll: false });
   }
 
   function setSearch(v: string) {
@@ -874,6 +898,10 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   async function uploadFiles(fileList: FileList) {
     dragCounter.current = 0;
     setDragOver(false);
+    // Destination folder of THIS batch. Captured up front because the user
+    // may navigate away while chunks are still in flight; the refresh below
+    // must never append A's new rows to another folder's list (root).
+    const targetFolderId = folderId;
     const filesArr = Array.from(fileList);
     if (filesArr.length === 0) return;
 
@@ -918,7 +946,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       const chunk = accepted.slice(offset, offset + CHUNK_SIZE);
       const fd = new FormData();
       chunk.forEach((f) => fd.append('files[]', f));
-      if (folderId) fd.append('folder_id', folderId);
+      if (targetFolderId) fd.append('folder_id', targetFolderId);
 
       const failChunk = (reason: string) => {
         setJobs((js) =>
@@ -966,9 +994,64 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       }
     }
 
-    // Single refresh once every chunk has been processed.
-    void revalidate();
+    // Single refresh once every chunk has been processed. Only refresh when
+    // this view is still the upload destination: while the user is elsewhere
+    // the queued files are already visible in A's next mount (fresh fetch of
+    // A's page 1) and its optimistic cache. A late 'merge' refresh here is
+    // what leaked A's items into the folder currently on screen.
+    if (folderId === targetFolderId) void refreshReplace();
   }
+
+  /**
+   * Preview overlay deep-link. Opening pushes `?preview=<id>` so a same-tab
+   * refresh / back restores the image (browsers restore scroll position);
+   * closing rewrites the current URL without it. Path and other params are
+   * preserved on purpose — a breadcrumb navigation from the overlay is a
+   * `push` to a NEW url and must never be undone by this effect.
+   */
+  const fileViewerUrl = (file: FileItem | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (file) params.set('preview', file.id);
+    else params.delete('preview');
+    const qs = params.toString();
+    return `/files${basePath}${qs ? '?' + qs : ''}`;
+  };
+
+  function closeViewer() {
+    if (viewerFile && searchParams.get('preview')) {
+      window.history.replaceState(window.history.state, '', fileViewerUrl(null));
+    }
+    setViewerFile(null);
+  }
+
+  function openViewer(file: FileItem) {
+    window.history.replaceState(window.history.state, '', fileViewerUrl(file));
+    setViewerFile(file);
+  }
+
+  // `?preview=` can be dropped by an in-app navigation that reuses this
+  // component; make sure the overlay does not stay on top of another folder.
+  // (The overlay itself blocks body scroll, so this only fires on pop/back.)
+  useEffect(() => {
+    const id = searchParams.get('preview');
+    if (!id && viewerFile) setViewerFile(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Deep-link: `?preview=<id>` opens the image/video on mount (e.g. reload
+  // after a same-tab navigation restored the document). Re-open only when
+  // the id changes so a local close is not fought by this effect.
+  const previewOpenedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const id = searchParams.get('preview');
+    if (!id || id === previewOpenedRef.current || files.length === 0) return;
+    const found = files.find((f) => f.id === id);
+    if (found) {
+      previewOpenedRef.current = id;
+      setViewerFile(found);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, files.length]);
 
   // Track file IDs whose completion we're waiting on (via WS). Read by
   // `pollStatus` and the completion observer below. Declared before
@@ -1704,14 +1787,14 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         label: t('files.actions.preview'),
         ariaLabel: t('files.actions.preview'),
         icon: <span className="material-symbols-outlined !text-base">visibility</span>,
-        onClick: () => setViewerFile(f),
+        onClick: () => openViewer(f),
       });
       items.push({
         label: t('files.action.details'),
         ariaLabel: t('files.action.details'),
         icon: <span className="material-symbols-outlined !text-base">info</span>,
         onClick: () => {
-          setViewerFile(f);
+          openViewer(f);
           setShowFileDetails(true);
         },
       });
@@ -1782,7 +1865,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           <h1 className="min-w-0 flex-1">
             <Breadcrumb
               size="lg"
-              className="flex flex-wrap items-center gap-1.5"
+              className="flex items-center gap-1.5"
               items={[
                 { id: null, label: t('files.title'), href: '/files' },
                 ...folderCrumbs.map((c, i) => ({
@@ -2053,7 +2136,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               uploadStatusLabel={statusLabel(t, f.upload_status)}
               selected={selected.has(f.id)}
               selectMode={selectMode}
-              onClick={selectMode ? () => toggleSelect(f.id) : () => setViewerFile(f)}
+              onClick={selectMode ? () => toggleSelect(f.id) : () => openViewer(f)}
               actions={
                 selectMode ? undefined : (
                   <DropdownMenu
@@ -2164,8 +2247,11 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         <FileViewer
           file={viewerFile}
           files={visibleFiles.filter((f) => f.upload_status === 'done')}
-          onClose={() => setViewerFile(null)}
-          onNavigate={setViewerFile}
+          onClose={closeViewer}
+          onNavigate={(f) => {
+            window.history.replaceState(window.history.state, '', fileViewerUrl(f));
+            setViewerFile(f);
+          }}
           actions={buildFileMenuItems(viewerFile)}
         />
       )}

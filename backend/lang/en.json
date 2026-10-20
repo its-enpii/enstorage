@@ -21,6 +21,8 @@
     "File tidak ditemukan atau belum siap.": "File not found or not ready yet.",
     "File tidak ditemukan.": "File not found.",
     "Folder berhasil dihapus.": "Folder deleted successfully.",
+    "Folder beserta seluruh isinya berhasil dihapus.": "Folder and all of its contents were deleted successfully.",
+    "Folder berhasil dihapus. Semua file di dalamnya dipindahkan ke folder induknya.": "Folder deleted successfully. All files inside it were moved to its parent folder.",
     "Folder berhasil diperbarui.": "Folder updated successfully.",
     "Folder berhasil dipindahkan.": "Folder moved successfully.",
     "Folder dengan nama ini sudah ada di lokasi yang sama.": "A folder with this name already exists in the same location.",

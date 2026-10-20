@@ -121,7 +121,7 @@ class FolderBroadcastEventsTest extends TestCase
         Event::assertDispatched(FolderMovedBroadcast::class, fn ($e) => $e->previousParentId === $parentA->id);
     }
 
-    public function test_destroy_folder_dispatches_deleted_plus_cascade_file_moved(): void
+    public function test_destroy_folder_with_keep_files_dispatches_deleted_plus_cascade_file_moved(): void
     {
         Event::fake([FolderDeletedBroadcast::class, FileMovedBroadcast::class]);
 
@@ -132,7 +132,7 @@ class FolderBroadcastEventsTest extends TestCase
         $fileA = $this->makeFile($user, 'a.txt', $folder);
         $fileB = $this->makeFile($user, 'b.txt', $folder);
 
-        $this->deleteJson("/api/v1/folders/{$folder->id}")->assertOk();
+        $this->deleteJson("/api/v1/folders/{$folder->id}?keep_files=1")->assertOk();
 
         Event::assertDispatched(FolderDeletedBroadcast::class, fn ($e) => $e->folderId === $folder->id);
         Event::assertDispatchedTimes(FileMovedBroadcast::class, 2);

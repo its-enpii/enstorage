@@ -39,6 +39,10 @@ function mimeCategory(file: FileItem): MimeCategory {
   const name = file.name.toLowerCase();
 
   if (mime.startsWith('image/')) return 'image';
+  // Browsers render AVIF; WebP is the default thumbnail format. Backends that
+  // fall back to `application/octet-stream` for unknown extensions still need
+  // these to open in the image viewer rather than the generic "other" card.
+  if (/\.(webp|avif|svg|bmp|ico|tiff?)$/i.test(name)) return 'image';
   if (mime.startsWith('video/')) return 'video';
   if (mime.startsWith('audio/')) return 'audio';
   if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
@@ -68,43 +72,149 @@ function mimeCategory(file: FileItem): MimeCategory {
   return 'other';
 }
 
+/**
+ * Image preview.
+ *
+ * The viewport is the visible area between the overlay header and the bottom
+ * of the screen — NOT the natural size of the bitmap. The image is always
+ * laid out with `object-contain` inside that box (max-w/max-h 100%), so a
+ * 4000×3000 photo is disclosed whole on first open instead of being cropped.
+ * Zoom never resizes the layout either: `scale()` is a visual transform on
+ * top of the fitted image, and panning happens on the scroll container.
+ *
+ *   - default zoom = 1 (= "fit screen"); 1x always re-fits the screen
+ *   - zoom in/out steps through 100 % → 300 %
+ *   - at >100 % the container can be dragged (wheel is forwarded to zoom)
+ */
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.25;
+
 function ImageViewer({ file }: { file: FileItem }) {
   const { t } = useTranslation();
-  const [scale, setScale] = useState(1);
+  const [zoom, setZoom] = useState(1);
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  const [panning, setPanning] = useState(false);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
 
-  const zoomIn = () => setScale((s) => Math.min(s + 0.25, 3));
-  const zoomOut = () => setScale((s) => Math.max(s - 0.25, 0.5));
-  const resetZoom = () => setScale(1);
+  const clamp = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100));
+  const zoomIn = () => setZoom((z) => clamp(z + ZOOM_STEP));
+  const zoomOut = () => setZoom((z) => clamp(z - ZOOM_STEP));
+  const resetZoom = () => {
+    setZoom(1);
+    viewportRef.current?.scrollTo({ left: 0, top: 0 });
+  };
+
+  // Zoomed image must keep the focal point in view: scroll to the centre.
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    el.scrollLeft = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
+    el.scrollTop = Math.max(0, (el.scrollHeight - el.clientHeight) / 2);
+  }, [zoom]);
+
+  // Ctrl/⌘ + wheel and plain wheel both zoom while hovering the image.
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setZoom((z) => clamp(z + (e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (zoom <= 1 || e.button !== 0) return;
+    const el = viewportRef.current;
+    if (!el) return;
+    dragRef.current = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
+    setPanning(true);
+    el.setPointerCapture?.(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current;
+    const el = viewportRef.current;
+    if (!d || !el) return;
+    el.scrollLeft = d.left - (e.clientX - d.x);
+    el.scrollTop = d.top - (e.clientY - d.y);
+  };
+  const endPan = () => {
+    dragRef.current = null;
+    setPanning(false);
+  };
 
   return (
-    <div className="relative flex-1 flex flex-col items-center justify-center p-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-      <div className="flex-1 flex items-center justify-center overflow-auto w-full h-full">
+    <div
+      // `h-full`: the flex item must not grow past the viewer body (a
+      // `flex-1` box combined with tall absolute controls pushed its
+      // height over the visible area, hiding the image under the header).
+      className="relative flex-1 h-full min-h-0 w-full flex flex-col overflow-hidden"
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        if (zoom > 1) resetZoom();
+        else zoomIn();
+      }}
+    >
+      {/*
+        Height = overlay minus its header (measured ~3.5 rem on phones,
+        4.5 rem from `sm`) and minus a safe bottom inset, so the fitted image
+        can never be covered by the header or the zoom pill. `min-h-0` +
+        `flex-1` make the viewport follow the actual available space.
+      */}
+      <div
+        ref={viewportRef}
+        data-testid="viewer-image-viewport"
+        className={
+          'flex-1 min-h-0 w-full overflow-auto overscroll-contain flex items-center justify-center p-3 sm:p-6 ' +
+          (panning ? 'cursor-grabbing select-none' : zoom > 1 ? 'cursor-grab' : '')
+        }
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endPan}
+        onPointerCancel={endPan}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
+          key={file.id}
           src={fileUrl(file)}
           alt={file.name}
-          style={{ transform: `scale(${scale})` }}
-          className="max-w-full max-h-full object-contain rounded-lg select-none transition-transform duration-150 ease-out"
+          data-testid="viewer-image"
+          draggable={false}
+          onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+          style={{ transform: `scale(${zoom})` }}
+          className="block max-w-full max-h-full w-auto h-auto object-contain rounded-lg select-none transition-transform duration-150 ease-out"
         />
       </div>
       <div
         data-testid="viewer-zoom-controls"
-        className="absolute bottom-[calc(5.5rem+env(safe-area-inset-bottom))] sm:bottom-[calc(3.75rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-surface-container/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-outline-variant/20 shadow-lg"
+        className="absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-surface-container/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-outline-variant/20 shadow-lg"
       >
-        <IconButton onClick={zoomOut} aria-label={t('preview.zoomOut')} className="!w-11 !h-11">
+        <IconButton onClick={zoomOut} aria-label={t('preview.zoomOut')} disabled={zoom <= ZOOM_MIN} className="!w-11 !h-11">
           <Remove className="!text-sm" />
         </IconButton>
         <TextAction
           onClick={resetZoom}
           size="sm"
-          className="!px-2 font-mono"
+          className="!px-2 font-mono min-w-14 text-center"
           aria-label={t('preview.resetZoom')}
         >
-          {Math.round(scale * 100)}%
+          {Math.round(zoom * 100)}%
         </TextAction>
-        <IconButton onClick={zoomIn} aria-label={t('preview.zoomIn')} className="!w-11 !h-11">
+        <IconButton onClick={zoomIn} aria-label={t('preview.zoomIn')} disabled={zoom >= ZOOM_MAX} className="!w-11 !h-11">
           <Add className="!text-sm" />
         </IconButton>
+        {natural && (
+          <span
+            data-testid="viewer-image-dimensions"
+            className="hidden sm:inline pl-2 ml-1 border-l border-outline-variant/30 text-outline text-xs font-mono tabular-nums"
+          >
+            {natural.w}×{natural.h}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -871,7 +981,7 @@ function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props)
               size="xl"
               onClick={onClose}
               aria-label={t('preview.close')}
-              className="!bg-surface-container/80 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest"
+              className="hidden sm:inline-flex !bg-surface-container/80 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest"
             >
               <Close className="!text-xl" />
             </IconButton>

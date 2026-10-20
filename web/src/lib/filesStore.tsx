@@ -134,6 +134,8 @@ type Ctx = {
    * happen to differ by search/type filter.
    */
   invalidateCurrentCache: () => void;
+  /** Re-fetch page 1 of the current view, replacing (not merging) the lists. */
+  refreshReplace: () => Promise<void>;
 };
 
 const FilesStoreContext = createContext<Ctx | null>(null);
@@ -308,9 +310,13 @@ export function FilesStoreProvider({
   /**
    * Initial load: page 1 of both. With seed present, runs in background.
    * `showLoading` controls whether to show a spinner and reset state.
+   * `mode` controls page-1 handling: 'merge' (default for background
+   * revalidates) keeps optimistic-only items; 'replace' is used for fresh
+   * loads and for post-upload refreshes so rows of other folders can never
+   * leak into this view.
    */
   const fetchAndReconcile = useCallback(
-    async (showLoading: boolean) => {
+    async (showLoading: boolean, mode: 'replace' | 'merge' = showLoading ? 'replace' : 'merge') => {
       if (!userId) return;
       if (showLoading) {
         setLoading(true);
@@ -323,11 +329,11 @@ export function FilesStoreProvider({
           setFilePage(0);
           setFolderTotal(0);
           setFileTotal(0);
-          await Promise.all([loadFoldersPage(1, 'replace'), loadFilesPage(1, 'replace')]);
+          await Promise.all([loadFoldersPage(1, mode), loadFilesPage(1, mode)]);
         } else {
           // Background revalidate: merge into existing state so optimistic
           // adds / cached items not in server's first page aren't dropped.
-          await Promise.all([loadFoldersPage(1, 'merge'), loadFilesPage(1, 'merge')]);
+          await Promise.all([loadFoldersPage(1, mode), loadFilesPage(1, mode)]);
         }
       } catch (e) {
         if (showLoading) {
@@ -580,6 +586,13 @@ export function FilesStoreProvider({
   }, [userId, currentKey]);
 
   const revalidate = useCallback(() => fetchAndReconcile(false), [fetchAndReconcile]);
+  /**
+   * Same fetch, but page 1 REPLACES the in-memory lists instead of merging.
+   * Use after uploads: the background `fetchAndReconcile(false)` only runs
+   * while this provider is mounted, so a merge could append the destination
+   * folder's new rows to whatever folder is currently on screen (e.g. root).
+   */
+  const refreshReplace = useCallback(() => fetchAndReconcile(false, 'replace'), [fetchAndReconcile]);
 
   const value: Ctx = {
     folders,
@@ -609,6 +622,7 @@ export function FilesStoreProvider({
     renameFile,
     updateFolderCounts,
     invalidateCurrentCache,
+    refreshReplace,
   };
 
   return <FilesStoreContext.Provider value={value}>{children}</FilesStoreContext.Provider>;

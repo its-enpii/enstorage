@@ -637,12 +637,15 @@ class FolderController extends Controller
     /**
      * DELETE /folders/{id} — hapus folder.
      *
-     * `delete_files=true`  : hapus seluruh file + subfolder di DB dan ikut
-     *                        menghapus folder Google Drive 1:1-nya (root +
-     *                        semua descendant, urut leaf → root).
-     * `delete_files=false` : folder EnStorage hilang dari DB, file dipindah ke
-     *                        root. Folder Google Drive TIDAK dihapus — isinya
-     *                        memang sengaja ditinggalkan di Drive.
+     * Default (tanpa query / `delete_files=1`): REKURSIF — folder, seluruh
+     * subfolder, dan semua file di dalamnya dihapus dari DB + Google Drive
+     * (folder Drive root + semua descendant, urut leaf → root).
+     *
+     * `delete_files=0` atau `keep_files=1` (setara, ada demi backward-compat):
+     * file TIDAK dihapus. File di folder ini maupun di seluruh subfolder
+     * diangkat ke folder induk (parent) — atau ke root bila folder induk
+     * tidak ada. Subfolder tetap dihapus (cascade FK), sehingga tidak ada
+     * file yatim. Folder Google Drive TIDAK dihapus.
      */
     public function destroy(Request $request, string $id): JsonResponse
     {
@@ -658,7 +661,12 @@ class FolderController extends Controller
         $userId = $folder->user_id;
         $parentId = $folder->parent_id;
         $folderId = $folder->id;
-        $deleteFiles = $request->boolean('delete_files', false);
+        // Default REKURSIF (konsisten dengan app mobile). Mode simpan-file
+        // hanya aktif bila user eksplisit memintanya.
+        $deleteFiles = $request->boolean('delete_files', true);
+        if ($request->boolean('keep_files', false)) {
+            $deleteFiles = false;
+        }
 
         if ($deleteFiles) {
             $descendantFolderIds = $this->getDescendantFolderIds($folderId, $userId);
@@ -727,22 +735,34 @@ class FolderController extends Controller
             // root) supaya tidak ada folder yatim tersisa di Drive.
             $this->deleteDriveFolders($userId, $driveFolderTargets);
         } else {
-            $filesInFolder = File::where('folder_id', $folder->id)->get();
+            // Mode simpan-file: file di folder ini DAN di seluruh subfolder
+            // diangkat ke induk folder (fallback root). Subfolder tetap
+            // dihapus (cascade FK), jadi tidak ada file yang tertinggal yatim.
+            $descendantFolderIds = $this->getDescendantFolderIds($folderId, $userId);
 
-            DB::transaction(function () use ($folder) {
-                // File di folder ini: set folder_id = NULL (file tetap ada, jadi root)
-                File::where('folder_id', $folder->id)
-                    ->update(['folder_id' => null]);
+            $filesToMove = File::where('user_id', $userId)
+                ->whereIn('folder_id', $descendantFolderIds)
+                ->get();
+
+            $targetParentId = $parentId !== null
+                ? Folder::where('user_id', $userId)->where('id', $parentId)->value('id')
+                : null;
+
+            DB::transaction(function () use ($folder, $descendantFolderIds, $targetParentId) {
+                // File di folder ini + semua subfolder: pindah ke induk (atau root)
+                File::whereIn('folder_id', $descendantFolderIds)
+                    ->update(['folder_id' => $targetParentId]);
 
                 // Hapus folder (cascade subfolders via FK)
                 $folder->delete();
             });
 
-            // Per-file cascade: each file moved from (deleted folder) to null (root).
-            foreach ($filesInFolder as $file) {
+            // Per-file cascade: file pindah ke induk/root, dari folder asalnya.
+            foreach ($filesToMove as $file) {
+                $file->folder_id = $targetParentId;
                 FileMovedBroadcast::dispatch(
                     $file,
-                    $folderId,        // previous_folder_id
+                    $folderId,        // previous_folder_id (view yang sedang dibuka)
                     $file->name,      // previous_name (no rename happened)
                     false,            // renamed
                 );
@@ -759,7 +779,9 @@ class FolderController extends Controller
         // Realtime broadcast — folder gone from parent view.
         FolderDeletedBroadcast::dispatch($folderId, $userId, $parentId);
 
-        return $this->ok(null, $deleteFiles ? __('Folder beserta seluruh isinya berhasil dihapus.') : __('Folder berhasil dihapus.'));
+        return $this->ok(null, $deleteFiles
+            ? __('Folder beserta seluruh isinya berhasil dihapus.')
+            : __('Folder berhasil dihapus. Semua file di dalamnya dipindahkan ke folder induknya.'));
     }
 
     /**

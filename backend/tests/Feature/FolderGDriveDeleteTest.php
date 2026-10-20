@@ -22,11 +22,11 @@ use Tests\TestCase;
  * foldernya di Google Drive.
  *
  * Perilaku yang dikunci:
- *  - delete_files=true  : deleteFolderOnDrive() dipanggil untuk folder utama
- *                         DAN setiap descendant, urut leaf → root.
- *  - delete_files=false : TIDAK ada folder Drive yang dihapus (isi memang
- *                         sengaja ditinggalkan di Drive; file hanya dipindah
- *                         ke root DB).
+ *  - default / delete_files=true : deleteFolderOnDrive() dipanggil untuk
+ *                         folder utama DAN setiap descendant, urut leaf → root.
+ *  - delete_files=false / keep_files=1 : TIDAK ada folder Drive yang dihapus
+ *                         (isi memang sengaja ditinggalkan di Drive; file
+ *                         dipindah ke folder induk, atau root bila tak ada).
  *  - akun per folder    : folder tidak menyimpan google_account_id, jadi akun
  *                         diambil dari file pertama di dalamnya; fallback ke
  *                         semua akun aktif milik user.
@@ -141,12 +141,12 @@ class FolderGDriveDeleteTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->deleteJson('/api/v1/folders/'.$root->id)->assertOk();
+        $this->deleteJson('/api/v1/folders/'.$root->id.'?delete_files=0')->assertOk();
 
-        $this->assertSame([], $this->drive->deletedFolders, 'mode pindah-ke-root tidak boleh menghapus folder Drive');
+        $this->assertSame([], $this->drive->deletedFolders, 'mode simpan-file tidak boleh menghapus folder Drive');
         $this->assertDatabaseMissing('folders', ['id' => $root->id]);
         $this->assertDatabaseMissing('folders', ['id' => $child->id]);
-        $this->assertNull($file->fresh()->folder_id, 'file tetap ada dan pindah ke root');
+        $this->assertNull($file->fresh()->folder_id, 'file tetap ada dan pindah ke root (folder induk tidak ada)');
         $this->assertSame($account->id, $file->fresh()->google_account_id);
     }
 
