@@ -170,8 +170,16 @@ class GoogleDriveFolderService
      * Return true bila panggilan delete ke Google berhasil, false bila gagal
      * (akun salah / folder sudah hilang) — dipakai pemanggil untuk mencoba
      * akun kandidat berikutnya.
+     *
+     * `$folder` opsional (kompatibel dengan pemanggil lama seperti
+     * AuthController): saat diisi, dipakai untuk mengenali anak-anak folder
+     * ini secara eksak (lihat deleteDriveChildren). DELETE folder Drive
+     * sendiri sudah rekursif di sisi Google; pembersihan anak eksplisit
+     * menjamin isinya hilang walau anak sempat "berpindah" (mis. file yang
+     * dibuat ulang) dan memastikan file/subfolder Drive turunan benar-benar
+     * dihapus, bukan hanya baris DB-nya.
      */
-    public function deleteFolderOnDrive(GoogleAccount $account, string $gdriveFolderId): bool
+    public function deleteFolderOnDrive(GoogleAccount $account, string $gdriveFolderId, ?Folder $folder = null): bool
     {
         if (trim($gdriveFolderId) === '') {
             return false;
@@ -179,6 +187,11 @@ class GoogleDriveFolderService
 
         try {
             $drive = $this->makeDrive($account);
+
+            if ($folder !== null) {
+                $this->deleteDriveChildren($drive, $account, $folder, $gdriveFolderId);
+            }
+
             $drive->files->delete($gdriveFolderId);
 
             return true;
@@ -190,6 +203,69 @@ class GoogleDriveFolderService
             ]);
 
             return false;
+        }
+    }
+
+    /**
+     * Hapus (best-effort) semua anak folder Drive milik satu Folder EnStorage.
+     *
+     * Anak dikenali secara EKSAK dari record EnStorage di bawah folder ini:
+     * subfolder lewat `folders.gdrive_folder_id`, file lewat
+     * `files.gdrive_file_id`. Tidak memakai pencarian nama (rawan salah
+     * hapus) dan tidak memakai query Drive 'in parents' (butuh scope penuh
+     * yang tidak selalu diberikan). Kegagalan item tertentu hanya di-log —
+     * DELETE folder induk setelahnya tetap menghapus sisanya.
+     *
+     * Dipanggil hanya untuk anak yang gdrive id-nya bukan id folder induk,
+     * supaya folder Drive yang di-share antar-folder EnStorage tidak ikut
+     * terhapus.
+     */
+    private function deleteDriveChildren(Drive $drive, GoogleAccount $account, Folder $folder, string $gdriveFolderId): void
+    {
+        $childFolders = Folder::where('user_id', $folder->user_id)
+            ->where('parent_id', $folder->id)
+            ->whereNotNull('gdrive_folder_id')
+            ->get();
+
+        foreach ($childFolders as $child) {
+            $childDriveId = trim((string) $child->gdrive_folder_id);
+            if ($childDriveId === '' || $childDriveId === $gdriveFolderId) {
+                continue;
+            }
+
+            try {
+                $drive->files->delete($childDriveId);
+            } catch (Throwable $e) {
+                Log::warning('GDrive delete child folder failed', [
+                    'folder_id' => $child->id,
+                    'gdrive_folder_id' => $childDriveId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        // Sengaja BUKAN di-scope user_id: lebih baik mencoba hapus satu id
+        // yang ternyata milik user lain (Drive menolak — best-effort di-log)
+        // daripada meninggalkan file lama di Drive folder user ini.
+        $childFiles = FileModel::where('folder_id', $folder->id)
+            ->whereNotNull('gdrive_file_id')
+            ->pluck('gdrive_file_id');
+
+        foreach ($childFiles as $gdriveFileId) {
+            $gdriveFileId = (string) $gdriveFileId;
+            if ($gdriveFileId === '' || str_starts_with($gdriveFileId, 'pending-')) {
+                continue;
+            }
+
+            try {
+                $drive->files->delete($gdriveFileId);
+            } catch (Throwable $e) {
+                Log::warning('GDrive delete child file failed', [
+                    'folder_id' => $folder->id,
+                    'gdrive_file_id' => $gdriveFileId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
     }
 

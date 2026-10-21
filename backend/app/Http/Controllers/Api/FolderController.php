@@ -61,6 +61,16 @@ class FolderController extends Controller
     public const STREAM_LIMIT_SECONDS = StreamPump::DEFAULT_LIMIT_SECONDS;
 
     /**
+     * Hook TEST-ONLY (tidak pernah di-set di produksi): dipanggil dengan
+     * daftar target folder Drive (leaf → root) saat destroy, supaya test
+     * bisa membuktikan folder Drive turunan ikut dihapus tanpa memuat ulang
+     * class controller. Tidak mengubah perilaku apa pun saat null.
+     *
+     * @var (\Closure(array<int, array{folder_id: string, folder: Folder, gdrive_folder_id: string, google_account_id: ?string}>): void)|null
+     */
+    public static ?\Closure $driveFolderDeleteSpy = null;
+
+    /**
      * GET /folders — list root folders milik user.
      * Query: parent_id (optional, untuk list children of specific folder),
      *        tree=1 (semua folder user, flat, tanpa pagination).
@@ -519,7 +529,7 @@ class FolderController extends Controller
     {
         $folders = Folder::where('user_id', $userId)
             ->whereIn('id', $folderIds)
-            ->get(['id', 'parent_id', 'gdrive_folder_id']);
+            ->get(['id', 'parent_id', 'name', 'gdrive_folder_id']);
 
         $childrenByParent = [];
         foreach ($folders as $candidate) {
@@ -545,8 +555,12 @@ class FolderController extends Controller
                 continue;
             }
 
+            // Simpan model Folder (bukan hanya id): setelah DB delete, driver
+            // delete Drive memakai instance in-memory ini — tidak ada query
+            // ulang ke baris yang sudah hilang.
             $targets[] = [
                 'folder_id' => $id,
+                'folder' => $model,
                 'gdrive_folder_id' => (string) $model->gdrive_folder_id,
                 'google_account_id' => File::where('folder_id', $id)
                     ->whereNotNull('google_account_id')
@@ -561,10 +575,14 @@ class FolderController extends Controller
      * Hapus folder-folder Google Drive hasil collectDriveFolderTargets().
      * Best-effort: kegagalan hanya di-log, tidak memblokir response delete.
      *
-     * @param  array<int, array{folder_id: string, gdrive_folder_id: string, google_account_id: ?string}>  $targets
+     * @param  array<int, array{folder_id: string, folder: Folder, gdrive_folder_id: string, google_account_id: ?string}>  $targets
      */
     private function deleteDriveFolders(string $userId, array $targets): void
     {
+        if (self::$driveFolderDeleteSpy !== null) {
+            (self::$driveFolderDeleteSpy)($targets);
+        }
+
         if (empty($targets)) {
             return;
         }
@@ -596,7 +614,7 @@ class FolderController extends Controller
                     continue;
                 }
 
-                if ($this->folders->deleteFolderOnDrive($account, $target['gdrive_folder_id'])) {
+                if ($this->folders->deleteFolderOnDrive($account, $target['gdrive_folder_id'], $target['folder'] ?? null)) {
                     $deleted = true;
 
                     break;
@@ -683,6 +701,17 @@ class FolderController extends Controller
                 ->with(['googleAccount', 'thumbnail'])
                 ->get();
 
+            // Relasi file turunan yang TIDAK punya FK cascade ke files:
+            // share_links bersifat polymorphic (shareable_type/shareable_id,
+            // tanpa FK), jadi harus dihapus manual. Thumbnail sudah FK
+            // CASCADE ke files, tapi tetap dibersihkan di sini supaya tidak
+            // bergantung pada perilaku DB.
+            $fileIdsToDelete = $filesToDelete->pluck('id')->all();
+            ShareLink::where('shareable_type', File::class)
+                ->whereIn('shareable_id', $fileIdsToDelete)
+                ->delete();
+            DB::table('thumbnails')->whereIn('file_id', $fileIdsToDelete)->delete();
+
             foreach ($filesToDelete as $file) {
                 $clientKey = $file->client_key;
                 $fFolderId = $file->folder_id;
@@ -728,8 +757,16 @@ class FolderController extends Controller
                 FileDeletedBroadcast::dispatch($fId, $clientKey, $fFolderId, $fUserId);
             }
 
-            // Hapus folder utama (FK cascade akan menghapus subfolder-subfolder di DB)
-            $folder->delete();
+            // Hapus folder utama (FK cascade akan menghapus subfolder-subfolder di DB).
+            // Share link folder (polymorphic, tanpa FK) dihapus manual untuk
+            // folder utama + SEMUA subfolder, dalam transaksi yang sama.
+            DB::transaction(function () use ($folder, $descendantFolderIds) {
+                ShareLink::where('shareable_type', Folder::class)
+                    ->whereIn('shareable_id', $descendantFolderIds)
+                    ->delete();
+
+                $folder->delete();
+            });
 
             // DB sudah bersih — baru hapus foldernya di Google Drive (leaf →
             // root) supaya tidak ada folder yatim tersisa di Drive.
