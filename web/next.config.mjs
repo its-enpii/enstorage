@@ -30,6 +30,21 @@ const nextConfig = {
   //   * `/s/:token/view`  — the RAW BYTES stream. Hands off to the
   //     backend via the rewrite below for bots / link previews / API
   //     consumers that need the file itself, not an HTML page.
+  // Privacy: no page may be indexed by search engines. Applied to every
+  // route (landing, docs, legal, login, share viewers, app).
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'X-Robots-Tag',
+            value: 'noindex, nofollow, noarchive, nosnippet, noimageindex',
+          },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     const apiBase =
       process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080/api/v1';

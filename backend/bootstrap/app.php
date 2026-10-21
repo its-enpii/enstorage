@@ -6,6 +6,7 @@ use App\Http\Middleware\CheckScope;
 use App\Http\Middleware\ComputeS3PayloadHash;
 use App\Http\Middleware\EnsureSanctum;
 use App\Http\Middleware\EnsureUserRole;
+use App\Http\Middleware\RobotsMetaHeaders;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\ThrottleApiKey;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -51,6 +52,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // request that Reverb's pusher-js needs to subscribe to private
         // channels. Allowed origins are read from config/cors.php.
         $middleware->prepend(HandleCors::class);
+
+        // Semua response (web + api + share viewer + error) wajib noindex
+        // untuk seluruh crawler. Append global agar berjalan di semua method.
+        $middleware->append(RobotsMetaHeaders::class);
 
         // Alias middleware custom
         $middleware->alias([
