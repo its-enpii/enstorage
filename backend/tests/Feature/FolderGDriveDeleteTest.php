@@ -9,12 +9,14 @@ use App\Models\User;
 use App\Services\Folder\FolderPathService;
 use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveFolderService;
+use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
 use App\Services\Google\QuotaManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\Support\FakeDriveScanService;
+use Tests\Support\FakeDriveUploader;
 use Tests\TestCase;
 
 /**
@@ -50,6 +52,15 @@ class FolderGDriveDeleteTest extends TestCase
         );
 
         $this->app->instance(GoogleDriveFolderService::class, $this->drive);
+
+        // Hapus folder kini ASINKRON (PurgeFolderTree). Di produksi job
+        // mengambil service ini dari container worker; di test job berjalan
+        // sinkron (`QUEUE_CONNECTION=sync`) DISPATCH-time, sebelum controller
+        // sempat membuat spy — jadi pastikan container test sudah memakai fake.
+        $this->assertSame($this->drive, app(GoogleDriveFolderService::class));
+
+        // File di Drive kini dihapus lewat batch API oleh job → fake uploader.
+        $this->app->instance(GoogleDriveUploader::class, new FakeDriveUploader);
     }
 
     private function makeUser(): User
@@ -105,7 +116,7 @@ class FolderGDriveDeleteTest extends TestCase
         Sanctum::actingAs($user);
 
         $this->deleteJson('/api/v1/folders/'.$root->id.'?delete_files=true')
-            ->assertOk();
+            ->assertStatus(202);
 
         $deleted = array_column($this->drive->deletedFolders, 1);
 
@@ -141,7 +152,7 @@ class FolderGDriveDeleteTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->deleteJson('/api/v1/folders/'.$root->id.'?delete_files=0')->assertOk();
+        $this->deleteJson('/api/v1/folders/'.$root->id.'?delete_files=0')->assertStatus(202);
 
         $this->assertSame([], $this->drive->deletedFolders, 'mode simpan-file tidak boleh menghapus folder Drive');
         $this->assertDatabaseMissing('folders', ['id' => $root->id]);
@@ -160,7 +171,7 @@ class FolderGDriveDeleteTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->deleteJson('/api/v1/folders/'.$root->id.'?delete_files=true')->assertOk();
+        $this->deleteJson('/api/v1/folders/'.$root->id.'?delete_files=true')->assertStatus(202);
 
         $this->assertSame([[$account->id, 'gd_kosong']], $this->drive->deletedFolders);
     }
@@ -173,7 +184,7 @@ class FolderGDriveDeleteTest extends TestCase
         Sanctum::actingAs($user);
 
         $this->deleteJson('/api/v1/folders/'.$root->id.'?delete_files=true')
-            ->assertOk();
+            ->assertStatus(202);
 
         $this->assertSame([], $this->drive->deletedFolders);
         $this->assertDatabaseMissing('folders', ['id' => $root->id]);
@@ -209,7 +220,7 @@ class FolderGDriveDeleteTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->deleteJson('/api/v1/folders/'.$legacy->id.'?delete_files=true')->assertOk();
+        $this->deleteJson('/api/v1/folders/'.$legacy->id.'?delete_files=true')->assertStatus(202);
 
         $this->assertSame([], $this->drive->deletedFolders, 'folder tanpa gdrive_folder_id tidak mungkin dihapus di Drive');
         $this->assertDatabaseMissing('folders', ['id' => $legacy->id]);

@@ -132,7 +132,9 @@ class FolderBroadcastEventsTest extends TestCase
         $fileA = $this->makeFile($user, 'a.txt', $folder);
         $fileB = $this->makeFile($user, 'b.txt', $folder);
 
-        $this->deleteJson("/api/v1/folders/{$folder->id}?keep_files=1")->assertOk();
+        $this->deleteJson("/api/v1/folders/{$folder->id}?keep_files=1")
+            ->assertStatus(202)
+            ->assertJsonPath('success', true);
 
         Event::assertDispatched(FolderDeletedBroadcast::class, fn ($e) => $e->folderId === $folder->id);
         Event::assertDispatchedTimes(FileMovedBroadcast::class, 2);

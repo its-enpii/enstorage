@@ -20,6 +20,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\Support\FakeDriveScanService;
+use Tests\Support\FakeRevokeGoogleClient;
 use Tests\TestCase;
 
 /**
@@ -44,6 +45,16 @@ class AuthDeleteAccountTest extends TestCase
     {
         parent::setUp();
 
+        // `revokeToken()` di Google Client asli menembak HTTP nyata ke Google;
+        // di dalam proses test itu mengotori istem HTTP global sehingga test
+        // lain (GDriveUnreachableTest) ikut gagal. Bind factory SEBELUM
+        // FakeDriveScanService di-construct supaya semua `makeFor()` memakai
+        // client tanpa I/O.
+        FakeRevokeGoogleClient::reset();
+        $factory = \Mockery::mock(GoogleClientFactory::class)->makePartial();
+        $factory->shouldReceive('makeFor')->andReturnUsing(fn () => new FakeRevokeGoogleClient);
+        $this->app->instance(GoogleClientFactory::class, $factory);
+
         $this->drive = new FakeDriveScanService(
             app(GoogleClientFactory::class),
             app(GoogleTokenService::class),
@@ -67,6 +78,7 @@ class AuthDeleteAccountTest extends TestCase
             'user_id' => $user->id,
             'email' => 'utama@gmail.com',
             'gdrive_root_folder_id' => 'gd_root_main',
+            'access_token' => 'token-main',
         ]);
 
         $folder = Folder::create([
@@ -128,6 +140,7 @@ class AuthDeleteAccountTest extends TestCase
 
         return [$user, $token, [
             'account' => $account->id,
+            'account_token' => 'token-main',
             'folder' => $folder->id,
             'file' => $file->id,
             'share' => $share->id,
@@ -159,12 +172,25 @@ class AuthDeleteAccountTest extends TestCase
         $this->assertSame(0, User::where('id', $userId)->count());
     }
 
+    public function test_account_deletion_revokes_google_oauth_token(): void
+    {
+        [$user, $token, $ids] = $this->seedVault();
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->deleteJson('/api/v1/auth/account')->assertStatus(200)->assertJsonPath('success', true);
+
+        // `revokeToken()` (dipanggil PurgeUserAccount) benar-benar dieksekusi
+        // dengan access_token akun yang dihapus — tanpa HTTP nyata.
+        $this->assertCount(1, FakeRevokeGoogleClient::$allRevokedTokens);
+        $this->assertSame($ids['account_token'], FakeRevokeGoogleClient::$allRevokedTokens[0]);
+    }
+
     public function test_token_is_invalid_after_account_deletion(): void
     {
         [$user, $token] = $this->seedVault();
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->deleteJson('/api/v1/auth/account')->assertOk();
+            ->deleteJson('/api/v1/auth/account')->assertStatus(200)->assertJsonPath('success', true);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->getJson('/api/v1/auth/me')->assertStatus(401);
@@ -187,7 +213,7 @@ class AuthDeleteAccountTest extends TestCase
         $userId = $user->id;
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->deleteJson('/api/v1/auth/account')->assertOk();
+            ->deleteJson('/api/v1/auth/account')->assertStatus(200)->assertJsonPath('success', true);
 
         $this->assertSame([[$ids['account'], 'gd_root_main']], $this->drive->deletedFolders);
     }
@@ -201,7 +227,7 @@ class AuthDeleteAccountTest extends TestCase
         $this->drive->deleteFailures = [$ids['account']];
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->deleteJson('/api/v1/auth/account')->assertOk();
+            ->deleteJson('/api/v1/auth/account')->assertStatus(200)->assertJsonPath('success', true);
 
         $this->assertDatabaseMissing('users', ['id' => $userId]);
     }
@@ -214,7 +240,7 @@ class AuthDeleteAccountTest extends TestCase
         $this->assertFileExists($absolute);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->deleteJson('/api/v1/auth/account')->assertOk();
+            ->deleteJson('/api/v1/auth/account')->assertStatus(200)->assertJsonPath('success', true);
 
         $this->assertFileDoesNotExist($absolute);
     }
@@ -225,7 +251,7 @@ class AuthDeleteAccountTest extends TestCase
         $userId = $user->id;
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->deleteJson('/api/v1/auth/account')->assertOk();
+            ->deleteJson('/api/v1/auth/account')->assertStatus(200)->assertJsonPath('success', true);
 
         $log = ActivityLog::where('action', 'USER_DELETE')->first();
         $this->assertNotNull($log, 'penghapusan akun harus tercatat di activity log');
@@ -241,8 +267,11 @@ class AuthDeleteAccountTest extends TestCase
         $bob = User::factory()->create(['email' => 'bob@example.test']);
         GoogleAccount::factory()->create(['user_id' => $bob->id, 'email' => 'bob@example.test']);
 
+        $this->keepPaths = $this->thumbnailPaths;
+        $this->thumbnailPaths = [];
+
         $this->withHeader('Authorization', 'Bearer '.$aliceToken)
-            ->deleteJson('/api/v1/auth/account')->assertOk();
+            ->deleteJson('/api/v1/auth/account')->assertStatus(200)->assertJsonPath('success', true);
 
         $this->assertDatabaseMissing('users', ['id' => $alice->id]);
         $this->assertDatabaseHas('users', ['id' => $bob->id]);
@@ -257,8 +286,21 @@ class AuthDeleteAccountTest extends TestCase
     /** @var array<int, string> path thumbnail yang dibuat test, dibersihkan di tearDown. */
     private array $thumbnailPaths = [];
 
+    /**
+     * Path thumbnail milik user ini. File user LAIN yang `user_id`-nya
+     * berubah ke user ini di `test_only_own_account_is_deleted` tetap
+     * menunjuk path-nya; job purge hanya boleh menghapus berkas yang
+     * benar-benar milik user yang dihapus — berkas itu sengaja dijaga.
+     */
+    private array $keepPaths = [];
+
     protected function tearDown(): void
     {
+        foreach ($this->keepPaths as $path) {
+            @unlink($path);
+        }
+        $this->keepPaths = [];
+
         foreach ($this->thumbnailPaths as $path) {
             @unlink($path);
         }

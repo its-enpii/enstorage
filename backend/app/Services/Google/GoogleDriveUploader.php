@@ -129,6 +129,57 @@ class GoogleDriveUploader
     /**
      * Hapus file di Google Drive.
      */
+    /**
+     * Hapus banyak file sekaligus memakai batch API Drive (1 HTTP request
+     * per ~100 file). Dipakai jalur hapus massal: 85 ribu panggilan
+     * `deleteFile` akan memakan jam; batch memotongnya ~100x.
+     *
+     * @param  array<int, string>  $gdriveFileIds
+     * @return array<int, string> id yang gagal dihapus
+     */
+    public function deleteFilesBulk(GoogleAccount $account, array $gdriveFileIds): array
+    {
+        if ($gdriveFileIds === []) {
+            return [];
+        }
+
+        $this->tokens->ensureFreshToken($account);
+        $client = $this->factory->makeFor($account);
+        $client->setAccessToken($account->access_token);
+        $drive = new Drive($client);
+        $client->setUseBatch(true);
+
+        $failed = [];
+
+        try {
+            $batch = $drive->createBatch();
+            $requests = [];
+
+            foreach ($gdriveFileIds as $gdriveFileId) {
+                $requests[$gdriveFileId] = $batch->add($drive->files->delete($gdriveFileId), $gdriveFileId);
+            }
+
+            $results = $batch->execute();
+
+            foreach ($results as $key => $result) {
+                $id = (string) (str_starts_with((string) $key, 'response-') ? substr($key, 9) : $key);
+
+                if ($result instanceof \Google\Service\Exception) {
+                    $failed[] = $id;
+                    Log::warning('GDrive batch delete failed', [
+                        'gdrive_file_id' => $id,
+                        'code' => $result->getCode(),
+                        'error' => $result->getMessage(),
+                    ]);
+                }
+            }
+        } finally {
+            $client->setUseBatch(false);
+        }
+
+        return $failed;
+    }
+
     public function deleteFile(GoogleAccount $account, string $gdriveFileId): void
     {
         $this->tokens->ensureFreshToken($account);

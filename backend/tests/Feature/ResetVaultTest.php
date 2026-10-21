@@ -142,8 +142,9 @@ class ResetVaultTest extends TestCase
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/v1/vault/reset')
-            ->assertOk()
-            ->assertJsonPath('success', true);
+            ->assertStatus(202)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.status', 'queued');
 
         $this->assertSame(0, File::where('user_id', $userId)->count());
         $this->assertSame(0, Folder::where('user_id', $userId)->count());
@@ -160,7 +161,7 @@ class ResetVaultTest extends TestCase
         $userId = $user->id;
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson('/api/v1/vault/reset')->assertOk();
+            ->postJson('/api/v1/vault/reset')->assertStatus(202)->assertJsonPath('success', true);
 
         // User tetap ada.
         $this->assertDatabaseHas('users', ['id' => $userId]);
@@ -179,7 +180,7 @@ class ResetVaultTest extends TestCase
         [$user, $token, $ids] = $this->seedVault();
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson('/api/v1/vault/reset')->assertOk();
+            ->postJson('/api/v1/vault/reset')->assertStatus(202)->assertJsonPath('success', true);
 
         $this->assertDatabaseHas('google_accounts', [
             'id' => $ids['account'],
@@ -195,7 +196,7 @@ class ResetVaultTest extends TestCase
         $this->assertFileExists($absolute);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson('/api/v1/vault/reset')->assertOk();
+            ->postJson('/api/v1/vault/reset')->assertStatus(202)->assertJsonPath('success', true);
 
         $this->assertFileDoesNotExist($absolute);
     }
@@ -206,7 +207,7 @@ class ResetVaultTest extends TestCase
         $userId = $user->id;
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson('/api/v1/vault/reset')->assertOk();
+            ->postJson('/api/v1/vault/reset')->assertStatus(202)->assertJsonPath('success', true);
 
         $log = ActivityLog::where('action', ActivityLog::ACTION_USER_UPDATE)->first();
         $this->assertNotNull($log, 'reset vault harus tercatat di activity log');
@@ -225,7 +226,7 @@ class ResetVaultTest extends TestCase
         ]);
 
         $this->withHeader('Authorization', 'Bearer '.$aliceToken)
-            ->postJson('/api/v1/vault/reset')->assertOk();
+            ->postJson('/api/v1/vault/reset')->assertStatus(202)->assertJsonPath('success', true);
 
         $this->assertSame(0, Folder::where('user_id', $alice->id)->count());
         $this->assertDatabaseHas('folders', ['id' => $bobFolder->id]);

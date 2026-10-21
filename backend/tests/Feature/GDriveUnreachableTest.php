@@ -12,6 +12,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
+use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Psr7\Response as PsrResponse;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
@@ -50,12 +51,52 @@ class GDriveUnreachableTest extends TestCase
         ]);
     }
 
-    private function fakeDrive(array $queue): GoogleClient
+    /**
+     * Handler hermetik: request untuk gdrive id yang diuji dijawab dari peta
+     * `$routes` (dipakai berurutan, lalu 200); request ke id lain — mis. file
+     * GDrive akun lain yang tersisa di DB saat `gdrive:audit-access` memindai
+     * semua akun — dijawab 200 kosong tanpa menghabiskan respons milik file
+     * yang diuji. Tanpa `$routes`, antrean `$queue` dipakai apa adanya.
+     *
+     * @param  array<string, array<int, ResponseInterface>>  $routes
+     */
+    private function routeAwareHandler(array $queue, array $routes): callable
+    {
+        $inner = new MockHandler($queue);
+
+        return function (RequestInterface $request, array $options) use ($inner, $routes) {
+            if ($routes === []) {
+                return $inner($request, $options);
+            }
+
+            $uri = (string) $request->getUri();
+            foreach ($routes as $id => &$responses) {
+                if ($responses !== [] && str_contains($uri, '/'.$id)) {
+                    return array_shift($responses)
+                        ?? new PsrResponse(200, ['Content-Type' => 'application/json'], '{}');
+                }
+            }
+
+            return new PsrResponse(200, ['Content-Type' => 'application/json'], '{}');
+        };
+    }
+
+    /**
+     * @param  array<int, ResponseInterface>  $queue  respons berurutan (pergantian)
+     * @param  array<string, array<int, ResponseInterface>>  $routes  respons eksplisit per gdrive id
+     */
+    private function fakeDrive(array $queue, array $routes = []): GoogleClient
     {
         $this->history = [];
         $queue[] = new PsrResponse(200, ['Content-Type' => 'application/json'], '{}');
 
-        $mock = new MockHandler($queue);
+        // Bungkus handler murni menjadi handler Guzzle (RequestInterface →
+        // PromiseInterface). Kalau handler mengembalikan Respons langsung,
+        // Guzzle menafsirkannya sebagai promise ("then() undefined").
+        $handler = $this->routeAwareHandler($queue, $routes);
+        $mock = function (RequestInterface $request, array $options) use ($handler) {
+            return Create::promiseFor($handler($request, $options));
+        };
         $stack = HandlerStack::create($mock);
         $stack->push(Middleware::history($this->history));
 
@@ -161,10 +202,17 @@ class GDriveUnreachableTest extends TestCase
         $back->gdrive_unreachable_at = now();
         $back->save();
 
-        // Satu request untuk gd_gone (404) lalu gd_back (200).
-        $this->fakeDrive([
-            new PsrResponse(404, ['Content-Type' => 'application/json'], json_encode(['error' => ['message' => 'File not found']])),
-            new PsrResponse(200, ['Content-Type' => 'application/json'], json_encode(['id' => 'gd_back'])),
+        // Respons diikat ke gdrive id masing-masing (gd_gone → 404, gd_back →
+        // 200) agar hermetik: file GDrive milik akun lain yang masih ada di DB
+        // tidak bisa menghabiskan respons 404. Command tetap dijalankan tanpa
+        // --account supaya perilaku "pindai semua akun" ikut teruji.
+        $this->fakeDrive([], [
+            'gd_gone' => [
+                new PsrResponse(404, ['Content-Type' => 'application/json'], json_encode(['error' => ['message' => 'File not found']])),
+            ],
+            'gd_back' => [
+                new PsrResponse(200, ['Content-Type' => 'application/json'], json_encode(['id' => 'gd_back'])),
+            ],
         ]);
 
         $output = new BufferedOutput;
