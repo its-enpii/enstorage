@@ -145,7 +145,7 @@ export function applyEvent(e: RealtimeEvent, ctx: ApplyContext): boolean {
     }
 
     case 'folder.created': {
-      if (matchesView(e.folder.parent_id ?? null, currentFolderId)) {
+      if (folderBelongsToView(e.folder, e.folder.parent_id ?? null, currentFolderId)) {
         store.upsertFolder(e.folder);
         return true;
       }
@@ -155,7 +155,7 @@ export function applyEvent(e: RealtimeEvent, ctx: ApplyContext): boolean {
     case 'folder.deleted': {
       // A folder gone — its parent loses a child card. Children of the
       // deleted folder are dropped by `file.moved` (cascade) broadcasts.
-      if (matchesView(e.parentId ?? null, currentFolderId)) {
+      if (folderBelongsToView({ parent_id: e.parentId ?? null }, e.parentId ?? null, currentFolderId)) {
         store.removeFolder(e.folderId);
         return true;
       }
@@ -173,7 +173,7 @@ export function applyEvent(e: RealtimeEvent, ctx: ApplyContext): boolean {
           store.removeFolder(e.folder.id);
         }
       }
-      if (matchesView(e.folder.parent_id ?? null, currentFolderId)) {
+      if (folderBelongsToView(e.folder, e.folder.parent_id ?? null, currentFolderId)) {
         store.upsertFolder(e.folder);
         return true;
       }
@@ -191,14 +191,34 @@ export function applyEvent(e: RealtimeEvent, ctx: ApplyContext): boolean {
 }
 
 /**
- * Mismatch rule:
- * - `event.folderId` matches `currentFolderId` (including both null = root)
- * - `currentFolderId === null` (root view) accepts ANY folder_id so the
- *   whole-user channel notifications show up consistently.
+ * View-match rule: an event belongs to the current view only when the
+ * parent it is reported under equals the folder currently shown.
+ * - Root view (`currentFolderId === null`) accepts ONLY items whose
+ *   folder/parent is null — i.e. files and folders that actually live in
+ *   root. Items created via the API or another app into a sub-folder must
+ *   NOT surface in root just because the event reached this client.
+ * - Folder view accepts only items reported under that exact folder.
+ * Unknown parents (missing values normalise to null) never match a
+ * non-root view.
  */
 function matchesView(eventFolderId: string | null, currentFolderId: string | null): boolean {
-  if (currentFolderId === null) return true; // root view = "show all folders"
-  return eventFolderId === currentFolderId;
+  return (eventFolderId ?? null) === currentFolderId;
+}
+
+/**
+ * Parent-guard for `upsertFolder`. `matchesView()` keys folder events on
+ * the parent they are reported under; this guards insertions too, so a
+ * folder whose own `parent_id` disagrees with the reported parent can
+ * never be inserted into the current view (defence in depth for
+ * broadcast payloads that omit or mistype `parent_id`).
+ */
+function folderBelongsToView(
+  folder: Pick<FolderType, 'parent_id'>,
+  reportedParentId: string | null,
+  currentFolderId: string | null,
+): boolean {
+  if (!matchesView(reportedParentId, currentFolderId)) return false;
+  return (folder.parent_id ?? null) === currentFolderId;
 }
 
 /**
