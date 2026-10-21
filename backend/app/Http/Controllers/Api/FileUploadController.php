@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\AssembleChunkedFileJob;
 use App\Jobs\UploadFileJob;
 use App\Models\File as FileModel;
 use App\Models\Folder;
@@ -433,7 +434,11 @@ class FileUploadController extends Controller
             'name' => $fileName,
             'original_name' => $fileName,
             'mime_type' => $mimeType,
-            'size' => 0,
+            // size diisi dari total_size client (presisi = file.size). Dipakai
+            // sebagai penanda "sudah di-assemble" oleh AssembleChunkedFileJob
+            // saat retry, sehingga retry tidak pernah menulis ulang dari
+            // chunk yang tersisa sebagian.
+            'size' => $totalSize,
             'gdrive_file_id' => 'pending-'.Str::uuid(),
             'upload_status' => FileModel::STATUS_PENDING,
             'client_key' => $clientKey,
@@ -539,8 +544,8 @@ class FileUploadController extends Controller
 
     /**
      * POST /files/upload/{fileId}/complete
-     * Finalisasi chunked upload: reassemble chunks dan dispatch job.
-     * Return 202 + file data.
+     * Finalisasi chunked upload: validasi semua chunk ada, dispatch job
+     * reassembly, return 202 + file data (bentuk JSON tidak berubah).
      */
     public function completeChunked(Request $request, string $fileId): JsonResponse
     {
@@ -564,44 +569,13 @@ class FileUploadController extends Controller
             );
         }
 
-        @set_time_limit(600);
-        $chunksDir = storage_path('app/temp/chunks/'.$fileId);
-        $tempDir = storage_path('app/temp');
-        $assembledPath = $tempDir.'/'.$fileId;
-
-        if (! is_dir($tempDir)) {
-            mkdir($tempDir, 0775, true);
+        // Reassembly (bisa ~14,5 detik untuk 800 MB) dipindah ke job queue
+        // supaya tidak memblokir worker PHP-FPM selama request. `size` diambil
+        // dari `total_size` yang client kirim di init (presisi, = file.size).
+        if (! $file->total_size || (int) $file->total_size <= 0) {
+            return $this->fail(__('total_size tidak valid.'), 500);
         }
-
-        $out = fopen($assembledPath, 'wb');
-        if (! $out) {
-            return $this->fail(__('Gagal membuat file reassembly.'), 500);
-        }
-
-        for ($i = 0; $i < $file->total_chunks; $i++) {
-            $chunkPath = $chunksDir.'/'.$i;
-            if (! file_exists($chunkPath)) {
-                fclose($out);
-                @unlink($assembledPath);
-
-                return $this->fail(__('Chunk :index tidak ditemukan.', ['index' => $i]), 500);
-            }
-            $in = fopen($chunkPath, 'rb');
-            if ($in) {
-                stream_copy_to_stream($in, $out);
-                fclose($in);
-            }
-        }
-        fclose($out);
-
-        // Hapus direktori chunks
-        for ($i = 0; $i < $file->total_chunks; $i++) {
-            @unlink($chunksDir.'/'.$i);
-        }
-        @rmdir($chunksDir);
-
-        $actualSize = filesize($assembledPath);
-        $file->size = $actualSize;
+        $file->size = (int) $file->total_size;
         $file->save();
 
         // Share link (sama seperti upload biasa)
@@ -630,7 +604,7 @@ class FileUploadController extends Controller
             ]);
         }
 
-        UploadFileJob::dispatch($file->id);
+        AssembleChunkedFileJob::dispatch($file->id);
 
         return $this->accepted([
             'file_id' => $file->id,
