@@ -11,7 +11,7 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Versi batch dari {@see FileDeletedBroadcast}, dipakai job hapus massal
- * (`PurgeFolderTree`): satu event membawa sampai ~1.000 id file, bukan
+ * (`PurgeFolderTree`): satu event membawa paling banyak 100 id file, bukan
  * satu round-trip broadcast per file (85rb file = 85rb HTTP ke Reverb).
  *
  * Channel tetap `user-{user_id}` — sama dengan FileDeletedBroadcast, jadi
@@ -43,6 +43,7 @@ class FilesDeletedBroadcast implements ShouldBroadcastNow
             'file_id' => $this->fileIds[0] ?? null,
             'file_ids' => array_values($this->fileIds),
             'folder_id' => $this->folderId,
+            'count' => count($this->fileIds),
         ];
     }
 }

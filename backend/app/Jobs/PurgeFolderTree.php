@@ -60,6 +60,20 @@ class PurgeFolderTree implements ShouldQueue
     /** Id file per statement & per batch kerja. */
     private const BATCH = 1000;
 
+    /**
+     * Id file maksimum per `FilesDeletedBroadcast`.
+     *
+     * Hitungan payload (JSON ter-escape): UUID 36 byte + kutip + koma =
+     * 39 byte → 100 id ≈ 3,9 KB; terukur 4.545 byte `data` (file_id +
+     * file_ids + folder_id + count + socket). Amplop Reverb/Pusher
+     * (event, channel, data) ≈ 0,3 KB → pesan ≈ 4,9 KB, di bawah batas
+     * 10.000 byte (Reverb default `max_message_size`, batas Pusher 10 KB)
+     * dengan headroom ~51%. 500 id (perilaku lama) ≈ 18,5 KB → "Payload
+     * too large" dan job gagal. Hard limit diuji dengan
+     * json_encode() nyata, bukan estimasi.
+     */
+    public const BROADCAST_CHUNK = 100;
+
     public function __construct(
         public string $folderId,
         public string $userId,
@@ -211,23 +225,48 @@ class PurgeFolderTree implements ShouldQueue
                 foreach ($rows as $row) {
                     $grouped[$row->folder_id ?? '-'][] = (string) $row->id;
                 }
+                //    100 id/event (≈5 KB, batas Pusher/Reverb 10 KB). Kegagalan
+                //    broadcast (payload, koneksi, Reverb down) TIDAK boleh
+                //    menggagalkan purge: file/folder sudah terhapus di DB dan
+                //    retry tidak boleh mengulang langkah yang sudah selesai.
                 foreach ($grouped as $folderId => $idsInFolder) {
-                    foreach (array_chunk($idsInFolder, 500) as $broadcastIds) {
-                        FilesDeletedBroadcast::dispatch(
-                            $broadcastIds,
-                            $folderId === '-' ? null : $folderId,
-                            $this->userId,
-                        );
+                    foreach (array_chunk($idsInFolder, self::BROADCAST_CHUNK) as $broadcastIds) {
+                        try {
+                            FilesDeletedBroadcast::dispatch(
+                                $broadcastIds,
+                                $folderId === '-' ? null : $folderId,
+                                $this->userId,
+                            );
+                        } catch (Throwable $e) {
+                            Log::warning('PurgeFolderTree: broadcast file terhapus gagal (diabaikan)', [
+                                'folder_id' => $this->folderId,
+                                'target_folder_id' => $folderId === '-' ? null : $folderId,
+                                'files_in_event' => count($broadcastIds),
+                                'error' => $e->getMessage(),
+                            ]);
+                        }
                     }
                 }
 
-                // 8. Webhook ringkasan per potongan.
+                // 8. Webhook ringkasan per potongan. Tidak boleh mengirim
+                //    5.000 UUID ke satu payload → `file_ids` hanya kalau
+                //    potongan kecil. Sama seperti broadcast: kegagalan
+                //    webhook (endpoint 5xx, worker sync) tidak boleh
+                //    menggagalkan hapus file/folder yang sudah jalan.
                 if ($notifyDeletedFiles) {
-                    $webhooks->dispatch($this->userId, 'files.deleted', [
-                        'count' => count($ids),
-                        'folder_id' => $this->folderId,
-                        'file_ids' => count($ids) <= 100 ? array_values($ids) : null,
-                    ]);
+                    try {
+                        $webhooks->dispatch($this->userId, 'files.deleted', [
+                            'count' => count($ids),
+                            'folder_id' => $this->folderId,
+                            'file_ids' => count($ids) <= 100 ? array_values($ids) : null,
+                        ]);
+                    } catch (Throwable $e) {
+                        Log::warning('PurgeFolderTree: webhook files.deleted gagal (diabaikan)', [
+                            'folder_id' => $this->folderId,
+                            'files' => count($ids),
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
                 }
             });
         });
@@ -244,7 +283,14 @@ class PurgeFolderTree implements ShouldQueue
         //     selesai SEBELUM controller balik; tanpa ini event tidak pernah
         //     terkirim di jalur sync. Async: controller mengirimnya sendiri
         //     (job belum jalan saat respons).
-        FolderDeletedBroadcast::dispatch($this->folderId, $this->userId, $parentId);
+        try {
+            FolderDeletedBroadcast::dispatch($this->folderId, $this->userId, $parentId);
+        } catch (Throwable $e) {
+            Log::warning('PurgeFolderTree: broadcast folder terhapus gagal (diabaikan)', [
+                'folder_id' => $this->folderId,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         // 10. Folder Drive leaf → root, setelah DB bersih supaya tidak ada
         //     folder yatim kalau langkah sebelumnya gagal.
