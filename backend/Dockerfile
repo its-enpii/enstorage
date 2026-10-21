@@ -23,7 +23,30 @@ RUN apk add --no-cache \
         $PHPIZE_DEPS \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install pdo pgsql pdo_pgsql intl zip bcmath pcntl gd \
-    && pecl install redis \
+    && set -x \
+    && ( \
+         ok=0; \
+         for i in 1 2 3 4 5; do \
+           if curl --fail --location --max-time 60 \
+                 --retry 2 --retry-delay 2 \
+                 -o /tmp/redis.tgz \
+                 https://pecl.php.net/get/redis-6.3.0.tgz; then \
+             if [ -s /tmp/redis.tgz ] && gzip -t /tmp/redis.tgz 2>/dev/null; then \
+               ok=1; break; \
+             fi; \
+           fi; \
+           rm -f /tmp/redis.tgz; \
+           case "$i" in 1) s=3 ;; 2) s=6 ;; 3) s=12 ;; 4) s=24 ;; *) s=48 ;; esac; \
+           echo "redis tgz download attempt $i failed; retrying in ${s}s" >&2; \
+           sleep "$s"; \
+         done; \
+         if [ "$ok" = 1 ]; then \
+           pecl install -f /tmp/redis.tgz; \
+         else \
+           echo "all downloads failed; falling back to pecl install redis" >&2; \
+           pecl install redis; \
+         fi \
+       ) \
     && docker-php-ext-enable redis \
     && apk del autoconf g++ make $PHPIZE_DEPS \
     && rm -rf /tmp/*
