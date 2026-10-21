@@ -768,7 +768,7 @@ function TextSurfaceLoading({ label }: { label: string }) {
  * sits directly on it with symmetric horizontal padding (no inner card frame),
  * so the rendered chain is body > overlay > text container > PRE.
  */
-function PlainTextViewer({ file, downloadUrl, onClose }: { file: FileItem; downloadUrl: string; onClose: () => void }) {
+function PlainTextViewer({ file, downloadUrl }: { file: FileItem; downloadUrl: string }) {
   const { t } = useTranslation();
   const [content, setContent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -873,17 +873,6 @@ function PlainTextViewer({ file, downloadUrl, onClose }: { file: FileItem; downl
           >
             {t('preview.downloadFile')}
           </LinkButton>
-          <Tooltip label={t('preview.close')}>
-            <IconButton
-              size="xl"
-              shape="circle"
-              onClick={onClose}
-              aria-label={t('preview.close')}
-              className="!bg-surface-container/80 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest"
-            >
-              <Close className="!text-xl" />
-            </IconButton>
-          </Tooltip>
         </div>
       </div>
       {body}
@@ -922,21 +911,123 @@ function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props)
     case 'markdown': viewer = <MarkdownViewer file={file} />; break;
     case 'code':
     case 'text':     viewer = <CodeTextViewer file={file} />; break;
-    default:         viewer = isPlainText(file)
-      ? <PlainTextViewer file={file} downloadUrl={downloadUrl} onClose={onClose} />
-      : <OtherViewer file={file} downloadUrl={downloadUrl} />; break;
+    default:
+      if (isPlainText(file)) {
+        // Plain text is the one preview rendered directly on the overlay
+        // (no header, opaque body). Portal it so it sits ON TOP of the
+        // overlay header bar — the header is flex-shrink-0 and would
+        // otherwise push it down / the backdrop click layer would cover it.
+        viewer = createPortal(
+          <div
+            className="fixed inset-0 z-viewer flex flex-col pt-14 sm:pt-16"
+            // Stop clicks inside the text surface from reaching the
+            // overlay's click-to-close backdrop layer.
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PlainTextViewer file={file} downloadUrl={downloadUrl} />
+          </div>,
+          document.body,
+        );
+      } else {
+        viewer = <OtherViewer file={file} downloadUrl={downloadUrl} />;
+      }
+      break;
   }
 
   return (
-    <div
-      data-testid="file-viewer-overlay"
-      className="fixed inset-0 z-viewer flex flex-col bg-background/90 backdrop-blur-md"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-viewer">
       {/*
-        Tombol X di pojok kanan-atas overlay. Header sudah punya tombol tutup
-        untuk desktop; X ini selalu terlihat di pojok (termasuk di atas
-        viewer media) supaya menutup tidak pernah bergantung pada header.
+        Backdrop layer: fills the viewport, dims + blurs the app behind the
+        preview, and carries click-to-close. It is a plain DIV on purpose —
+        it is NOT a button (Escape and the single X are the keyboard /
+        visible affordances). Because the close button is a SIBLING rendered
+        after it (same stacking context), the X is never covered by it.
+      */}
+      <div
+        data-testid="file-viewer-backdrop"
+        aria-hidden="true"
+        className="absolute inset-0 bg-background/90 backdrop-blur-md"
+        onClick={onClose}
+      />
+
+      {/* Visual shell — pointer-events pass through to the backdrop so
+          clicking empty areas still closes, while the header/controls
+          themselves remain clickable. */}
+      <div className="pointer-events-none absolute inset-0 flex flex-col">
+        <div
+          data-testid="file-viewer-header"
+          className="pointer-events-auto flex items-center justify-between pl-3 pr-14 sm:pl-6 sm:pr-20 py-2 sm:py-3 shrink-0 border-b border-outline-variant/10"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <p className="text-on-surface font-display text-base truncate">{file.name}</p>
+            <span className="text-outline text-sm shrink-0">{bytes(file.size)}</span>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {actions && actions.length > 0 && (
+              <DropdownMenu
+                align="right"
+                trigger={
+                  <Tooltip label={t('preview.menu')} placement="bottom">
+                    <IconButton
+                      bare
+                      shape="circle"
+                      size="xl"
+                      aria-label={t('preview.menu')}
+                    >
+                      <span className="material-symbols-outlined !text-xl" aria-hidden>more_vert</span>
+                    </IconButton>
+                  </Tooltip>
+                }
+                items={actions}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Main Viewer Body */}
+        <div className="pointer-events-none flex-1 flex items-center justify-center min-h-0 relative">
+          {hasNav && currentIndex > 0 && category !== 'office' && (
+            <IconButton
+              shape="circle"
+              size="xl"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigate?.(files![currentIndex - 1]);
+              }}
+              className="pointer-events-auto absolute left-2 sm:left-4 z-10 !bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest shadow-lg"
+              aria-label={t('preview.prev')}
+            >
+              <ChevronLeft />
+            </IconButton>
+          )}
+
+          {/* Viewers already stop click propagation on their own surface, so
+              clicks that land inside them never reach the backdrop layer. */}
+          <div className="flex-1 min-w-0 h-full flex" data-testid="file-viewer-body">
+            {viewer}
+          </div>
+
+          {hasNav && currentIndex < files!.length - 1 && category !== 'office' && (
+            <IconButton
+              shape="circle"
+              size="xl"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigate?.(files![currentIndex + 1]);
+              }}
+              className="pointer-events-auto absolute right-2 sm:right-4 z-10 !bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest shadow-lg"
+              aria-label={t('preview.next')}
+            >
+              <ChevronRight />
+            </IconButton>
+          )}
+        </div>
+      </div>
+
+      {/*
+        The ONE visible close control of the preview (top-right X). It is a
+        plain child of the full-viewport root (no transformed/filtered
+        ancestor), so `absolute` resolves against the viewport-sized overlay.
       */}
       <Tooltip label={t('preview.close')} placement="bottom">
         <IconButton
@@ -953,79 +1044,6 @@ function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props)
           <Close className="!text-xl" />
         </IconButton>
       </Tooltip>
-      {/* Header */}
-      <div className="flex items-center justify-between pl-3 pr-14 sm:pl-6 sm:pr-20 py-2 sm:py-3 shrink-0 border-b border-outline-variant/10">
-        <div className="flex items-center gap-3 min-w-0">
-          <p className="text-on-surface font-display text-base truncate">{file.name}</p>
-          <span className="text-outline text-sm shrink-0">{bytes(file.size)}</span>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {actions && actions.length > 0 && (
-            <DropdownMenu
-              align="right"
-              trigger={
-                <Tooltip label={t('preview.menu')} placement="bottom">
-                  <IconButton
-                    bare
-                    shape="circle"
-                    size="xl"
-                    aria-label={t('preview.menu')}
-                  >
-                    <span className="material-symbols-outlined !text-xl" aria-hidden>more_vert</span>
-                  </IconButton>
-                </Tooltip>
-              }
-              items={actions}
-            />
-          )}
-          <Tooltip label={t('preview.close')} placement="bottom">
-            <IconButton
-              shape="circle"
-              size="xl"
-              onClick={onClose}
-              aria-label={t('preview.close')}
-              className="hidden sm:inline-flex !bg-surface-container/80 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest"
-            >
-              <Close className="!text-xl" />
-            </IconButton>
-          </Tooltip>
-        </div>
-      </div>
-
-      {/* Main Viewer Body */}
-      <div className="flex-1 flex items-center justify-center min-h-0 relative">
-        {hasNav && currentIndex > 0 && category !== 'office' && (
-          <IconButton
-            shape="circle"
-            size="xl"
-            onClick={(e) => {
-              e.stopPropagation();
-              onNavigate?.(files![currentIndex - 1]);
-            }}
-            className="absolute left-2 sm:left-4 z-10 !bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest shadow-lg"
-            aria-label={t('preview.prev')}
-          >
-            <ChevronLeft />
-          </IconButton>
-        )}
-
-        {viewer}
-
-        {hasNav && currentIndex < files!.length - 1 && category !== 'office' && (
-          <IconButton
-            shape="circle"
-            size="xl"
-            onClick={(e) => {
-              e.stopPropagation();
-              onNavigate?.(files![currentIndex + 1]);
-            }}
-            className="absolute right-2 sm:right-4 z-10 !bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest shadow-lg"
-            aria-label={t('preview.next')}
-          >
-            <ChevronRight />
-          </IconButton>
-        )}
-      </div>
     </div>
   );
 }
