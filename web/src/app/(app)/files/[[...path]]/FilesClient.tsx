@@ -39,6 +39,12 @@ import { EmptyDropZone } from '@/components/EmptyDropZone';
 import { Loading } from '@/components/Loading';
 import { usePrompt } from '@/components/usePrompt';
 import { useInfiniteScroll } from '@/lib/useInfiniteScroll';
+import {
+  CHUNKED_THRESHOLD_BYTES,
+  ChunkedUploadError,
+  MAX_UPLOAD_BYTES,
+  uploadFileChunked,
+} from '@/lib/chunkedUpload';
 import { bytes, fileExtension } from '@/lib/format';
 import { usePageTitle } from '@/lib/usePageTitle';
 
@@ -48,6 +54,15 @@ function fileThumbnailUrl(file: FileItem): string | null {
   if (!file.has_thumbnail || file.upload_status !== 'done') return null;
   const token = getToken();
   return `${process.env.NEXT_PUBLIC_API_BASE}/files/${file.id}/thumbnail${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+}
+
+/**
+ * Human-readable ceiling for the upload gate, derived from MAX_UPLOAD_BYTES so
+ * the copy can never drift from the enforced limit (1 GiB → "1 GB").
+ */
+function formatLimit(bytes: number): string {
+  const gb = bytes / (1024 * 1024 * 1024);
+  return gb >= 1 && Number.isInteger(gb) ? `${gb} GB` : `${Math.round(bytes / (1024 * 1024))} MB`;
 }
 
 function statusLabel(t: (key: string) => string, s: FileItem['upload_status']) {
@@ -62,6 +77,10 @@ function statusLabel(t: (key: string) => string, s: FileItem['upload_status']) {
  * by FileCard so the icon/label never disagree with the action. Note: the
  * backend extractor only truly supports ZIP (isZip), hence we additionally
  * require a `.zip`-recognisable name or a ZIP mime type.
+ *
+ * The action is surfaced in the file card's "⋮" (more_vert) menu AND in the
+ * viewer's action menu — the same dropdown the user opens for rename/move/
+ * download — right above Delete, so it is visible for every .zip file.
  */
 const ARCHIVE_MIME_PATTERN = /zip|rar|tar|7z|gzip|compressed|archive/;
 
@@ -887,63 +906,21 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   }
 
   /**
-   * Upload via `POST /files/bulk-upload` (one multipart request, `files[]`).
-   * The server caps each request at MAX_FILES (10, FileUploadController::
-   * MAX_FILES), so larger batches are split into sequential chunks of 10 —
-   * this keeps the 10-file limit as a chunk size, not a rejection.
-   * Progress is honest: we only learn per-file outcomes when the request
-   * finishes, so files stay at 0% ("uploading") until then.
+   * Bulk upload (small files) via `POST /files/bulk-upload` (one multipart
+   * request, `files[]`). The server caps each request at MAX_FILES (10,
+   * FileUploadController::MAX_FILES), so larger batches are split into
+   * sequential chunks of 10. Progress is honest: we only learn per-file
+   * outcomes when the request finishes, so files stay at 0% ("uploading").
    * A failure of one file only marks that job as failed.
    */
-  async function uploadFiles(fileList: FileList) {
-    dragCounter.current = 0;
-    setDragOver(false);
-    // Destination folder of THIS batch. Captured up front because the user
-    // may navigate away while chunks are still in flight; the refresh below
-    // must never append A's new rows to another folder's list (root).
-    const targetFolderId = folderId;
-    const filesArr = Array.from(fileList);
+  async function uploadBulk(filesArr: File[], targetFolderId: string | null) {
     if (filesArr.length === 0) return;
-
-    // Filter oversize upfront (same 1GB rule as the server); no double check.
-    const accepted: File[] = [];
-    for (const file of filesArr) {
-      if (file.size > 1024 * 1024 * 1024) {
-        setJobs((prev) => [
-          ...prev,
-          {
-            fileId: '',
-            name: file.name,
-            total: file.size,
-            loaded: 0,
-            status: 'failed',
-            error: t('files.errors.tooLarge'),
-          },
-        ]);
-      } else {
-        accepted.push(file);
-      }
-    }
-    if (accepted.length === 0) return;
-
-    // Seed jobs for all accepted files up front so the user sees each one.
-    setJobs((prev) => [
-      ...prev,
-      ...accepted.map<UploadJob>((f) => ({
-        fileId: '',
-        name: f.name,
-        total: f.size,
-        loaded: 0,
-        status: 'uploading',
-      })),
-    ]);
-
     const CHUNK_SIZE = 10;
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE ?? '';
     const authToken = getToken();
 
-    for (let offset = 0; offset < accepted.length; offset += CHUNK_SIZE) {
-      const chunk = accepted.slice(offset, offset + CHUNK_SIZE);
+    for (let offset = 0; offset < filesArr.length; offset += CHUNK_SIZE) {
+      const chunk = filesArr.slice(offset, offset + CHUNK_SIZE);
       const fd = new FormData();
       chunk.forEach((f) => fd.append('files[]', f));
       if (targetFolderId) fd.append('folder_id', targetFolderId);
@@ -993,8 +970,118 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         failChunk(t('files.errors.uploadNetwork'));
       }
     }
+  }
 
-    // Single refresh once every chunk has been processed. Only refresh when
+  /**
+   * Chunked upload (files > CHUNKED_THRESHOLD_BYTES) via
+   * `web/src/lib/chunkedUpload.ts`: init → 8 MiB chunk POSTs (max 3 in
+   * flight, 3 attempts each with backoff) → complete. Progress is byte-based.
+   * Failure of THIS file only marks its own job as failed.
+   */
+  async function uploadChunkedFile(file: File, targetFolderId: string | null, token: string) {
+    const fail = (reason: string) =>
+      setJobs((js) =>
+        js.map((j) => (j.name === file.name && j.status === 'uploading' ? { ...j, status: 'failed', error: reason } : j)),
+      );
+    try {
+      await uploadFileChunked(file, {
+        token,
+        folderId: targetFolderId,
+        onProgress: ({ loaded, total }) => {
+          setJobs((js) =>
+            js.map((j) => (j.name === file.name && j.status === 'uploading' ? { ...j, loaded, total } : j)),
+          );
+        },
+      });
+      setJobs((js) =>
+        js.map((j) => (j.name === file.name && j.status === 'uploading' ? { ...j, status: 'done', loaded: j.total } : j)),
+      );
+    } catch (e) {
+      fail(
+        e instanceof ChunkedUploadError
+          ? e.message === 'file_too_large'
+            ? t('files.upload.tooLarge', { limit: formatLimit(MAX_UPLOAD_BYTES) })
+            : e.message
+          : t('files.errors.uploadNetwork'),
+      );
+    }
+  }
+
+  /**
+   * Entry point for every upload (picker, folder picker, drag-drop):
+   *  1. Reject files > MAX_UPLOAD_BYTES up front with a clear i18n message.
+   *  2. Files > 64 MiB → chunked upload, max 2 files in parallel
+   *     (simple in-function worker pool, no new dependency).
+   *  3. Files ≤ 64 MiB → existing `bulk-upload`, 10 files per request.
+   * Partial success: one file failing never cancels the others.
+   */
+  async function uploadFiles(fileList: FileList) {
+    dragCounter.current = 0;
+    setDragOver(false);
+    // Destination folder of THIS batch. Captured up front because the user
+    // may navigate away while uploads are still in flight; the refresh below
+    // must never append A's new rows to another folder's list (root).
+    const targetFolderId = folderId;
+    const filesArr = Array.from(fileList);
+    if (filesArr.length === 0) return;
+
+    // Size gate BEFORE any request: never surface a raw server/proxy error.
+    const accepted: File[] = [];
+    for (const file of filesArr) {
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setJobs((prev) => [
+          ...prev,
+          {
+            fileId: '',
+            name: file.name,
+            total: file.size,
+            loaded: 0,
+            status: 'failed',
+            error: t('files.upload.tooLarge', { limit: formatLimit(MAX_UPLOAD_BYTES) }),
+          },
+        ]);
+      } else {
+        accepted.push(file);
+      }
+    }
+    if (accepted.length === 0) return;
+
+    const largeFiles = accepted.filter((f) => f.size > CHUNKED_THRESHOLD_BYTES);
+    const smallFiles = accepted.filter((f) => f.size <= CHUNKED_THRESHOLD_BYTES);
+
+    // Seed jobs for all accepted files up front so the user sees each one.
+    setJobs((prev) => [
+      ...prev,
+      ...accepted.map<UploadJob>((f) => ({
+        fileId: '',
+        name: f.name,
+        total: f.size,
+        loaded: 0,
+        status: 'uploading',
+      })),
+    ]);
+
+    const token = getToken() ?? '';
+    const tasks: Promise<void>[] = [
+      // Multipart lane: same 10-file batches as before.
+      uploadBulk(smallFiles, targetFolderId),
+      // Chunked lane: max 2 large files concurrently.
+      (async () => {
+        let next = 0;
+        const worker = async () => {
+          while (next < largeFiles.length) {
+            const file = largeFiles[next++];
+            await uploadChunkedFile(file, targetFolderId, token);
+          }
+        };
+        await Promise.all(
+          Array.from({ length: Math.min(2, largeFiles.length) }, () => worker()),
+        );
+      })(),
+    ];
+    await Promise.all(tasks);
+
+    // Single refresh once every upload has finished. Only refresh when
     // this view is still the upload destination: while the user is elsewhere
     // the queued files are already visible in A's next mount (fresh fetch of
     // A's page 1) and its optimistic cache. A late 'merge' refresh here is
