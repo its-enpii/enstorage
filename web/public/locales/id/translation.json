@@ -130,6 +130,10 @@
       "disconnectFailed": "Gagal menghapus.",
       "uploadNetwork": "Kesalahan jaringan saat mengupload."
     },
+    "upload": {
+      "tooLarge": "Ukuran file melebihi batas {{limit}}. File ini tidak diunggah.",
+      "hint": "Maksimal {{limit}} per file. File lebih dari {{chunked}} diunggah bertahap (chunked) agar tidak gagal."
+    },
     "move": {
       "titleSingle": "Pindahkan File",
       "titleBulk": "Pindahkan {{count}} File",

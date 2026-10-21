@@ -130,6 +130,10 @@
       "disconnectFailed": "Failed to disconnect.",
       "uploadNetwork": "Network error while uploading."
     },
+    "upload": {
+      "tooLarge": "File size exceeds the {{limit}} limit. This file was not uploaded.",
+      "hint": "Up to {{limit}} per file. Files over {{chunked}} are uploaded in chunks so they don't fail."
+    },
     "move": {
       "titleSingle": "Move File",
       "titleBulk": "Move {{count}} Files",
