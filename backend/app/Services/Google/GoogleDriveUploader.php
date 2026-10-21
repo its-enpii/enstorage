@@ -12,7 +12,13 @@ use Illuminate\Support\Facades\Log;
 
 class GoogleDriveUploader
 {
-    private const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
+    // 25 MB per chunk. Google resumable upload API mewajibkan ukuran chunk
+    // kelipatan 256 KB (kecuali chunk terakhir) — 25 MB = 100 x 256 KB, aman.
+    // Chunk lebih besar = jauh lebih sedikit round-trip HTTP ke Drive untuk
+    // file besar (5 MB → 25 MB: 5x lebih sedikit request), sehingga file
+    // tidak menumpuk di server. Buffer fread 25 MB masih wajar untuk
+    // memory_limit backend 512M.
+    private const CHUNK_SIZE = 25 * 1024 * 1024; // 25 MB per chunk
 
     public function __construct(
         private readonly GoogleClientFactory $factory,

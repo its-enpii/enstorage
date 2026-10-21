@@ -11,6 +11,7 @@ use App\Services\FileRecordCreator;
 use App\Services\FolderLockGuard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -20,7 +21,10 @@ class FileUploadController extends Controller
 {
     private const MAX_FILES = 10;
 
-    private const MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
+    private const MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GiB
+
+    /** Batas ukuran per chunk chunked upload (guard server; client normal 8 MB). */
+    private const MAX_CHUNK_SIZE_BYTES = 32 * 1024 * 1024; // 32 MB
 
     public function __construct(
         private readonly FolderLockGuard $lockGuard,
@@ -79,6 +83,17 @@ class FileUploadController extends Controller
                 throw ValidationException::withMessages(['client_key' => __('client_key hanya boleh berisi huruf, angka, ".", "_", "-", ":" (maks 128 karakter).')]);
             }
         }
+        // Batas ukuran eksplisit per file: 422 dengan pesan jelas (bukan nginx 413/500),
+        // supaya "1 GB" di UI konsisten dengan kenyataan. Dijalankan sebelum file
+        // dipindahkan ke temp / record dibuat.
+        foreach ($files as $uploadedFile) {
+            if ($uploadedFile instanceof UploadedFile && (int) $uploadedFile->getSize() > self::MAX_FILE_SIZE_BYTES) {
+                throw ValidationException::withMessages([
+                    'file' => self::fileTooLargeMessage(),
+                ]);
+            }
+        }
+
         $fileCount = count($files);
         $collisions = [];
         for ($i = 0; $i < $fileCount; $i++) {
@@ -257,6 +272,18 @@ class FileUploadController extends Controller
             }
         }
 
+        // Batas ukuran eksplisit per file (dicek di awal, sebelum record dibuat):
+        // 422 dengan pesan jelas per-index, bukan nginx 413/500.
+        $tooLarge = [];
+        foreach ($files as $index => $uploadedFile) {
+            if ($uploadedFile instanceof UploadedFile && (int) $uploadedFile->getSize() > self::MAX_FILE_SIZE_BYTES) {
+                $tooLarge['files.'.$index] = self::fileTooLargeMessage();
+            }
+        }
+        if (! empty($tooLarge)) {
+            throw ValidationException::withMessages($tooLarge);
+        }
+
         $origin = ($rawKey !== null && $rawKey !== '') ? 'client' : 'server';
         $shareBaseUrl = rtrim(config('app.frontend_url', config('app.url')), '/');
 
@@ -347,6 +374,11 @@ class FileUploadController extends Controller
             throw ValidationException::withMessages(['total_size' => __('total_size harus lebih dari 0.')]);
         }
         $totalSize = (int) $totalSize;
+        if ($totalSize > self::MAX_FILE_SIZE_BYTES) {
+            throw ValidationException::withMessages([
+                'total_size' => self::fileTooLargeMessage(),
+            ]);
+        }
 
         $totalChunks = $request->input('total_chunks');
         if (! is_numeric($totalChunks) || (int) $totalChunks < 1 || (int) $totalChunks > 1000) {
@@ -445,8 +477,23 @@ class FileUploadController extends Controller
         if ($file->upload_status !== FileModel::STATUS_PENDING) {
             return $this->fail(__('Upload sudah selesai atau gagal.'), 422);
         }
-        if ($chunkIndex < 0 || $chunkIndex >= $file->total_chunks) {
+        if ($chunkIndex < 0) {
+            return $this->fail(__('chunk_index tidak boleh negatif.'), 422);
+        }
+        if ($chunkIndex >= $file->total_chunks) {
             return $this->fail(__('chunk_index harus antara 0 dan :max.', ['max' => $file->total_chunks - 1]), 422);
+        }
+
+        // Guard ukuran chunk: client normal mengirim 8 MB; server menolak > 32 MB.
+        // Ini dicek SEBELUM framework mem-parse body (trim Request::createFromGlobals
+        // bisa 413 duluan) supaya klien dapat envelope 422 dengan pesan jelas.
+        $chunkSize = $this->requestChunkSize($request);
+        if ($chunkSize !== null && $chunkSize > self::MAX_CHUNK_SIZE_BYTES) {
+            return $this->fail(
+                __('Ukuran chunk melebihi batas 32 MB.'),
+                422,
+                ['max_bytes' => self::MAX_CHUNK_SIZE_BYTES, 'received_bytes' => $chunkSize],
+            );
         }
 
         $chunksDir = storage_path('app/temp/chunks/'.$fileId);
@@ -841,6 +888,39 @@ class FileUploadController extends Controller
 
             return $this->fail($e->getMessage(), 502);
         }
+    }
+
+    /**
+     * Pesan validasi ukuran file yang melebihi batas (i18n-friendly).
+     */
+    private static function fileTooLargeMessage(): string
+    {
+        return __('Ukuran file melebihi batas 1 GB.');
+    }
+
+    /**
+     * Ukuran data chunk pada request (multipart `chunk` atau raw body).
+     * Null kalau tidak bisa ditentukan — validasi isi tetap di bawah.
+     *
+     * Dibaca dari $_FILES / $_SERVER dulu (tanpa memicu parse body), lalu
+     * fallback ke object Request (dipakai test / request yang sudah ter-parse).
+     */
+    private function requestChunkSize(Request $request): ?int
+    {
+        $files = $_FILES['chunk'] ?? null;
+        if (is_array($files) && isset($files['size']) && is_numeric($files['size'])) {
+            return (int) $files['size'];
+        }
+
+        if ($request->hasFile('chunk')) {
+            $uploaded = $request->file('chunk');
+
+            return $uploaded instanceof UploadedFile ? (int) $uploaded->getSize() : null;
+        }
+
+        $length = $_SERVER['CONTENT_LENGTH'] ?? $request->headers->get('Content-Length');
+
+        return is_numeric($length) ? (int) $length : null;
     }
 
     /**
