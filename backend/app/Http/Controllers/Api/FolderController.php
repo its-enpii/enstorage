@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Events\FileDeletedBroadcast;
-use App\Events\FileMovedBroadcast;
 use App\Events\FolderCreatedBroadcast;
 use App\Events\FolderDeletedBroadcast;
 use App\Events\FolderMovedBroadcast;
@@ -12,6 +10,7 @@ use App\Events\FolderSharedBroadcast;
 use App\Events\FolderUnsharedBroadcast;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FolderResource;
+use App\Jobs\PurgeFolderTree;
 use App\Models\ActivityLog;
 use App\Models\File;
 use App\Models\Folder;
@@ -27,13 +26,16 @@ use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
 use App\Services\Google\QuotaManager;
 use App\Services\WebhookService;
+use App\Support\BulkQuery;
 use App\Support\StreamPump;
 use Google\Service\Drive\DriveFile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
@@ -62,9 +64,8 @@ class FolderController extends Controller
 
     /**
      * Hook TEST-ONLY (tidak pernah di-set di produksi): dipanggil dengan
-     * daftar target folder Drive (leaf → root) saat destroy, supaya test
-     * bisa membuktikan folder Drive turunan ikut dihapus tanpa memuat ulang
-     * class controller. Tidak mengubah perilaku apa pun saat null.
+     * daftar target folder Drive (leaf → root) oleh `PurgeFolderTree`
+     * sebelum baris folder dihapus. Tidak mengubah perilaku saat null.
      *
      * @var (\Closure(array<int, array{folder_id: string, folder: Folder, gdrive_folder_id: string, google_account_id: ?string}>): void)|null
      */
@@ -519,151 +520,22 @@ class FolderController extends Controller
      * Dapatkan semua folder ID turunan (termasuk folder ini sendiri).
      */
     /**
-     * Kumpulkan folder Google Drive (folder utama + descendant) yang harus
-     * ikut dihapus, sudah terurut leaf → root.
-     *
-     * @param  array<int, string>  $folderIds
-     * @return array<int, array{folder_id: string, gdrive_folder_id: string, google_account_id: ?string}>
-     */
-    private function collectDriveFolderTargets(string $rootFolderId, string $userId, array $folderIds): array
-    {
-        $folders = Folder::where('user_id', $userId)
-            ->whereIn('id', $folderIds)
-            ->get(['id', 'parent_id', 'name', 'gdrive_folder_id']);
-
-        $childrenByParent = [];
-        foreach ($folders as $candidate) {
-            $childrenByParent[$candidate->parent_id][] = $candidate->id;
-        }
-
-        // Post-order traversal: anak sebelum bapak (leaf → root).
-        $leafFirst = [];
-        $walk = function (string $id) use (&$walk, &$leafFirst, &$childrenByParent): void {
-            foreach ($childrenByParent[$id] ?? [] as $childId) {
-                $walk($childId);
-            }
-            $leafFirst[] = $id;
-        };
-        $walk($rootFolderId);
-
-        $byId = $folders->keyBy('id');
-        $targets = [];
-
-        foreach ($leafFirst as $id) {
-            $model = $byId->get($id);
-            if (! $model || ! $model->gdrive_folder_id) {
-                continue;
-            }
-
-            // Simpan model Folder (bukan hanya id): setelah DB delete, driver
-            // delete Drive memakai instance in-memory ini — tidak ada query
-            // ulang ke baris yang sudah hilang.
-            $targets[] = [
-                'folder_id' => $id,
-                'folder' => $model,
-                'gdrive_folder_id' => (string) $model->gdrive_folder_id,
-                'google_account_id' => File::where('folder_id', $id)
-                    ->whereNotNull('google_account_id')
-                    ->value('google_account_id'),
-            ];
-        }
-
-        return $targets;
-    }
-
-    /**
-     * Hapus folder-folder Google Drive hasil collectDriveFolderTargets().
-     * Best-effort: kegagalan hanya di-log, tidak memblokir response delete.
-     *
-     * @param  array<int, array{folder_id: string, folder: Folder, gdrive_folder_id: string, google_account_id: ?string}>  $targets
-     */
-    private function deleteDriveFolders(string $userId, array $targets): void
-    {
-        if (self::$driveFolderDeleteSpy !== null) {
-            (self::$driveFolderDeleteSpy)($targets);
-        }
-
-        if (empty($targets)) {
-            return;
-        }
-
-        $fallbackAccountIds = GoogleAccount::where('user_id', $userId)
-            ->where('is_active', true)
-            ->pluck('id')
-            ->all();
-
-        foreach ($targets as $target) {
-            $candidates = array_values(array_unique(array_filter(
-                array_merge([$target['google_account_id']], $fallbackAccountIds),
-            )));
-
-            if (empty($candidates)) {
-                Log::warning('Folder Google Drive tidak dihapus: akun Google tidak ditemukan', [
-                    'folder_id' => $target['folder_id'],
-                    'gdrive_folder_id' => $target['gdrive_folder_id'],
-                ]);
-
-                continue;
-            }
-
-            $deleted = false;
-
-            foreach ($candidates as $accountId) {
-                $account = GoogleAccount::find($accountId);
-                if (! $account) {
-                    continue;
-                }
-
-                if ($this->folders->deleteFolderOnDrive($account, $target['gdrive_folder_id'], $target['folder'] ?? null)) {
-                    $deleted = true;
-
-                    break;
-                }
-            }
-
-            if (! $deleted) {
-                Log::warning('Folder Google Drive gagal dihapus dari Drive', [
-                    'folder_id' => $target['folder_id'],
-                    'gdrive_folder_id' => $target['gdrive_folder_id'],
-                    'accounts_tried' => count($candidates),
-                ]);
-            }
-        }
-    }
-
-    private function getDescendantFolderIds(string $folderId, string $userId): array
-    {
-        $ids = [$folderId];
-        $queue = [$folderId];
-
-        while (! empty($queue)) {
-            $currentId = array_shift($queue);
-            $childrenIds = Folder::where('user_id', $userId)
-                ->where('parent_id', $currentId)
-                ->pluck('id')
-                ->all();
-
-            if (! empty($childrenIds)) {
-                $ids = array_merge($ids, $childrenIds);
-                $queue = array_merge($queue, $childrenIds);
-            }
-        }
-
-        return array_values(array_unique($ids));
-    }
-
-    /**
-     * DELETE /folders/{id} — hapus folder.
+     * DELETE /folders/{id} — hapus folder (ASINKRON).
      *
      * Default (tanpa query / `delete_files=1`): REKURSIF — folder, seluruh
-     * subfolder, dan semua file di dalamnya dihapus dari DB + Google Drive
-     * (folder Drive root + semua descendant, urut leaf → root).
+     * subfolder, dan semua file di dalamnya dihapus dari DB + Google Drive.
+     * `delete_files=0` / `keep_files=1`: file diangkat ke folder induk
+     * (fallback root), subfolder tetap dihapus.
      *
-     * `delete_files=0` atau `keep_files=1` (setara, ada demi backward-compat):
-     * file TIDAK dihapus. File di folder ini maupun di seluruh subfolder
-     * diangkat ke folder induk (parent) — atau ke root bila folder induk
-     * tidak ada. Subfolder tetap dihapus (cascade FK), sehingga tidak ada
-     * file yatim. Folder Google Drive TIDAK dihapus.
+     * Yang dikerjakan DI SINI hanya hal yang harus sinkron: validasi, lock
+     * guard (423), snapshot ringan (hitung file/folder via CTE), dan
+     * broadcast `FolderDeletedBroadcast` supaya UI langsung bersih. Semua
+     * operasi berat (85rb file x [query + activity log + webhook + broadcast
+     * + GDrive delete]) dijalankan `PurgeFolderTree` di queue worker —
+     * sebelumnya inline di request dan pasti kena `fastcgi_read_timeout 300`.
+     *
+     * Kontrak frontend dipertahankan: `success: true`; field baru
+     * `status: "queued"` & `job_id` diabaikan klien lama.
      */
     public function destroy(Request $request, string $id): JsonResponse
     {
@@ -686,139 +558,68 @@ class FolderController extends Controller
             $deleteFiles = false;
         }
 
-        if ($deleteFiles) {
-            $descendantFolderIds = $this->getDescendantFolderIds($folderId, $userId);
+        $purgeToken = (string) Str::uuid();
 
-            // Snapshot target Google Drive SEBELUM barisnya hilang dari DB:
-            // folder tidak menyimpan google_account_id, jadi akun pemilik
-            // folder diambil dari file pertama di dalamnya (fallback: semua
-            // akun aktif milik user, dicoba satu per satu).
-            $driveFolderTargets = $this->collectDriveFolderTargets($folderId, $userId, $descendantFolderIds);
+        // Recursive CTE (1 statement, 3 parameter) — bukan BFS `whereIn`
+        // per level yang jumlah parameternya tumbuh mengikuti 419 subfolder.
+        $folderIds = BulkQuery::descendantFolderIds($folderId, $userId);
 
-            // Ambil semua file di dalam folder ini dan seluruh subfoldernya
-            $filesToDelete = File::where('user_id', $userId)
-                ->whereIn('folder_id', $descendantFolderIds)
-                ->with(['googleAccount', 'thumbnail'])
-                ->get();
+        $totalFiles = 0;
+        BulkQuery::eachChunk($folderIds, function (array $chunk) use ($userId, &$totalFiles) {
+            $totalFiles += File::where('user_id', $userId)
+                ->whereIn('folder_id', $chunk)
+                ->count();
+        });
 
-            // Relasi file turunan yang TIDAK punya FK cascade ke files:
-            // share_links bersifat polymorphic (shareable_type/shareable_id,
-            // tanpa FK), jadi harus dihapus manual. Thumbnail sudah FK
-            // CASCADE ke files, tapi tetap dibersihkan di sini supaya tidak
-            // bergantung pada perilaku DB.
-            $fileIdsToDelete = $filesToDelete->pluck('id')->all();
-            ShareLink::where('shareable_type', File::class)
-                ->whereIn('shareable_id', $fileIdsToDelete)
-                ->delete();
-            DB::table('thumbnails')->whereIn('file_id', $fileIdsToDelete)->delete();
+        $targetParentId = $deleteFiles ? null : $this->resolveTargetParent($parentId, $userId);
 
-            foreach ($filesToDelete as $file) {
-                $clientKey = $file->client_key;
-                $fFolderId = $file->folder_id;
-                $fId = $file->id;
-                $fUserId = $file->user_id;
-                $fName = $file->name;
-                $fSize = $file->size;
-                $gdriveFileId = $file->gdrive_file_id;
-                $account = $file->googleAccount;
+        // Tandai "queued" SEBELUM dispatch: `QUEUE_CONNECTION=sync` (test,
+        // CLI) menjalankan job di dalam dispatch() dan menghapus folder di
+        // titik itu juga. Job MEMBACA lalu MENGHAPUS alias `queued:` ini;
+        // controller hanya memeriksa sisanya. Alias dipakai bersama alasan
+        // ini: tanpa flag bersama, job sync mengubah state global (Cache)
+        // yang tidak ikut di-rollback `RefreshDatabase` — sisa alias dari
+        // test lain membuat broadcast di sini hilang.
+        Cache::put('purge-folder:done:'.$purgeToken, true, now()->addHour());
 
-                // Hapus thumbnail fisik
-                if ($file->thumbnail) {
-                    @unlink(storage_path('app/'.$file->thumbnail->path));
-                }
+        try {
+            PurgeFolderTree::dispatch($folderId, $userId, $purgeToken, $deleteFiles, $targetParentId);
+        } catch (Throwable $e) {
+            Log::error('Gagal menjadwalkan hapus folder', [
+                'folder_id' => $folderId,
+                'error' => $e->getMessage(),
+            ]);
 
-                $file->delete();
-
-                // Hapus di GDrive (best-effort)
-                if ($account && $gdriveFileId && ! str_starts_with($gdriveFileId, 'pending-')) {
-                    try {
-                        $this->uploader->deleteFile($account, $gdriveFileId);
-                    } catch (Throwable $e) {
-                        Log::warning('GDrive delete gagal saat destroy file dalam folder', [
-                            'file_id' => $fId,
-                            'gdrive_file_id' => $gdriveFileId,
-                            'error' => $e->getMessage(),
-                        ]);
-                    }
-                }
-
-                $this->activityLog->log(
-                    ActivityLog::ACTION_FILE_DELETE,
-                    userId: $fUserId,
-                    metadata: ['file_id' => $fId, 'name' => $fName],
-                );
-
-                $this->webhooks->dispatch($fUserId, 'file.deleted', [
-                    'file_id' => $fId,
-                    'name' => $fName,
-                    'size' => $fSize,
-                ]);
-
-                FileDeletedBroadcast::dispatch($fId, $clientKey, $fFolderId, $fUserId);
-            }
-
-            // Hapus folder utama (FK cascade akan menghapus subfolder-subfolder di DB).
-            // Share link folder (polymorphic, tanpa FK) dihapus manual untuk
-            // folder utama + SEMUA subfolder, dalam transaksi yang sama.
-            DB::transaction(function () use ($folder, $descendantFolderIds) {
-                ShareLink::where('shareable_type', Folder::class)
-                    ->whereIn('shareable_id', $descendantFolderIds)
-                    ->delete();
-
-                $folder->delete();
-            });
-
-            // DB sudah bersih — baru hapus foldernya di Google Drive (leaf →
-            // root) supaya tidak ada folder yatim tersisa di Drive.
-            $this->deleteDriveFolders($userId, $driveFolderTargets);
-        } else {
-            // Mode simpan-file: file di folder ini DAN di seluruh subfolder
-            // diangkat ke induk folder (fallback root). Subfolder tetap
-            // dihapus (cascade FK), jadi tidak ada file yang tertinggal yatim.
-            $descendantFolderIds = $this->getDescendantFolderIds($folderId, $userId);
-
-            $filesToMove = File::where('user_id', $userId)
-                ->whereIn('folder_id', $descendantFolderIds)
-                ->get();
-
-            $targetParentId = $parentId !== null
-                ? Folder::where('user_id', $userId)->where('id', $parentId)->value('id')
-                : null;
-
-            DB::transaction(function () use ($folder, $descendantFolderIds, $targetParentId) {
-                // File di folder ini + semua subfolder: pindah ke induk (atau root)
-                File::whereIn('folder_id', $descendantFolderIds)
-                    ->update(['folder_id' => $targetParentId]);
-
-                // Hapus folder (cascade subfolders via FK)
-                $folder->delete();
-            });
-
-            // Per-file cascade: file pindah ke induk/root, dari folder asalnya.
-            foreach ($filesToMove as $file) {
-                $file->folder_id = $targetParentId;
-                FileMovedBroadcast::dispatch(
-                    $file,
-                    $folderId,        // previous_folder_id (view yang sedang dibuka)
-                    $file->name,      // previous_name (no rename happened)
-                    false,            // renamed
-                );
-            }
+            return $this->fail(__('Folder gagal dijadwalkan untuk dihapus. Silakan coba lagi.'), 500);
         }
 
-        $this->activityLog->log(
-            ActivityLog::ACTION_FOLDER_DELETE ?? 'FOLDER_DELETE',
-            userId: $request->user()->id,
-            metadata: ['folder_id' => $id, 'name' => $folder->name, 'delete_files' => $deleteFiles],
-            request: $request,
-        );
+        if (Cache::pull('purge-folder:done:'.$purgeToken, false)) {
+            // Belum dikerjakan (async): UI disembunyikan sekarang juga.
+            FolderDeletedBroadcast::dispatch($folderId, $userId, $parentId);
+        }
 
-        // Realtime broadcast — folder gone from parent view.
-        FolderDeletedBroadcast::dispatch($folderId, $userId, $parentId);
+        return $this->accepted([
+            'status' => 'queued',
+            'job_id' => $purgeToken,
+            'folder_id' => $folderId,
+            'delete_files' => $deleteFiles,
+            'total_files' => $totalFiles,
+            'total_folders' => count($folderIds),
+        ], $deleteFiles
+            ? __('Penghapusan folder dijadwalkan.')
+            : __('Folder dijadwalkan untuk dihapus; file dipindahkan ke folder induk.'));
+    }
 
-        return $this->ok(null, $deleteFiles
-            ? __('Folder beserta seluruh isinya berhasil dihapus.')
-            : __('Folder berhasil dihapus. Semua file di dalamnya dipindahkan ke folder induknya.'));
+    /**
+     * Id induk folder setelah penghapusan (mode simpan-file). Null = root.
+     */
+    private function resolveTargetParent(?string $parentId, string $userId): ?string
+    {
+        if ($parentId === null) {
+            return null;
+        }
+
+        return Folder::where('user_id', $userId)->where('id', $parentId)->value('id');
     }
 
     /**

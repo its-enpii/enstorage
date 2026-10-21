@@ -665,6 +665,45 @@ class FileController extends Controller
      * - Folder_id == folder saat ini → no-op (200, renamed=false).
      * - Dispatch webhook `file.moved` ke semua subscriber user.
      */
+    /**
+     * Pindahkan file di Google Drive mengikuti `folder_id` baru.
+     *
+     * Best-effort: kegagalan Google TIDAK boleh menggagalkan move di DB.
+     * WAJIB tidak melempar exception yang tidak tertangkap — sebelumnya
+     * try/catch hanya membungkus bagian ini, sedangkan `ensureRootFolder()`
+     * memanggil `ensureFreshToken()` yang bisa throw di luar jangkauan.
+     */
+    private function syncGdriveMove(FileModel $file, ?string $newFolderId): void
+    {
+        try {
+            if (! $file->google_account_id) {
+                return;
+            }
+
+            $account = $file->googleAccount;
+            if (! $account || ! $account->is_active) {
+                return;
+            }
+
+            $folderService = app(GoogleDriveFolderService::class);
+            $newGDriveParentId = null;
+            if ($newFolderId) {
+                $targetFolder = Folder::where('id', $newFolderId)
+                    ->where('user_id', $file->user_id)
+                    ->first();
+                if ($targetFolder) {
+                    $newGDriveParentId = $folderService->ensureFolderOnDrive($account, $targetFolder);
+                }
+            }
+            if (! $newGDriveParentId) {
+                $newGDriveParentId = app(QuotaManager::class)->ensureRootFolder($account);
+            }
+            $folderService->moveFileOnDrive($account, $file, $newGDriveParentId);
+        } catch (Throwable $e) {
+            Log::warning('GDrive move file sync failed: '.$e->getMessage());
+        }
+    }
+
     public function move(Request $request, string $id): JsonResponse
     {
         $file = $this->findOwned($request, $id);
@@ -738,25 +777,9 @@ class FileController extends Controller
             request: $request,
         );
 
-        // Sync GDrive file move (1:1 folder hierarchy)
-        try {
-            if ($file->google_account_id && $file->googleAccount && $file->googleAccount->is_active) {
-                $folderService = app(GoogleDriveFolderService::class);
-                $newGDriveParentId = null;
-                if ($newFolderId) {
-                    $targetFolder = Folder::find($newFolderId);
-                    if ($targetFolder) {
-                        $newGDriveParentId = $folderService->ensureFolderOnDrive($file->googleAccount, $targetFolder);
-                    }
-                }
-                if (! $newGDriveParentId) {
-                    $newGDriveParentId = app(QuotaManager::class)->ensureRootFolder($file->googleAccount);
-                }
-                $folderService->moveFileOnDrive($file->googleAccount, $file, $newGDriveParentId);
-            }
-        } catch (Throwable $e) {
-            Log::warning('GDrive move file sync failed: '.$e->getMessage());
-        }
+        // Sync GDrive file move (1:1 folder hierarchy) — NAMA method
+        // dipertahankan (test lama memanggilnya), implementasi kini best-effort.
+        $this->syncGdriveMove($file, $newFolderId);
 
         // Broadcast event ke webhook subscriber.
         // Payload berisi field minimal + nama sebelum/sesudah rename agar
@@ -864,8 +887,10 @@ class FileController extends Controller
         ]);
 
         $userId = $request->user()->id;
+        // Maks 50 id → aman; relasi dibatasi kolom (bukan `select *`).
         $files = FileModel::where('user_id', $userId)
             ->whereIn('id', $data['ids'])
+            ->with('thumbnail:id,file_id,path')
             ->get();
 
         $deleted = [];
@@ -1631,10 +1656,21 @@ class FileController extends Controller
         $name = $file->name;
         $size = $file->size;
 
-        // Hapus thumbnail fisik
-        if ($file->thumbnail) {
-            @unlink(storage_path('app/'.$file->thumbnail->path));
+        // Hapus thumbnail fisik. Relasi sudah di-eager-load terbatas kolom
+        // oleh findOwned()/bulkDestroy(), jadi tidak ada query `select *`
+        // (ambil sendiri hanya bila model datang tanpa relasi ter-load).
+        $thumbnails = $file->relationLoaded('thumbnail')
+            ? ($file->thumbnail ? [$file->thumbnail] : [])
+            : DB::table('thumbnails')->where('file_id', $fileId)->get(['id', 'file_id', 'path'])->all();
+        foreach ($thumbnails as $thumbnail) {
+            @unlink(storage_path('app/'.$thumbnail->path));
         }
+
+        // share_links bersifat polymorphic TANPA FK → tidak ikut ter-cascade
+        // saat file dihapus; tanpa ini link publik menunjuk file yang hilang.
+        ShareLink::where('shareable_type', FileModel::class)
+            ->where('shareable_id', $fileId)
+            ->delete();
 
         $driver = $file->storage_driver;
         $storagePath = $file->storage_path;
@@ -1687,10 +1723,18 @@ class FileController extends Controller
         ]);
     }
 
+    /**
+     * File milik user + relasi `thumbnail` HANYA kolom yang dipakai
+     * (`id,file_id,path`). Eager-load tanpa daftar kolom menghasilkan
+     * `select * from "thumbnails" where "file_id" in (...)` — untuk 1 file
+     * aman, tapi kontraknya harus eksplisit supaya tidak pernah `select *`
+     * walau `findOwned` dipakai untuk koleksi besar.
+     */
     private function findOwned(Request $request, string $id): ?FileModel
     {
         return FileModel::where('id', $id)
             ->where('user_id', $request->user()->id)
+            ->with('thumbnail:id,file_id,path')
             ->first();
     }
 

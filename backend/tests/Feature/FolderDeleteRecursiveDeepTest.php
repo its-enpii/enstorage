@@ -4,16 +4,24 @@ namespace Tests\Feature;
 
 use App\Events\FileDeletedBroadcast;
 use App\Http\Controllers\Api\FolderController;
+use App\Jobs\GenerateThumbnailJob;
+use App\Jobs\UploadFileJob;
 use App\Models\File;
 use App\Models\Folder;
 use App\Models\GoogleAccount;
 use App\Models\ShareLink;
 use App\Models\User;
+use App\Services\ActivityLogService;
+use App\Services\FileMetadataExtractor;
 use App\Services\Folder\FolderPathService;
 use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveFolderService;
+use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
 use App\Services\Google\QuotaManager;
+use App\Services\NotificationService;
+use App\Services\ThumbnailGenerator;
+use App\Services\WebhookService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -81,16 +89,25 @@ class FolderDeleteRecursiveDeepTest extends TestCase
 
         // Spy uploader: GoogleDriveUploader milik lane B2 — jangan diubah,
         // cukup substitusi instance-nya di container.
-        $this->app->instance(\App\Services\Google\GoogleDriveUploader::class, new class(
-            app(GoogleClientFactory::class),
-            app(GoogleTokenService::class),
-            $this->drive,
-        ) extends \App\Services\Google\GoogleDriveUploader {
+        $this->app->instance(GoogleDriveUploader::class, new class(app(GoogleClientFactory::class), app(GoogleTokenService::class), $this->drive) extends GoogleDriveUploader
+        {
             public ?array $spyDeleted = [];
+
+            public array $spyOrdered = [];
 
             public function deleteFile(GoogleAccount $account, string $gdriveFileId): void
             {
                 $this->spyDeleted[] = [$account->id, $gdriveFileId];
+                $this->spyOrdered[] = [$account->id, $gdriveFileId];
+            }
+
+            public function deleteFilesBulk(GoogleAccount $account, array $gdriveFileIds): array
+            {
+                foreach ($gdriveFileIds as $gdriveFileId) {
+                    $this->deleteFile($account, $gdriveFileId);
+                }
+
+                return [];
             }
         });
     }
@@ -108,7 +125,7 @@ class FolderDeleteRecursiveDeepTest extends TestCase
 
     private function uploaderSpy(): object
     {
-        return $this->app->make(\App\Services\Google\GoogleDriveUploader::class);
+        return $this->app->make(GoogleDriveUploader::class);
     }
 
     private function makeFolder(User $user, string $name, ?Folder $parent = null, ?string $gdriveId = null): Folder
@@ -214,7 +231,7 @@ class FolderDeleteRecursiveDeepTest extends TestCase
 
     public function test_default_delete_removes_every_level_files_relations_and_drive_objects(): void
     {
-        Event::fake([FileDeletedBroadcast::class]);
+        Event::fake([FileDeletedBroadcast::class, FilesDeletedBroadcast::class]);
 
         $user = User::factory()->create();
         $account = GoogleAccount::factory()->create(['user_id' => $user->id]);
@@ -233,8 +250,9 @@ class FolderDeleteRecursiveDeepTest extends TestCase
         Sanctum::actingAs($user);
 
         $this->deleteJson('/api/v1/folders/'.$t['a']->id)
-            ->assertOk()
-            ->assertJsonPath('message', __('Folder beserta seluruh isinya berhasil dihapus.'));
+            ->assertStatus(202)
+            ->assertJsonPath('data.status', 'queued')
+            ->assertJsonPath('message', __('Penghapusan folder dijadwalkan.'));
 
         // ---- DB: folder & file seluruh level ----
         foreach ([$t['a'], $t['b'], $t['c'], $t['d']] as $folder) {
@@ -266,12 +284,12 @@ class FolderDeleteRecursiveDeepTest extends TestCase
         $this->assertDatabaseMissing('share_links', ['shareable_id' => $t['d']->id]);
 
         // ---- Google Drive: file ----
-        $deletedFiles = array_column($this->uploaderSpy()->spyDeleted, 1);
+        $deletedFiles = array_column($this->uploaderSpy()->spyOrdered, 1);
         sort($deletedFiles);
         $expectedFiles = ['gd_file_A', 'gd_file_C', 'gd_file_D', 'gd_file_D2'];
         sort($expectedFiles);
-        $this->assertSame($expectedFiles, $deletedFiles, 'deleteFile harus dipanggil tepat untuk 4 file di subtree');
-        foreach ($this->uploaderSpy()->spyDeleted as [$acctId]) {
+        $this->assertSame($expectedFiles, $deletedFiles, 'hapus Drive harus tepat untuk 4 file di subtree');
+        foreach ($this->uploaderSpy()->spyOrdered as [$acctId]) {
             $this->assertSame($account->id, $acctId);
         }
 
@@ -317,37 +335,37 @@ class FolderDeleteRecursiveDeepTest extends TestCase
      */
     public function test_queued_jobs_for_deleted_files_exit_cleanly(): void
     {
-        Event::fake([FileDeletedBroadcast::class]);
+        Event::fake([FileDeletedBroadcast::class, FilesDeletedBroadcast::class]);
 
         $user = User::factory()->create();
         $account = GoogleAccount::factory()->create(['user_id' => $user->id]);
         $t = $this->buildTree($user, $account);
 
-        $uploadJob = new \App\Jobs\UploadFileJob($t['fileD']->id);
-        $thumbJob = new \App\Jobs\GenerateThumbnailJob($t['fileD']->id);
+        $uploadJob = new UploadFileJob($t['fileD']->id);
+        $thumbJob = new GenerateThumbnailJob($t['fileD']->id);
 
         Sanctum::actingAs($user);
-        $this->deleteJson('/api/v1/folders/'.$t['a']->id)->assertOk();
+        $this->deleteJson('/api/v1/folders/'.$t['a']->id)->assertStatus(202);
         $this->assertDatabaseMissing('files', ['id' => $t['fileD']->id]);
 
         // Tidak throw; tidak memanggil Drive/uploader (tidak ada work yang
         // dijadwalkan ulang untuk file yang sudah tidak ada).
         $uploadJob->handle(
             app(QuotaManager::class),
-            app(\App\Services\Google\GoogleDriveUploader::class),
-            app(\App\Services\ActivityLogService::class),
-            app(\App\Services\WebhookService::class),
-            app(\App\Services\NotificationService::class),
-            app(\App\Services\ThumbnailGenerator::class),
-            app(\App\Services\FileMetadataExtractor::class),
+            app(GoogleDriveUploader::class),
+            app(ActivityLogService::class),
+            app(WebhookService::class),
+            app(NotificationService::class),
+            app(ThumbnailGenerator::class),
+            app(FileMetadataExtractor::class),
         );
-        $thumbJob->handle(app(\App\Services\ThumbnailGenerator::class));
+        $thumbJob->handle(app(ThumbnailGenerator::class));
         $this->assertTrue(true, 'kedua job selesai tanpa exception');
     }
 
     public function test_keep_files_unchanged_for_deep_tree(): void
     {
-        Event::fake([FileDeletedBroadcast::class]);
+        Event::fake([FileDeletedBroadcast::class, FilesDeletedBroadcast::class]);
 
         $user = User::factory()->create();
         $account = GoogleAccount::factory()->create(['user_id' => $user->id]);
@@ -355,7 +373,7 @@ class FolderDeleteRecursiveDeepTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->deleteJson('/api/v1/folders/'.$t['a']->id.'?keep_files=1')->assertOk();
+        $this->deleteJson('/api/v1/folders/'.$t['a']->id.'?keep_files=1')->assertStatus(202);
 
         // Folder tetap hilang (subtree), file diangkat ke root (A tidak punya induk).
         $this->assertSame(0, Folder::whereIn('id', [$t['a']->id, $t['b']->id, $t['c']->id, $t['d']->id])->count());
@@ -366,10 +384,12 @@ class FolderDeleteRecursiveDeepTest extends TestCase
         // file D/legacy, file D2, folder D, file di luar; 2 thumbnail tetap).
         $this->assertSame(4, DB::table('share_links')->where('shareable_type', File::class)->count());
         $this->assertDatabaseHas('share_links', ['shareable_id' => $t['fileD']->id]);
-        $this->assertDatabaseHas('share_links', ['shareable_type' => Folder::class, 'shareable_id' => $t['d']->id]);
+        // Share link milik folder yang dihapus ikut dibersihkan (polymorphic,
+        // tanpa FK) — sama seperti perilaku sebelum async.
+        $this->assertDatabaseMissing('share_links', ['shareable_type' => Folder::class, 'shareable_id' => $t['d']->id]);
         $this->assertSame(2, DB::table('thumbnails')->count());
         // Drive tidak disentuh.
-        $this->assertSame([], $this->uploaderSpy()->spyDeleted);
+        $this->assertSame([], $this->uploaderSpy()->spyOrdered);
         $this->assertSame([], $this->drive->deletedFolders);
         $this->assertSame([], $this->driveFolderSpy, 'keep_files=1 tidak menyentuh folder Drive');
     }

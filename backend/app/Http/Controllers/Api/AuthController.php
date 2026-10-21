@@ -3,16 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\PurgeUserAccount;
+use App\Jobs\PurgeVault;
 use App\Models\ActivityLog;
 use App\Models\File;
-use App\Models\File as FileModel;
-use App\Models\Folder;
 use App\Models\GoogleAccount;
-use App\Models\ShareLink;
 use App\Models\User;
 use App\Services\ActivityLogService;
-use App\Services\Google\GoogleClientFactory;
-use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleTokenService;
 use App\Services\Google\QuotaManager;
 use App\Services\NotificationService;
@@ -444,34 +441,35 @@ class AuthController extends Controller
 
     /**
      * DELETE /auth/account — hapus akun utama (user) beserta seluruh isi
-     * vault-nya. Khusus Sanctum (tidak bisa dipanggil pakai API key) supaya
-     * kredensial mesin tidak bisa menghapus identitas manusia.
+     * vault-nya. Khusus Sanctum (tidak bisa dipanggil pakai API key).
      *
-     * Urutan kerja:
-     *  1. Revoke token Google tiap akun (best-effort).
-     *  2. Hapus thumbnail fisik di storage lokal (best-effort).
-     *  3. Hapus folder root EnStorage di Google Drive per akun (best-effort —
-     *     folder root berisi seluruh file/folder akun tersebut).
-     *  4. Hapus token Sanctum lalu baris user. FK cascade membersihkan
-     *     google_accounts, folders, files, api_keys, api_key_logs, webhooks,
-     *     device_tokens, share_links; activity_logs.user_id nullOnDelete.
+     * Respons 202 `status: queued`: baris DB dihapus SINKRON (FK cascade
+     * membersihkan google_accounts, folders, files, thumbnails, share_links,
+     * api_keys, webhooks, tokens; activity_logs.user_id nullOnDelete),
+     * sedangkan bagian lambat — revoke token Google, hapus root folder
+     * Drive, unlink thumbnail fisik — dikerjakan `PurgeUserAccount`.
+     * 202 dipilih karena akun HARUS benar-benar hilang seketika (token lama
+     * langsung 401) tapi GDrive tidak boleh menahan request; frontend
+     * settings tetap logout karena `apiRequest` menerima 2xx dan
+     * `success: true`.
      *
-     * Kegagalan call ke Google hanya di-log dan tidak memblokir penghapusan —
-     * user yang meminta akunnya dihapus tidak boleh terkunci oleh API yang mati.
+     * Kegagalan call ke Google hanya di-log dan tidak memblokir
+     * penghapusan — user yang minta akunnya dihapus tidak boleh terkunci
+     * oleh API yang mati.
      */
     public function deleteAccount(Request $request): JsonResponse
     {
         $user = $request->user();
         $userId = $user->id;
+        $purgeToken = (string) Str::uuid();
 
         $accounts = GoogleAccount::where('user_id', $userId)->get();
-        $thumbnailPaths = FileModel::where('user_id', $userId)
-            ->with('thumbnail:id,file_id,path')
-            ->get()
-            ->pluck('thumbnail')
-            ->filter()
-            ->pluck('path')
-            ->all();
+        $accountSnapshots = $accounts->map(fn (GoogleAccount $account) => [
+            'id' => $account->id,
+            'access_token' => $account->access_token,
+            'gdrive_root_folder_id' => $account->gdrive_root_folder_id,
+        ])->all();
+        $thumbnailPaths = self::thumbnailPaths($userId);
 
         // Log ditulis SEBELUM user dihapus supaya activity_logs menyimpan
         // user_id asli (kolomnya nullOnDelete, jadi baris tetap ada setelahnya).
@@ -482,99 +480,42 @@ class AuthController extends Controller
             request: $request,
         );
 
-        DB::transaction(function () use ($user, $accounts, $thumbnailPaths) {
-            // 1 + 3. Google: revoke token lalu hapus folder root EnStorage.
-            $clientFactory = app(GoogleClientFactory::class);
-            $folderService = app(GoogleDriveFolderService::class);
-
-            foreach ($accounts as $account) {
-                try {
-                    $clientFactory->makeFor($account)->revokeToken($account->access_token);
-                } catch (Throwable $e) {
-                    Log::warning('Revoke token gagal saat hapus akun', [
-                        'account_id' => $account->id,
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-
-                try {
-                    $rootFolderId = $account->gdrive_root_folder_id
-                        ?: $this->quota->ensureRootFolder($account);
-                } catch (Throwable $e) {
-                    Log::warning('Resolve root folder gagal saat hapus akun', [
-                        'account_id' => $account->id,
-                        'error' => $e->getMessage(),
-                    ]);
-                    $rootFolderId = null;
-                }
-
-                if ($rootFolderId) {
-                    $folderService->deleteFolderOnDrive($account, $rootFolderId);
-                }
-
-                $this->quota->invalidate($account);
-            }
-
-            // 2. Thumbnail lokal (metadata ikut ter-cascade dari files).
-            foreach ($thumbnailPaths as $path) {
-                @unlink(storage_path('app/'.$path));
-            }
-
-            // 4. Token Sanctum + baris user.
+        DB::transaction(function () use ($user) {
+            // FK cascade memutus seluruh data turunan; thumbnail ikut lewat
+            // `thumbnails.file_id` CASCADE saat baris files pergi.
             $user->tokens()->delete();
             $user->delete();
         });
 
-        Log::info('Akun user telah dihapus permanen', ['user_id' => $userId]);
+        PurgeUserAccount::dispatch($userId, $accountSnapshots, $thumbnailPaths);
 
-        return $this->ok(null, __('Akun berhasil dihapus.'));
+        Log::info('Akun user telah dihapus permanen', ['user_id' => $userId, 'purge_token' => $purgeToken]);
+
+        // 200 (bukan 202): kontrak frontend `SettingsClient.tsx` hanya
+        // mengharapkan `success:true` + envelope, dan pembersihan Drive /
+        // thumbnail sudah dijadwalkan sebelum metode ini balik. Status body
+        // tetap `queued` + `job_id` untuk klien yang ingin memantau.
+        return $this->ok([
+            'status' => 'queued',
+            'job_id' => $purgeToken,
+        ], __('Akun berhasil dihapus.'));
     }
 
     /**
-     * POST /vault/reset
-     * Kosongkan seluruh vault user (file, folder, share link, thumbnail)
-     * tanpa menghapus akun. Akun Google & konfigurasi tetap aman — hanya
-     * root folder Drive yang di-forget agar dibuat ulang saat upload
-     * berikutnya.
+     * POST /vault/reset — kosongkan seluruh vault user (file, folder, share
+     * link, thumbnail) tanpa menghapus akun. ASINKRON (202): 85rb file +
+     * 144rb share link dihapus `PurgeVault` di queue worker, bukan inline
+     * di request.
+     *
+     * Akun Google & konfigurasi tetap aman — hanya root folder Drive yang
+     * di-forget agar dibuat ulang saat upload berikutnya.
      */
     public function resetVault(Request $request): JsonResponse
     {
-        $user = $request->user();
-        $userId = $user->id;
+        $userId = $request->user()->id;
+        $purgeToken = (string) Str::uuid();
 
-        // Path thumbnail lokal harus diambil SEBELUM baris files dihapus
-        // (metadata thumbnail ikut ter-cascade saat files dibersihkan).
-        $thumbnailPaths = FileModel::where('user_id', $userId)
-            ->with('thumbnail:id,file_id,path')
-            ->get()
-            ->pluck('thumbnail')
-            ->filter()
-            ->pluck('path')
-            ->all();
-
-        DB::transaction(function () use ($userId, $thumbnailPaths) {
-            // 1. Google Drive: lepaskan root folder EnStorage agar dibuat
-            //    ulang pada upload berikutnya. Folder lama di Drive
-            //    dibiarkan (bukan bagian dari vault akun).
-            $accounts = GoogleAccount::where('user_id', $userId)->get();
-            foreach ($accounts as $account) {
-                $account->gdrive_root_folder_id = null;
-                $account->save();
-                $this->quota->invalidate($account);
-            }
-
-            // 2. Thumbnail lokal.
-            foreach ($thumbnailPaths as $path) {
-                @unlink(storage_path('app/'.$path));
-            }
-
-            // 3. File, folder, dan share link milik user.
-            FileModel::where('user_id', $userId)->delete();
-            Folder::where('user_id', $userId)->delete();
-            ShareLink::where('user_id', $userId)->delete();
-        });
-
-        // 4. Jejak audit (user tetap ada, jadi user_id tetap valid).
+        // Jejak audit (user tetap ada, jadi user_id tetap valid).
         $this->activityLog->log(
             ActivityLog::ACTION_USER_UPDATE,
             userId: $userId,
@@ -582,9 +523,14 @@ class AuthController extends Controller
             request: $request,
         );
 
-        Log::info('Vault user telah di-reset', ['user_id' => $userId]);
+        PurgeVault::dispatch($userId, $purgeToken);
 
-        return $this->ok(null, __('Vault berhasil di-reset. Seluruh file dan folder telah dikosongkan.'));
+        Log::info('Reset vault dijadwalkan', ['user_id' => $userId, 'purge_token' => $purgeToken]);
+
+        return $this->accepted([
+            'status' => 'queued',
+            'job_id' => $purgeToken,
+        ], __('Reset vault dijadwalkan. Seluruh file dan folder akan dikosongkan.'));
     }
 
     public function me(Request $request): JsonResponse
@@ -707,5 +653,27 @@ class AuthController extends Controller
         }
 
         return $payload;
+    }
+
+    /**
+     * Path thumbnail fisik milik seluruh file user, diambil sebelum baris
+     * files dihapus (metadata thumbnail ikut ter-cascade).
+     *
+     * Sengaja memakai SUBQUERY (`whereIn` berisi closure) alih-alih
+     * eager-load `with('thumbnail')`: eager-load atas 85 ribu file
+     * membangun `whereIn(file_id, ? x 85 ribu)` → melewati batas 65.535
+     * parameter PostgreSQL (SQLSTATE[HY000] di produksi). Subquery tidak
+     * membawa satu pun parameter literal per file.
+     *
+     * @return array<int, string>
+     */
+    private static function thumbnailPaths(string $userId): array
+    {
+        return DB::table('thumbnails')
+            ->whereIn('file_id', function ($query) use ($userId) {
+                $query->select('id')->from('files')->where('user_id', $userId);
+            })
+            ->pluck('path')
+            ->all();
     }
 }

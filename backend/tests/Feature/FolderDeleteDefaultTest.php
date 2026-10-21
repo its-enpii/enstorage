@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Events\FileDeletedBroadcast;
 use App\Events\FileMovedBroadcast;
+use App\Events\FilesDeletedBroadcast;
 use App\Models\File;
 use App\Models\Folder;
 use App\Models\GoogleAccount;
@@ -11,6 +12,7 @@ use App\Models\User;
 use App\Services\Folder\FolderPathService;
 use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveFolderService;
+use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
 use App\Services\Google\QuotaManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -18,6 +20,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\Support\FakeDriveScanService;
+use Tests\Support\FakeDriveUploader;
 use Tests\TestCase;
 
 /**
@@ -42,6 +45,8 @@ class FolderDeleteDefaultTest extends TestCase
             app(QuotaManager::class),
             app(FolderPathService::class),
         ));
+        // File di Drive kini dihapus lewat batch API oleh PurgeFolderTree.
+        $this->app->instance(GoogleDriveUploader::class, new FakeDriveUploader);
     }
 
     private function makeFolder(User $user, string $name, ?Folder $parent = null): Folder
@@ -78,7 +83,7 @@ class FolderDeleteDefaultTest extends TestCase
 
     public function test_delete_without_params_is_recursive(): void
     {
-        Event::fake([FileDeletedBroadcast::class, FileMovedBroadcast::class]);
+        Event::fake([FileDeletedBroadcast::class, FilesDeletedBroadcast::class, FileMovedBroadcast::class]);
 
         $user = User::factory()->create();
         $account = GoogleAccount::factory()->create(['user_id' => $user->id]);
@@ -92,16 +97,22 @@ class FolderDeleteDefaultTest extends TestCase
 
         Sanctum::actingAs($user);
 
+        // Hapus folder ASINKRON: 202 + status queued. `QUEUE_CONNECTION=sync`
+        // di test menjalankan PurgeFolderTree sebelum respons ditulis.
         $this->deleteJson('/api/v1/folders/'.$root->id)
-            ->assertOk()
-            ->assertJsonPath('message', __('Folder beserta seluruh isinya berhasil dihapus.'));
+            ->assertStatus(202)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.status', 'queued')
+            ->assertJsonPath('message', __('Penghapusan folder dijadwalkan.'));
 
         $this->assertDatabaseMissing('folders', ['id' => $root->id]);
         $this->assertDatabaseMissing('folders', ['id' => $child->id]);
         $this->assertDatabaseMissing('folders', ['id' => $grand->id]);
         $this->assertSame(0, File::where('user_id', $user->id)->count(), 'file di subfolder ikut terhapus');
 
-        Event::assertDispatchedTimes(FileDeletedBroadcast::class, 3);
+        // Satu FilesDeletedBroadcast per potongan (bukan 3 event per file).
+        Event::assertDispatchedTimes(FilesDeletedBroadcast::class, 3);
+        Event::assertNotDispatched(FileDeletedBroadcast::class);
         Event::assertNotDispatched(FileMovedBroadcast::class);
     }
 
@@ -115,14 +126,14 @@ class FolderDeleteDefaultTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->deleteJson('/api/v1/folders/'.$root->id.'?delete_files=1')->assertOk();
+        $this->deleteJson('/api/v1/folders/'.$root->id.'?delete_files=1')->assertStatus(202);
 
         $this->assertSame(0, File::where('user_id', $user->id)->count());
     }
 
     public function test_keep_files_lifts_files_from_subfolders_to_parent(): void
     {
-        Event::fake([FileDeletedBroadcast::class, FileMovedBroadcast::class]);
+        Event::fake([FileDeletedBroadcast::class, FilesDeletedBroadcast::class, FileMovedBroadcast::class]);
 
         $user = User::factory()->create();
         $account = GoogleAccount::factory()->create(['user_id' => $user->id]);
@@ -138,8 +149,8 @@ class FolderDeleteDefaultTest extends TestCase
         Sanctum::actingAs($user);
 
         $this->deleteJson('/api/v1/folders/'.$target->id.'?keep_files=1')
-            ->assertOk()
-            ->assertJsonPath('message', __('Folder berhasil dihapus. Semua file di dalamnya dipindahkan ke folder induknya.'));
+            ->assertStatus(202)
+            ->assertJsonPath('message', __('Folder dijadwalkan untuk dihapus; file dipindahkan ke folder induk.'));
 
         $this->assertDatabaseMissing('folders', ['id' => $target->id]);
         $this->assertDatabaseMissing('folders', ['id' => $child->id]);
@@ -151,7 +162,8 @@ class FolderDeleteDefaultTest extends TestCase
         }
 
         $this->assertSame(0, File::where('user_id', $user->id)->whereNull('folder_id')->count());
-        Event::assertDispatchedTimes(FileMovedBroadcast::class, 3);
+        // Mode simpan-file diproses job yang sama (PurgeFolderTree); event
+        // per file tidak lagi dikirim — UI sudah menerima FolderDeletedBroadcast.
         Event::assertNotDispatched(FileDeletedBroadcast::class);
     }
 
@@ -165,7 +177,7 @@ class FolderDeleteDefaultTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->deleteJson('/api/v1/folders/'.$target->id.'?delete_files=0')->assertOk();
+        $this->deleteJson('/api/v1/folders/'.$target->id.'?delete_files=0')->assertStatus(202);
 
         $this->assertSame($parent->id, $file->fresh()->folder_id);
     }
@@ -181,7 +193,7 @@ class FolderDeleteDefaultTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->deleteJson('/api/v1/folders/'.$target->id.'?keep_files=1')->assertOk();
+        $this->deleteJson('/api/v1/folders/'.$target->id.'?keep_files=1')->assertStatus(202);
 
         $this->assertNull($direct->fresh()->folder_id);
         $this->assertNull($nested->fresh()->folder_id, 'file di subfolder ikut ke root, tidak yatim');
@@ -189,7 +201,7 @@ class FolderDeleteDefaultTest extends TestCase
 
     public function test_delete_deeply_nested_folders_removes_all_files_from_db(): void
     {
-        Event::fake([FileDeletedBroadcast::class, FileMovedBroadcast::class]);
+        Event::fake([FileDeletedBroadcast::class, FilesDeletedBroadcast::class, FileMovedBroadcast::class]);
 
         $user = User::factory()->create();
         $account = GoogleAccount::factory()->create(['user_id' => $user->id]);
@@ -203,7 +215,7 @@ class FolderDeleteDefaultTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->deleteJson('/api/v1/folders/'.$a->id)->assertOk();
+        $this->deleteJson('/api/v1/folders/'.$a->id)->assertStatus(202);
 
         foreach ([$a, $b, $c] as $folder) {
             $this->assertDatabaseMissing('folders', ['id' => $folder->id]);
