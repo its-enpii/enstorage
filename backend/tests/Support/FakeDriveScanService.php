@@ -2,6 +2,7 @@
 
 namespace Tests\Support;
 
+use App\Models\Folder;
 use App\Models\GoogleAccount;
 use App\Services\Google\GoogleDriveFolderService;
 use Google\Service\Drive;
@@ -110,7 +111,7 @@ class FakeDriveScanService extends GoogleDriveFolderService
         ];
     }
 
-    public function deleteFolderOnDrive(GoogleAccount $account, string $gdriveFolderId): bool
+    public function deleteFolderOnDrive(GoogleAccount $account, string $gdriveFolderId, ?Folder $folder = null): bool
     {
         $this->deletedFolders[] = [$account->id, $gdriveFolderId];
 
