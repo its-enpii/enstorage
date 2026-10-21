@@ -919,7 +919,7 @@ function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props)
         // otherwise push it down / the backdrop click layer would cover it.
         viewer = createPortal(
           <div
-            className="fixed inset-0 z-viewer flex flex-col pt-14 sm:pt-16"
+            className="fixed inset-0 z-[1000] z-viewer flex flex-col pt-14 sm:pt-16"
             // Stop clicks inside the text surface from reaching the
             // overlay's click-to-close backdrop layer.
             onClick={(e) => e.stopPropagation()}
@@ -935,7 +935,7 @@ function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props)
   }
 
   return (
-    <div className="fixed inset-0 z-viewer">
+    <div className="fixed inset-0 z-[1000] z-viewer">
       {/*
         Backdrop layer: fills the viewport, dims + blurs the app behind the
         preview, and carries click-to-close. It is a plain DIV on purpose —
