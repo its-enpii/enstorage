@@ -70,7 +70,10 @@
       "showFiles": "Files",
       "reset": "Reset",
       "apply": "Apply",
-      "summary": "{{folders}} folders • {{files}} files",
+      "summary_folders_one": "{{count}} folder",
+      "summary_folders_other": "{{count}} folders",
+      "summary_files_one": "{{count}} file",
+      "summary_files_other": "{{count}} files",
       "typeLockedHint": "Switch 'Show: All' first to enable type filter",
       "showLockedHint": "Reset type filter to see folders only"
     },

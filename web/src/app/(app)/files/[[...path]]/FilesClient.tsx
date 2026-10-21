@@ -1942,7 +1942,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         className="mb-1 md:mb-6"
       >
         <div className="flex flex-nowrap items-center gap-2 md:gap-3">
-          <h1 className="min-w-0 flex-1">
+          <h1 className="min-w-0 flex-1 font-display tracking-tight text-on-surface [&_a]:text-on-surface-variant [&_a]:font-medium [&_a]:hover:text-on-surface [&_svg]:text-outline-variant">
             <Breadcrumb
               size="lg"
               className="flex items-center gap-1.5"
@@ -2078,7 +2078,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               data-testid="files-summary-row"
             >
               <span className="text-metadata text-outline tabular-nums truncate min-w-0">
-                {t('files.filter.summary', { folders: totalFolders, files: totalFiles })}
+                {t('files.filter.summary_folders', { count: totalFolders })} • {t('files.filter.summary_files', { count: totalFiles })}
               </span>
             </div>
           )}

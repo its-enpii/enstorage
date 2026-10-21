@@ -70,7 +70,12 @@
       "showFiles": "File",
       "reset": "Atur ulang",
       "apply": "Terapkan",
-      "summary": "{{folders}} folder • {{files}} file",
+      "summary_folders": "{{count}} folder",
+      "summary_folders_one": "{{count}} folder",
+      "summary_folders_other": "{{count}} folder",
+      "summary_files": "{{count}} file",
+      "summary_files_one": "{{count}} file",
+      "summary_files_other": "{{count}} file",
       "typeLockedHint": "Pilih 'Tampilkan: Semua' dulu untuk filter tipe",
       "showLockedHint": "Reset filter tipe dulu untuk lihat folder saja"
     },
