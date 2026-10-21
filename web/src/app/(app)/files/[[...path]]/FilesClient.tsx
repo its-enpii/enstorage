@@ -44,6 +44,7 @@ import {
   ChunkedUploadError,
   MAX_UPLOAD_BYTES,
   uploadFileChunked,
+  uploadFilesChunked,
 } from '@/lib/chunkedUpload';
 import { bytes, fileExtension } from '@/lib/format';
 import { usePageTitle } from '@/lib/usePageTitle';
@@ -975,43 +976,43 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   /**
    * Chunked upload (files > CHUNKED_THRESHOLD_BYTES) via
    * `web/src/lib/chunkedUpload.ts`: init → 8 MiB chunk POSTs (max 3 in
-   * flight, 3 attempts each with backoff) → complete. Progress is byte-based.
-   * Failure of THIS file only marks its own job as failed.
+   * flight per file, 3 files at once, 3 attempts each with backoff) →
+   * complete. Progress is byte-based. Failure of THIS file only marks its
+   * own job as failed.
    */
-  async function uploadChunkedFile(file: File, targetFolderId: string | null, token: string) {
-    const fail = (reason: string) =>
-      setJobs((js) =>
-        js.map((j) => (j.name === file.name && j.status === 'uploading' ? { ...j, status: 'failed', error: reason } : j)),
-      );
-    try {
-      await uploadFileChunked(file, {
-        token,
-        folderId: targetFolderId,
-        onProgress: ({ loaded, total }) => {
-          setJobs((js) =>
-            js.map((j) => (j.name === file.name && j.status === 'uploading' ? { ...j, loaded, total } : j)),
-          );
-        },
-      });
-      setJobs((js) =>
-        js.map((j) => (j.name === file.name && j.status === 'uploading' ? { ...j, status: 'done', loaded: j.total } : j)),
-      );
-    } catch (e) {
-      fail(
-        e instanceof ChunkedUploadError
-          ? e.message === 'file_too_large'
-            ? t('files.upload.tooLarge', { limit: formatLimit(MAX_UPLOAD_BYTES) })
-            : e.message
-          : t('files.errors.uploadNetwork'),
-      );
-    }
+  async function uploadChunkedFiles(files: File[], targetFolderId: string | null, token: string) {
+    await uploadFilesChunked(files, {
+      token,
+      folderId: targetFolderId,
+      onProgress: (file, { loaded, total }) => {
+        setJobs((js) =>
+          js.map((j) => (j.name === file.name && j.status === 'uploading' ? { ...j, loaded, total } : j)),
+        );
+      },
+      onFileDone: (file) => {
+        setJobs((js) =>
+          js.map((j) => (j.name === file.name && j.status === 'uploading' ? { ...j, status: 'done', loaded: j.total } : j)),
+        );
+      },
+      onFileError: (file, e) => {
+        const reason =
+          e instanceof ChunkedUploadError
+            ? e.message === 'file_too_large'
+              ? t('files.upload.tooLarge', { limit: formatLimit(MAX_UPLOAD_BYTES) })
+              : e.message
+            : t('files.errors.uploadNetwork');
+        setJobs((js) =>
+          js.map((j) => (j.name === file.name && j.status === 'uploading' ? { ...j, status: 'failed', error: reason } : j)),
+        );
+      },
+    });
   }
 
   /**
    * Entry point for every upload (picker, folder picker, drag-drop):
    *  1. Reject files > MAX_UPLOAD_BYTES up front with a clear i18n message.
-   *  2. Files > 64 MiB → chunked upload, max 2 files in parallel
-   *     (simple in-function worker pool, no new dependency).
+   *  2. Files > 64 MiB → chunked upload, 3 files in parallel
+   *     (`uploadFilesChunked` in chunkedUpload.ts).
    *  3. Files ≤ 64 MiB → existing `bulk-upload`, 10 files per request.
    * Partial success: one file failing never cancels the others.
    */
@@ -1062,22 +1063,14 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     ]);
 
     const token = getToken() ?? '';
+    // Chunked lane: 3 active files at once in-file (chunkedUpload.ts), each
+    // with its own 3-chunk pool. Runs alongside the multipart lane so a
+    // stalled small-file batch never blocks the large files.
+    const chunkedLane = uploadChunkedFiles(largeFiles, targetFolderId, token);
     const tasks: Promise<void>[] = [
       // Multipart lane: same 10-file batches as before.
       uploadBulk(smallFiles, targetFolderId),
-      // Chunked lane: max 2 large files concurrently.
-      (async () => {
-        let next = 0;
-        const worker = async () => {
-          while (next < largeFiles.length) {
-            const file = largeFiles[next++];
-            await uploadChunkedFile(file, targetFolderId, token);
-          }
-        };
-        await Promise.all(
-          Array.from({ length: Math.min(2, largeFiles.length) }, () => worker()),
-        );
-      })(),
+      chunkedLane,
     ];
     await Promise.all(tasks);
 

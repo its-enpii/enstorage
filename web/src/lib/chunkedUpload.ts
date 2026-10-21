@@ -27,6 +27,12 @@ export const CHUNK_SIZE_BYTES = 8 * 1024 * 1024; // 8 MiB
 /** Max chunk requests in flight for a single file. */
 const CHUNK_CONCURRENCY = 3;
 
+/**
+ * Max files uploaded concurrently by `uploadFilesChunked`. Total in-flight
+ * chunk requests stay at FILES_CONCURRENCY x CHUNK_CONCURRENCY (3 x 3 = 9).
+ */
+export const FILES_CONCURRENCY = 3;
+
 /** Max attempts per chunk (1 initial try + 2 retries). */
 const MAX_CHUNK_ATTEMPTS = 3;
 
@@ -205,9 +211,55 @@ export async function uploadFileChunked(
   );
   if (failure !== null) throw failure;
 
-  // 3) complete — server reassembles + dispatches the upload job.
+  // 3) complete — server validates chunks + 202, reassembly runs in a queue job.
   const done = await postJson<CompleteResponse>(`/files/upload/${init.file_id}/complete`, token, {});
   if (!done?.file_id) throw new ChunkedUploadError('complete_failed');
   onProgress?.({ loaded: file.size, total: file.size });
   return done;
+}
+
+/**
+ * Upload many large files with a small cross-file pool (`FILES_CONCURRENCY`
+ * files active at once; each keeps at most `CHUNK_CONCURRENCY` chunk
+ * requests in flight). Per-file progress uses the same `onProgress` shape.
+ *
+ * Isolation: one file failing only rejects that file's promise — the other
+ * files keep going. `signal` aborts every active file.
+ */
+export async function uploadFilesChunked(
+  files: File[],
+  opts: {
+    token: string;
+    folderId: string | null;
+    onProgress?: (file: File, progress: ChunkedUploadProgress) => void;
+    onFileDone?: (file: File, result: CompleteResponse) => void;
+    onFileError?: (file: File, error: unknown) => void;
+    signal?: AbortSignal;
+  },
+): Promise<void> {
+  const { token, folderId, onProgress, onFileDone, onFileError, signal } = opts;
+  let next = 0;
+
+  async function worker(): Promise<void> {
+    while (next < files.length) {
+      if (signal?.aborted) return;
+      const file = files[next++];
+      try {
+        const done = await uploadFileChunked(file, {
+          token,
+          folderId,
+          signal,
+          onProgress: onProgress ? (p) => onProgress(file, p) : undefined,
+        });
+        onFileDone?.(file, done);
+      } catch (e) {
+        if (signal?.aborted) return;
+        onFileError?.(file, e);
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(FILES_CONCURRENCY, files.length) }, () => worker()),
+  );
 }

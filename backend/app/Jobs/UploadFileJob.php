@@ -15,6 +15,7 @@ use App\Services\ThumbnailGenerator;
 use App\Services\WebhookService;
 use App\Support\WebhookPayload;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Http\File;
@@ -23,9 +24,23 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
-class UploadFileJob implements ShouldQueue
+/**
+ * `ShouldBeUnique`: AssembleChunkedFileJob (retry) bisa mem-dispatch job ini
+ * lebih dari sekali untuk file yang sama; unique lock memastikan hanya satu
+ * yang berjalan, jadi upload ke Drive tidak dobel.
+ */
+class UploadFileJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    /** Dedupe key: satu job aktif per file. */
+    public function uniqueId(): string
+    {
+        return $this->fileId;
+    }
+
+    /** Umur lock (detik): > timeout job (1800 s) + retry. */
+    public int $uniqueFor = 5400;
 
     public int $tries = 3;
 
