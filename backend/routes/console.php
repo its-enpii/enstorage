@@ -14,8 +14,8 @@ Artisan::command('inspire', function () {
 // Sync quota semua akun Google tiap jam (via worker)
 Schedule::job(new SyncAllQuotasJob)->hourly()->name('sync-all-quotas')->withoutOverlapping();
 
-// Hapus file gagal yang lebih dari 30 menit, tiap 15 menit
-Schedule::job(new CleanupFailedFilesJob)->everyFifteenMinutes()->name('cleanup-failed-files')->withoutOverlapping();
+// Hapus file gagal + upload chunked yatim > 30 menit, tiap 5 menit
+Schedule::job(new CleanupFailedFilesJob)->everyFiveMinutes()->name('cleanup-failed-files')->withoutOverlapping();
 
 // Auto-revoke share links yang sudah lewat expires_at, tiap jam
 Schedule::job(new ExpireShareLinksJob)->hourly()->name('expire-share-links')->withoutOverlapping();

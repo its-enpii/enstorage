@@ -8,6 +8,13 @@ import { useTranslation } from 'react-i18next';
 import { Tune, Link as LinkIcon } from '@mui/icons-material';
 import { apiRequest, apiRequestEnvelope, ApiError, getToken, isUuid, type FileItem, type Folder, type Folder as FolderType, type ResolvedFolder } from '@/lib/api';
 import { cacheInvalidatePrefix } from '@/lib/cache';
+import {
+  clearFilesScroll,
+  findScrollContainer,
+  readFilesScroll,
+  saveFilesScroll,
+  type SavedScroll,
+} from '@/lib/filesScroll';
 import { getLocalUserId } from '@/lib/filesStore';
 import {
   CloudDoneIcon,
@@ -727,6 +734,10 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     invalidateCurrentCache,
     allFolders,
     reloadAllFolders,
+    hydrated,
+    folderPage,
+    filePage,
+    ensureLoadedPages,
   } = store;
 
   const [tab, setTab] = useState<Tab>(() => {
@@ -772,6 +783,174 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   useEffect(() => {
     folderIdRef.current = folderId;
   }, [folderId]);
+
+  // ---------------------------------------------------------------------
+  // Restore posisi scroll saat kembali (back / breadcrumb) ke folder ini.
+  //
+  // Scroll terjadi di container AppShell (div overflow-y-auto), bukan di
+  // window — jadi window.scrollY selalu 0. Entri disimpan per folder path
+  // ke sessionStorage tepat sebelum navigasi keluar (kartu folder,
+  // breadcrumb, pagehide), dan dipulihkan HANYA untuk navigasi back.
+  // ---------------------------------------------------------------------
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const pathKeyRef = useRef(currentPath);
+  const markViewRef = useRef(true);
+  const overlayOpenRef = useRef(false);
+  const restoreAttemptsRef = useRef(0);
+  const folderPageRef = useRef(folderPage);
+  const filePageRef = useRef(filePage);
+
+  useEffect(() => {
+    folderPageRef.current = folderPage;
+  }, [folderPage]);
+  useEffect(() => {
+    filePageRef.current = filePage;
+  }, [filePage]);
+
+  const scrollSnapshot = useCallback((): SavedScroll => {
+    const container = findScrollContainer(rootRef.current);
+    return {
+      top: container.scrollTop,
+      folderId: folderIdRef.current,
+      search,
+      typeFilter,
+      folderPage: folderPageRef.current,
+      filePage: filePageRef.current,
+      scrollHeight: container.scrollHeight,
+      clientHeight: container.clientHeight,
+    };
+  }, [search, typeFilter]);
+
+  /** Simpan posisi sekarang untuk path yang sedang ditampilkan. Panggil SEBELUM navigasi keluar. */
+  const persistScroll = useCallback(() => {
+    const uid = getLocalUserId();
+    if (!uid) return;
+    saveFilesScroll(uid, pathKeyRef.current, scrollSnapshot());
+  }, [scrollSnapshot]);
+
+  const navigateAway = useCallback(
+    (href: string) => {
+      persistScroll();
+      markViewRef.current = false;
+      router.push(href);
+    },
+    [persistScroll, router],
+  );
+
+  // Navigasi back/forward → tandai bahwa view yang datang boleh me-restore.
+  useEffect(() => {
+    const onPopState = () => {
+      markViewRef.current = true;
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  // Tab ditutup / di-hide / pindah ke memori bfcache → simpan posisi.
+  useEffect(() => {
+    const onPageHide = () => persistScroll();
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') persistScroll();
+    };
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('beforeunload', onPageHide);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('beforeunload', onPageHide);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [persistScroll]);
+
+  // Path halaman baru: satu kali percobaan restore per kedatangan.
+  useEffect(() => {
+    pathKeyRef.current = currentPath;
+    restoreAttemptsRef.current = 0;
+  }, [currentPath]);
+
+  // Overlay viewer/dialog memblokir scroll — jangan restore di belakangnya.
+  useEffect(() => {
+    overlayOpenRef.current =
+      Boolean(viewerFile) ||
+      showFileDetails ||
+      Boolean(shareFile) ||
+      Boolean(shareFolder) ||
+      Boolean(deleteFolderTarget) ||
+      Boolean(lockTarget) ||
+      Boolean(moveFiles) ||
+      Boolean(moveFolders);
+  }, [
+    viewerFile,
+    showFileDetails,
+    shareFile,
+    shareFolder,
+    deleteFolderTarget,
+    lockTarget,
+    moveFiles,
+    moveFolders,
+  ]);
+
+  // Restore setelah listing termuat (seed cache langsung, atau setelah fetch
+  // pertama). Hanya untuk view yang datang lewat back; entri one-shot.
+  useEffect(() => {
+    if (!hydrated || !markViewRef.current || restoreAttemptsRef.current >= 3) return;
+    if (overlayOpenRef.current) return;
+    const uid = getLocalUserId();
+    if (!uid) return;
+    const saved = readFilesScroll(uid, currentPath);
+    if (!saved || saved.folderId !== folderId || saved.search !== search || saved.typeFilter !== typeFilter) {
+      return;
+    }
+
+    restoreAttemptsRef.current += 1;
+    const renderedFolderPage = folderPageRef.current;
+    const renderedFilePage = filePageRef.current;
+    let cancelled = false;
+
+    const waitForDom = () =>
+      new Promise<void>((resolve) => {
+        let frames = 0;
+        const tick = () => {
+          if (cancelled) return;
+          frames += 1;
+          if (frames >= 3) resolve();
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+
+    const apply = () => {
+      if (cancelled) return;
+      const container = findScrollContainer(rootRef.current);
+      // Tertinggal (browser native restore / load-more) → jangan tangkap user.
+      if (container.scrollTop > 4) {
+        clearFilesScroll(uid, currentPath);
+        return;
+      }
+      // Konten belum setinggi saat disimpan (mis. entri dari page 3) →
+      // paksa naik ke posisi valid terdekat dulu, lalu muat paging yang
+      // memberi ruang untuk posisi target.
+      const maxNow = Math.max(0, container.scrollHeight - container.clientHeight);
+      container.scrollTop = Math.min(saved.top, maxNow);
+      clearFilesScroll(uid, currentPath);
+      if (saved.scrollHeight > container.scrollHeight && saved.folderPage + saved.filePage > renderedFolderPage + renderedFilePage) {
+        void ensureLoadedPages(saved.folderPage, saved.filePage).then(() => {
+          if (cancelled) return;
+          const again = findScrollContainer(rootRef.current);
+          const maxLater = Math.max(0, again.scrollHeight - again.clientHeight);
+          again.scrollTop = Math.min(saved.top, maxLater);
+        });
+      }
+    };
+
+    void waitForDom().then(apply);
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, currentPath, folderId, search, typeFilter]);
+
 
   // Dynamic title: deepest folder name · "My Files" · EnStorage. Falls back to
   // plain "My Files" when at the root or crumbs haven't loaded yet.
@@ -835,9 +1014,9 @@ function FilesContent({ currentPath }: { currentPath: string }) {
 
   function navigateToFolder(path: string | null) {
     if (path && path !== '/') {
-      router.push(`/files${path}`);
+      navigateAway(`/files${path}`);
     } else {
-      router.push('/files');
+      navigateAway('/files');
     }
   }
 
@@ -1939,7 +2118,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   }
 
   return (
-    <>
+    <div ref={rootRef}>
       {/* Header: breadcrumb + actions share one row at every width. The
           breadcrumb takes the free space (`flex-1` + `min-w-0`) and wraps
           its own segments instead of pushing the action cluster onto a
@@ -1953,6 +2132,9 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             <Breadcrumb
               size="lg"
               className="flex items-center gap-1.5"
+              // Link breadcrumb adalah <Link>: simpan posisi scroll SEBELUM
+              // navigasinya terjadi (capture pada container header).
+              onClickCapture={persistScroll}
               items={[
                 { id: null, label: t('files.title'), href: '/files' },
                 ...folderCrumbs.map((c, i) => ({
@@ -2433,6 +2615,6 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

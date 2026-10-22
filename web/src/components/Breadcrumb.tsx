@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { ChevronRight, MoreHoriz } from '@mui/icons-material';
 import clsx from 'clsx';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type MouseEventHandler } from 'react';
 import { IconButton } from '@/components/Button';
 import { Tooltip } from '@/components/Tooltip';
 
@@ -39,6 +39,11 @@ type Props = {
   /** Visual size. */
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  /**
+   * Capture-phase click pada nav. Dipakai halaman untuk menyimpan posisi
+   * scroll SEBELUM <Link> memicu navigasi.
+   */
+  onClickCapture?: MouseEventHandler<HTMLElement>;
 };
 
 // `lg` is the page-heading size. On phones it steps down to 17px so the
@@ -58,6 +63,7 @@ export function Breadcrumb({
   hrefForIndex,
   size = 'lg',
   className,
+  onClickCapture,
 }: Props) {
   const isHeading = size === 'lg';
   const navRef = useRef<HTMLElement | null>(null);
@@ -101,6 +107,7 @@ export function Breadcrumb({
     <nav
       ref={navRef}
       aria-label="Breadcrumb"
+      onClickCapture={onClickCapture}
       className={clsx('min-w-0 flex-nowrap', className)}
     >
       {items.map((c, i) => {

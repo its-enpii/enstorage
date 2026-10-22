@@ -30,6 +30,13 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(300)->by($request->user()?->id ?: $request->ip());
         });
 
+        // Khusus upload: bulk (10 file per request) + chunked stream
+        // (3 file x 3 chunk paralel) butuh budget request lebih tinggi
+        // daripada navigasi biasa, jadi dipisah dari limiter `api` (300/min).
+        RateLimiter::for('upload', function (Request $request) {
+            return Limit::perMinute(500)->by($request->user()?->id ?: $request->ip());
+        });
+
         // Limit lebih ketat untuk auth (anti-brute force)
         RateLimiter::for('auth', function (Request $request) {
             return Limit::perMinute(10)->by($request->ip());
