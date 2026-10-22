@@ -43,10 +43,10 @@
   },
   "files": {
     "title": "My Files",
-    "empty": "Drop files here or click to select (max 10 files, 1GB per file)",
+    "empty": "Drop files here or click to select (max 10 files, 1 GB (1,073,741,824 bytes) per file)",
     "dropTitle": "Drop files here to upload",
-    "dropDesc": "Upload to this folder • max 10 files, 1GB per file",
-    "dropDescRoot": "Upload to root • max 10 files, 1GB per file",
+    "dropDesc": "Upload to this folder • max 10 files, 1 GB (1,073,741,824 bytes) per file",
+    "dropDescRoot": "Upload to root • max 10 files, 1 GB (1,073,741,824 bytes) per file",
     "uploading": "Uploading",
     "tabs": {
       "all": "All",
@@ -124,7 +124,7 @@
       "downloadFailed": "Failed to download.",
       "copyFailed": "Failed to copy file.",
       "maxFiles": "Maximum 10 files per upload.",
-      "tooLarge": "File exceeds 1GB",
+      "tooLarge": "File size exceeds the maximum {{limit}} (1,073,741,824 bytes).",
       "oauthFailed": "Failed to connect account",
       "oauthWarning": "Account connected, but {{warning}}. Disconnect & reconnect.",
       "warningTitle": "Warning",
@@ -134,7 +134,7 @@
       "uploadNetwork": "Network error while uploading."
     },
     "upload": {
-      "tooLarge": "File size exceeds the {{limit}} limit. This file was not uploaded.",
+      "tooLarge": "File size exceeds the maximum {{limit}} (1,073,741,824 bytes).",
       "hint": "Up to {{limit}} per file. Files over {{chunked}} are uploaded in chunks so they don't fail."
     },
     "move": {

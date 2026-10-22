@@ -914,7 +914,7 @@ export const REFERENCE: ReferenceEntry[] = [
         "share_url": "https://vault.example.com/s/3f9a1c7e5b2d48af90c6e1d7a3b5c8f0"
       }
     ],
-    "rejected": [{ "name": "too-large.bin", "reason": "File melebihi 1GB" }],
+    "rejected": [{ "name": "too-large.bin", "reason": "Ukuran file melebihi batas maksimum 1 GB (1.073.741.824 byte)." }],
     "count": 1
   },
   "message": "File berhasil diupload.",
@@ -1251,7 +1251,7 @@ Content-Length: 18244
       },
       expect: '200 OK',
       notes: [
-        'Multipart batch upload: up to 10 files at 1 GB each, routed per file like',
+        'Multipart batch upload: up to 10 files at 1 GB (1.073.741.824 bytes) each, routed per file like',
         'POST /files/upload. Partial success is normal and still answers 200 —',
         'inspect `success` on every item in `results` instead of trusting the status code.',
       ],
@@ -1291,7 +1291,7 @@ Content-Length: 18244
         "index": 1,
         "success": false,
         "name": "too-large.bin",
-        "reason": "File melebihi 1GB"
+        "reason": "Ukuran file melebihi batas maksimum 1 GB (1.073.741.824 byte)."
       }
     ]
   },
