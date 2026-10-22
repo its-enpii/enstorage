@@ -125,13 +125,14 @@ Route::middleware('auth.apikey')->group(function () {
     // Storage summary
     Route::get('storage/summary', [StorageController::class, 'summary']);
 
-    // Files
-    Route::post('files/upload', [FileUploadController::class, 'upload']);
-    Route::post('files/upload-from-url', [FileUploadController::class, 'uploadFromUrl']);
-    Route::post('files/bulk-upload', [FileUploadController::class, 'bulkUpload']);
-    Route::post('files/upload/init', [FileUploadController::class, 'initChunked']);
-    Route::post('files/upload/{fileId}/chunk/{chunkIndex}', [FileUploadController::class, 'uploadChunk']);
-    Route::post('files/upload/{fileId}/complete', [FileUploadController::class, 'completeChunked']);
+    // Files — rute upload pakai limiter `upload` (500/min), bukan `api` (300/min):
+    // bulk + chunked stream butuh budget lebih besar dari navigasi.
+    Route::post('files/upload', [FileUploadController::class, 'upload'])->middleware('throttle:upload');
+    Route::post('files/upload-from-url', [FileUploadController::class, 'uploadFromUrl'])->middleware('throttle:upload');
+    Route::post('files/bulk-upload', [FileUploadController::class, 'bulkUpload'])->middleware('throttle:upload');
+    Route::post('files/upload/init', [FileUploadController::class, 'initChunked'])->middleware('throttle:upload');
+    Route::post('files/upload/{fileId}/chunk/{chunkIndex}', [FileUploadController::class, 'uploadChunk'])->middleware('throttle:upload');
+    Route::post('files/upload/{fileId}/complete', [FileUploadController::class, 'completeChunked'])->middleware('throttle:upload');
     Route::get('files', [FileController::class, 'index']);
     Route::get('files/by-hashes', [FileController::class, 'byHashes']);
     Route::post('files/by-metadata', [FileController::class, 'byMetadata']);
@@ -197,12 +198,12 @@ Route::middleware('auth.apikey')->group(function () {
 // mengakses `$request->user()->id` pada null.
 Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(function () {
     Route::middleware('check.scope:write')->group(function () {
-        Route::post('files/upload', [FileUploadController::class, 'upload']);
-        Route::post('files/upload-from-url', [FileUploadController::class, 'uploadFromUrl']);
-        Route::post('files/bulk-upload', [FileUploadController::class, 'bulkUpload']);
-        Route::post('files/upload/init', [FileUploadController::class, 'initChunked']);
-        Route::post('files/upload/{fileId}/chunk/{chunkIndex}', [FileUploadController::class, 'uploadChunk']);
-        Route::post('files/upload/{fileId}/complete', [FileUploadController::class, 'completeChunked']);
+        Route::post('files/upload', [FileUploadController::class, 'upload'])->middleware('throttle:upload');
+        Route::post('files/upload-from-url', [FileUploadController::class, 'uploadFromUrl'])->middleware('throttle:upload');
+        Route::post('files/bulk-upload', [FileUploadController::class, 'bulkUpload'])->middleware('throttle:upload');
+        Route::post('files/upload/init', [FileUploadController::class, 'initChunked'])->middleware('throttle:upload');
+        Route::post('files/upload/{fileId}/chunk/{chunkIndex}', [FileUploadController::class, 'uploadChunk'])->middleware('throttle:upload');
+        Route::post('files/upload/{fileId}/complete', [FileUploadController::class, 'completeChunked'])->middleware('throttle:upload');
         Route::patch('files/{id}', [FileController::class, 'update']);
         Route::put('files/{id}/move', [FileController::class, 'move']);
         Route::post('files/{id}/extract', [FileController::class, 'extract']);
@@ -256,12 +257,12 @@ Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(funct
     // Write scope
     Route::middleware('check.scope:write')->group(function () {
         Route::post('google-accounts/{id}/sync-quota', [GoogleAccountController::class, 'syncQuota']);
-        Route::post('files/upload', [FileUploadController::class, 'upload']);
-        Route::post('files/upload-from-url', [FileUploadController::class, 'uploadFromUrl']);
-        Route::post('files/bulk-upload', [FileUploadController::class, 'bulkUpload']);
-        Route::post('files/upload/init', [FileUploadController::class, 'initChunked']);
-        Route::post('files/upload/{fileId}/chunk/{chunkIndex}', [FileUploadController::class, 'uploadChunk']);
-        Route::post('files/upload/{fileId}/complete', [FileUploadController::class, 'completeChunked']);
+        Route::post('files/upload', [FileUploadController::class, 'upload'])->middleware('throttle:upload');
+        Route::post('files/upload-from-url', [FileUploadController::class, 'uploadFromUrl'])->middleware('throttle:upload');
+        Route::post('files/bulk-upload', [FileUploadController::class, 'bulkUpload'])->middleware('throttle:upload');
+        Route::post('files/upload/init', [FileUploadController::class, 'initChunked'])->middleware('throttle:upload');
+        Route::post('files/upload/{fileId}/chunk/{chunkIndex}', [FileUploadController::class, 'uploadChunk'])->middleware('throttle:upload');
+        Route::post('files/upload/{fileId}/complete', [FileUploadController::class, 'completeChunked'])->middleware('throttle:upload');
         Route::patch('files/{id}', [FileController::class, 'update']);
         Route::put('files/{id}/move', [FileController::class, 'move']);
         Route::post('files/{id}/extract', [FileController::class, 'extract']);

@@ -92,6 +92,20 @@ type Ctx = {
   totalFolders: number;
   totalFiles: number;
 
+  /**
+   * Halaman yang sudah dimuat untuk view aktif — dipakai restore scroll
+   * (lihat `filesScroll.ts`) supaya entri dari page 3 tidak mendarat di
+   * posisi kosong ketika cache hanya berisi page 1.
+   */
+  folderPage: number;
+  filePage: number;
+  /**
+   * Naikkan target page view aktif (paging bertahap) agar restore scroll
+   * untuk view itu bisa mencapai posisi tersimpan. Resolve setelah
+   * halaman tersebut selesai dimuat (atau tidak bisa ditambah lagi).
+   */
+  ensureLoadedPages: (folderPages: number, filePages: number) => Promise<void>;
+
   // Initial hydration done (cache hit OR first fetch done)
   hydrated: boolean;
 
@@ -580,6 +594,37 @@ export function FilesStoreProvider({
    * removal still applies for the in-memory view; this just guards the
    * disk cache for the race window between unmount and re-mount.
    */
+  /**
+   * Muat halaman tambahan sampai target tercapai atau tidak ada lagi.
+   * Dipakai restore scroll: bila entri tersimpan berasal dari page 3 tapi
+   * cache hanya page 1, scroll akan di-clamp ke posisi kosong tanpa ini.
+   * Paging tetap bertahap (satu halaman per iterasi) — sama dengan
+   * "Load more" manual.
+   */
+  const ensureLoadedPages = useCallback(
+    async (folderPages: number, filePages: number) => {
+      let guard = 0;
+      while (folderPageRef.current < folderPages && folderPageRef.current < folderLastPageRef.current && guard < 50) {
+        guard++;
+        try {
+          await loadFoldersPage(folderPageRef.current + 1);
+        } catch {
+          break;
+        }
+      }
+      guard = 0;
+      while (filePageRef.current < filePages && filePageRef.current < fileLastPageRef.current && guard < 50) {
+        guard++;
+        try {
+          await loadFilesPage(filePageRef.current + 1);
+        } catch {
+          break;
+        }
+      }
+    },
+    [loadFoldersPage, loadFilesPage],
+  );
+
   const invalidateCurrentCache = useCallback(() => {
     if (!userId) return;
     cacheRemove(userId, currentKey);
@@ -606,6 +651,9 @@ export function FilesStoreProvider({
     hasMoreFiles,
     totalFolders: folderTotal,
     totalFiles: fileTotal,
+    folderPage,
+    filePage,
+    ensureLoadedPages,
     hydrated,
     revalidate,
     reloadAllFolders,
