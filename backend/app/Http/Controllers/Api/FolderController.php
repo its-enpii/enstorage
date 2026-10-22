@@ -767,12 +767,39 @@ class FolderController extends Controller
             );
         }
 
-        return $this->streamDownloadResponse(
+        $failed = $streamer->getFailed();
+        if (count($tree['files']) > 0 && count($failed) === count($tree['files'])) {
+            $streamer->discard($zipPath);
+
+            return $this->fail(
+                __('Seluruh berkas di dalam folder gagal disiapkan untuk diunduh.'),
+                500,
+                null,
+                ['code' => 'zip_build_failed'],
+            );
+        }
+
+        if (! empty($failed)) {
+            Log::warning('Unduhan folder mengandung berkas yang gagal disalin', [
+                'folder_id' => $folder->id,
+                'failed_count' => count($failed),
+                'failed_files' => array_column($failed, 'path'),
+            ]);
+        }
+
+        $response = $this->streamDownloadResponse(
             $streamer->bodyFor($zipPath),
             FolderZipStreamer::CONTENT_TYPE,
             $this->downloadDisposition($streamer->zipName((string) $folder->name), $streamer->zipName((string) $folder->name)),
             'no-store, no-cache, must-revalidate',
         );
+
+        if (! empty($failed)) {
+            $response->headers->set('X-Zip-Incomplete', 'true');
+            $response->headers->set('X-Zip-Failed-Count', (string) count($failed));
+        }
+
+        return $response;
     }
 
     // =========================================================================
