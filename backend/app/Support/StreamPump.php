@@ -33,6 +33,13 @@ final class StreamPump
     public const CHUNK_BYTES = 8192;
 
     /**
+     * Callback override untuk cek aborted pada saat testing.
+     *
+     * @var (callable(): bool)|null
+     */
+    public static $abortedResolver = null;
+
+    /**
      * Salin isi resource/PSR stream ke output klien dengan batas waktu.
      *
      * @param  resource|StreamInterface  $source
@@ -73,12 +80,48 @@ final class StreamPump
     }
 
     /**
+     * Salin satu PHP native resource stream ke resource tujuan dengan batas waktu per berkas.
+     *
+     * @param  resource  $source
+     * @param  resource  $target
+     */
+    public static function copyResourceTo($source, $target, ?float $limitSeconds = null): void
+    {
+        if (! is_resource($source) || ! is_resource($target)) {
+            return;
+        }
+
+        $deadline = microtime(true) + ($limitSeconds ?? self::DEFAULT_LIMIT_SECONDS);
+
+        while (! feof($source)) {
+            if (self::aborted() || self::deadlineReached($deadline)) {
+                break;
+            }
+
+            $chunk = fread($source, self::CHUNK_BYTES);
+            if ($chunk === false || $chunk === '') {
+                break;
+            }
+
+            fwrite($target, $chunk);
+        }
+    }
+
+    /**
      * Salin satu PSR stream ke resource tujuan dengan batas waktu per berkas.
      * Dipakai jalur ZIP yang membangun banyak berkas sekaligus: satu klien
      * mati tidak boleh membakar waktu seluruh proses.
+     *
+     * Bila $source adalah PHP native resource, delegasikan ke copyResourceTo().
      */
     public static function copyPsrTo($source, $target, ?float $limitSeconds = null): void
     {
+        if (is_resource($source)) {
+            self::copyResourceTo($source, $target, $limitSeconds);
+
+            return;
+        }
+
         if (! $source instanceof StreamInterface) {
             return;
         }
@@ -104,6 +147,10 @@ final class StreamPump
      */
     public static function aborted(): bool
     {
+        if (self::$abortedResolver !== null) {
+            return (bool) (self::$abortedResolver)();
+        }
+
         return connection_aborted() !== 0;
     }
 

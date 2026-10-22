@@ -9,6 +9,7 @@ use App\Services\Google\GoogleTokenService;
 use App\Support\StreamPump;
 use Closure;
 use Google\Service\Drive;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
@@ -27,6 +28,25 @@ use ZipArchive;
  */
 class FolderZipStreamer
 {
+    /** @var list<array{file: FileModel, path: string, reason: string}> */
+    private array $failed = [];
+
+    /**
+     * @return list<array{file: FileModel, path: string, reason: string}>
+     */
+    public function getFailed(): array
+    {
+        return $this->failed;
+    }
+
+    /**
+     * @return list<array{file: FileModel, path: string, reason: string}>
+     */
+    public function failedFiles(): array
+    {
+        return $this->failed;
+    }
+
     /** Batas jumlah entri (folder + berkas) dalam satu ZIP. */
     public const MAX_ENTRIES = 1000;
 
@@ -153,6 +173,8 @@ class FolderZipStreamer
 
         $deadline = microtime(true) + self::BUILD_LIMIT_SECONDS;
         $tmpFiles = [];
+        $this->failed = [];
+        $addedFiles = 0;
 
         try {
             $zip = new ZipArchive;
@@ -177,11 +199,35 @@ class FolderZipStreamer
 
                 try {
                     $this->copyFileTo($file, $tmp);
-                } catch (Throwable) {
-                    continue; // berkas gagal dibaca dilewati, ZIP tetap valid
+                    clearstatcache(true, $tmp);
+                    $written = @filesize($tmp);
+                    if ((int) $file->size > 0 && ($written === false || $written <= 0)) {
+                        throw new \RuntimeException("Berkas kosong setelah disalin (tercatat {$file->size} byte).");
+                    }
+                } catch (Throwable $e) {
+                    $this->failed[] = [
+                        'file' => $file,
+                        'path' => $entry,
+                        'reason' => $e->getMessage(),
+                    ];
+                    Log::warning('FolderZipStreamer: gagal menyalin berkas ke arsip', [
+                        'file_id' => $file->id,
+                        'path' => $entry,
+                        'error' => $e->getMessage(),
+                    ]);
+
+                    continue; // berkas gagal dibaca dilewati, JANGAN masukkan entri kosong ke ZIP
                 }
 
                 $zip->addFile($tmp, $entry);
+                $addedFiles++;
+            }
+
+            if ($addedFiles === 0 && count($folderEntries) === 0) {
+                $zip->close();
+                @unlink($output);
+
+                return null;
             }
 
             if (! $zip->close()) {
@@ -309,7 +355,7 @@ class FolderZipStreamer
                     throw new \RuntimeException('Berkas tidak ditemukan di storage backend.');
                 }
                 try {
-                    StreamPump::copyPsrTo($source, $out);
+                    StreamPump::copyResourceTo($source, $out);
                 } finally {
                     fclose($source);
                 }
