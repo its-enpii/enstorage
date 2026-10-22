@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 export type MenuItem = {
@@ -27,7 +27,7 @@ const useIsoLayoutEffect =
 
 export function DropdownMenu({ trigger, items, align = 'right', header }: Props) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -50,34 +50,61 @@ export function DropdownMenu({ trigger, items, align = 'right', header }: Props)
     };
   }, [open]);
 
+  const place = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const menuEl = menuRef.current;
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const margin = 8;
+    const gap = 4;
+
+    const menuWidth = menuEl?.offsetWidth ?? 180;
+    const borderHeight = menuEl ? menuEl.offsetHeight - menuEl.clientHeight : 0;
+    const naturalHeight = menuEl
+      ? Math.max(menuEl.offsetHeight, menuEl.scrollHeight + borderHeight)
+      : Math.max(items.length * 44 + (header ? 50 : 0) + 8, 220);
+
+    const maxAllowedHeight = Math.max(0, vh - margin * 2);
+    const effectiveHeight = Math.min(naturalHeight, maxAllowedHeight);
+
+    const spaceBelow = vh - rect.bottom;
+    const openUp = spaceBelow < effectiveHeight + gap + margin && rect.top > spaceBelow;
+
+    let top = openUp ? rect.top - effectiveHeight - gap : rect.bottom + gap;
+    const minTop = margin;
+    const maxTop = Math.max(margin, vh - effectiveHeight - margin);
+    top = Math.min(Math.max(top, minTop), maxTop);
+
+    let left = align === 'right' ? rect.right - menuWidth : rect.left;
+    const minLeft = margin;
+    const maxLeft = Math.max(margin, vw - menuWidth - margin);
+    left = Math.min(Math.max(left, minLeft), maxLeft);
+
+    setPos({
+      top: Math.round(top),
+      left: Math.round(left),
+      maxHeight: Math.round(maxAllowedHeight),
+    });
+  }, [align, header, items.length]);
+
   useIsoLayoutEffect(() => {
     if (!open) {
       setPos(null);
       return;
     }
-    function place() {
-      const el = triggerRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const menuEl = menuRef.current;
-      const menuWidth = menuEl?.offsetWidth ?? 180;
-      const menuHeight = menuEl?.offsetHeight ?? 220;
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const openUp = spaceBelow < menuHeight + 8 && rect.top > spaceBelow;
-      const top = openUp ? rect.top - menuHeight - 4 : rect.bottom + 4;
-      const left = align === 'right'
-        ? Math.max(8, rect.right - menuWidth)
-        : Math.max(8, rect.left);
-      setPos({ top, left });
-    }
     place();
+    const rafId = requestAnimationFrame(place);
     window.addEventListener('resize', place);
     window.addEventListener('scroll', place, true);
     return () => {
+      cancelAnimationFrame(rafId);
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', place, true);
     };
-  }, [open, align]);
+  }, [open, place]);
 
   function handleToggle() {
     setOpen((v) => !v);
@@ -88,11 +115,17 @@ export function DropdownMenu({ trigger, items, align = 'right', header }: Props)
       <div onClick={(e) => { e.stopPropagation(); handleToggle(); }}>
         {trigger}
       </div>
-      {open && pos && typeof document !== 'undefined' && createPortal(
+      {open && typeof document !== 'undefined' && createPortal(
         <div
           ref={menuRef}
-          style={{ position: 'fixed', top: pos.top, left: pos.left }}
-          className="z-[1000] min-w-[180px] bg-surface-container-highest rounded-xl shadow-2xl py-1 border border-outline-variant/20"
+          style={{
+            position: 'fixed',
+            top: pos?.top ?? -9999,
+            left: pos?.left ?? -9999,
+            maxHeight: pos?.maxHeight,
+            visibility: pos ? undefined : 'hidden',
+          }}
+          className="z-[1000] min-w-[180px] bg-surface-container-highest rounded-xl shadow-2xl py-1 border border-outline-variant/20 overflow-y-auto overscroll-contain"
           onClick={(e) => e.stopPropagation()}
         >
           {header && (
