@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Jobs\UploadFileJob;
 use App\Models\File as FileModel;
 use App\Models\ShareLink;
+use App\Support\UploadSizeLimit;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -75,7 +76,7 @@ class FileRecordCreator
         array $options = [],
     ): FileModel {
         if ($size > self::MAX_FILE_SIZE_BYTES) {
-            throw new RuntimeException(__('File melebihi 1GB'));
+            throw new RuntimeException(UploadSizeLimit::canonicalMessage());
         }
 
         $mimeType = $this->normalizeImageMime($mimeType, $originalName);

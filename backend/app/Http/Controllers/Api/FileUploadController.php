@@ -10,6 +10,7 @@ use App\Models\Folder;
 use App\Models\ShareLink;
 use App\Services\FileRecordCreator;
 use App\Services\FolderLockGuard;
+use App\Support\UploadSizeLimit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -22,7 +23,7 @@ class FileUploadController extends Controller
 {
     private const MAX_FILES = 10;
 
-    private const MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GiB
+    private const MAX_FILE_SIZE_BYTES = FileRecordCreator::MAX_FILE_SIZE_BYTES;
 
     /** Batas ukuran per chunk chunked upload (guard server; client normal 8 MB). */
     private const MAX_CHUNK_SIZE_BYTES = 32 * 1024 * 1024; // 32 MB
@@ -90,7 +91,7 @@ class FileUploadController extends Controller
         foreach ($files as $uploadedFile) {
             if ($uploadedFile instanceof UploadedFile && (int) $uploadedFile->getSize() > self::MAX_FILE_SIZE_BYTES) {
                 throw ValidationException::withMessages([
-                    'file' => self::fileTooLargeMessage(),
+                    'file' => UploadSizeLimit::canonicalMessage(),
                 ]);
             }
         }
@@ -183,7 +184,7 @@ class FileUploadController extends Controller
                     continue;
                 }
                 if ($uploadedFile->getSize() > self::MAX_FILE_SIZE_BYTES) {
-                    $rejected[] = ['name' => $uploadedFile->getClientOriginalName(), 'reason' => __('File melebihi 1GB')];
+                    $rejected[] = ['name' => $uploadedFile->getClientOriginalName(), 'reason' => UploadSizeLimit::canonicalMessage()];
 
                     continue;
                 }
@@ -278,7 +279,7 @@ class FileUploadController extends Controller
         $tooLarge = [];
         foreach ($files as $index => $uploadedFile) {
             if ($uploadedFile instanceof UploadedFile && (int) $uploadedFile->getSize() > self::MAX_FILE_SIZE_BYTES) {
-                $tooLarge['files.'.$index] = self::fileTooLargeMessage();
+                $tooLarge['files.'.$index] = UploadSizeLimit::canonicalMessage();
             }
         }
         if (! empty($tooLarge)) {
@@ -299,7 +300,7 @@ class FileUploadController extends Controller
                     throw new ValidationException(['Upload tidak valid.']);
                 }
                 if ($uploadedFile->getSize() > self::MAX_FILE_SIZE_BYTES) {
-                    throw new ValidationException(['File melebihi 1GB']);
+                    throw new ValidationException([UploadSizeLimit::canonicalMessage()]);
                 }
                 if (FileModel::where('user_id', $userId)->where('client_key', $userKeys[$index])->exists()) {
                     throw new ValidationException([__('client_key sudah dipakai.')]);
@@ -377,7 +378,7 @@ class FileUploadController extends Controller
         $totalSize = (int) $totalSize;
         if ($totalSize > self::MAX_FILE_SIZE_BYTES) {
             throw ValidationException::withMessages([
-                'total_size' => self::fileTooLargeMessage(),
+                'total_size' => UploadSizeLimit::canonicalMessage(),
             ]);
         }
 
@@ -768,7 +769,7 @@ class FileUploadController extends Controller
             }
             if ($size > self::MAX_FILE_SIZE_BYTES) {
                 @unlink($tmpPath);
-                throw ValidationException::withMessages(['url' => __('File melebihi 1GB.')]);
+                throw ValidationException::withMessages(['url' => UploadSizeLimit::canonicalMessage()]);
             }
 
             $filename = $nameOverride;
@@ -862,14 +863,6 @@ class FileUploadController extends Controller
 
             return $this->fail($e->getMessage(), 502);
         }
-    }
-
-    /**
-     * Pesan validasi ukuran file yang melebihi batas (i18n-friendly).
-     */
-    private static function fileTooLargeMessage(): string
-    {
-        return __('Ukuran file melebihi batas 1 GB.');
     }
 
     /**

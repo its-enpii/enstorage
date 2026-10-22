@@ -745,7 +745,7 @@ class FileController extends Controller
         DB::transaction(function () use ($file, $newFolderId, &$renamed) {
             $file->folder_id = $newFolderId;
 
-            // Auto-rename kalau di folder tujuan sudah ada file同名 (kecuali diri sendiri).
+            // Auto-rename kalau di folder tujuan sudah ada file dengan nama yang sama (kecuali diri sendiri).
             $collision = FileModel::where('user_id', $file->user_id)
                 ->where('folder_id', $newFolderId)
                 ->where('name', $file->name)

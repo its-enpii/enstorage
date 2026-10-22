@@ -43,10 +43,10 @@
   },
   "files": {
     "title": "File Saya",
-    "empty": "Drop file di sini atau klik untuk pilih (max 10 file, 1GB per file)",
+    "empty": "Drop file di sini atau klik untuk pilih (max 10 file, 1 GB (1.073.741.824 byte) per file)",
     "dropTitle": "Drop file di sini untuk upload",
-    "dropDesc": "Upload ke folder ini • max 10 file, 1GB per file",
-    "dropDescRoot": "Upload ke root • max 10 file, 1GB per file",
+    "dropDesc": "Upload ke folder ini • max 10 file, 1 GB (1.073.741.824 byte) per file",
+    "dropDescRoot": "Upload ke root • max 10 file, 1 GB (1.073.741.824 byte) per file",
     "uploading": "Mengupload",
     "tabs": {
       "all": "Semua",
@@ -126,7 +126,7 @@
       "downloadFailed": "Gagal download.",
       "copyFailed": "Gagal copy file.",
       "maxFiles": "Maksimal 10 file per upload.",
-      "tooLarge": "File melebihi 1GB",
+      "tooLarge": "Ukuran file melebihi batas maksimum {{limit}} (1.073.741.824 byte).",
       "oauthFailed": "Gagal menghubungkan akun",
       "oauthWarning": "Akun terhubung, tetapi {{warning}}. Cabut & hubungkan ulang.",
       "warningTitle": "Peringatan",
@@ -136,7 +136,7 @@
       "uploadNetwork": "Kesalahan jaringan saat mengupload."
     },
     "upload": {
-      "tooLarge": "Ukuran file melebihi batas {{limit}}. File ini tidak diunggah.",
+      "tooLarge": "Ukuran file melebihi batas maksimum {{limit}} (1.073.741.824 byte).",
       "hint": "Maksimal {{limit}} per file. File lebih dari {{chunked}} diunggah bertahap (chunked) agar tidak gagal."
     },
     "move": {
