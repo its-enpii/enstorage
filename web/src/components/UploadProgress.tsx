@@ -6,6 +6,7 @@ import { Chip } from '@/components/Chip';
 import { ProgressBar } from '@/components/ProgressBar';
 
 export type UploadJob = {
+  id: string;
   fileId: string;
   name: string;
   total: number;
@@ -19,7 +20,7 @@ export function UploadProgress({
   onDismiss,
 }: {
   jobs: UploadJob[];
-  onDismiss: (name: string) => void;
+  onDismiss: (id: string) => void;
 }) {
   const visible = jobs.filter(
     (j) => j.status === 'uploading' || j.status === 'failed' || j.status === 'done',
@@ -32,7 +33,7 @@ export function UploadProgress({
         const pct = j.total > 0 ? Math.min(100, Math.round((j.loaded / j.total) * 100)) : 0;
         return (
           <div
-            key={j.name}
+            key={j.id}
             className="bg-surface-container-highest/90 backdrop-blur-md rounded-2xl p-3 shadow-2xl"
           >
             <div className="flex items-center justify-between mb-2">
@@ -49,7 +50,7 @@ export function UploadProgress({
               <IconButton
                 type="button"
                 bare
-                onClick={() => onDismiss(j.name)}
+                onClick={() => onDismiss(j.id)}
                 className="shrink-0 ml-1"
                 aria-label="Dismiss"
                 title="Dismiss"
