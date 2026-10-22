@@ -67,9 +67,39 @@ class FileBulkUploadTest extends TestCase
         $this->assertSame([0, 1], array_column($results, 'index'));
         $this->assertTrue($results[0]['success']);
         $this->assertTrue($results[1]['success']);
+        $this->assertSame('a.txt', $results[0]['name']);
+        $this->assertIsArray($results[0]['file']);
+        $this->assertNotEmpty($results[0]['file']['file_id']);
 
         $this->assertSame(2, File::where('user_id', $user->id)->where('folder_id', $folder->id)->count());
         Bus::assertDispatchedTimes(UploadFileJob::class, 2);
+    }
+
+    public function test_bulk_upload_accepts_exactly_ten_and_rejects_eleven_files(): void
+    {
+        Bus::fake();
+        $this->actingUser();
+
+        $tenFiles = array_map(
+            fn (int $index) => UploadedFile::fake()->createWithContent("file-{$index}.txt", (string) $index),
+            range(1, 10),
+        );
+        $this->post('/api/v1/files/bulk-upload', ['files' => $tenFiles])
+            ->assertStatus(200)
+            ->assertJsonPath('data.total', 10)
+            ->assertJsonPath('data.succeeded', 10)
+            ->assertJsonPath('data.failed', 0);
+
+        $elevenFiles = array_map(
+            fn (int $index) => UploadedFile::fake()->createWithContent("extra-{$index}.txt", (string) $index),
+            range(1, 11),
+        );
+        $this->postJson('/api/v1/files/bulk-upload', ['files' => $elevenFiles])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonStructure(['data' => ['errors' => ['files']]]);
+
+        Bus::assertDispatchedTimes(UploadFileJob::class, 10);
     }
 
     public function test_bulk_upload_isolates_failure_and_still_processes_other_files(): void

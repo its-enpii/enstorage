@@ -46,6 +46,10 @@ import {
   uploadFileChunked,
   uploadFilesChunked,
 } from '@/lib/chunkedUpload';
+import {
+  BULK_REQUEST_CONCURRENCY,
+  uploadBulkFiles,
+} from '@/lib/bulkUpload';
 import { bytes, fileExtension } from '@/lib/format';
 import { usePageTitle } from '@/lib/usePageTitle';
 
@@ -734,6 +738,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   const [draftType, setDraftType] = useState(typeFilter);
   const [draftTab, setDraftTab] = useState<Tab>(tab);
   const [jobs, setJobs] = useState<UploadJob[]>([]);
+  const nextUploadJobId = useRef(0);
   const [dragOver, setDragOver] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [viewerFile, setViewerFile] = useState<FileItem | null>(null);
@@ -909,68 +914,58 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   /**
    * Bulk upload (small files) via `POST /files/bulk-upload` (one multipart
    * request, `files[]`). The server caps each request at MAX_FILES (10,
-   * FileUploadController::MAX_FILES), so larger batches are split into
-   * sequential chunks of 10. Progress is honest: we only learn per-file
+   * FileUploadController::MAX_FILES), so larger batches are split into chunks
+   * of 10 and up to three chunks run concurrently. Progress is honest: we only learn per-file
    * outcomes when the request finishes, so files stay at 0% ("uploading").
    * A failure of one file only marks that job as failed.
    */
-  async function uploadBulk(filesArr: File[], targetFolderId: string | null) {
-    if (filesArr.length === 0) return;
-    const CHUNK_SIZE = 10;
+  async function uploadBulk(
+    entries: { file: File; jobId: string }[],
+    targetFolderId: string | null,
+  ) {
+    if (entries.length === 0) return;
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE ?? '';
     const authToken = getToken();
 
-    for (let offset = 0; offset < filesArr.length; offset += CHUNK_SIZE) {
-      const chunk = filesArr.slice(offset, offset + CHUNK_SIZE);
-      const fd = new FormData();
-      chunk.forEach((f) => fd.append('files[]', f));
-      if (targetFolderId) fd.append('folder_id', targetFolderId);
-
-      const failChunk = (reason: string) => {
+    await uploadBulkFiles(entries, {
+      baseUrl,
+      authToken,
+      folderId: targetFolderId,
+      concurrency: BULK_REQUEST_CONCURRENCY,
+      onBatchFailure: (jobIds, reason) => {
+        const ids = new Set(jobIds);
+        const error = reason === 'network' ? t('files.errors.uploadNetwork') : reason;
         setJobs((js) =>
           js.map((j) =>
-            chunk.some((f) => f.name === j.name) && j.status === 'uploading'
-              ? { ...j, status: 'failed', error: reason }
+            ids.has(j.id) && j.status === 'uploading'
+              ? { ...j, status: 'failed', error }
               : j,
           ),
         );
-      };
-
-      try {
-        const res = await fetch(`${baseUrl}/files/bulk-upload`, {
-          method: 'POST',
-          headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
-          credentials: 'omit',
-          body: fd,
-        });
-        const body = (await res.json().catch(() => null)) as {
-          message?: string;
-          data?: {
-            results?: { index: number; success: boolean; name?: string; reason?: string }[];
-          };
-        } | null;
-        if (!res.ok) {
-          failChunk(body?.message ?? `HTTP ${res.status}`);
-          continue;
-        }
-        const results = body?.data?.results ?? [];
-        const byIndex = new Map(results.map((r) => [r.index, r]));
+      },
+      onBatchResult: (outcomes) => {
+        const byJobId = new Map(outcomes.map((outcome) => [outcome.jobId, outcome]));
         setJobs((js) =>
           js.map((j) => {
-            // Match by name within this chunk; duplicates share the same outcome bucket.
-            const match = chunk
-              .map((f, i) => ({ f, r: byIndex.get(i) }))
-              .find((entry) => entry.f.name === j.name);
-            if (!match || j.status !== 'uploading') return j;
-            if (match.r?.success) return { ...j, status: 'done', loaded: j.total };
-            if (match.r) return { ...j, status: 'failed', error: match.r.reason ?? t('files.errors.uploadFailed') };
-            return { ...j, status: 'failed', error: t('files.errors.uploadFailed') };
+            const outcome = byJobId.get(j.id);
+            if (!outcome || j.status !== 'uploading') return j;
+            if (outcome.success) {
+              return {
+                ...j,
+                fileId: outcome.fileId ?? j.fileId,
+                status: 'done',
+                loaded: j.total,
+              };
+            }
+            return {
+              ...j,
+              status: 'failed',
+              error: outcome.reason ?? t('files.errors.uploadFailed'),
+            };
           }),
         );
-      } catch {
-        failChunk(t('files.errors.uploadNetwork'));
-      }
-    }
+      },
+    });
   }
 
   /**
@@ -980,21 +975,29 @@ function FilesContent({ currentPath }: { currentPath: string }) {
    * complete. Progress is byte-based. Failure of THIS file only marks its
    * own job as failed.
    */
-  async function uploadChunkedFiles(files: File[], targetFolderId: string | null, token: string) {
-    await uploadFilesChunked(files, {
+  async function uploadChunkedFiles(
+    entries: { file: File; jobId: string }[],
+    targetFolderId: string | null,
+    token: string,
+  ) {
+    const jobIdByFile = new Map(entries.map(({ file, jobId }) => [file, jobId]));
+    await uploadFilesChunked(entries.map(({ file }) => file), {
       token,
       folderId: targetFolderId,
       onProgress: (file, { loaded, total }) => {
+        const jobId = jobIdByFile.get(file);
         setJobs((js) =>
-          js.map((j) => (j.name === file.name && j.status === 'uploading' ? { ...j, loaded, total } : j)),
+          js.map((j) => (j.id === jobId && j.status === 'uploading' ? { ...j, loaded, total } : j)),
         );
       },
       onFileDone: (file) => {
+        const jobId = jobIdByFile.get(file);
         setJobs((js) =>
-          js.map((j) => (j.name === file.name && j.status === 'uploading' ? { ...j, status: 'done', loaded: j.total } : j)),
+          js.map((j) => (j.id === jobId && j.status === 'uploading' ? { ...j, status: 'done', loaded: j.total } : j)),
         );
       },
       onFileError: (file, e) => {
+        const jobId = jobIdByFile.get(file);
         const reason =
           e instanceof ChunkedUploadError
             ? e.message === 'file_too_large'
@@ -1002,7 +1005,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               : e.message
             : t('files.errors.uploadNetwork');
         setJobs((js) =>
-          js.map((j) => (j.name === file.name && j.status === 'uploading' ? { ...j, status: 'failed', error: reason } : j)),
+          js.map((j) => (j.id === jobId && j.status === 'uploading' ? { ...j, status: 'failed', error: reason } : j)),
         );
       },
     });
@@ -1013,7 +1016,8 @@ function FilesContent({ currentPath }: { currentPath: string }) {
    *  1. Reject files > MAX_UPLOAD_BYTES up front with a clear i18n message.
    *  2. Files > 64 MiB → chunked upload, 3 files in parallel
    *     (`uploadFilesChunked` in chunkedUpload.ts).
-   *  3. Files ≤ 64 MiB → existing `bulk-upload`, 10 files per request.
+   *  3. Files ≤ 64 MiB → existing `bulk-upload`, 10 files per request and
+   *     up to 3 requests in parallel.
    * Partial success: one file failing never cancels the others.
    */
   async function uploadFiles(fileList: FileList) {
@@ -1027,12 +1031,14 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     if (filesArr.length === 0) return;
 
     // Size gate BEFORE any request: never surface a raw server/proxy error.
-    const accepted: File[] = [];
+    const accepted: { file: File; jobId: string }[] = [];
     for (const file of filesArr) {
+      const jobId = `upload-${nextUploadJobId.current++}`;
       if (file.size > MAX_UPLOAD_BYTES) {
         setJobs((prev) => [
           ...prev,
           {
+            id: jobId,
             fileId: '',
             name: file.name,
             total: file.size,
@@ -1042,21 +1048,22 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           },
         ]);
       } else {
-        accepted.push(file);
+        accepted.push({ file, jobId });
       }
     }
     if (accepted.length === 0) return;
 
-    const largeFiles = accepted.filter((f) => f.size > CHUNKED_THRESHOLD_BYTES);
-    const smallFiles = accepted.filter((f) => f.size <= CHUNKED_THRESHOLD_BYTES);
+    const largeFiles = accepted.filter(({ file }) => file.size > CHUNKED_THRESHOLD_BYTES);
+    const smallFiles = accepted.filter(({ file }) => file.size <= CHUNKED_THRESHOLD_BYTES);
 
     // Seed jobs for all accepted files up front so the user sees each one.
     setJobs((prev) => [
       ...prev,
-      ...accepted.map<UploadJob>((f) => ({
+      ...accepted.map<UploadJob>(({ file, jobId }) => ({
+        id: jobId,
         fileId: '',
-        name: f.name,
-        total: f.size,
+        name: file.name,
+        total: file.size,
         loaded: 0,
         status: 'uploading',
       })),
@@ -1211,8 +1218,8 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files.length, files.map((f) => `${f.id}:${f.upload_status}`).join('|')]);
 
-  function dismissJob(name: string) {
-    setJobs((js) => js.filter((j) => j.name !== name));
+  function dismissJob(id: string) {
+    setJobs((js) => js.filter((j) => j.id !== id));
   }
 
   function toggleSelect(id: string) {
