@@ -26,7 +26,17 @@ class AppServiceProvider extends ServiceProvider
     {
         // Default untuk semua endpoint API — generous untuk app yang
         // melakukan navigasi folder cepat. Cegah user abuse dengan cap di 300/min.
+        //
+        // Rute upload DIKECUALIKAN: setiap rute upload sudah memasang
+        // `throttle:upload` (500/min). `throttleApi()` global tetap aktif untuk
+        // seluruh grup `api`, jadi tanpa pengecualian ini setiap request upload
+        // dihitung dua kali (limiter `api` 300 + `upload` 500) dan limiter
+        // paling ketat (300) yang menang — upload jadi terblokir di ~300.
         RateLimiter::for('api', function (Request $request) {
+            if (self::isUploadRoute($request)) {
+                return Limit::none();
+            }
+
             return Limit::perMinute(300)->by($request->user()?->id ?: $request->ip());
         });
 
@@ -41,5 +51,16 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('auth', function (Request $request) {
             return Limit::perMinute(10)->by($request->ip());
         });
+    }
+
+    /**
+     * Apakah request menuju rute upload yang punya limiter `upload` sendiri.
+     *
+     * Mencakup `files/upload`, `files/upload-from-url`, `files/bulk-upload`,
+     * `files/upload/init`, `files/upload/{id}/chunk/{i}`, `files/upload/{id}/complete`.
+     */
+    private static function isUploadRoute(Request $request): bool
+    {
+        return $request->is('api/v1/files/upload*', 'api/v1/files/bulk-upload*');
     }
 }
