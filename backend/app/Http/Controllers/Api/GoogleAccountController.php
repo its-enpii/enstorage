@@ -66,7 +66,12 @@ class GoogleAccountController extends Controller
             $clientId = (string) config('services.google.client_id_mobile');
             $clientSecret = config('services.google.client_secret_mobile');
         } else {
-            $redirectUri = null;
+            // Connect flow MUST land on GoogleAccountController::callback
+            // (/connect/google/callback), NOT the login callback
+            // (AuthController::googleCallback). Otherwise Google sends the
+            // browser to the login handler, which registers a brand-new user
+            // when the Google email is not yet in `users`.
+            $redirectUri = (string) config('services.google.redirect_uri_connect');
             $clientId = null;
             $clientSecret = null;
         }
@@ -426,7 +431,7 @@ HTML;
      * Returns array with keys:
      *   - user:         ?\App\Models\User
      *   - platform:     string ('web' | 'mobile')
-     *   - redirect_uri: ?string  (hanya di-set untuk mobile)
+     *   - redirect_uri: ?string  (hanya di-set untuk mobile & web connect)
      *   - error:        ?string  (jika gagal resolve)
      *   - status:       int      (HTTP status untuk error)
      */
@@ -480,6 +485,10 @@ HTML;
                 $redirectUri = (string) config('services.google.redirect_uri_mobile');
                 $clientId = (string) config('services.google.client_id_mobile');
                 $clientSecret = config('services.google.client_secret_mobile');
+            } else {
+                // Harus sama persis dengan redirect_uri saat authorize
+                // (`redirect()`), jangan fallback ke GOOGLE_REDIRECT_URI (login).
+                $redirectUri = (string) config('services.google.redirect_uri_connect');
             }
         }
 

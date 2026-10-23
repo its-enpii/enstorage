@@ -40,6 +40,10 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect_uri' => env('GOOGLE_REDIRECT_URI'),
+        // Callback khusus CONNECT (GoogleAccountController::callback, web route
+        // /connect/google/callback) — beda dari GOOGLE_REDIRECT_URI yang dipakai
+        // alur login. Jangan samakan keduanya.
+        'redirect_uri_connect' => env('GOOGLE_REDIRECT_URI_CONNECT', 'https://enstorage.enpiistudio.com/connect/google/callback'),
 
         // --- Mobile client (Android OAuth client) ---
         // Android client type di Google Console tidak butuh

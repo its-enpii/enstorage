@@ -776,8 +776,7 @@
     },
     "cta": {
       "signIn": "Masuk",
-      "dashboard": "Buka Dashboard",
-      "signInLoading": "Mengalihkan ke Google…"
+      "dashboard": "Buka Dashboard"
     },
     "hero": {
       "eyebrow": "Penyimpanan non-custodial",

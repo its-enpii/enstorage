@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { Button, IconButton } from '@/components/Button';
 import { useTheme } from '@/components/ThemeProvider';
 import { getLocale, setLocale } from '@/lib/i18n';
-import { useGoogleSignIn } from '@/lib/useGoogleSignIn';
+import { useSignIn } from '@/lib/useSignIn';
 import { PUBLIC_NAV, LANDING_PATH, scrollToId, type PublicNavItem } from '@/lib/site';
 
 type Props = {
@@ -23,7 +23,7 @@ type Props = {
 function HeaderActions({ stacked }: { stacked?: boolean }) {
   const { t } = useTranslation();
   const { resolved, setTheme } = useTheme();
-  const { user, signIn, signingIn } = useGoogleSignIn();
+  const { user, signIn } = useSignIn();
   const [locale, setLocaleState] = useState('id');
 
   useEffect(() => {
@@ -76,15 +76,10 @@ function HeaderActions({ stacked }: { stacked?: boolean }) {
         variant="primary"
         size="md"
         onClick={signIn}
-        loading={signingIn}
         fullWidth={stacked}
-        rightIcon={!signingIn && user ? <ArrowForward className="!text-lg" /> : undefined}
+        rightIcon={user ? <ArrowForward className="!text-lg" /> : undefined}
       >
-        {user
-          ? t('landing.cta.dashboard')
-          : signingIn
-            ? t('landing.cta.signInLoading')
-            : t('landing.cta.signIn')}
+        {user ? t('landing.cta.dashboard') : t('landing.cta.signIn')}
       </Button>
     </div>
   );
@@ -125,7 +120,7 @@ export function PublicHeader({ navItems = PUBLIC_NAV, activeSection }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const { resolved, setTheme } = useTheme();
-  const { user, signIn, signingIn } = useGoogleSignIn();
+  const { user, signIn } = useSignIn();
   const [locale, setLocaleState] = useState('id');
 
   useEffect(() => {
@@ -354,16 +349,11 @@ export function PublicHeader({ navItems = PUBLIC_NAV, activeSection }: Props) {
                   setMenuOpen(false);
                   signIn();
                 }}
-                loading={signingIn}
                 fullWidth
                 className="!h-12 !rounded-2xl !text-base font-bold shadow-lg shadow-primary/20"
-                rightIcon={!signingIn && user ? <ArrowForward className="!text-xl" /> : undefined}
+                rightIcon={user ? <ArrowForward className="!text-xl" /> : undefined}
               >
-                {user
-                  ? t('landing.cta.dashboard')
-                  : signingIn
-                    ? t('landing.cta.signInLoading')
-                    : t('landing.cta.signIn')}
+                {user ? t('landing.cta.dashboard') : t('landing.cta.signIn')}
               </Button>
             </div>
           </div>
