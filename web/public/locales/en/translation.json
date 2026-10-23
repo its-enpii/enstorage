@@ -774,8 +774,7 @@
     },
     "cta": {
       "signIn": "Sign in",
-      "dashboard": "Open dashboard",
-      "signInLoading": "Redirecting to Google…"
+      "dashboard": "Open dashboard"
     },
     "hero": {
       "eyebrow": "Non-custodial storage",

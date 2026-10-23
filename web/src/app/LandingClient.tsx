@@ -21,7 +21,7 @@ import { Button } from '@/components/Button';
 import { Card, CardIconBox } from '@/components/Card';
 import { CodeBlock } from '@/components/CodeBlock';
 import { PublicShell } from '@/components/PublicShell';
-import { useGoogleSignIn } from '@/lib/useGoogleSignIn';
+import { useSignIn } from '@/lib/useSignIn';
 import { DOCS_HREF, prefersReducedMotion, scrollToId } from '@/lib/site';
 import { ENDPOINT_GROUPS, SNIPPETS, TOTAL_ENDPOINTS, snippetCode } from '@/lib/apiCatalog';
 import { usePageTitle } from '@/lib/usePageTitle';
@@ -181,7 +181,7 @@ function SectionHeading({
 
 function Hero() {
   const { t } = useTranslation();
-  const { user, signIn, signingIn } = useGoogleSignIn();
+  const { user, signIn } = useSignIn();
 
   return (
     <section className="relative isolate overflow-hidden border-b border-outline-variant/20">
@@ -207,8 +207,7 @@ function Hero() {
               <Button
                 size="lg"
                 onClick={signIn}
-                loading={signingIn}
-                rightIcon={!signingIn && <ArrowForward className="!text-lg" />}
+                rightIcon={<ArrowForward className="!text-lg" />}
                 className="sm:min-w-44"
               >
                 {t(user ? 'landing.hero.primarySignedIn' : 'landing.hero.primary')}
