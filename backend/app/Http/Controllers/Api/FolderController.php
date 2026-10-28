@@ -440,6 +440,13 @@ class FolderController extends Controller
         $newParentId = $data['parent_id'] ?? null;
         $previousParentId = $folder->parent_id;
 
+        // Cegah self-move (folder dipindah ke dirinya sendiri). Harus 422
+        // sesuai kontrak docs/api.md §PUT /folders/{id}/move karena akan
+        // membuat cycle + path berulang (mis. /A/A/A/...).
+        if ($newParentId !== null && $newParentId === $folder->id) {
+            return $this->fail(__('Tidak dapat memindahkan folder ke dirinya sendiri atau ke child-nya.'), 422);
+        }
+
         // Cegah no-op move
         if ($newParentId === $folder->parent_id) {
             return $this->ok(new FolderResource($folder), __('Folder tetap di lokasi yang sama.'));
@@ -459,7 +466,7 @@ class FolderController extends Controller
             }
 
             // Cegah move ke dirinya sendiri atau descendant (cycle)
-            if ($this->isDescendantOf($newParentId, $folder->id)) {
+            if ($newParentId === $folder->id || $this->isDescendantOf($newParentId, $folder->id)) {
                 return $this->fail(__('Tidak dapat memindahkan folder ke dirinya sendiri atau ke child-nya.'), 422);
             }
         }
@@ -883,6 +890,11 @@ class FolderController extends Controller
      */
     private function isDescendantOf(string $candidateId, string $ancestorId): bool
     {
+        // Candidate yang sama dengan ancestor juga dianggap cycle (self-move).
+        if ($candidateId === $ancestorId) {
+            return true;
+        }
+
         $current = Folder::find($candidateId);
         while ($current && $current->parent_id) {
             if ($current->parent_id === $ancestorId) {

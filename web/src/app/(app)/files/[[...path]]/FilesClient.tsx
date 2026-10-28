@@ -1420,27 +1420,58 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   }
 
   async function bulkDelete() {
+    // Selection can mix folders and files (select-all covers both). Split by
+    // kind: files go to the bulk endpoint, folders are deleted one by one via
+    // DELETE /folders/{id} (api.md semantics: folder + descendants removed,
+    // files inside moved to root).
     const ids = Array.from(selected);
-    const count = ids.length;
-    const ok = await confirm(t('files.confirmBulkDelete.body', { count }), {
-      title: t('files.confirmBulkDelete.title', { count }),
-      danger: true,
-      confirmLabel: t('files.confirmBulkDelete.confirm'),
-    });
+    const folderIds = ids.filter((id) => folders.some((f) => f.id === id));
+    const fileIds = ids.filter((id) => files.some((f) => f.id === id));
+    if (folderIds.length === 0 && fileIds.length === 0) return;
+    const count = folderIds.length + fileIds.length;
+    const ok = await confirm(
+      t('files.confirmBulkDelete.body', { count, files: fileIds.length, folders: folderIds.length }),
+      {
+        title: t('files.confirmBulkDelete.title', { count }),
+        danger: true,
+        confirmLabel: t('files.confirmBulkDelete.confirm'),
+      },
+    );
     if (!ok) return;
 
-    // Optimistic: remove from UI immediately
-    ids.forEach((id) => removeFile(id));
+    // Optimistic: remove from UI immediately (folders + files).
+    fileIds.forEach((id) => removeFile(id));
+    folderIds.forEach((id) => removeFolder(id));
     clearSelection();
 
-    try {
-      await apiRequest<{ deleted: string[] }>('/files/bulk-delete', {
-        method: 'POST',
-        body: { ids },
-      });
-    } catch (e) {
+    let folderFailures = 0;
+    if (fileIds.length > 0) {
+      try {
+        await apiRequest<{ deleted: string[] }>('/files/bulk-delete', {
+          method: 'POST',
+          body: { ids: fileIds },
+        });
+      } catch (e) {
+        void revalidate();
+        await alert(e instanceof ApiError ? e.message : t('files.errors.deleteFailed'));
+      }
+    }
+
+    for (const folderToDelete of folderIds) {
+      try {
+        await apiRequest<null>(`/folders/${folderToDelete}`, { method: 'DELETE' });
+      } catch {
+        folderFailures += 1;
+      }
+    }
+
+    if (folderFailures > 0) {
       void revalidate();
-      await alert(e instanceof ApiError ? e.message : t('files.errors.deleteFailed'));
+      void reloadAllFolders();
+      await alert(
+        t('files.confirmBulkDelete.folderFailed', { count: folderFailures }),
+        { title: t('common.error') },
+      );
     }
   }
 
@@ -1546,6 +1577,13 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     const targetFiles = files.filter((f) => fileIds.includes(f.id));
     const targetFolders = folders.filter((f) => folderIds.includes(f.id));
 
+    // Guard cepat: drop folder pada dirinya sendiri (atau target ada di
+    // daftar folder yang didrag) TIDAK boleh memicu move/remove optimistik.
+    if (targetFolderId !== null && folderIds.includes(targetFolderId)) {
+      void alert(t('files.move.errors.sameFolder'), { title: t('common.error') });
+      return;
+    }
+
     // Tidak boleh memindahkan item ke folder asalnya sendiri. Folder yang
     // sudah ada di tujuan dilewati (bukan kegagalan); file dari folder yang
     // sama diabaikan.
@@ -1580,11 +1618,20 @@ function FilesContent({ currentPath }: { currentPath: string }) {
    * yang gagal dipindah dikembalikan ke posisi lamanya.
    */
   async function runDirectFolderMove(
-    targetFolders: FolderType[],
+    foldersToMove: FolderType[],
     targetFolderId: string | null,
     extraFiles: FileItem[] = [],
   ) {
-    const snapshot = targetFolders.map((f) => ({ ...f }));
+    // Move ke parent sekarang = no-op; jangan hapus optimistik (bug: folder
+    // yang di-drop ke dirinya sendiri hilang dari UI).
+    const effective = foldersToMove.filter(
+      (f) => f.id !== targetFolderId && (f.parent_id ?? null) !== targetFolderId,
+    );
+    if (effective.length === 0) {
+      if (extraFiles.length > 0) await runDirectMove(extraFiles, targetFolderId);
+      return;
+    }
+    const snapshot = effective.map((f) => ({ ...f }));
     // Optimistik: folder pindah keluar dari view ini.
     for (const f of snapshot) removeFolder(f.id);
     clearSelection();
@@ -1768,9 +1815,12 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     }
   }
 
-  function downloadMultiple(fileIds: string[]) {
-    for (const id of fileIds) {
-      downloadFile(id);
+  function downloadMultiple(ids: string[]) {
+    // Selection may include folders: download each folder as a ZIP archive
+    // and each file via its own stream endpoint.
+    for (const id of ids) {
+      if (folders.some((f) => f.id === id)) downloadFolder(id);
+      else if (files.some((f) => f.id === id)) downloadFile(id);
     }
   }
 
@@ -2503,10 +2553,10 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           onUploadFiles={uploadFiles}
           onUploadFolder={(files) => uploadFiles(files)}
           onSelectMode={() => {
-            // Enter select mode by selecting the first visible file
-            if (visibleFiles.length > 0) {
-              setSelected(new Set([visibleFiles[0].id]));
-            }
+            // Enter select mode by selecting the first visible item
+            // (folder takes precedence on the default tab, otherwise file).
+            const first = visibleFolders[0]?.id ?? visibleFiles[0]?.id;
+            if (first) setSelected(new Set([first]));
           }}
         />
       )}

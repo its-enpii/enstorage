@@ -70,8 +70,10 @@
       "showFiles": "Files",
       "reset": "Reset",
       "apply": "Apply",
+      "summary_folders": "{{count}} folder",
       "summary_folders_one": "{{count}} folder",
       "summary_folders_other": "{{count}} folders",
+      "summary_files": "{{count}} file",
       "summary_files_one": "{{count}} file",
       "summary_files_other": "{{count}} files",
       "typeLockedHint": "Switch 'Show: All' first to enable type filter",
@@ -101,9 +103,10 @@
       "confirm": "Delete"
     },
     "confirmBulkDelete": {
-      "title": "Delete {{count}} Files?",
-      "body": "Delete {{count}} files from Google Drive and database?",
-      "confirm": "Delete All"
+      "title": "Delete {{count}} item(s)?",
+      "body": "Delete {{files}} file(s) and {{folders}} folder(s) (including contents)? Files inside folders will be moved to root.",
+      "confirm": "Delete All",
+      "folderFailed": "{{count}} folder(s) failed to delete."
     },
     "selected": "{{count}} selected",
     "downloadAll": "Download",

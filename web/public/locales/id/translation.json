@@ -103,9 +103,10 @@
       "confirm": "Hapus"
     },
     "confirmBulkDelete": {
-      "title": "Hapus {{count}} File?",
-      "body": "Hapus {{count}} file dari Google Drive dan database?",
-      "confirm": "Hapus Semua"
+      "title": "Hapus {{count}} item?",
+      "body": "Hapus {{files}} file dan {{folders}} folder (beserta isinya)? File di dalam folder akan dipindahkan ke root.",
+      "confirm": "Hapus Semua",
+      "folderFailed": "{{count}} folder gagal dihapus."
     },
     "selected": "{{count}} dipilih",
     "downloadAll": "Unduh semua",
