@@ -24,6 +24,9 @@ type SharedFolder = {
   name: string;
   path: string;
   parent_id: string | null;
+  description?: string | null;
+  icon?: string | null;
+  logo_url?: string | null;
 };
 
 type Breadcrumb = {
@@ -414,16 +417,32 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
               <span className="material-symbols-outlined !text-2xl">chevron_left</span>
             </IconButton>
           )}
-          <div className="w-12 h-12 rounded-2xl bg-primary-container flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined !text-3xl fill text-on-primary-container">folder</span>
+          <div className="w-12 h-12 rounded-2xl bg-primary-container flex items-center justify-center shrink-0 overflow-hidden">
+            {folder.logo_url ? (
+              <img
+                src={folder.logo_url}
+                alt={folder.name}
+                className="w-12 h-12 rounded-2xl object-cover"
+              />
+            ) : folder.icon ? (
+              <span className="material-symbols-outlined !text-3xl fill text-on-primary-container">{folder.icon}</span>
+            ) : (
+              <span className="material-symbols-outlined !text-3xl fill text-on-primary-container">folder</span>
+            )}
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="font-display text-headline-lg-mobile text-on-surface truncate">
               {folder.name}
             </h1>
-            <p className="text-metadata text-on-surface-variant truncate">
-              {t('share.sharedFolderDesc')}
-            </p>
+            {folder.description?.trim() ? (
+              <p className="text-sm text-on-surface-variant leading-relaxed mt-1 line-clamp-2">
+                {folder.description.trim()}
+              </p>
+            ) : (
+              <p className="text-metadata text-on-surface-variant truncate">
+                {t('share.sharedFolderDesc')}
+              </p>
+            )}
           </div>
           {!isInsideSubfolder && (
             <Button

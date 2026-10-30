@@ -34,6 +34,7 @@ import { ShareDialog } from '@/components/ShareDialog';
 import { MoveDialog, type MovedFileResult } from '@/components/MoveDialog';
 import { DeleteFolderDialog } from '@/components/DeleteFolderDialog';
 import { FolderLockDialog, type FolderLockMode } from '@/components/FolderLockDialog';
+import { FolderDetailsDialog } from '@/components/FolderDetailsDialog';
 import { Input, Field } from '@/components/Input';
 import { Alert } from '@/components/Alert';
 import { SegmentedControl } from '@/components/SegmentedControl';
@@ -762,6 +763,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   const [deleteFolderTarget, setDeleteFolderTarget] = useState<FolderType | null>(null);
   // Folder lock dialog: which folder + which mode, or null when closed.
   const [lockTarget, setLockTarget] = useState<{ folder: FolderType; mode: FolderLockMode } | null>(null);
+  const [detailsTarget, setDetailsTarget] = useState<FolderType | null>(null);
   const [moveFiles, setMoveFiles] = useState<FileItem[] | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [moveFolders, setMoveFolders] = useState<FolderType[] | null>(null);
@@ -2061,6 +2063,12 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         onClick: () => renameFolderHandler(f),
       },
       {
+        label: t('folders.editDetails'),
+        ariaLabel: t('folders.editDetails'),
+        icon: <span className="material-symbols-outlined !text-base">tune</span>,
+        onClick: () => setDetailsTarget(f),
+      },
+      {
         label: t('folders.moveFolder'),
         ariaLabel: t('folders.moveFolder'),
         icon: <DriveFileMoveIcon />,
@@ -2450,6 +2458,9 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               >
               <FolderCard
                 name={f.name}
+                description={f.description}
+                iconName={f.icon}
+                logoUrl={f.logo_url}
                 isStarred={f.is_starred}
                 isLocked={f.is_locked}
                 itemCount={items}
@@ -2649,6 +2660,19 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           open
           onClose={() => setLockTarget(null)}
           onSuccess={handleFolderLockSuccess}
+        />
+      )}
+
+      {detailsTarget && (
+        <FolderDetailsDialog
+          folder={detailsTarget}
+          open
+          onClose={() => setDetailsTarget(null)}
+          onSuccess={(updated) => {
+            upsertFolder(updated);
+            setDetailsTarget(updated);
+            invalidateFoldersPageCache();
+          }}
         />
       )}
 

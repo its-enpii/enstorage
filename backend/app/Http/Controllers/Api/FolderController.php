@@ -290,6 +290,9 @@ class FolderController extends Controller
                 'regex:/^[^\\\\\\/:*?"<>|]+$/',
             ],
             'parent_id' => ['nullable', 'string', 'uuid'],
+            'description' => ['nullable', 'string', 'max:2000'],
+            'icon' => ['nullable', 'string', 'max:100'],
+            'logo_url' => ['nullable', 'string', 'max:1000', 'url'],
         ], [
             'name.regex' => __('Nama folder tidak boleh mengandung karakter khusus (\\ / : * ? " < > |).'),
         ]);
@@ -318,6 +321,9 @@ class FolderController extends Controller
         $folder->parent_id = $parentId;
         $folder->name = $uniqueName;
         $folder->path = $this->paths->computePath($folder);
+        $folder->description = $data['description'] ?? null;
+        $folder->icon = $data['icon'] ?? null;
+        $folder->logo_url = $data['logo_url'] ?? null;
         $folder->save();
 
         $this->activityLog->log(
@@ -365,6 +371,9 @@ class FolderController extends Controller
                 'regex:/^[^\\\\\\/:*?"<>|]+$/',
             ],
             'is_starred' => ['sometimes', 'boolean'],
+            'description' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'icon' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'logo_url' => ['sometimes', 'nullable', 'string', 'max:1000', 'url'],
         ], [
             'name.regex' => __('Nama folder tidak boleh mengandung karakter khusus (\\ / : * ? " < > |).'),
         ]);
@@ -392,6 +401,12 @@ class FolderController extends Controller
 
         if (array_key_exists('is_starred', $data)) {
             $folder->is_starred = (bool) $data['is_starred'];
+        }
+
+        foreach (['description', 'icon', 'logo_url'] as $brandingField) {
+            if (array_key_exists($brandingField, $data)) {
+                $folder->{$brandingField} = $data[$brandingField];
+            }
         }
 
         $folder->save();

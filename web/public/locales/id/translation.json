@@ -256,7 +256,16 @@
     "moveFolder": "Pindahkan",
     "moveFolderTitle": "Pindahkan Folder",
     "moveFolderTitleBulk": "Pindahkan {{count}} Folder",
-    "emptyItems": "Folder kosong"
+    "emptyItems": "Folder kosong",
+    "editDetails": "Edit Info & Tampilan",
+    "editDetailsTitle": "Info & Tampilan Folder",
+    "nameLabel": "Nama Folder",
+    "descriptionLabel": "Deskripsi Folder (untuk preview link & SEO)",
+    "descriptionPlaceholder": "Tuliskan ringkasan isi folder...",
+    "iconLabel": "Pilihan Ikon",
+    "logoUrlLabel": "URL Logo / Gambar",
+    "logoUrlPlaceholder": "https://domain.com/logo.png",
+    "previewLabel": "Pratinjau Tampilan Link"
   },
   "profile": {
     "title": "Profil",

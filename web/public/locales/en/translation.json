@@ -256,7 +256,16 @@
     "moveFolder": "Move",
     "moveFolderTitle": "Move Folder",
     "moveFolderTitleBulk": "Move {{count}} Folders",
-    "emptyItems": "Empty folder"
+    "emptyItems": "Empty folder",
+    "editDetails": "Edit Info & Appearance",
+    "editDetailsTitle": "Folder Info & Appearance",
+    "nameLabel": "Folder name",
+    "descriptionLabel": "Folder description (for link preview & SEO)",
+    "descriptionPlaceholder": "Write a summary of folder content...",
+    "iconLabel": "Icon selection",
+    "logoUrlLabel": "Logo / Image URL",
+    "logoUrlPlaceholder": "https://domain.com/logo.png",
+    "previewLabel": "Link preview"
   },
   "profile": {
     "title": "Profile",

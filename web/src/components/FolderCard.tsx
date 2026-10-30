@@ -9,6 +9,12 @@ export type FolderCardProps = {
   name: string;
   /** Rendered thumbnail/icon fallback region — superseded by the default squircle. */
   icon?: ReactNode;
+  /** Free-text summary rendered under the title. */
+  description?: string | null;
+  /** Material Symbols icon name for the folder glyph (when no logo/override). */
+  iconName?: string | null;
+  /** Logo/image URL rendered instead of the glyph. */
+  logoUrl?: string | null;
   itemCount?: number;
   /** Human-readable count label (e.g. "12 item"). Falls back to the raw count. */
   itemsLabel?: string;
@@ -36,6 +42,9 @@ export type FolderCardProps = {
 export function FolderCard({
   name,
   icon,
+  description,
+  iconName,
+  logoUrl,
   itemCount,
   itemsLabel,
   totalSize,
@@ -65,16 +74,31 @@ export function FolderCard({
       <CardMedia className="bg-surface-container/40">
         <div className="absolute inset-0 bg-gradient-to-b from-surface-container/60 to-surface-container-lowest/90" aria-hidden />
 
-        <div
-          className={
-            'relative flex items-center justify-center rounded-2xl shadow-sm group-hover:scale-105 transition-transform duration-200 w-14 h-14 ' +
-            (isStarred
-              ? 'bg-secondary-container/30 text-secondary border border-secondary/30'
-              : 'bg-primary-container/60 text-primary border border-primary/25 group-hover:bg-primary-container/80')
-          }
-        >
-          {icon ?? (isStarred ? <FolderSpecialIcon className="!text-3xl" /> : <FolderIcon className="!text-3xl" />)}
-        </div>
+        {logoUrl ? (
+          <img
+            src={logoUrl}
+            alt={name}
+            className="relative w-14 h-14 rounded-2xl object-cover shadow-sm group-hover:scale-105 transition-transform duration-200"
+          />
+        ) : (
+          <div
+            className={
+              'relative flex items-center justify-center rounded-2xl shadow-sm group-hover:scale-105 transition-transform duration-200 w-14 h-14 ' +
+              (isStarred
+                ? 'bg-secondary-container/30 text-secondary border border-secondary/30'
+                : 'bg-primary-container/60 text-primary border border-primary/25 group-hover:bg-primary-container/80')
+            }
+          >
+            {icon ??
+              (!isStarred && iconName ? (
+                <span className="material-symbols-outlined !text-3xl">{iconName}</span>
+              ) : isStarred ? (
+                <FolderSpecialIcon className="!text-3xl" />
+              ) : (
+                <FolderIcon className="!text-3xl" />
+              ))}
+          </div>
+        )}
 
         {isLocked && (
           <span className="absolute bottom-2 right-2 inline-flex items-center justify-center gap-1 px-2 py-0.5 rounded-md bg-background/85 text-secondary border border-secondary/40 backdrop-blur-md text-[10px] font-semibold">
@@ -103,6 +127,11 @@ export function FolderCard({
         {editSlot ?? (
           <span className="font-semibold text-body-sm text-on-surface truncate block min-w-0 w-full group-hover:text-primary transition-colors">
             {name}
+          </span>
+        )}
+        {description?.trim() && (
+          <span className="block mt-0.5 text-xs text-on-surface-variant line-clamp-2">
+            {description.trim()}
           </span>
         )}
       </div>

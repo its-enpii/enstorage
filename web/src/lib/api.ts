@@ -115,6 +115,12 @@ export type Folder = {
    * decide which lock menu actions to offer.
    */
   is_locked?: boolean;
+  /** Free-text summary shown on the folder card and shared-link preview (SEO). */
+  description?: string | null;
+  /** Material Symbols icon name chosen for the folder glyph. */
+  icon?: string | null;
+  /** Logo/image URL used for the folder card and OpenGraph image. */
+  logo_url?: string | null;
   created_at: string;
   updated_at: string;
 };

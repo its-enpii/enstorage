@@ -20,6 +20,9 @@ type SharedInfo =
         id: string;
         name: string;
         path: string;
+        description?: string | null;
+        icon?: string | null;
+        logo_url?: string | null;
       };
       subfolders: Array<{ id: string; name: string }>;
       files: Array<{ id: string; name: string; size: number; mime_type: string }>;
@@ -71,7 +74,14 @@ export async function generateSharedMetadata(
     const name = info.folder.name || 'Shared Folder';
     const count = (info.files?.length ?? 0) + (info.subfolders?.length ?? 0);
     const title = `${name} · EnStorage`;
-    const description = `Folder bersama "${name}" berisi ${count} item di EnStorage.`;
+    const customDescription = info.folder.description?.trim();
+    const description =
+      customDescription || `Folder bersama "${name}" berisi ${count} item di EnStorage.`;
+    const logoUrl = info.folder.logo_url?.trim() || null;
+    const ogImage = logoUrl
+      ? { url: logoUrl, alt: name }
+      : { url: defaultOgImage, alt: 'EnStorage' };
+    const twitterImage = logoUrl || defaultOgImage;
 
     return {
       title,
@@ -81,13 +91,13 @@ export async function generateSharedMetadata(
         description,
         type: 'website',
         siteName: 'EnStorage',
-        images: [{ url: defaultOgImage, alt: name }],
+        images: [ogImage],
       },
       twitter: {
-        card: 'summary',
+        card: logoUrl ? 'summary_large_image' : 'summary',
         title,
         description,
-        images: [defaultOgImage],
+        images: [twitterImage],
       },
     };
   }
