@@ -462,6 +462,24 @@ body {
   font-size: inherit;
 }
 
+
+/* Mermaid diagrams */
+.mermaid-container .mermaid {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--color-on-surface);
+  font-family: inherit;
+}
+
+.mermaid-container .mermaid[data-processed="true"] {
+  display: flex;
+}
+
+.mermaid-container .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
 /* Blockquotes */
 .prose blockquote, .markdown-body blockquote {
   border-left: 4px solid var(--color-primary);

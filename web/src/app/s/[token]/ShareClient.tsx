@@ -6,6 +6,7 @@ import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import { usePageTitle } from '@/lib/usePageTitle';
 import { FileViewer } from '@/components/FileViewer';
+import { renderMarkdownWithDiagrams, useMermaid } from '@/components/MermaidMarkdown';
 import { Button, IconButton, LinkButton, TextAction } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { triggerDirectDownload } from '@/lib/download';
@@ -769,6 +770,17 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
+function isMarkdownFile(listing: FileListing): boolean {
+  const name = (listing.original_name ?? listing.name ?? '').toLowerCase();
+  const mime = listing.mime_type ?? '';
+  return (
+    name.endsWith('.md') ||
+    name.endsWith('.markdown') ||
+    mime === 'text/markdown' ||
+    mime === 'text/x-markdown'
+  );
+}
+
 function isPreviewable(mime: string): boolean {
   return (
     mime.startsWith('image/') ||
@@ -804,10 +816,12 @@ function FilePreview({
   const isVideo = listing.mime_type.startsWith('video/');
   const isAudio = listing.mime_type.startsWith('audio/');
   const isPdf = listing.mime_type === 'application/pdf';
+  const isMarkdown = isMarkdownFile(listing);
   const isText =
-    listing.mime_type.startsWith('text/') ||
-    listing.mime_type.includes('json') ||
-    listing.mime_type.includes('xml');
+    !isMarkdown &&
+    (listing.mime_type.startsWith('text/') ||
+      listing.mime_type.includes('json') ||
+      listing.mime_type.includes('xml'));
 
   if (mode === 'viewer') {
     return (
@@ -819,6 +833,7 @@ function FilePreview({
         isAudio={isAudio}
         isPdf={isPdf}
         isText={isText}
+        isMarkdown={isMarkdown}
         originalName={listing.original_name}
         textFetchUrl={streamUrl}
         fallbackUrl={downloadUrl}
@@ -898,6 +913,7 @@ function FilePreview({
                   />
                 </div>
               )}
+              {isMarkdown && <MarkdownPreview streamUrl={streamUrl} />}
               {isText && <TextPreview streamUrl={streamUrl} />}
             </div>
           )}
@@ -944,6 +960,7 @@ function ViewerOnly({
   isAudio,
   isPdf,
   isText,
+  isMarkdown,
   originalName,
   textFetchUrl,
   fallbackUrl,
@@ -955,6 +972,7 @@ function ViewerOnly({
   isAudio: boolean;
   isPdf: boolean;
   isText: boolean;
+  isMarkdown: boolean;
   originalName: string;
   textFetchUrl: string;
   fallbackUrl: string;
@@ -1054,6 +1072,7 @@ function ViewerOnly({
           className="w-full h-full"
         />
       )}
+      {isMarkdown && <MarkdownPreviewDark streamUrl={textFetchUrl} />}
       {isText && <TextPreviewDark streamUrl={textFetchUrl} />}
     </div>
   );
@@ -1128,6 +1147,72 @@ function TextPreviewDark({ streamUrl }: { streamUrl: string }) {
         <pre className="text-xs text-on-media whitespace-pre-wrap break-words font-mono">
           {content}
         </pre>
+      )}
+    </div>
+  );
+}
+
+function useMarkdownSource(streamUrl: string) {
+  const { t } = useTranslation();
+  const [content, setContent] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(streamUrl)
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((text) => {
+        if (!cancelled) setContent(text);
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setError(e.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [streamUrl]);
+
+  const html = content === null ? '' : renderMarkdownWithDiagrams(content);
+  return { t, content, error, html };
+}
+
+function MarkdownPreview({ streamUrl }: { streamUrl: string }) {
+  const { t, content, error, html } = useMarkdownSource(streamUrl);
+  const ref = useMermaid<HTMLDivElement>([html]);
+
+  return (
+    <div className="rounded-2xl overflow-hidden bg-surface-container border border-outline-variant/20 mb-4">
+      {content === null && error === null && (
+        <p className="text-metadata text-on-surface-variant p-4">{t('common.loading')}</p>
+      )}
+      {error && <p className="text-sm text-error p-4">{error}</p>}
+      {content !== null && (
+        <div
+          ref={ref}
+          className="prose markdown-body max-w-none text-on-surface leading-relaxed text-sm p-4 max-h-[70vh] overflow-auto"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      )}
+    </div>
+  );
+}
+
+function MarkdownPreviewDark({ streamUrl }: { streamUrl: string }) {
+  const { t, content, error, html } = useMarkdownSource(streamUrl);
+  const ref = useMermaid<HTMLDivElement>([html]);
+
+  return (
+    <div className="w-full h-full overflow-auto p-6">
+      {content === null && error === null && (
+        <p className="text-sm text-on-media-muted">{t('common.loading')}</p>
+      )}
+      {error && <p className="text-sm text-error">{error}</p>}
+      {content !== null && (
+        <div
+          ref={ref}
+          className="prose markdown-body max-w-none text-on-media leading-relaxed text-sm"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
       )}
     </div>
   );

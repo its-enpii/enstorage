@@ -5,7 +5,6 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Close, ChevronLeft, ChevronRight, Download, ContentCopy, Check, Slideshow, Add, Remove, Fullscreen, FullscreenExit } from '@mui/icons-material';
 import JSZip from 'jszip';
-import { marked } from 'marked';
 import type { FileItem } from '@/lib/api';
 import { getToken } from '@/lib/api';
 import { bytes } from '@/lib/format';
@@ -14,6 +13,7 @@ import { DropdownMenu, type MenuItem } from '@/components/DropdownMenu';
 import { Tabs } from '@/components/Tabs';
 import { Button, IconButton, LinkButton, TextAction } from '@/components/Button';
 import { Tooltip } from '@/components/Tooltip';
+import { renderMarkdownWithDiagrams, useMermaid } from '@/components/MermaidMarkdown';
 
 type Props = {
   file: FileItem;
@@ -644,6 +644,7 @@ function MarkdownViewer({ file }: { file: FileItem }) {
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'preview' | 'code'>('preview');
+  const previewRef = useMermaid<HTMLDivElement>([content, tab]);
 
   useEffect(() => {
     fetch(fileUrl(file))
@@ -655,7 +656,7 @@ function MarkdownViewer({ file }: { file: FileItem }) {
 
   if (loading) return <TextSurfaceLoading label={t('preview.loadingText')} />;
 
-  const htmlContent = marked.parse(content, { gfm: true, breaks: true }) as string;
+  const htmlContent = renderMarkdownWithDiagrams(content);
 
   // Single surface: the overlay is already the backdrop — no inner card/frame.
   return (
@@ -678,6 +679,7 @@ function MarkdownViewer({ file }: { file: FileItem }) {
       <div className="flex-1 min-h-0 overflow-auto">
         {tab === 'preview' ? (
           <div
+            ref={previewRef}
             className="prose markdown-body max-w-none text-on-surface leading-relaxed text-sm"
             dangerouslySetInnerHTML={{ __html: htmlContent }}
           />
