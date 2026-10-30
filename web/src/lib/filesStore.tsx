@@ -150,7 +150,28 @@ type Ctx = {
   invalidateCurrentCache: () => void;
   /** Re-fetch page 1 of the current view, replacing (not merging) the lists. */
   refreshReplace: () => Promise<void>;
+  /** Active sort field (`name` | `size` | `created_at` | `uploaded_at`). */
+  sort: string;
+  /** Active sort direction. */
+  sortDir: 'asc' | 'desc';
+  /**
+   * Ubah sort aktif: update state + localStorage + PATCH preferensi akun,
+   * lalu reload halaman 1 view aktif dengan urutan baru.
+   */
+  setSort: (newSort: string, newDir: 'asc' | 'desc') => Promise<void>;
 };
+
+const SORT_KEYS = ['name', 'size', 'created_at', 'uploaded_at'];
+
+function readStoredSort(): { sort: string; sortDir: 'asc' | 'desc' } {
+  if (typeof window === 'undefined') return { sort: 'name', sortDir: 'asc' };
+  const sort = window.localStorage.getItem('enstorage_sort') ?? '';
+  const dir = window.localStorage.getItem('enstorage_sort_dir');
+  return {
+    sort: SORT_KEYS.includes(sort) ? sort : 'name',
+    sortDir: dir === 'desc' ? 'desc' : 'asc',
+  };
+}
 
 const FilesStoreContext = createContext<Ctx | null>(null);
 
@@ -190,6 +211,21 @@ export function FilesStoreProvider({
   const [filePage, setFilePage] = useState(seed?.filePage ?? 0);
   const [fileLastPage, setFileLastPage] = useState(seed?.fileLastPage ?? 1);
   const [fileTotal, setFileTotal] = useState(seed?.fileTotal ?? 0);
+
+  const initialSort = useRef<{ sort: string; sortDir: 'asc' | 'desc' } | null>(null);
+  if (!initialSort.current) {
+    const prefSort = user?.preferences?.sort;
+    const prefDir = user?.preferences?.dir;
+    const stored = readStoredSort();
+    initialSort.current = {
+      sort: prefSort && SORT_KEYS.includes(prefSort) ? prefSort : stored.sort,
+      sortDir: prefDir === 'desc' || prefDir === 'asc' ? prefDir : stored.sortDir,
+    };
+  }
+  const [sort, setSortState] = useState<string>(initialSort.current.sort);
+  const [sortDir, setSortDirState] = useState<'asc' | 'desc'>(initialSort.current.sortDir);
+  const sortRef = useRef({ sort, sortDir });
+  sortRef.current = { sort, sortDir };
 
   const [loading, setLoading] = useState(!seed);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -277,6 +313,8 @@ export function FilesStoreProvider({
       params.set('page', String(page));
       params.set('per_page', String(PER_PAGE));
       if (folderId) params.set('parent_id', folderId);
+      params.set('sort', sortRef.current.sort);
+      params.set('dir', sortRef.current.sortDir);
       const res = await apiRequestEnvelope<FolderType[]>(
         `/folders?${params.toString()}`,
       );
@@ -305,6 +343,8 @@ export function FilesStoreProvider({
       if (folderId) params.set('folder_id', folderId);
       if (search) params.set('search', search);
       if (typeFilter) params.set('type', typeFilter);
+      params.set('sort', sortRef.current.sort);
+      params.set('dir', sortRef.current.sortDir);
       const res = await apiRequestEnvelope<FileItem[]>(
         `/files?${params.toString()}`,
       );
@@ -639,6 +679,30 @@ export function FilesStoreProvider({
    */
   const refreshReplace = useCallback(() => fetchAndReconcile(false, 'replace'), [fetchAndReconcile]);
 
+  const setSort = useCallback(
+    async (newSort: string, newDir: 'asc' | 'desc') => {
+      const nextSort = SORT_KEYS.includes(newSort) ? newSort : 'name';
+      const nextDir: 'asc' | 'desc' = newDir === 'desc' ? 'desc' : 'asc';
+      sortRef.current = { sort: nextSort, sortDir: nextDir };
+      setSortState(nextSort);
+      setSortDirState(nextDir);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('enstorage_sort', nextSort);
+        window.localStorage.setItem('enstorage_sort_dir', nextDir);
+      }
+      try {
+        await apiRequestEnvelope<{ preferences: Record<string, unknown> }>(
+          '/auth/preferences',
+          { method: 'PATCH', body: { sort: nextSort, dir: nextDir } },
+        );
+      } catch {
+        // Preferensi lokal tetap dipakai walau server gagal — bukan blocker UI.
+      }
+      await refreshReplace();
+    },
+    [refreshReplace],
+  );
+
   const value: Ctx = {
     folders,
     files,
@@ -671,6 +735,9 @@ export function FilesStoreProvider({
     updateFolderCounts,
     invalidateCurrentCache,
     refreshReplace,
+    sort,
+    sortDir,
+    setSort,
   };
 
   return <FilesStoreContext.Provider value={value}>{children}</FilesStoreContext.Provider>;

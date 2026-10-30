@@ -110,9 +110,13 @@ class FolderController extends Controller
             $folders = $folders->where('is_starred', true);
         }
 
-        $folders = $folders
-            ->orderByDesc('created_at')
-            ->orderBy('name');
+        $sort = (string) $request->query('sort', 'name');
+        $dir = strtolower((string) $request->query('dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+        if ($sort === 'name') {
+            $folders = $folders->orderBy('name', $dir);
+        } else {
+            $folders = $folders->orderByDesc('created_at')->orderBy('name');
+        }
 
         $perPage = min(100, max(1, (int) $request->query('per_page', 25)));
         $page = max(1, (int) $request->query('page', 1));
@@ -177,12 +181,27 @@ class FolderController extends Controller
             return $blocked;
         }
 
+        $sort = (string) $request->query('sort', 'name');
+        $dir = strtolower((string) $request->query('dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+        if (! in_array($sort, ['name', 'size', 'created_at', 'uploaded_at'], true)) {
+            $sort = 'name';
+        }
+
         $subfoldersQ = Folder::where('parent_id', $folder->id)
             ->withCount(['files', 'children as folders_count'])
-            ->withSum('files', 'size')
-            ->orderBy('name');
-        $filesQ = File::where('folder_id', $folder->id)
-            ->orderBy('created_at', 'desc');
+            ->withSum('files', 'size');
+        if ($sort === 'name') {
+            $subfoldersQ->orderBy('name', $dir);
+        } else {
+            $subfoldersQ->orderByDesc('created_at')->orderBy('name');
+        }
+
+        $filesQ = File::where('folder_id', $folder->id)->orderBy($sort, $dir);
+        if ($sort === 'created_at' || $sort === 'uploaded_at') {
+            $filesQ->orderBy('name', 'asc');
+        } else {
+            $filesQ->orderBy('created_at', 'desc');
+        }
 
         $perPage = min(100, max(1, (int) $request->query('per_page', 25)));
         $page = max(1, (int) $request->query('page', 1));

@@ -17,6 +17,12 @@ export type User = {
   /** False for OAuth-only users that never set their own password. */
   has_password?: boolean;
   locale: 'id' | 'en';
+  /** Per-account preferences (e.g. default sort). */
+  preferences?: {
+    sort?: string;
+    dir?: 'asc' | 'desc';
+    [key: string]: unknown;
+  };
   created_at: string;
   counts?: {
     google_accounts: number;

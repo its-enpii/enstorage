@@ -614,6 +614,27 @@ class AuthController extends Controller
         return $this->ok(['locale' => $user->locale], __('Locale berhasil diperbarui.'));
     }
 
+    public function updatePreferences(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $known = ['sort', 'dir'];
+        $data = $request->validate([
+            'sort' => ['sometimes', 'nullable', 'string', 'in:name,size,created_at,uploaded_at'],
+            'dir' => ['sometimes', 'nullable', 'string', 'in:asc,desc'],
+        ]);
+
+        // Simpan hanya key yang dikenal (sort/dir) — payload dictionary
+        // lain diabaikan agar preferences tetap konsisten.
+        $data = array_intersect_key($data, array_flip($known));
+        $data = array_filter($data, fn ($value) => $value !== null);
+
+        $user->preferences = array_merge($user->preferences ?? [], $data);
+        $user->save();
+
+        return $this->ok(['preferences' => $user->preferences], __('Preferensi berhasil disimpan.'));
+    }
+
     private function userPayload(User $user, bool $withCounts = false): array
     {
         $payload = [
@@ -626,6 +647,10 @@ class AuthController extends Controller
             'email_verified_at' => $user->email_verified_at?->toIso8601String(),
             'locale' => $user->locale ?? config('app.locale', 'id'),
             'created_at' => $user->created_at?->toIso8601String(),
+            'preferences' => $user->preferences ?? [
+                'sort' => 'name',
+                'dir' => 'asc',
+            ],
         ];
 
         if ($withCounts) {

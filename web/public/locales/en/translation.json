@@ -79,6 +79,15 @@
       "typeLockedHint": "Switch 'Show: All' first to enable type filter",
       "showLockedHint": "Reset type filter to see folders only"
     },
+    "sort": {
+      "button": "Sort",
+      "nameAsc": "Name (A to Z)",
+      "nameDesc": "Name (Z to A)",
+      "newest": "Newest upload",
+      "oldest": "Oldest upload",
+      "sizeDesc": "Largest size",
+      "sizeAsc": "Smallest size"
+    },
     "actions": {
       "star": "Star",
       "unstar": "Unstar",

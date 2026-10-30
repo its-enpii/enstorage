@@ -79,6 +79,15 @@
       "typeLockedHint": "Pilih 'Tampilkan: Semua' dulu untuk filter tipe",
       "showLockedHint": "Reset filter tipe dulu untuk lihat folder saja"
     },
+    "sort": {
+      "button": "Urutkan",
+      "nameAsc": "Nama (A ke Z)",
+      "nameDesc": "Nama (Z ke A)",
+      "newest": "Upload Terbaru",
+      "oldest": "Upload Terlama",
+      "sizeDesc": "Ukuran Terbesar",
+      "sizeAsc": "Ukuran Terkecil"
+    },
     "actions": {
       "star": "Bintang",
       "unstar": "Hapus Star",

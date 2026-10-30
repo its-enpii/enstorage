@@ -69,6 +69,7 @@ Route::middleware('auth.apikey')->group(function () {
     Route::patch('auth/me', [AuthController::class, 'updateMe']);
     Route::post('auth/change-password', [AuthController::class, 'changePassword']);
     Route::patch('auth/locale', [AuthController::class, 'updateLocale']);
+    Route::patch('auth/preferences', [AuthController::class, 'updatePreferences'])->middleware('auth.sanctum.only');
 
     // Reset vault — kosongkan seluruh file/folder/share link user tanpa
     // menghapus akun. Sanctum only (API key tidak boleh menghapus data user).

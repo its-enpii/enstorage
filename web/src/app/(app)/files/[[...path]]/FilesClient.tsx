@@ -5,7 +5,7 @@ import { getFileDownloadUrl, getFolderDownloadUrl, triggerDirectDownload } from 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
-import { Tune, Link as LinkIcon } from '@mui/icons-material';
+import { Tune, Link as LinkIcon, SwapVert, Check } from '@mui/icons-material';
 import { apiRequest, apiRequestEnvelope, ApiError, getToken, isUuid, type FileItem, type Folder, type Folder as FolderType, type ResolvedFolder } from '@/lib/api';
 import { cacheInvalidatePrefix } from '@/lib/cache';
 import {
@@ -738,6 +738,9 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     folderPage,
     filePage,
     ensureLoadedPages,
+    sort,
+    sortDir,
+    setSort,
   } = store;
 
   const [tab, setTab] = useState<Tab>(() => {
@@ -1069,6 +1072,25 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   }
 
   const filterActive = !!typeFilter || tab !== 'all';
+
+  // Menu urutkan: pilihan aktif ditandai icon check. Urutan state disimpan
+  // ke preferensi akun + localStorage lewat store.setSort.
+  const sortActive = (field: string, dir: 'asc' | 'desc') => sort === field && sortDir === dir;
+  const sortMenuItems: MenuItem[] = [
+    { key: 'name_asc', field: 'name', dir: 'asc' as const, label: t('files.sort.nameAsc') },
+    { key: 'name_desc', field: 'name', dir: 'desc' as const, label: t('files.sort.nameDesc') },
+    { key: 'date_desc', field: 'created_at', dir: 'desc' as const, label: t('files.sort.newest') },
+    { key: 'date_asc', field: 'created_at', dir: 'asc' as const, label: t('files.sort.oldest') },
+    { key: 'size_desc', field: 'size', dir: 'desc' as const, label: t('files.sort.sizeDesc') },
+    { key: 'size_asc', field: 'size', dir: 'asc' as const, label: t('files.sort.sizeAsc') },
+  ].map((item) => ({
+    label: item.label,
+    ariaLabel: item.label,
+    icon: sortActive(item.field, item.dir) ? <Check className="!text-lg" /> : undefined,
+    onClick: () => {
+      void setSort(item.field, item.dir);
+    },
+  }));
 
   // Cross-section disable: Tipe filter only applies to files, so it conflicts
   // with Tampilkan=Folder. Computed against DRAFT state so user sees the
@@ -2212,6 +2234,22 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               </IconButton>
             </Tooltip>
           )}
+          <DropdownMenu
+            align="right"
+            trigger={
+              <Tooltip label={t('files.sort.button')} placement="bottom">
+                <IconButton
+                  variant="default"
+                  size="xl"
+                  shape="circle"
+                  aria-label={t('files.sort.button')}
+                >
+                  <SwapVert className="!text-xl" />
+                </IconButton>
+              </Tooltip>
+            }
+            items={sortMenuItems}
+          />
           <Tooltip label={filterActive ? t('files.filter.activeBadge') : t('files.filter.button')}>
             <IconButton
               variant={filterActive ? 'default' : 'default'}

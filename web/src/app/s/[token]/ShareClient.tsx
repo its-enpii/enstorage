@@ -41,6 +41,7 @@ type SharedFileEntry = {
   mime_type: string;
   size: number;
   has_thumbnail: boolean;
+  created_at?: string;
 };
 
 type FolderListing = {
@@ -59,6 +60,7 @@ type FileListing = {
   original_name: string;
   mime_type: string;
   size: number;
+  created_at?: string | null;
   updated_at: string | null;
 };
 
@@ -383,7 +385,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
     upload_status: 'done',
     uploaded_at: null,
     has_thumbnail: f.has_thumbnail,
-    created_at: '',
+    created_at: f.created_at ?? '',
     updated_at: '',
     stream_url: `${API_BASE}/s/${token}?file_id=${f.id}`,
     download_url: `${API_BASE}/s/${token}?file_id=${f.id}&download=1`,
@@ -549,6 +551,7 @@ export default function ShareClient({ mode = 'landing' }: { mode?: ShareClientMo
                       </span>
                       <span className="block text-metadata text-on-surface-variant tabular-nums truncate">
                         {formatBytes(f.size)}
+                        {f.created_at ? ' • ' + formatDateTime(f.created_at) : ''}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
@@ -740,6 +743,25 @@ function ShareUnlockPanel({
   );
 }
 
+/**
+ * Tanggal + jam upload lokal, mis. "30 Okt 2026, 10:01".
+ * Locale mengikuti `enstorage_locale` (fallback 'id') agar konsisten
+ * dengan bahasa UI tanpa perlu hook i18n di helper murni.
+ */
+function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const locale =
+    typeof window !== 'undefined' ? window.localStorage.getItem('enstorage_locale') ?? 'id' : 'id';
+  return date.toLocaleString(locale === 'en' ? 'en-GB' : 'id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -833,6 +855,12 @@ function FilePreview({
 
           <div className="mt-1 flex items-center justify-center gap-2 text-metadata text-on-surface-variant min-w-0 max-w-full truncate">
             {listing.size > 0 && <span className="shrink-0">{formatBytes(listing.size)}</span>}
+            {listing.created_at ? (
+              <>
+                <span aria-hidden="true" className="shrink-0">•</span>
+                <span className="shrink-0">{formatDateTime(listing.created_at)}</span>
+              </>
+            ) : null}
             {listing.size > 0 && listing.mime_type && (
               <span aria-hidden="true" className="shrink-0">•</span>
             )}

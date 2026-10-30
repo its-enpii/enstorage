@@ -135,12 +135,19 @@ class FileController extends Controller
         }
 
         // Sort
-        $sort = $request->query('sort', 'created_at');
-        $dir = strtolower($request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+        $sort = (string) $request->query('sort', 'name');
+        $dir = strtolower((string) $request->query('dir', 'asc')) === 'desc' ? 'desc' : 'asc';
         if (! in_array($sort, ['name', 'size', 'created_at', 'uploaded_at'], true)) {
-            $sort = 'created_at';
+            $sort = 'name';
         }
         $query->orderBy($sort, $dir);
+        // Tie-breaker wajib agar urutan deterministik saat timestamps atau
+        // nama sama (batch upload dengan detik identik → 01 sebelum 02).
+        if ($sort === 'created_at' || $sort === 'uploaded_at') {
+            $query->orderBy('name', 'asc');
+        } else {
+            $query->orderBy('created_at', 'desc');
+        }
         // Eager load thumbnail supaya FileResource bisa baca relasi
         // `has_thumbnail` dari koleksi yang sudah di-load (N+1 safe).
         $query->with('thumbnail:id,file_id');
@@ -1314,6 +1321,7 @@ class FileController extends Controller
                 'original_name' => $file->original_name,
                 'mime_type' => $file->mime_type,
                 'size' => $file->size,
+                'created_at' => $file->created_at?->toIso8601String(),
                 'updated_at' => $file->updated_at?->toIso8601String(),
                 'metadata' => $file->metadata,
             ]);
@@ -1622,15 +1630,15 @@ class FileController extends Controller
             ->where('user_id', $folder->user_id)
             ->withCount(['files', 'children as folders_count'])
             ->withSum('files', 'size')
-            ->orderBy('name')
+            ->orderBy('name', 'asc')
             ->get();
 
         $files = FileModel::where('folder_id', $targetFolder->id)
             ->where('user_id', $folder->user_id)
             ->where('upload_status', FileModel::STATUS_DONE)
             ->with('thumbnail:id,file_id')
-            ->orderByDesc('created_at')
-            ->get(['id', 'name', 'original_name', 'mime_type', 'size']);
+            ->orderBy('name', 'asc')
+            ->get(['id', 'name', 'original_name', 'mime_type', 'size', 'created_at']);
 
         return $this->ok([
             'kind' => 'folder',
@@ -1644,6 +1652,7 @@ class FileController extends Controller
                 'mime_type' => $f->mime_type,
                 'size' => (int) $f->size,
                 'has_thumbnail' => $f->thumbnail !== null,
+                'created_at' => $f->created_at?->toIso8601String(),
             ])->all(),
         ], __('Folder share listing.'));
     }
