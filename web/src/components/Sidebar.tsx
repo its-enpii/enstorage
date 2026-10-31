@@ -132,7 +132,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
   const railInner = (
     <>
       <Link
-        href="/files"
+        href="/"
         title="EnStorage"
         className="transition-transform hover:scale-105 active:scale-95"
       >
@@ -178,7 +178,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
     <>
       <header className="flex items-center justify-between gap-3 px-5 pt-6 pb-5 border-b border-outline-variant/15">
         <Link
-          href="/files"
+          href="/"
           onClick={onMobileClose}
           className="flex items-center gap-3 min-w-0 no-underline transition-transform active:scale-[0.98]"
         >

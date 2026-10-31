@@ -188,6 +188,7 @@ export type FileItem = {
   updated_at: string;
   stream_url?: string;
   download_url?: string;
+  folder?: { id: string; name: string; path?: string } | null;
 };
 
 /** Satu kategori berkas pada ringkasan dashboard. */

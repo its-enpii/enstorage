@@ -13,6 +13,7 @@ import {
   type UnreachableFile,
 } from '@/lib/api';
 import { AppShell } from '@/components/AppShell';
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { Button, IconButton } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Chip } from '@/components/Chip';
@@ -261,9 +262,15 @@ function AccountsContent() {
 
   return (
     <>
-      <nav className="flex items-center gap-2 mb-6 text-sm text-outline">
-        <span>{t('nav.home')}</span>
-      </nav>
+      <div className="mb-6">
+        <Breadcrumb
+          size="lg"
+          items={[
+            { id: null, label: t('nav.dashboard'), href: '/' },
+            { id: 'accounts', label: t('accounts.title'), href: '/google-accounts' },
+          ]}
+        />
+      </div>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-6">
         <div>
@@ -327,8 +334,11 @@ function AccountsContent() {
 
                   <div className="flex-1 min-w-0 flex flex-col gap-3">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-body text-body-lg font-semibold text-on-surface break-words">
+                      <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                        <h3
+                          className="font-body text-body-lg font-semibold text-on-surface truncate min-w-0 max-w-full"
+                          title={acc.label && acc.label !== acc.email ? `${acc.label} (${acc.email})` : acc.email}
+                        >
                           {acc.label && acc.label !== acc.email ? acc.label : acc.email}
                         </h3>
                         {isPrimary && (
@@ -398,37 +408,33 @@ function AccountsContent() {
                   </div>
                 )}
 
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="!border-outline-variant/40"
-                    onClick={() => importFromDrive(acc.id)}
-                    disabled={accountBusy}
-                    leftIcon={<AddToDriveIcon />}
-                  >
-                    {t('accounts.import.action')}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => toggleUnreachable(acc.id)}
-                    disabled={unreachableBusy === acc.id}
-                    leftIcon={unreachableBusy === acc.id ? <Spinner size="xs" /> : <ExpandMoreIcon />}
-                  >
-                    {t('accounts.unreachable.toggle')}
-                  </Button>
-                  <IconButton
-                    onClick={() => syncQuota(acc.id)}
-                    disabled={busy === acc.id}
-                    title={t('accounts.syncQuota')}
-                  >
-                    {busy === acc.id ? <Spinner size="xs" /> : <RefreshIcon />}
-                  </IconButton>
+                <div className="flex items-center justify-between gap-2 pt-3 border-t border-outline-variant/15 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="!border-outline-variant/40 max-w-full"
+                      onClick={() => importFromDrive(acc.id)}
+                      disabled={accountBusy}
+                      leftIcon={<AddToDriveIcon className="shrink-0" />}
+                      title={t('accounts.import.action')}
+                    >
+                      <span className="truncate">{t('accounts.import.action')}</span>
+                    </Button>
+                    <IconButton
+                      size="sm"
+                      onClick={() => syncQuota(acc.id)}
+                      disabled={busy === acc.id}
+                      title={t('accounts.syncQuota')}
+                    >
+                      {busy === acc.id ? <Spinner size="xs" /> : <RefreshIcon />}
+                    </IconButton>
+                  </div>
                   {!isPrimary && (
                     <Button
                       variant="danger-soft"
                       size="sm"
+                      className="shrink-0"
                       onClick={() => remove(acc.id)}
                       disabled={busy === acc.id}
                     >

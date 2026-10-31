@@ -34,7 +34,7 @@ function CallbackContent() {
 
     handleGoogleCallback(token)
       .then(() => {
-        router.replace('/files');
+        router.replace('/');
       })
       .catch((e) => {
         setError(e instanceof Error ? e.message : t('auth.callback.failed'));

@@ -27,7 +27,7 @@ export default function LoginClient() {
 
   // Already signed in → straight to the vault.
   useEffect(() => {
-    if (!loading && user) router.replace('/files');
+    if (!loading && user) router.replace('/');
   }, [loading, user, router]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -37,7 +37,7 @@ export default function LoginClient() {
     setSubmitting(true);
     try {
       await login(email.trim(), password);
-      router.replace('/files');
+      router.replace('/');
     } catch (err) {
       if (err instanceof ApiError) {
         setError(

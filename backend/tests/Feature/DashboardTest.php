@@ -165,6 +165,11 @@ class DashboardTest extends TestCase
             'mime_type' => 'application/pdf',
             'folder_id' => $folder->id,
         ]);
+        $mdInSubfolder = $this->makeFile($user, $account, [
+            'name' => '04-schema.md',
+            'mime_type' => 'text/plain',
+            'folder_id' => $folder->id,
+        ]);
 
         $response = $this->getJson('/api/v1/files?type=image')->assertStatus(200);
         $ids = collect($response->json('data'))->pluck('id');
@@ -173,6 +178,12 @@ class DashboardTest extends TestCase
         $this->assertTrue($ids->contains($imageDeep->id));
         $this->assertTrue($ids->contains($rootImage->id));
         $this->assertFalse($ids->contains($docInSubfolder->id));
+
+        $docResponse = $this->getJson('/api/v1/files?type=doc')->assertStatus(200);
+        $docIds = collect($docResponse->json('data'))->pluck('id');
+        $this->assertTrue($docIds->contains($docInSubfolder->id));
+        $this->assertTrue($docIds->contains($mdInSubfolder->id));
+        $this->assertFalse($docIds->contains($imageInSubfolder->id));
     }
 
     public function test_files_endpoint_without_filter_still_scopes_to_root(): void

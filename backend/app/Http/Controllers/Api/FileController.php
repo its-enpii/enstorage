@@ -148,6 +148,26 @@ class FileController extends Controller
                             $q->orWhere('name', 'ilike', '%.'.$ext);
                         }
                     });
+                } elseif ($type === 'doc') {
+                    // Dokumen: teks/markdown/csv, pdf, word, excel, ppt, dan format dokumen umum.
+                    $query->where(function ($q) {
+                        $q->where('mime_type', 'like', 'text/%')
+                            ->orWhere('mime_type', '=', 'application/pdf')
+                            ->orWhere('mime_type', 'like', '%word%')
+                            ->orWhere('mime_type', 'like', '%excel%')
+                            ->orWhere('mime_type', 'like', '%spreadsheet%')
+                            ->orWhere('mime_type', 'like', '%presentation%')
+                            ->orWhere('mime_type', 'like', '%powerpoint%')
+                            ->orWhere('name', 'ilike', '%.doc')
+                            ->orWhere('name', 'ilike', '%.docx')
+                            ->orWhere('name', 'ilike', '%.xls')
+                            ->orWhere('name', 'ilike', '%.xlsx')
+                            ->orWhere('name', 'ilike', '%.ppt')
+                            ->orWhere('name', 'ilike', '%.pptx')
+                            ->orWhere('name', 'ilike', '%.txt')
+                            ->orWhere('name', 'ilike', '%.md')
+                            ->orWhere('name', 'ilike', '%.csv');
+                    });
                 } elseif ($prefix === 'application/pdf') {
                     $query->where('mime_type', '=', 'application/pdf');
                 } else {
