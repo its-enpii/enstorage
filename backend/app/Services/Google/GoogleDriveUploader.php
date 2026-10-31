@@ -12,13 +12,18 @@ use Illuminate\Support\Facades\Log;
 
 class GoogleDriveUploader
 {
-    // 25 MB per chunk. Google resumable upload API mewajibkan ukuran chunk
-    // kelipatan 256 KB (kecuali chunk terakhir) — 25 MB = 100 x 256 KB, aman.
-    // Chunk lebih besar = jauh lebih sedikit round-trip HTTP ke Drive untuk
-    // file besar (5 MB → 25 MB: 5x lebih sedikit request), sehingga file
-    // tidak menumpuk di server. Buffer fread 25 MB masih wajar untuk
-    // memory_limit backend 512M.
-    private const CHUNK_SIZE = 25 * 1024 * 1024; // 25 MB per chunk
+    // Ambang batas "Direct 1-shot Multipart". File/part dengan ukuran
+    // <= 5 MB dikirim dalam SATU request HTTP (metadata + isi file sekaligus),
+    // tanpa handshake resumable (init session + nextChunk). Ini memotong
+    // round-trip untuk mayoritas file kecil secara signifikan.
+    public const MULTIPART_THRESHOLD_BYTES = 5 * 1024 * 1024; // 5 MB (ambang batas 1-shot multipart)
+
+    // 50 MB per chunk (dari 25 MB). Google resumable upload API mewajibkan
+    // ukuran chunk kelipatan 256 KB (kecuali chunk terakhir) — 50 MB = 200 x
+    // 256 KB, aman. Chunk lebih besar = jauh lebih sedikit round-trip HTTP ke
+    // Drive untuk file besar (25 MB → 50 MB), sehingga file tidak menumpuk di
+    // server. Buffer fread 50 MB masih wajar untuk memory_limit backend 512M.
+    private const CHUNK_SIZE = 50 * 1024 * 1024; // 50 MB (dari 25 MB)
 
     public function __construct(
         private readonly GoogleClientFactory $factory,
@@ -42,32 +47,27 @@ class GoogleDriveUploader
 
         $client = $this->factory->makeFor($account);
         $client->setAccessToken($account->access_token);
-        $client->setDefer(true); // penting: agar nextChunk() bisa loop
         $drive = new Drive($client);
 
         // 2. Tentukan target parent folder di Google Drive (1:1 folder sync)
-        $parentFolderId = null;
-        if ($file->folder_id) {
-            $folder = Folder::find($file->folder_id);
-            if ($folder) {
-                $parentFolderId = $this->folderService->ensureFolderOnDrive($account, $folder);
-            }
-        }
-
-        if (! $parentFolderId) {
-            $parentFolderId = app(QuotaManager::class)->ensureRootFolder($account);
-        }
-
-        // 3. Siapkan metadata file
-        $metadata = new DriveFile([
-            'name' => $file->original_name,
-            'parents' => [$parentFolderId],
-        ]);
+        $parentFolderId = $this->resolveParentFolderId($account, $file);
 
         $size = (int) filesize($localPath);
         if ($size === 0) {
             throw new \RuntimeException('File yang akan di-upload kosong (0 byte).');
         }
+
+        // 3a. File kecil (<= 5 MB): Direct Multipart Upload 1-shot.
+        //     Metadata + isi file dikirim dalam satu request, tanpa handshake
+        //     resumable — jalur tercepat untuk file berukuran kecil.
+        if ($size <= self::MULTIPART_THRESHOLD_BYTES) {
+            return $this->uploadMultipart($client, $drive, $file, $parentFolderId, (string) file_get_contents($localPath));
+        }
+
+        // 3b. File besar (> 5 MB): Resumable Upload streaming per chunk.
+        $client->setDefer(true); // penting: agar nextChunk() bisa loop
+
+        $metadata = $this->buildMetadata($file, $parentFolderId);
 
         $request = $drive->files->create($metadata, [
             'fields' => 'id,name,webViewLink,webContentLink,mimeType,size',
@@ -153,27 +153,45 @@ class GoogleDriveUploader
 
         $client = $this->factory->makeFor($account);
         $client->setAccessToken($account->access_token);
-        $client->setDefer(true);
         $drive = new Drive($client);
 
         // 2. Parent folder: folder sync 1:1 bila ada, else root EnStorage.
-        $parentFolderId = null;
-        if ($file->folder_id) {
-            $folder = Folder::find($file->folder_id);
-            if ($folder) {
-                $parentFolderId = $this->folderService->ensureFolderOnDrive($account, $folder);
-            }
-        }
-
-        if (! $parentFolderId) {
-            $parentFolderId = app(QuotaManager::class)->ensureRootFolder($account);
-        }
+        $parentFolderId = $this->resolveParentFolderId($account, $file);
 
         // 3. Metadata part: "<nama asli>.part<N>"
         $metadata = new DriveFile([
             'name' => $file->original_name.'.part'.$partNumber,
             'parents' => [$parentFolderId],
         ]);
+
+        // 4a. Part kecil (<= 5 MB): Direct Multipart Upload 1-shot. Baca
+        //     potongan byte lalu kirim sekaligus tanpa handshake resumable.
+        if ($partSize <= self::MULTIPART_THRESHOLD_BYTES) {
+            $handle = fopen($localPath, 'rb');
+            if (! $handle) {
+                throw new \RuntimeException("Gagal membuka file lokal untuk streaming: {$localPath}");
+            }
+
+            try {
+                if (fseek($handle, $offset) !== 0) {
+                    throw new \RuntimeException("Gagal seek ke offset {$offset} pada {$localPath}");
+                }
+
+                $partData = fread($handle, $partSize);
+                if ($partData === false || $partData === '') {
+                    throw new \RuntimeException("Gagal membaca part dari {$localPath}");
+                }
+            } finally {
+                if (is_resource($handle)) {
+                    fclose($handle);
+                }
+            }
+
+            return $this->uploadMultipart($client, $drive, $file, $parentFolderId, $partData, $metadata);
+        }
+
+        // 4b. Part besar (> 5 MB): Resumable Upload streaming per chunk.
+        $client->setDefer(true);
 
         $handle = fopen($localPath, 'rb');
         if (! $handle) {
@@ -228,6 +246,70 @@ class GoogleDriveUploader
         return [
             'gdrive_file_id' => $uploaded->getId(),
             'shareable_link' => $uploaded->getWebViewLink() ?? null,
+        ];
+    }
+
+    /**
+     * Tentukan parent folder di Google Drive: folder sync 1:1 bila ada,
+     * else root EnStorage milik akun.
+     */
+    private function resolveParentFolderId(GoogleAccount $account, FileModel $file): string
+    {
+        if ($file->folder_id) {
+            $folder = Folder::find($file->folder_id);
+            if ($folder) {
+                return $this->folderService->ensureFolderOnDrive($account, $folder);
+            }
+        }
+
+        return app(QuotaManager::class)->ensureRootFolder($account);
+    }
+
+    /**
+     * Metadata file untuk upload 1-shot / resumable.
+     */
+    private function buildMetadata(FileModel $file, string $parentFolderId): DriveFile
+    {
+        return new DriveFile([
+            'name' => $file->original_name,
+            'parents' => [$parentFolderId],
+        ]);
+    }
+
+    /**
+     * Direct Multipart Upload 1-shot: metadata + isi file/part dikirim dalam
+     * satu request HTTP (`uploadType=multipart`), tanpa handshake resumable.
+     * Dipakai untuk payload <= MULTIPART_THRESHOLD_BYTES.
+     *
+     * File sengaja dibiarkan PRIVATE (tanpa permission publik) — sama seperti
+     * jalur resumable; akses share tetap lewat /s/{token}.
+     *
+     * @return array{gdrive_file_id: string, shareable_link: ?string}
+     */
+    private function uploadMultipart(
+        \Google\Client $client,
+        Drive $drive,
+        FileModel $file,
+        string $parentFolderId,
+        string $data,
+        ?DriveFile $metadata = null,
+    ): array {
+        $client->setDefer(false);
+
+        $uploaded = $drive->files->create($metadata ?? $this->buildMetadata($file, $parentFolderId), [
+            'data' => $data,
+            'mimeType' => $file->mime_type,
+            'uploadType' => 'multipart',
+            'fields' => 'id,name,webViewLink,webContentLink,mimeType,size',
+        ]);
+
+        if (! $uploaded instanceof DriveFile) {
+            throw new \RuntimeException('Upload multipart gagal: response tidak valid dari Google Drive.');
+        }
+
+        return [
+            'gdrive_file_id' => $uploaded->getId(),
+            'shareable_link' => $uploaded->getWebViewLink(),
         ];
     }
 
