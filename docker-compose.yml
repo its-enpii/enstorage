@@ -125,6 +125,12 @@ services:
     networks:
       - enstorage-net
       - web-network
+    healthcheck:
+      test: ["CMD-SHELL", "supervisorctl status | grep -E 'queue-worker.*RUNNING' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
   postgres:
