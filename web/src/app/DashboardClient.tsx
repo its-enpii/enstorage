@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import {
   apiRequest,
-  apiRequestEnvelope,
   ApiError,
   getToken,
   type DashboardData,
@@ -14,7 +14,7 @@ import {
 } from '@/lib/api';
 import { AppShell } from '@/components/AppShell';
 import { Alert } from '@/components/Alert';
-import { Button, IconButton, LinkButton } from '@/components/Button';
+import { IconButton, LinkButton } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { FileCard } from '@/components/ItemCard';
@@ -75,15 +75,11 @@ export function DashboardClient() {
 
 function DashboardContent() {
   const { t, i18n } = useTranslation();
+  const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewerFile, setViewerFile] = useState<FileItem | null>(null);
-
-  // Kategori aktif yang sedang dibuka langsung di Dashboard
-  const [selectedCategory, setSelectedCategory] = useState<CategoryKey | null>(null);
-  const [categoryFiles, setCategoryFiles] = useState<FileItem[]>([]);
-  const [categoryLoading, setCategoryLoading] = useState(false);
 
   usePageTitle(t('nav.dashboard'));
 
@@ -105,26 +101,6 @@ function DashboardContent() {
     };
   }, [t]);
 
-  function handleCategoryClick(type: CategoryKey) {
-    if (selectedCategory === type) {
-      setSelectedCategory(null);
-      setCategoryFiles([]);
-      return;
-    }
-    setSelectedCategory(type);
-    setCategoryLoading(true);
-    apiRequestEnvelope<FileItem[]>(`/files?type=${type}&per_page=100`)
-      .then((res) => {
-        setCategoryFiles(res.data ?? []);
-      })
-      .catch(() => {
-        setCategoryFiles([]);
-      })
-      .finally(() => {
-        setCategoryLoading(false);
-      });
-  }
-
   if (loading) {
     return <Loading label={t('common.loadingLabel')} />;
   }
@@ -137,8 +113,7 @@ function DashboardContent() {
   const percent = Math.max(0, Math.min(100, storage.percentage));
   const categoryByType = new Map(data.categories.map((c) => [c.type, c]));
   const recent = data.recent_files ?? [];
-  const currentActiveList = selectedCategory ? categoryFiles : recent;
-  const doneFileList = currentActiveList.filter((f) => f.upload_status === 'done');
+  const doneRecent = recent.filter((f) => f.upload_status === 'done');
 
   return (
     <div className="flex flex-col gap-6 pb-8">
@@ -185,37 +160,22 @@ function DashboardContent() {
         </p>
       </Card>
 
-      {/* Kategori Berkas */}
+      {/* Kategori Berkas -> Klik membuka halaman /categories/[type] */}
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-body text-body-lg font-semibold text-on-surface">
             {t('dashboard.categoriesTitle')}
           </h2>
-          {selectedCategory && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSelectedCategory(null)}
-              leftIcon={<span className="material-symbols-outlined !text-base" aria-hidden>close</span>}
-            >
-              {t('common.close')}
-            </Button>
-          )}
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-card-gap">
           {DASHBOARD_CATEGORIES.map((type) => {
             const meta = CATEGORY_META[type];
             const cat = categoryByType.get(type) ?? { type, count: 0, size: 0 };
-            const isSelected = selectedCategory === type;
             return (
               <Card
                 key={type}
-                onClick={() => handleCategoryClick(type)}
-                className={`flex flex-col gap-3 cursor-pointer transition-all hover:scale-[1.02] ${
-                  isSelected
-                    ? 'ring-2 ring-primary border-primary bg-primary/10 shadow-md'
-                    : 'hover:border-primary/50'
-                }`}
+                onClick={() => router.push(`/categories/${type}`)}
+                className="flex flex-col gap-3 cursor-pointer hover:border-primary/50 transition-all hover:scale-[1.02]"
                 data-testid={`dashboard-category-${type}`}
               >
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-transform duration-200 group-hover:scale-105 ${meta.tone}`}>
@@ -235,21 +195,12 @@ function DashboardContent() {
         </div>
       </section>
 
-      {/* Daftar Berkas Kategori Terpilih atau Berkas Terbaru */}
+      {/* File Baru Diupload */}
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <h2 className="font-body text-body-lg font-semibold text-on-surface truncate">
-              {selectedCategory
-                ? `${t(CATEGORY_META[selectedCategory].labelKey)}`
-                : t('dashboard.recentTitle')}
-            </h2>
-            {selectedCategory && (
-              <span className="text-metadata text-outline tabular-nums shrink-0">
-                ({categoryFiles.length} {t('files.tabs.files').toLowerCase()})
-              </span>
-            )}
-          </div>
+          <h2 className="font-body text-body-lg font-semibold text-on-surface">
+            {t('dashboard.recentTitle')}
+          </h2>
           <Link
             href="/files"
             className="text-sm font-medium text-primary hover:underline shrink-0"
@@ -258,17 +209,16 @@ function DashboardContent() {
           </Link>
         </div>
 
-        {categoryLoading ? (
-          <Loading label={t('common.loadingLabel')} />
-        ) : currentActiveList.length === 0 ? (
+        {recent.length === 0 ? (
           <EmptyState
-            icon={<span className={`${IconSymbol} !text-4xl`}>folder_open</span>}
-            title={selectedCategory ? t('dashboard.emptyCategory', 'Tidak ada berkas dalam kategori ini.') : t('dashboard.emptyRecent')}
+            icon={<span className={`${IconSymbol} !text-4xl`}>upload_file</span>}
+            title={t('dashboard.emptyRecent')}
           />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-card-gap">
-            {currentActiveList.map((file) => {
-              const metaText = `${bytes(file.size)}${file.folder ? ` • ${file.folder.name}` : ''} • ${uploadedLabel(file, i18n.language)}`;
+            {recent.map((file) => {
+              const folderName = file.folder?.name ?? 'Root';
+              const metaText = `${bytes(file.size)} • ${folderName} • ${uploadedLabel(file, i18n.language)}`;
               return (
                 <FileCard
                   key={file.id}
@@ -306,7 +256,7 @@ function DashboardContent() {
       {viewerFile && (
         <FileViewer
           file={viewerFile}
-          files={doneFileList}
+          files={doneRecent}
           onClose={() => setViewerFile(null)}
           onNavigate={setViewerFile}
         />
