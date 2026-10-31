@@ -212,6 +212,14 @@ paths:
       responses:
         '200': { description: OK }
 
+  /dashboard:
+    get:
+      tags: [Dashboard]
+      summary: Ringkasan kuota storage, metrik kategori berkas, dan berkas terbaru
+      security: [{ sanctum: [] }, { apiKey: [] }]
+      responses:
+        '200': { description: OK }
+
   /folders:
     get:
       tags: [Folders]

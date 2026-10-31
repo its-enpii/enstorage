@@ -74,6 +74,7 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
     key: 'storage',
     endpoints: [
       { method: 'GET', path: '/storage/summary', scope: 'read', key: 'summary' },
+      { method: 'GET', path: '/dashboard', scope: 'read', key: 'dashboard' },
     ],
   },
   {
@@ -1891,6 +1892,64 @@ Content-Disposition: attachment; filename="Laporan-2026.zip"
     },
     errors: ['401', '403'],
     noteKey: 'quotaCacheNote',
+  },
+  {
+    id: 'storage-dashboard',
+    group: 'storage',
+    method: 'GET',
+    path: '/dashboard',
+    scope: 'read',
+    key: 'dashboard',
+    call: {
+      method: 'GET',
+      path: '/dashboard',
+      expect: '200 OK',
+      notes: [
+        'Ringkasan terpadu dashboard: total kapasitas, 7 kategori berkas, dan berkas terbaru.',
+      ],
+    },
+    headerRows: [AUTH_ROW],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "storage": {
+      "total": 32212254720,
+      "used": 10485760000,
+      "free": 21726494720,
+      "percentage": 32.5,
+      "accounts_count": 3
+    },
+    "categories": [
+      { "type": "doc", "count": 42, "size": 991232 },
+      { "type": "image", "count": 795, "size": 1258291200 },
+      { "type": "video", "count": 12, "size": 2147483648 },
+      { "type": "audio", "count": 5, "size": 52428800 },
+      { "type": "app", "count": 2, "size": 83886080 },
+      { "type": "archive", "count": 8, "size": 524288000 },
+      { "type": "other", "count": 0, "size": 0 }
+    ],
+    "recent_files": [
+      {
+        "id": "019ff117-f4ae-7027-aa7d-3a5148992cca",
+        "name": "04-Schema.md",
+        "size": 26624,
+        "mime_type": "text/plain",
+        "upload_status": "done"
+      }
+    ],
+    "summary": {
+      "files_count": 864,
+      "files_size": 4075199460,
+      "folders_count": 24,
+      "accounts_count": 3
+    }
+  },
+  "message": "Dashboard berhasil dimuat."
+}`,
+    },
+    errors: ['401', '403'],
   },
   {
     id: 'accounts-list',

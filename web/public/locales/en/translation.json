@@ -1300,6 +1300,7 @@
       "showFolder": "Folder details with its immediate contents.",
       "subtitle": "Mapped directly from `backend/routes/api.php`. Paths are shown without the `/api/v1` prefix.",
       "summary": "Total, used, and free quota across every connected account.",
+      "dashboard": "Pooled storage metrics, 7 file categories breakdown, and recent uploads.",
       "syncQuota": "Pull the latest quota from Google for one account.",
       "thumbnail": "Small image or video preview.",
       "title": "Endpoint table",

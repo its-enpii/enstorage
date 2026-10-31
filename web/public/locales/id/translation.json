@@ -1300,6 +1300,7 @@
       "showFolder": "Detail folder beserta isi langsung.",
       "subtitle": "Dipetakan langsung dari `backend/routes/api.php`. Path ditampilkan tanpa prefix `/api/v1`.",
       "summary": "Total, terpakai, dan sisa kuota gabungan seluruh akun.",
+      "dashboard": "Ringkasan metrik kuota gabungan, klasifikasi 7 kategori berkas, dan berkas terbaru.",
       "syncQuota": "Tarik kuota terbaru dari Google untuk satu akun.",
       "thumbnail": "Pratinjau gambar atau video dalam ukuran kecil.",
       "title": "Tabel endpoint",
