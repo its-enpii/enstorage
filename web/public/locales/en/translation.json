@@ -57,12 +57,14 @@
       "all": "All",
       "image": "Images",
       "pdf": "PDF",
-      "doc": "Documents"
+      "doc": "Documents",
+      "video": "Video",
+      "audio": "Audio"
     },
     "filter": {
       "button": "Filter",
       "activeBadge": "Filter active",
-      "title": "Filter",
+      "title": "Filter & Sort",
       "sectionType": "Type",
       "sectionShow": "Show",
       "showAll": "All",
@@ -77,7 +79,9 @@
       "summary_files_one": "{{count}} file",
       "summary_files_other": "{{count}} files",
       "typeLockedHint": "Switch 'Show: All' first to enable type filter",
-      "showLockedHint": "Reset type filter to see folders only"
+      "showLockedHint": "Reset type filter to see folders only",
+      "sectionSort": "Sort by",
+      "cancel": "Cancel"
     },
     "sort": {
       "button": "Sort",

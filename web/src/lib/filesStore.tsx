@@ -19,6 +19,26 @@ import {
 import { cacheGet, cacheRemove, cacheSet } from '@/lib/cache';
 import { useAuth } from '@/components/AuthProvider';
 
+/**
+ * Active sort preference (field + direction), read without a provider so the
+ * route shell can key the store on sort before the store itself is mounted.
+ */
+export function readStoredSort(): { sort: string; sortDir: 'asc' | 'desc' } {
+  if (typeof window === 'undefined') return { sort: 'name', sortDir: 'asc' };
+  const sort = window.localStorage.getItem('enstorage_sort') ?? '';
+  const dir = window.localStorage.getItem('enstorage_sort_dir') ?? '';
+  return {
+    sort: SORT_KEYS.includes(sort) ? sort : 'name',
+    sortDir: dir === 'desc' ? 'desc' : 'asc',
+  };
+}
+
+/** Broadcast the active sort so route-level shells can key on it. */
+export function broadcastSortChange(sort: string, sortDir: 'asc' | 'desc'): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('sortchange', { detail: { sort, sortDir } }));
+}
+
 export function getLocalUserId(): string {
   if (typeof window === 'undefined') return '';
   try {
@@ -34,10 +54,12 @@ type ViewKey = {
   folderId: string | null;
   search: string;
   typeFilter: string;
+  sort: string;
+  sortDir: 'asc' | 'desc';
 };
 
-function keyOf({ folderId, search, typeFilter }: ViewKey): string {
-  return `view:${folderId ?? 'root'}:${search || 'all'}:${typeFilter || 'all'}`;
+function keyOf({ folderId, search, typeFilter, sort, sortDir }: ViewKey): string {
+  return `view:${folderId ?? 'root'}:${search || 'all'}:${typeFilter || 'all'}:${sort || 'name'}:${sortDir || 'asc'}`;
 }
 
 const PER_PAGE = 50;
@@ -161,17 +183,7 @@ type Ctx = {
   setSort: (newSort: string, newDir: 'asc' | 'desc') => Promise<void>;
 };
 
-const SORT_KEYS = ['name', 'size', 'created_at', 'uploaded_at'];
-
-function readStoredSort(): { sort: string; sortDir: 'asc' | 'desc' } {
-  if (typeof window === 'undefined') return { sort: 'name', sortDir: 'asc' };
-  const sort = window.localStorage.getItem('enstorage_sort') ?? '';
-  const dir = window.localStorage.getItem('enstorage_sort_dir');
-  return {
-    sort: SORT_KEYS.includes(sort) ? sort : 'name',
-    sortDir: dir === 'desc' ? 'desc' : 'asc',
-  };
-}
+export const SORT_KEYS = ['name', 'size', 'created_at', 'uploaded_at'];
 
 const FilesStoreContext = createContext<Ctx | null>(null);
 
@@ -189,9 +201,26 @@ export function FilesStoreProvider({
   const { user } = useAuth();
   const userId = user?.id || getLocalUserId();
 
+  const initialSort = useRef<{ sort: string; sortDir: 'asc' | 'desc' } | null>(null);
+  if (!initialSort.current) {
+    const prefSort = user?.preferences?.sort;
+    const prefDir = user?.preferences?.dir;
+    const stored = readStoredSort();
+    initialSort.current = {
+      sort: prefSort && SORT_KEYS.includes(prefSort) ? prefSort : stored.sort,
+      sortDir: prefDir === 'desc' || prefDir === 'asc' ? prefDir : stored.sortDir,
+    };
+  }
+  const [sort, setSortState] = useState<string>(initialSort.current.sort);
+  const [sortDir, setSortDirState] = useState<'asc' | 'desc'>(initialSort.current.sortDir);
+  const sortRef = useRef({ sort, sortDir });
+  sortRef.current = { sort, sortDir };
+
+  // Cache key covers folder + search + type filter + active sort, so a view
+  // sorted differently never reuses a snapshot taken under another order.
   const currentKey = useMemo(
-    () => keyOf({ folderId, search, typeFilter }),
-    [folderId, search, typeFilter],
+    () => keyOf({ folderId, search, typeFilter, sort, sortDir }),
+    [folderId, search, typeFilter, sort, sortDir],
   );
 
   const initialCache = useRef<{ shape: CacheShape | null; read: boolean }>({ shape: null, read: false });
@@ -211,21 +240,6 @@ export function FilesStoreProvider({
   const [filePage, setFilePage] = useState(seed?.filePage ?? 0);
   const [fileLastPage, setFileLastPage] = useState(seed?.fileLastPage ?? 1);
   const [fileTotal, setFileTotal] = useState(seed?.fileTotal ?? 0);
-
-  const initialSort = useRef<{ sort: string; sortDir: 'asc' | 'desc' } | null>(null);
-  if (!initialSort.current) {
-    const prefSort = user?.preferences?.sort;
-    const prefDir = user?.preferences?.dir;
-    const stored = readStoredSort();
-    initialSort.current = {
-      sort: prefSort && SORT_KEYS.includes(prefSort) ? prefSort : stored.sort,
-      sortDir: prefDir === 'desc' || prefDir === 'asc' ? prefDir : stored.sortDir,
-    };
-  }
-  const [sort, setSortState] = useState<string>(initialSort.current.sort);
-  const [sortDir, setSortDirState] = useState<'asc' | 'desc'>(initialSort.current.sortDir);
-  const sortRef = useRef({ sort, sortDir });
-  sortRef.current = { sort, sortDir };
 
   const [loading, setLoading] = useState(!seed);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -321,7 +335,10 @@ export function FilesStoreProvider({
       const items = res.data ?? [];
       const meta = res.meta?.pagination;
       setFolders((prev) => {
-        if (page === 1 && mode === 'replace') return items;
+        // Page 1 carries the server's canonical order for the active sort:
+        // replace the whole list instead of merging in place (which would
+        // keep stale cached positions). mergeUnique is only for pagination.
+        if (page === 1) return items;
         return mergeUnique(prev, items);
       });
       setFolderPage(meta?.page ?? page);
@@ -351,7 +368,10 @@ export function FilesStoreProvider({
       const items = res.data ?? [];
       const meta = res.meta?.pagination;
       setFiles((prev) => {
-        if (page === 1 && mode === 'replace') return items;
+        // Page 1 carries the server's canonical order for the active sort:
+        // replace the whole list instead of merging in place (which would
+        // keep stale cached positions). mergeUnique is only for pagination.
+        if (page === 1) return items;
         return mergeUnique(prev, items);
       });
       setFilePage(meta?.page ?? page);
@@ -686,6 +706,7 @@ export function FilesStoreProvider({
       sortRef.current = { sort: nextSort, sortDir: nextDir };
       setSortState(nextSort);
       setSortDirState(nextDir);
+      broadcastSortChange(nextSort, nextDir);
       if (typeof window !== 'undefined') {
         window.localStorage.setItem('enstorage_sort', nextSort);
         window.localStorage.setItem('enstorage_sort_dir', nextDir);

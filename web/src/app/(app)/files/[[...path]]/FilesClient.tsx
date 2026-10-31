@@ -5,7 +5,7 @@ import { getFileDownloadUrl, getFolderDownloadUrl, triggerDirectDownload } from 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
-import { Tune, Link as LinkIcon, SwapVert, Check } from '@mui/icons-material';
+import { Tune, Link as LinkIcon } from '@mui/icons-material';
 import { apiRequest, apiRequestEnvelope, ApiError, getToken, isUuid, type FileItem, type Folder, type Folder as FolderType, type ResolvedFolder } from '@/lib/api';
 import { cacheInvalidatePrefix } from '@/lib/cache';
 import {
@@ -38,7 +38,7 @@ import { FolderDetailsDialog } from '@/components/FolderDetailsDialog';
 import { Input, Field } from '@/components/Input';
 import { Alert } from '@/components/Alert';
 import { SegmentedControl } from '@/components/SegmentedControl';
-import { FilesStoreProvider, useFilesStore } from '@/lib/filesStore';;
+import { FilesStoreProvider, readStoredSort, useFilesStore } from '@/lib/filesStore';
 import { FilesStoreBinder, useRealtime } from '@/lib/realtime/realtimeProvider';
 import { UploadToolbar } from '@/components/UploadToolbar';
 import { Tooltip } from '@/components/Tooltip';
@@ -491,6 +491,19 @@ function FilesRoute() {
 
   const search = searchParams.get('q') ?? '';
   const typeFilter = searchParams.get('type') ?? '';
+  // Mirrors the store's active sort so the provider key can include it. The
+  // `sortchange` event is dispatched by the store whenever setSort resolves.
+  const [sort, setSort] = useState(() => readStoredSort().sort);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => readStoredSort().sortDir);
+  useEffect(() => {
+    const sync = () => {
+      const stored = readStoredSort();
+      setSort(stored.sort);
+      setSortDir(stored.sortDir);
+    };
+    window.addEventListener('sortchange', sync);
+    return () => window.removeEventListener('sortchange', sync);
+  }, []);
 
   const [resolved, setResolved] = useState<ResolvedRoute | null>(null);
   /**
@@ -592,7 +605,15 @@ function FilesRoute() {
     // Fall back to the root view; surface via the store error banner instead
     // of a dead-end screen.
     return (
-      <FilesStoreGate folderId={null} currentPath="/" crumbs={[]} search={search} typeFilter={typeFilter}>
+      <FilesStoreGate
+        folderId={null}
+        currentPath="/"
+        crumbs={[]}
+        search={search}
+        typeFilter={typeFilter}
+        sort={sort}
+        sortDir={sortDir}
+      >
         <FilesContent currentPath="/" />
       </FilesStoreGate>
     );
@@ -614,6 +635,8 @@ function FilesRoute() {
       crumbs={active.crumbs}
       search={search}
       typeFilter={typeFilter}
+      sort={sort}
+      sortDir={sortDir}
       pending={resolved === null}
     >
       <FilesContent currentPath={active.currentPath} />
@@ -628,6 +651,8 @@ function FilesStoreGate({
   crumbs,
   search,
   typeFilter,
+  sort,
+  sortDir,
   pending = false,
 }: {
   children: React.ReactNode;
@@ -636,12 +661,15 @@ function FilesStoreGate({
   crumbs: { id: string; name: string; path: string }[];
   search: string;
   typeFilter: string;
+  sort: string;
+  sortDir: 'asc' | 'desc';
   /** True while the next path is still resolving (shows a thin top bar). */
   pending?: boolean;
 }) {
   // Force a fresh provider mount on every view change so the store reads
   // the right cache key and renders instantly with no stale-data flash.
-  const viewKey = `${currentPath}|${search || ''}|${typeFilter || ''}`;
+  // Sort participates in the key so a re-sort never reuses an old ordering.
+  const viewKey = `${currentPath}|${search || ''}|${typeFilter || ''}|${sort}|${sortDir}`;
   return (
     <FilesStoreProvider key={viewKey} folderId={folderId} search={search} typeFilter={typeFilter}>
       <FilesStoreBinderHost folderId={folderId}>
@@ -752,6 +780,8 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [draftType, setDraftType] = useState(typeFilter);
   const [draftTab, setDraftTab] = useState<Tab>(tab);
+  const [draftSort, setDraftSort] = useState(sort);
+  const [draftSortDir, setDraftSortDir] = useState<'asc' | 'desc'>(sortDir);
   const [jobs, setJobs] = useState<UploadJob[]>([]);
   const nextUploadJobId = useRef(0);
   const [dragOver, setDragOver] = useState(false);
@@ -1059,40 +1089,41 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   function openFilter() {
     setDraftType(typeFilter);
     setDraftTab(tab);
+    setDraftSort(sort);
+    setDraftSortDir(sortDir);
     setFilterOpen(true);
   }
 
-  function applyFilter() {
+  async function applyFilter() {
+    const sortChanged = draftSort !== sort || draftSortDir !== sortDir;
     setTypeFilter(draftType);
     setTabFromUrl(draftTab);
     setFilterOpen(false);
+    if (sortChanged) await setSort(draftSort, draftSortDir);
   }
 
   function resetFilter() {
     setDraftType('');
     setDraftTab('all');
+    setDraftSort('name');
+    setDraftSortDir('asc');
   }
 
-  const filterActive = !!typeFilter || tab !== 'all';
+  // Sort is active when it deviates from the account/default `name asc`.
+  const isSortActive = sort !== 'name' || sortDir !== 'asc';
+  const filterActive = !!typeFilter || tab !== 'all' || isSortActive;
 
-  // Menu urutkan: pilihan aktif ditandai icon check. Urutan state disimpan
-  // ke preferensi akun + localStorage lewat store.setSort.
-  const sortActive = (field: string, dir: 'asc' | 'desc') => sort === field && sortDir === dir;
-  const sortMenuItems: MenuItem[] = [
-    { key: 'name_asc', field: 'name', dir: 'asc' as const, label: t('files.sort.nameAsc') },
-    { key: 'name_desc', field: 'name', dir: 'desc' as const, label: t('files.sort.nameDesc') },
-    { key: 'date_desc', field: 'created_at', dir: 'desc' as const, label: t('files.sort.newest') },
-    { key: 'date_asc', field: 'created_at', dir: 'asc' as const, label: t('files.sort.oldest') },
-    { key: 'size_desc', field: 'size', dir: 'desc' as const, label: t('files.sort.sizeDesc') },
-    { key: 'size_asc', field: 'size', dir: 'asc' as const, label: t('files.sort.sizeAsc') },
-  ].map((item) => ({
-    label: item.label,
-    ariaLabel: item.label,
-    icon: sortActive(item.field, item.dir) ? <Check className="!text-lg" /> : undefined,
-    onClick: () => {
-      void setSort(item.field, item.dir);
-    },
-  }));
+  // Pilihan urutkan & tipe — dikelola di modal "Filter & Urutkan" yang sama
+  // dengan filter, sehingga Terapkan bersifat atomik (sort + filter sekali).
+  const sortKey = `${draftSort}:${draftSortDir}`;
+  const sortOptions: { value: string; label: string; sort: string; dir: 'asc' | 'desc' }[] = [
+    { value: 'name:asc', label: t('files.sort.nameAsc'), sort: 'name', dir: 'asc' },
+    { value: 'name:desc', label: t('files.sort.nameDesc'), sort: 'name', dir: 'desc' },
+    { value: 'created_at:desc', label: t('files.sort.newest'), sort: 'created_at', dir: 'desc' },
+    { value: 'created_at:asc', label: t('files.sort.oldest'), sort: 'created_at', dir: 'asc' },
+    { value: 'size:desc', label: t('files.sort.sizeDesc'), sort: 'size', dir: 'desc' },
+    { value: 'size:asc', label: t('files.sort.sizeAsc'), sort: 'size', dir: 'asc' },
+  ];
 
   // Cross-section disable: Tipe filter only applies to files, so it conflicts
   // with Tampilkan=Folder. Computed against DRAFT state so user sees the
@@ -2242,30 +2273,14 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               </IconButton>
             </Tooltip>
           )}
-          <DropdownMenu
-            align="right"
-            trigger={
-              <Tooltip label={t('files.sort.button')} placement="bottom">
-                <IconButton
-                  variant="default"
-                  size="xl"
-                  shape="circle"
-                  aria-label={t('files.sort.button')}
-                >
-                  <SwapVert className="!text-xl" />
-                </IconButton>
-              </Tooltip>
-            }
-            items={sortMenuItems}
-          />
-          <Tooltip label={filterActive ? t('files.filter.activeBadge') : t('files.filter.button')}>
+          <Tooltip label={filterActive ? t('files.filter.activeBadge') : t('files.filter.title')}>
             <IconButton
-              variant={filterActive ? 'default' : 'default'}
+              variant="default"
               active={filterActive}
               size="xl"
               shape="circle"
               onClick={openFilter}
-              aria-label={filterActive ? t('files.filter.activeBadge') : t('files.filter.button')}
+              aria-label={filterActive ? t('files.filter.activeBadge') : t('files.filter.title')}
               className="relative"
             >
               <Tune className="!text-xl" />
@@ -2288,17 +2303,36 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         icon={<Tune className="!text-2xl" />}
         actions={
           <>
+            <Button variant="ghost" size="md" onClick={() => setFilterOpen(false)}>
+              {t('files.filter.cancel')}
+            </Button>
             <Button variant="ghost" size="md" onClick={resetFilter}>
               {t('files.filter.reset')}
             </Button>
-            <Button variant="primary" size="md" onClick={applyFilter}>
+            <Button variant="primary" size="md" onClick={() => void applyFilter()}>
               {t('files.filter.apply')}
             </Button>
           </>
         }
       >
-        {/* Section: Tipe */}
+        {/* Section: Urutkan */}
         <div>
+          <h3 className="text-label-sm text-outline mb-2">{t('files.filter.sectionSort')}</h3>
+          <SegmentedControl
+            aria-label={t('files.filter.sectionSort')}
+            value={sortKey}
+            onChange={(v) => {
+              const opt = sortOptions.find((o) => o.value === v);
+              if (!opt) return;
+              setDraftSort(opt.sort);
+              setDraftSortDir(opt.dir);
+            }}
+            options={sortOptions.map((o) => ({ value: o.value, label: o.label }))}
+          />
+        </div>
+
+        {/* Section: Tipe */}
+        <div className="mt-6">
           <h3 className="text-label-sm text-outline mb-2">{t('files.filter.sectionType')}</h3>
           <SegmentedControl
             aria-label={t('files.filter.sectionType')}
@@ -2321,6 +2355,18 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               {
                 value: 'doc',
                 label: t('files.typeFilter.doc'),
+                disabled: typeLocked,
+                disabledHint: t('files.filter.typeLockedHint'),
+              },
+              {
+                value: 'video',
+                label: t('files.typeFilter.video'),
+                disabled: typeLocked,
+                disabledHint: t('files.filter.typeLockedHint'),
+              },
+              {
+                value: 'audio',
+                label: t('files.typeFilter.audio'),
                 disabled: typeLocked,
                 disabledHint: t('files.filter.typeLockedHint'),
               },
