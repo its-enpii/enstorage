@@ -138,6 +138,9 @@ Route::middleware('auth.apikey')->group(function () {
     Route::post('files/upload/init', [FileUploadController::class, 'initChunked'])->middleware('throttle:upload');
     Route::post('files/upload/{fileId}/chunk/{chunkIndex}', [FileUploadController::class, 'uploadChunk'])->middleware('throttle:upload');
     Route::post('files/upload/{fileId}/complete', [FileUploadController::class, 'completeChunked'])->middleware('throttle:upload');
+    // Jalur 2: batch upload zero VPS disk (Resumable session URI direct-to-Drive).
+    Route::post('files/direct-batch-init', [FileUploadController::class, 'directBatchInit'])->middleware('throttle:upload');
+    Route::post('files/{fileId}/direct-complete', [FileUploadController::class, 'directComplete'])->middleware('throttle:upload');
     Route::get('files', [FileController::class, 'index']);
     Route::get('files/by-hashes', [FileController::class, 'byHashes']);
     Route::post('files/by-metadata', [FileController::class, 'byMetadata']);
@@ -209,6 +212,9 @@ Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(funct
         Route::post('files/upload/init', [FileUploadController::class, 'initChunked'])->middleware('throttle:upload');
         Route::post('files/upload/{fileId}/chunk/{chunkIndex}', [FileUploadController::class, 'uploadChunk'])->middleware('throttle:upload');
         Route::post('files/upload/{fileId}/complete', [FileUploadController::class, 'completeChunked'])->middleware('throttle:upload');
+        // Jalur 2: batch upload zero VPS disk.
+        Route::post('files/direct-batch-init', [FileUploadController::class, 'directBatchInit'])->middleware('throttle:upload');
+        Route::post('files/{fileId}/direct-complete', [FileUploadController::class, 'directComplete'])->middleware('throttle:upload');
         Route::patch('files/{id}', [FileController::class, 'update']);
         Route::put('files/{id}/move', [FileController::class, 'move']);
         Route::post('files/{id}/extract', [FileController::class, 'extract']);
@@ -269,6 +275,9 @@ Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(funct
         Route::post('files/upload/init', [FileUploadController::class, 'initChunked'])->middleware('throttle:upload');
         Route::post('files/upload/{fileId}/chunk/{chunkIndex}', [FileUploadController::class, 'uploadChunk'])->middleware('throttle:upload');
         Route::post('files/upload/{fileId}/complete', [FileUploadController::class, 'completeChunked'])->middleware('throttle:upload');
+        // Jalur 2: batch upload zero VPS disk.
+        Route::post('files/direct-batch-init', [FileUploadController::class, 'directBatchInit'])->middleware('throttle:upload');
+        Route::post('files/{fileId}/direct-complete', [FileUploadController::class, 'directComplete'])->middleware('throttle:upload');
         Route::patch('files/{id}', [FileController::class, 'update']);
         Route::put('files/{id}/move', [FileController::class, 'move']);
         Route::post('files/{id}/extract', [FileController::class, 'extract']);

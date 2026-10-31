@@ -250,6 +250,46 @@ class GoogleDriveUploader
     }
 
     /**
+     * Buat sesi Resumable Upload di Google Drive lalu kembalikan session URI
+     * (header `Location`). Klien (web/mobile) meng-PUT byte file langsung ke
+     * URI ini — byte TIDAK pernah mampir ke disk VPS (Jalur 2: zero VPS disk).
+     *
+     * Sesi dibuat dengan `setDefer(true)` supaya `files->create()` hanya
+     * mengirim request init (metadata) dan `MediaFileUpload` menangkap URI
+     * resumable dari respons, bukan mengunggah isi file.
+     */
+    public function createResumableSession(
+        GoogleAccount $account,
+        FileModel $file,
+    ): string {
+        $this->tokens->ensureFreshToken($account);
+
+        $client = $this->factory->makeFor($account);
+        $client->setAccessToken($account->access_token);
+        $client->setDefer(true);
+        $drive = new Drive($client);
+
+        $parentFolderId = $this->resolveParentFolderId($account, $file);
+        $metadata = $this->buildMetadata($file, $parentFolderId);
+
+        $request = $drive->files->create($metadata, [
+            'fields' => 'id,name,webViewLink,webContentLink,mimeType,size',
+            'uploadType' => 'resumable',
+        ]);
+
+        $uploader = new MediaFileUpload(
+            $client,
+            $request,
+            $file->mime_type,
+            false,
+            true,
+        );
+        $uploader->setFileSize((int) $file->size);
+
+        return $uploader->getResumeUri();
+    }
+
+    /**
      * Tentukan parent folder di Google Drive: folder sync 1:1 bila ada,
      * else root EnStorage milik akun.
      */

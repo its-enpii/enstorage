@@ -2,15 +2,25 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\FileUploadedBroadcast;
 use App\Http\Controllers\Controller;
 use App\Jobs\AssembleChunkedFileJob;
+use App\Jobs\GenerateThumbnailJob;
 use App\Jobs\UploadFileJob;
+use App\Models\ActivityLog;
 use App\Models\File as FileModel;
 use App\Models\Folder;
+use App\Models\GoogleAccount;
 use App\Models\ShareLink;
+use App\Services\ActivityLogService;
 use App\Services\FileRecordCreator;
 use App\Services\FolderLockGuard;
+use App\Services\Google\GoogleDriveUploader;
+use App\Services\Google\QuotaManager;
+use App\Services\NotificationService;
+use App\Services\WebhookService;
 use App\Support\UploadSizeLimit;
+use App\Support\WebhookPayload;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -28,6 +38,19 @@ class FileUploadController extends Controller
     /** Batas ukuran per chunk chunked upload (guard server; client normal 8 MB). */
     private const MAX_CHUNK_SIZE_BYTES = 32 * 1024 * 1024; // 32 MB
 
+    /** Maksimal file per batch direct-to-drive (Jalur 2). */
+    private const MAX_DIRECT_BATCH_FILES = 100;
+
+    /** Batas ukuran per file batch direct-to-drive (1 GB). */
+    private const MAX_DIRECT_FILE_SIZE_BYTES = 1073741824;
+
+    /**
+     * Ambang backpressure disk temp: kalau sisa < 5 GB, upload lewat VPS
+     * ditolak (507) supaya disk tidak penuh; klien diarahkan ke batch
+     * upload direct-to-drive.
+     */
+    private const TEMP_DISK_MIN_FREE_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB
+
     public function __construct(
         private readonly FolderLockGuard $lockGuard,
         private readonly FileRecordCreator $creator,
@@ -40,6 +63,10 @@ class FileUploadController extends Controller
      */
     public function upload(Request $request): JsonResponse
     {
+        if ($guard = $this->diskBackpressureGuard()) {
+            return $guard;
+        }
+
         $userId = $request->user()->id;
 
         // Validasi count
@@ -349,6 +376,223 @@ class FileUploadController extends Controller
     }
 
     /**
+     * POST /files/direct-batch-init
+     * Jalur 2 "Batch Upload Zero VPS Disk": buat record file + sesi
+     * Resumable Upload Google Drive untuk setiap item, lalu kembalikan
+     * `upload_url` (session URI). Klien meng-PUT byte file langsung ke
+     * Google — tidak ada byte yang ditulis ke disk VPS.
+     *
+     * Body: files[] = [{name, size, mime_type?, folder_id?, client_key?}]
+     * Opsional level batch: shareable (default ON), share_expires_at,
+     * share_max_views.
+     */
+    public function directBatchInit(Request $request): JsonResponse
+    {
+        $request->validate([
+            'files' => ['required', 'array', 'min:1', 'max:'.self::MAX_DIRECT_BATCH_FILES],
+            'files.*.name' => ['required', 'string', 'max:255'],
+            'files.*.size' => ['required', 'integer', 'min:1', 'max:'.self::MAX_DIRECT_FILE_SIZE_BYTES],
+            'files.*.mime_type' => ['nullable', 'string', 'max:255'],
+            'files.*.folder_id' => ['nullable', 'string', 'uuid'],
+            'files.*.client_key' => ['nullable', 'string', 'max:128'],
+        ]);
+
+        $user = $request->user();
+        $items = $request->input('files', []);
+
+        // Folder lock: setiap folder_id yang dikirim harus milik user dan
+        // tidak terkunci. Satu folder yang terkunci membatalkan seluruh batch.
+        $folderIds = collect($items)->pluck('folder_id')->filter()->unique()->values();
+        foreach ($folderIds as $folderId) {
+            $folder = Folder::where('id', $folderId)->where('user_id', $user->id)->first();
+            if (! $folder) {
+                throw ValidationException::withMessages(['files' => __('Folder tidak ditemukan.')]);
+            }
+            if ($locked = $this->lockGuard->gateForFolder($folder, $user->id)) {
+                return $this->lockGuardFail($locked);
+            }
+        }
+
+        $totalBatchSize = (int) collect($items)->sum(fn (array $item) => (int) $item['size']);
+
+        $quota = app(QuotaManager::class);
+        try {
+            $planned = $quota->planStorageAllocation($user, $totalBatchSize);
+        } catch (Throwable) {
+            $planned = [];
+        }
+        if (empty($planned)) {
+            throw ValidationException::withMessages([
+                'files' => __('Tidak ada akun Google Drive yang memiliki kuota cukup.'),
+            ]);
+        }
+
+        $shareable = $request->boolean('shareable', true);
+        $shareBaseUrl = rtrim(config('app.frontend_url', config('app.url')), '/');
+        $shareExpiresAt = $request->input('share_expires_at');
+        $shareMaxViews = $request->input('share_max_views');
+        if ($shareable) {
+            $this->validateShareOptions($shareExpiresAt, $shareMaxViews);
+        }
+
+        $uploader = app(GoogleDriveUploader::class);
+        $results = [];
+
+        foreach ($items as $fileData) {
+            $allocation = $quota->planStorageAllocation($user, (int) $fileData['size']);
+            /** @var GoogleAccount $account */
+            $account = $allocation[0]['account'];
+
+            $folderId = $fileData['folder_id'] ?? null;
+            $uniqueName = $this->creator->uniqueFileName($user->id, $folderId, $fileData['name']);
+            $mimeType = $this->creator->normalizeImageMime(
+                (string) ($fileData['mime_type'] ?? ''),
+                $fileData['name'],
+            );
+
+            $rawKey = trim((string) ($fileData['client_key'] ?? ''));
+            $clientKey = $rawKey !== '' ? $rawKey : strtolower((string) Str::ulid());
+
+            $shareToken = $shareable ? bin2hex(random_bytes(16)) : null;
+
+            $fileRecord = FileModel::create([
+                'user_id' => $user->id,
+                'folder_id' => $folderId,
+                'google_account_id' => $account->id,
+                'name' => $uniqueName,
+                'original_name' => $uniqueName,
+                'mime_type' => $mimeType,
+                'size' => (int) $fileData['size'],
+                'gdrive_file_id' => 'direct_pending_'.Str::uuid(),
+                'upload_status' => FileModel::STATUS_UPLOADING,
+                'storage_driver' => 'gdrive',
+                'share_token' => $shareToken,
+                'client_key' => $clientKey,
+                'client_key_origin' => $rawKey !== '' ? 'client' : 'server',
+            ]);
+
+            if ($shareToken !== null) {
+                ShareLink::create([
+                    'user_id' => $user->id,
+                    'shareable_type' => FileModel::class,
+                    'shareable_id' => $fileRecord->id,
+                    'token' => $shareToken,
+                    'expires_at' => $shareExpiresAt,
+                    'max_views' => $shareMaxViews,
+                ]);
+            }
+
+            try {
+                $uploadUrl = $uploader->createResumableSession($account, $fileRecord);
+            } catch (Throwable $e) {
+                // Sesi resumable gagal dibuat → record tidak akan pernah
+                // di-complete; tandai gagal supaya tidak menggantung.
+                $fileRecord->upload_status = FileModel::STATUS_FAILED;
+                $fileRecord->save();
+
+                throw $e;
+            }
+
+            $results[] = [
+                'file_id' => $fileRecord->id,
+                'upload_url' => $uploadUrl,
+                'original_name' => $fileRecord->original_name,
+                'client_key' => $fileRecord->client_key,
+                'size' => $fileRecord->size,
+            ];
+        }
+
+        return $this->created(
+            [
+                'items' => $results,
+                'share_url_base' => $shareable ? $shareBaseUrl.'/s/' : null,
+            ],
+            __('Sesi upload langsung ke Google Drive berhasil dibuat.'),
+        );
+    }
+
+    /**
+     * POST /files/{fileId}/direct-complete
+     * Finalisasi upload Jalur 2 setelah klien selesai meng-PUT byte ke
+     * Google Drive: rekam gdrive_file_id, tandai `done`, lalu jalankan
+     * efek samping yang sama dengan UploadFileJob (broadcast, log, webhook,
+     * notifikasi, thumbnail).
+     */
+    public function directComplete(Request $request, string $fileId): JsonResponse
+    {
+        $file = FileModel::where('id', $fileId)->where('user_id', $request->user()->id)->first();
+        if (! $file) {
+            return $this->notFound(__('File tidak ditemukan.'));
+        }
+
+        $validated = $request->validate([
+            'gdrive_file_id' => ['required', 'string', 'max:255'],
+            'shareable_link' => ['nullable', 'string', 'max:2048'],
+            'size' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        $file->gdrive_file_id = $validated['gdrive_file_id'];
+        $file->upload_status = FileModel::STATUS_DONE;
+        $file->uploaded_at = now();
+
+        if (array_key_exists('shareable_link', $validated) && $validated['shareable_link'] !== null) {
+            $file->shareable_link = $validated['shareable_link'];
+        }
+        if (isset($validated['size'])) {
+            $file->size = (int) $validated['size'];
+        }
+
+        $file->save();
+
+        if ($file->googleAccount) {
+            app(QuotaManager::class)->invalidate($file->googleAccount);
+        }
+
+        FileUploadedBroadcast::dispatch($file);
+
+        app(ActivityLogService::class)->log(
+            ActivityLog::ACTION_FILE_UPLOAD,
+            userId: $file->user_id,
+            subject: $file,
+            metadata: [
+                'name' => $file->name,
+                'size' => $file->size,
+                'storage_driver' => $file->storage_driver,
+                'google_account_id' => $file->google_account_id,
+                'upload_path' => 'direct',
+            ],
+        );
+
+        app(WebhookService::class)->dispatch(
+            $file->user_id,
+            'file.upload.completed',
+            WebhookPayload::fileUploaded($file),
+        );
+
+        app(NotificationService::class)->sendToUser(
+            $file->user,
+            __('Upload Selesai'),
+            __(':name berhasil diupload.', ['name' => $file->name]),
+            'upload',
+            [
+                'type' => 'upload.complete',
+                'file_id' => $file->id,
+                'file_name' => $file->name,
+                'folder_id' => $file->folder_id ?? '',
+                'mime_type' => $file->mime_type,
+                'size' => (string) $file->size,
+                'has_thumbnail' => $file->thumbnail !== null ? 'true' : 'false',
+            ],
+        );
+
+        if (str_starts_with((string) $file->mime_type, 'image/')) {
+            GenerateThumbnailJob::dispatch($file->id);
+        }
+
+        return $this->ok($this->creator->summary($file), __('Upload berhasil diselesaikan.'));
+    }
+
+    /**
      * POST /files/upload/init
      * Inisialisasi chunked upload untuk file besar (>1GB).
      * Return 201 + file_id dan upload_url_template.
@@ -471,6 +715,10 @@ class FileUploadController extends Controller
      */
     public function uploadChunk(Request $request, string $fileId, int $chunkIndex): JsonResponse
     {
+        if ($guard = $this->diskBackpressureGuard()) {
+            return $guard;
+        }
+
         $userId = $request->user()->id;
 
         $file = FileModel::where('id', $fileId)->where('user_id', $userId)->first();
@@ -1056,6 +1304,33 @@ class FileUploadController extends Controller
         }
 
         return ! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
+    }
+
+    /**
+     * Circuit breaker backpressure disk temp. Return response 507 kalau
+     * sisa disk `storage/app/temp` < 5 GB (null = disk cukup / tak terbaca).
+     */
+    private function diskBackpressureGuard(): ?JsonResponse
+    {
+        $tempDir = storage_path('app/temp');
+        if (! file_exists($tempDir)) {
+            @mkdir($tempDir, 0775, true);
+        }
+
+        // Path hasil `disk_free_space()`; bisa diganti di test untuk
+        // mensimulasikan disk hampir penuh versi portable (mis. vfs://DEV).
+        $probePath = config('filesystems.temp_disk_probe_path') ?: $tempDir;
+        $freeBytes = @disk_free_space($probePath);
+
+        if ($freeBytes !== false && $freeBytes < self::TEMP_DISK_MIN_FREE_BYTES) {
+            return $this->fail(
+                __('Penyimpanan sementara server penuh (sisa < 5 GB). Silakan tunggu antrean selesai atau gunakan batch upload.'),
+                507,
+                ['reason' => 'temp_disk_full', 'use_direct_batch' => true],
+            );
+        }
+
+        return null;
     }
 
     /**
