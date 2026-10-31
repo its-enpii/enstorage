@@ -22,16 +22,16 @@ export const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024; // 1 GiB
 export const CHUNKED_THRESHOLD_BYTES = 64 * 1024 * 1024; // 64 MiB
 
 /** Size of one chunk POST. */
-export const CHUNK_SIZE_BYTES = 8 * 1024 * 1024; // 8 MiB
+export const CHUNK_SIZE_BYTES = 16 * 1024 * 1024; // 16 MiB
 
 /** Max chunk requests in flight for a single file. */
-const CHUNK_CONCURRENCY = 3;
+const CHUNK_CONCURRENCY = 5;
 
 /**
  * Max files uploaded concurrently by `uploadFilesChunked`. Total in-flight
- * chunk requests stay at FILES_CONCURRENCY x CHUNK_CONCURRENCY (3 x 3 = 9).
+ * chunk requests stay at FILES_CONCURRENCY x CHUNK_CONCURRENCY (4 x 5 = 20).
  */
-export const FILES_CONCURRENCY = 3;
+export const FILES_CONCURRENCY = 4;
 
 /** Max attempts per chunk (1 initial try + 2 retries). */
 const MAX_CHUNK_ATTEMPTS = 3;
@@ -128,7 +128,7 @@ async function postChunk(
 }
 
 /**
- * Upload one large file: init → chunks (max 3 in flight, 3 attempts each)
+ * Upload one large file: init → chunks (max 5 in flight, 3 attempts each)
  * → complete. `onProgress` reports bytes confirmed by the server.
  */
 export async function uploadFileChunked(

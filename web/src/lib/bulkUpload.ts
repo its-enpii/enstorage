@@ -1,5 +1,5 @@
-export const BULK_FILES_PER_REQUEST = 10;
-export const BULK_REQUEST_CONCURRENCY = 3;
+export const BULK_FILES_PER_REQUEST = 20;
+export const BULK_REQUEST_CONCURRENCY = 5;
 
 export type BulkUploadEntry = {
   file: File;
