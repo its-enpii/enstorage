@@ -587,6 +587,25 @@ class FileController extends Controller
             }
         }
 
+        // Spanned Chunk Storage: alirkan part-part berurutan dalam satu koneksi.
+        if ($file->storage_driver === 'gdrive_spanned') {
+            try {
+                return $this->streamSpannedDriveFile($file, $disposition, $range);
+            } catch (Throwable $e) {
+                if ($this->isDriveAccessError($e)) {
+                    $file->markGdriveUnreachable();
+
+                    return $this->fail(
+                        __('File ini tidak dapat diakses lagi oleh token akun Google. Pilih ulang file ini lewat Google Picker untuk memulihkan akses.'),
+                        409,
+                        ['code' => 'gdrive_reauth_required'],
+                    );
+                }
+
+                return $this->fail(__('Download gagal: ').$e->getMessage(), 502);
+            }
+        }
+
         try {
             $account = $file->googleAccount;
             if (! $account) {
@@ -1745,6 +1764,12 @@ class FileController extends Controller
         $driver = $file->storage_driver;
         $storagePath = $file->storage_path;
 
+        // Snapshot part spanned SEBELUM baris file (dan cascade-nya) hilang.
+        $parts = [];
+        if ($driver === 'gdrive_spanned') {
+            $parts = $file->parts()->with('googleAccount')->orderBy('part_number')->get();
+        }
+
         $file->delete();
 
         // Hapus di backend storage sesuai driver (best-effort).
@@ -1767,6 +1792,23 @@ class FileController extends Controller
                     'storage_path' => $storagePath,
                     'error' => $e->getMessage(),
                 ]);
+            }
+        } elseif ($driver === 'gdrive_spanned') {
+            // Spanned Chunk Storage: hapus setiap part di akunnya masing-masing.
+            // Baris file_parts ikut ter-cascade saat $file->delete().
+            foreach ($parts as $part) {
+                try {
+                    if ($part->googleAccount) {
+                        $this->uploader->deleteFile($part->googleAccount, $part->gdrive_file_id);
+                    }
+                } catch (Throwable $e) {
+                    Log::warning('GDrive delete part gagal saat destroy file', [
+                        'file_id' => $fileId,
+                        'part_number' => $part->part_number,
+                        'gdrive_file_id' => $part->gdrive_file_id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
         } elseif ($account && $gdriveFileId && ! str_starts_with($gdriveFileId, 'pending-')) {
             try {
@@ -2025,6 +2067,90 @@ class FileController extends Controller
         }
 
         return $this->limitReadStream($stream, $length, $offset);
+    }
+
+    /**
+     * Stream file spanned (terpecah di beberapa akun Drive) secara berurutan
+     * dalam satu koneksi HTTP. Hanya part yang beririsan dengan range yang
+     * dibuka; masing-masing part dipotong sesuai offset lokalnya.
+     *
+     * @param  array{status:int, offset:int, length:int, size:int, content_range:?string, invalid:bool}  $range
+     */
+    private function streamSpannedDriveFile(FileModel $file, string $disposition, array $range): StreamedResponse
+    {
+        $parts = $file->parts()->with('googleAccount')->orderBy('part_number')->get();
+
+        if ($parts->isEmpty()) {
+            throw new \RuntimeException('Part file spanned tidak ditemukan.');
+        }
+
+        $rangeEnd = $range['offset'] + $range['length'] - 1;
+
+        // [start, end, account, gdrive_file_id] untuk part yang beririsan.
+        $slices = [];
+        foreach ($parts as $part) {
+            $start = (int) $part->byte_offset_start;
+            $end = (int) $part->byte_offset_end;
+
+            if ($end < $range['offset'] || $start > $rangeEnd) {
+                continue;
+            }
+
+            $slices[] = [
+                'start' => $start,
+                'end' => $end,
+                'account' => $part->googleAccount,
+                'gdrive_file_id' => $part->gdrive_file_id,
+            ];
+        }
+
+        if ($slices === []) {
+            throw new \RuntimeException('Tidak ada part yang cocok dengan range yang diminta.');
+        }
+
+        $stream = $this->streamDownloadResponse(
+            function () use ($range, $rangeEnd, $slices) {
+                foreach ($slices as $slice) {
+                    $account = $slice['account'];
+                    if (! $account) {
+                        throw new \RuntimeException('Akun Google untuk part file tidak ditemukan.');
+                    }
+
+                    // Potongan milik part ini (koordinat byte absolut file).
+                    $localStart = max($range['offset'], $slice['start']) - $slice['start'];
+                    $localEnd = min($rangeEnd, $slice['end']) - $slice['start'];
+                    $localLength = $localEnd - $localStart + 1;
+                    if ($localLength <= 0) {
+                        continue;
+                    }
+
+                    $client = app(GoogleClientFactory::class)->makeFor($account);
+                    app(GoogleTokenService::class)->ensureFreshToken($account);
+                    $client->setAccessToken($account->access_token);
+
+                    $drive = new Drive($client);
+                    $response = $drive->files->get($slice['gdrive_file_id'], ['alt' => 'media']);
+                    $body = $response->getBody();
+
+                    $source = new ClosureStream(function (int $max) use ($body): ?string {
+                        if ($body->eof()) {
+                            return null;
+                        }
+
+                        return $body->read(min(StreamPump::CHUNK_BYTES, $max));
+                    }, $localLength);
+
+                    StreamPump::copy($source);
+                }
+            },
+            $file->mime_type,
+            $this->makeContentDisposition($disposition, $file),
+            'no-cache, private',
+            $range['status'],
+        );
+        $this->applyRangeHeaders($stream, $range);
+
+        return $stream;
     }
 
     /**

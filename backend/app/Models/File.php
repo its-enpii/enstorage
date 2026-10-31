@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
@@ -88,6 +89,22 @@ class File extends Model
     public function thumbnail(): HasOne
     {
         return $this->hasOne(Thumbnail::class);
+    }
+
+    /**
+     * Part byte dari Spanned Chunk Storage (urutan part_number).
+     */
+    public function parts(): HasMany
+    {
+        return $this->hasMany(FilePart::class)->orderBy('part_number');
+    }
+
+    /**
+     * File tersebar di lebih dari satu akun Drive (atau ditandai spanned).
+     */
+    public function isSpanned(): bool
+    {
+        return $this->storage_driver === 'gdrive_spanned' || $this->parts()->count() > 1;
     }
 
     public function isDone(): bool

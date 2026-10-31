@@ -127,6 +127,111 @@ class GoogleDriveUploader
     }
 
     /**
+     * Upload satu part byte (Spanned Chunk Storage) dari file lokal ke akun
+     * Google Drive tertentu. Membaca `$partSize` byte mulai `$offset`.
+     *
+     * @return array{gdrive_file_id: string, shareable_link: ?string}
+     */
+    public function uploadPart(
+        GoogleAccount $account,
+        FileModel $file,
+        string $localPath,
+        int $offset,
+        int $partSize,
+        int $partNumber,
+    ): array {
+        if ($partSize <= 0) {
+            throw new \RuntimeException('Ukuran part harus lebih besar dari 0 byte.');
+        }
+
+        if (! is_file($localPath)) {
+            throw new \RuntimeException("File lokal tidak ditemukan: {$localPath}");
+        }
+
+        // 1. Refresh token jika perlu
+        $this->tokens->ensureFreshToken($account);
+
+        $client = $this->factory->makeFor($account);
+        $client->setAccessToken($account->access_token);
+        $client->setDefer(true);
+        $drive = new Drive($client);
+
+        // 2. Parent folder: folder sync 1:1 bila ada, else root EnStorage.
+        $parentFolderId = null;
+        if ($file->folder_id) {
+            $folder = Folder::find($file->folder_id);
+            if ($folder) {
+                $parentFolderId = $this->folderService->ensureFolderOnDrive($account, $folder);
+            }
+        }
+
+        if (! $parentFolderId) {
+            $parentFolderId = app(QuotaManager::class)->ensureRootFolder($account);
+        }
+
+        // 3. Metadata part: "<nama asli>.part<N>"
+        $metadata = new DriveFile([
+            'name' => $file->original_name.'.part'.$partNumber,
+            'parents' => [$parentFolderId],
+        ]);
+
+        $handle = fopen($localPath, 'rb');
+        if (! $handle) {
+            throw new \RuntimeException("Gagal membuka file lokal untuk streaming: {$localPath}");
+        }
+
+        try {
+            if (fseek($handle, $offset) !== 0) {
+                throw new \RuntimeException("Gagal seek ke offset {$offset} pada {$localPath}");
+            }
+
+            $request = $drive->files->create($metadata, [
+                'fields' => 'id,name,webViewLink,webContentLink,mimeType,size',
+                'uploadType' => 'resumable',
+            ]);
+
+            $uploader = new MediaFileUpload(
+                $client,
+                $request,
+                $file->mime_type,
+                false,      // streaming mode
+                true,       // resumable
+            );
+            $uploader->setFileSize($partSize);
+            $uploader->setChunkSize(self::CHUNK_SIZE);
+
+            $uploaded = false;
+            $bytesLeft = $partSize;
+
+            while (! $uploaded && $bytesLeft > 0) {
+                $chunk = fread($handle, min(self::CHUNK_SIZE, $bytesLeft));
+                if ($chunk === false || $chunk === '') {
+                    throw new \RuntimeException("Gagal membaca part dari {$localPath} (sisa {$bytesLeft} byte).");
+                }
+                $bytesLeft -= strlen($chunk);
+                $uploaded = $uploader->nextChunk($chunk);
+                unset($chunk);
+            }
+
+            if ($uploaded instanceof \Exception) {
+                throw $uploaded;
+            }
+            if (! $uploaded instanceof DriveFile) {
+                throw new \RuntimeException('Upload part gagal: response tidak valid dari Google Drive.');
+            }
+        } finally {
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
+        }
+
+        return [
+            'gdrive_file_id' => $uploaded->getId(),
+            'shareable_link' => $uploaded->getWebViewLink() ?? null,
+        ];
+    }
+
+    /**
      * Hapus file di Google Drive.
      */
     /**

@@ -6,6 +6,7 @@ use App\Events\FileUploadedBroadcast;
 use App\Events\FileUploadFailedBroadcast;
 use App\Models\ActivityLog;
 use App\Models\File as FileModel;
+use App\Models\FilePart;
 use App\Services\ActivityLogService;
 use App\Services\FileMetadataExtractor;
 use App\Services\Google\GoogleDriveUploader;
@@ -85,17 +86,21 @@ class UploadFileJob implements ShouldBeUnique, ShouldQueue
             $file->save();
 
             // Multi-driver: utamakan Google Drive kalau ada akun yang
-            // terhubung & punya kuota. Kalau tidak ada, fallback ke S3 (bila
-            // disk terkonfigurasi) atau persistent local disk.
+            // terhubung & punya kuota. Kalau satu akun tidak cukup tetapi
+            // gabungan akun cukup, file dipecah (Spanned Chunk Storage).
+            // Kalau sama sekali tidak cukup, fallback ke S3 (bila disk
+            // terkonfigurasi) atau persistent local disk.
             $account = null;
+            $allocationPlan = [];
             try {
-                $account = $quota->getAvailableAccount($file->user, $file->size);
+                $allocationPlan = $quota->planStorageAllocation($file->user, (int) $file->size);
             } catch (\Throwable $e) {
-                // Tidak ada akun Google yang terhubung atau kuota habis.
-                $account = null;
+                // Tidak ada akun Google yang terhubung atau total kuota habis.
+                $allocationPlan = [];
             }
 
-            if ($account) {
+            if (count($allocationPlan) === 1) {
+                $account = $allocationPlan[0]['account'];
                 $file->google_account_id = $account->id;
 
                 $result = $uploader->uploadFile($account, $file, $localPath);
@@ -103,6 +108,39 @@ class UploadFileJob implements ShouldBeUnique, ShouldQueue
                 $file->gdrive_file_id = $result['gdrive_file_id'];
                 $file->shareable_link = $result['shareable_link'];
                 $file->storage_driver = 'gdrive';
+                $file->upload_status = FileModel::STATUS_DONE;
+                $file->uploaded_at = now();
+                $file->save();
+            } elseif (count($allocationPlan) > 1) {
+                // Spanned Chunk Storage: upload tiap part ke akunnya sendiri.
+                foreach ($allocationPlan as $planItem) {
+                    $partResult = $uploader->uploadPart(
+                        $planItem['account'],
+                        $file,
+                        $localPath,
+                        $planItem['byte_offset_start'],
+                        $planItem['size'],
+                        $planItem['part_number'],
+                    );
+
+                    FilePart::create([
+                        'file_id' => $file->id,
+                        'part_number' => $planItem['part_number'],
+                        'google_account_id' => $planItem['account']->id,
+                        'gdrive_file_id' => $partResult['gdrive_file_id'],
+                        'byte_offset_start' => $planItem['byte_offset_start'],
+                        'byte_offset_end' => $planItem['byte_offset_end'],
+                        'size' => $planItem['size'],
+                        'status' => 'done',
+                    ]);
+
+                    $quota->invalidate($planItem['account']);
+                }
+
+                $account = $allocationPlan[0]['account'];
+                $file->storage_driver = 'gdrive_spanned';
+                $file->google_account_id = $account->id;
+                $file->gdrive_file_id = 'spanned_'.$file->id;
                 $file->upload_status = FileModel::STATUS_DONE;
                 $file->uploaded_at = now();
                 $file->save();
