@@ -963,7 +963,7 @@ List files dengan filter & sort.
 | Param | Tipe | Default | Keterangan |
 |-------|------|---------|------------|
 | `folder_id` | uuid \| `null` | (semua) | Filter folder |
-| `type` | string | — | Shortcut: `image` \| `pdf` \| `doc` \| `video` \| `audio` |
+| `type` | string | — | Shortcut kategori: `image` \| `pdf` \| `doc` \| `video` \| `audio` \| `app` \| `archive`. Jika `type` atau `search` aktif tanpa `folder_id`, query otomatis mencakup seluruh berkas milik user lintas subfolder. |
 | `mime_type` | string | — | Filter prefix mime, mis. `image/` |
 | `search` | string | — | Cari nama (ILIKE) |
 | `status` | string | `!= failed` | `pending` \| `uploading` \| `done` \| `failed` |
@@ -1565,7 +1565,45 @@ Manual revoke satu share link. Setelah revoke, link return 410 di `GET /s/{token
 
 ---
 
-### Storage Summary
+### Storage Summary & Dashboard
+
+#### `GET /dashboard` — Scope: `read`
+
+Ringkasan lengkap dashboard: metrik kuota gabungan, klasifikasi 7 kategori berkas, 10 berkas yang baru selesai diunggah, dan summary vault.
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "storage": {
+      "total": 32212254720,
+      "used": 10485760000,
+      "free": 21726494720,
+      "percentage": 32.5,
+      "accounts_count": 3
+    },
+    "categories": [
+      { "type": "doc", "count": 42, "size": 991232 },
+      { "type": "image", "count": 795, "size": 1258291200 },
+      { "type": "video", "count": 12, "size": 2147483648 },
+      { "type": "audio", "count": 5, "size": 52428800 },
+      { "type": "app", "count": 2, "size": 83886080 },
+      { "type": "archive", "count": 8, "size": 524288000 },
+      { "type": "other", "count": 0, "size": 0 }
+    ],
+    "recent_files": [ /* 10 FileResource terbaru */ ],
+    "summary": {
+      "files_count": 864,
+      "files_size": 4075199460,
+      "folders_count": 24,
+      "accounts_count": 3
+    }
+  },
+  "message": "Dashboard berhasil dimuat."
+}
+```
 
 #### `GET /storage/summary` — Scope: `read`
 

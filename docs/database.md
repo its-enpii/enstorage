@@ -23,6 +23,7 @@ PostgreSQL 15 + UUID primary keys + JSONB metadata.
 | `google_accounts` | Akun Google Drive yang terhubung |
 | `folders` | Folder hierarkis milik user |
 | `files` | Metadata file yang tersimpan di Google Drive |
+| `file_parts` | Potongan berkas multi-drive (Spanned Chunk Storage) |
 | `thumbnails` | Metadata thumbnail (disimpan lokal, bukan Drive) |
 | `api_keys` | API Key untuk akses eksternal |
 | `api_key_logs` | Log penggunaan API Key (volume tinggi) |
@@ -44,6 +45,8 @@ CREATE TABLE users (
     role        VARCHAR(20) NOT NULL DEFAULT 'member',  -- 'owner' | 'member'
     locale      VARCHAR(10) NOT NULL DEFAULT 'id',
     is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+    password_set_at TIMESTAMP WITH TIME ZONE,    -- NULL jika akun OAuth murni
+    preferences JSONB DEFAULT '{"sort":"name","dir":"asc"}', -- preferensi sort & navigasi
     created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -96,6 +99,11 @@ CREATE TABLE folders (
     parent_id   UUID REFERENCES folders(id) ON DELETE CASCADE,   -- NULL = root
     name        VARCHAR(255) NOT NULL,
     path        TEXT NOT NULL,                                   -- "/Photos/2024/Januari"
+    description TEXT,                                            -- ringkasan isi folder & SEO
+    icon        VARCHAR(100),                                    -- glyph Material Symbols kustom
+    logo_url    TEXT,                                            -- URL logo folder / open graph
+    is_locked   BOOLEAN NOT NULL DEFAULT FALSE,
+    lock_password_hash VARCHAR(255),
     created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
@@ -120,19 +128,21 @@ CREATE TABLE files (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     folder_id           UUID REFERENCES folders(id) ON DELETE SET NULL,
-    google_account_id   UUID NOT NULL REFERENCES google_accounts(id),
+    google_account_id   UUID REFERENCES google_accounts(id),       -- NULL bila S3/local/spanned
     name                VARCHAR(255) NOT NULL,                     -- display name
     original_name       VARCHAR(255) NOT NULL,                     -- nama saat upload
     mime_type           VARCHAR(255) NOT NULL,
     size                BIGINT NOT NULL,                           -- bytes
-    gdrive_file_id      VARCHAR(255) NOT NULL UNIQUE,
+    gdrive_file_id      VARCHAR(255) NOT NULL,                     -- ID file Drive / 'spanned_{id}'
     shareable_link      TEXT,
     upload_status       VARCHAR(20) NOT NULL DEFAULT 'pending',
                         -- 'pending' | 'uploading' | 'done' | 'failed'
     uploaded_at         TIMESTAMP WITH TIME ZONE,
     is_starred          BOOLEAN NOT NULL DEFAULT FALSE,
     share_token         VARCHAR(64) UNIQUE,                        -- shareable link internal
-    metadata            JSONB,                                    -- kontekstual hasil ekstraksi
+    storage_driver      VARCHAR(32) NOT NULL DEFAULT 'gdrive',     -- 'gdrive' | 's3' | 'local' | 'gdrive_spanned'
+    storage_path        VARCHAR(255),                              -- path bila driver s3/local
+    metadata            JSONB,                                     -- kontekstual hasil ekstraksi
     created_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -143,12 +153,43 @@ CREATE INDEX idx_files_google_account_id ON files(google_account_id);
 CREATE INDEX idx_files_upload_status ON files(upload_status);
 CREATE INDEX idx_files_mime_type ON files(mime_type);
 CREATE INDEX idx_files_created_at ON files(created_at DESC);
+CREATE INDEX idx_files_upload_status_updated_at ON files(upload_status, updated_at);
 ```
 
 - `name` bisa berbeda dari `original_name` kalau user rename setelah upload.
+- `storage_driver = 'gdrive_spanned'` menandakan berkas terpecah ke beberapa akun Google Drive melalui tabel `file_parts`.
 - `upload_status = 'pending'` dibuat di request HTTP, diupdate oleh worker.
-- File dengan `failed` tidak punya `gdrive_file_id` valid.
 - Rename di EnStorage **tidak** mengubah nama di Google Drive (hanya update kolom `name`).
+
+---
+
+### `file_parts`
+
+Menyimpan metadata potongan fisik untuk berkas yang di-split lintas akun Google Drive (Spanned Chunk Storage).
+
+```sql
+CREATE TABLE file_parts (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    file_id             UUID NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    part_number         INTEGER NOT NULL,
+    google_account_id   UUID NOT NULL REFERENCES google_accounts(id) ON DELETE CASCADE,
+    gdrive_file_id      VARCHAR(255) NOT NULL,
+    byte_offset_start   BIGINT NOT NULL,
+    byte_offset_end     BIGINT NOT NULL,
+    size                BIGINT NOT NULL,
+    status              VARCHAR(20) NOT NULL DEFAULT 'done',
+    created_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    UNIQUE(file_id, part_number)
+);
+
+CREATE INDEX idx_file_parts_file_id ON file_parts(file_id);
+CREATE INDEX idx_file_parts_google_account_id ON file_parts(google_account_id);
+```
+
+- Tiap part merepresentasikan rentang byte `[byte_offset_start, byte_offset_end]` dari total ukuran file.
+- Saat diunduh / distreaming, `StreamPump` menyambungkan pembacaan media stream dari masing-masing part secara berurutan.
 - `is_starred` untuk fitur bookmark.
 - `share_token` untuk shareable link internal EnStorage (selain Google Drive link).
 - `metadata` (JSONB, nullable) menyimpan metadata **kontekstual** hasil ekstraksi

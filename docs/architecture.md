@@ -183,20 +183,28 @@ Verifikasi ≈ 60-100ms (bcrypt cost 12). Untuk ribuan request/detik, pertimbang
 
 ## Quota & Routing
 
-### Quota Manager
+### Quota Manager & Multi-Drive Spanned Allocation
 
 Setiap akun Google punya `quota_total`, `quota_used`, `quota_synced_at`. Cache di Redis dengan key `quota:{google_account_id}`, TTL **5 menit**.
 
-Saat upload, pilih akun:
+Saat upload berkas, sistem mengeksekusi perencanaan alokasi penyimpanan:
 
 ```php
-QuotaManager::getAvailableAccount($user, $fileSizeBytes)
-// 1. Filter akun Google milik user yang is_active=true
-// 2. Refresh quota kalau cache > 5 menit
-// 3. Filter yang free >= $fileSizeBytes
-// 4. Sort by free DESC, ambil yang pertama
-// 5. Return null kalau tidak ada yang muat
+QuotaManager::planStorageAllocation($user, $fileSizeBytes)
 ```
+
+1. **Single-Drive Fit (Prioritas Cepat)**:
+   - Jika ada satu akun Google Drive aktif yang memiliki `free >= $fileSizeBytes`, pilih akun tersebut (utamakan yang ruangnya paling besar).
+   - Berkas diunggah utuh ke satu drive (`storage_driver = 'gdrive'`).
+2. **Spanned Chunk Storage (Greedy Capacity Exhaustion)**:
+   - Jika tidak ada satu pun akun yang mampu menampung file secara utuh, sistem memeriksa total ruang gabungan seluruh akun aktif.
+   - Akun diurutkan berdasarkan ruang sisa dari yang terkecil ke terbesar (`free ASC`).
+   - Akun dengan sisa kuota terkecil diisi penuh terlebih dahulu hingga tepat **0 KB**, dan sisa byte dialokasikan ke akun berikutnya.
+   - Berkas dipotong menjadi beberapa part (`file_parts`) dan diunggah menggunakan `GoogleDriveUploader::uploadPart()`.
+   - Di database dan antarmuka, berkas tetap berstatus **1 file utuh** dengan `storage_driver = 'gdrive_spanned'`.
+3. **Continuous Chained Streaming & Range Seeking (RFC 7233)**:
+   - Saat pengguna mengunduh atau menonton video/audio yang berstatus spanned, `FileController::streamSpannedDriveFile()` memetakan rentang byte yang diminta ke part-part yang beririsan.
+   - `StreamPump` menyambungkan aliran byte dari part pertama ke part berikutnya secara berurutan dalam satu koneksi HTTP yang sama tanpa jeda transfer. Browser menerima stream berkelanjutan dan seek video berfungsi mulus tanpa menyadari file tersimpan di beberapa akun Drive berbeda.
 
 ### Model scope Google Drive: `drive.file` + Google Picker
 
