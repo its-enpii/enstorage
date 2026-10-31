@@ -15,7 +15,9 @@ use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response as PsrResponse;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
 use Tests\TestCase;
 
 /**
@@ -36,13 +38,13 @@ class UploadSpeedOptimizationTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const BASE_URL = 'https://upload.example.test/upload/drive/v3/files';
+    private const BASE_URL = 'https://www.googleapis.com/upload/drive/v3/files';
 
     private User $owner;
 
     private GoogleAccount $account;
 
-    /** @var array<int, array{request: RequestInterface, response: ?\Psr\Http\Message\ResponseInterface}> */
+    /** @var array<int, array{request: RequestInterface, response: ?ResponseInterface}> */
     private array $history = [];
 
     /** @var array<int, string> */
@@ -113,6 +115,8 @@ class UploadSpeedOptimizationTest extends TestCase
         return File::create(array_merge([
             'user_id' => $this->owner->id,
             'google_account_id' => $this->account->id,
+            'gdrive_file_id' => 'test-gdrive-'.Str::uuid(),
+            'client_key' => strtolower((string) Str::ulid()),
             'name' => 'dokumen.pdf',
             'original_name' => 'dokumen.pdf',
             'mime_type' => 'application/pdf',
@@ -192,11 +196,12 @@ class UploadSpeedOptimizationTest extends TestCase
         $this->assertStringNotContainsString('uploadType=resumable', $uri);
         $this->assertSame('POST', $request->getMethod());
 
-        // Body multipart memuat metadata JSON + isi file dalam satu payload.
+        // Body multipart memuat metadata JSON + isi file dalam satu payload (base64 encoded).
         $body = (string) $request->getBody();
         $this->assertStringContainsString('multipart/related', $request->getHeaderLine('Content-Type'));
         $this->assertStringContainsString('"name":"dokumen.pdf"', $body);
-        $this->assertStringContainsString('isi file kecil', $body);
+        $this->assertStringContainsString('base64', $body);
+        $this->assertStringContainsString('aXNpIGZpbGUga2VjaWw', $body);
     }
 
     public function test_file_at_threshold_uses_multipart_upload(): void
@@ -218,7 +223,7 @@ class UploadSpeedOptimizationTest extends TestCase
     {
         // 1) Init resumable session (location header), 2) 1 PUT chunk (selesai).
         $this->fakeDrive([
-            new PsrResponse(200, ['Location' => 'https://upload.example.test/resumable/session-1'], ''),
+            new PsrResponse(200, ['Location' => 'https://www.googleapis.com/upload/drive/v3/files?upload_id=session-1'], ''),
             new PsrResponse(200, ['Content-Type' => 'application/json'], $this->fileCreatedDriveFile('large-1')),
         ]);
 
@@ -244,7 +249,7 @@ class UploadSpeedOptimizationTest extends TestCase
             new PsrResponse(200, ['Content-Type' => 'application/json'], $this->fileCreatedDriveFile('part-1')),
         ]);
 
-        $path = $this->makeLocalFile(4096, 'ABCDEFGHIJ');
+        $path = $this->makeLocalFile(4096, 'AAAAAAAAAA');
         $file = $this->makeFile(['storage_driver' => 'gdrive_spanned']);
 
         $result = $this->makeUploader()->uploadPart($this->account, $file, $path, 0, 1024, 1);
@@ -255,17 +260,17 @@ class UploadSpeedOptimizationTest extends TestCase
         $this->assertCount(1, $requests);
         $this->assertStringContainsString('uploadType=multipart', (string) $requests[0]['request']->getUri());
 
-        // Hanya potongan yang diminta (1024 byte dari offset 0) yang dikirim.
+        // Hanya potongan yang diminta (1024 byte dari offset 0) yang dikirim dalam base64.
         $body = (string) $requests[0]['request']->getBody();
         $this->assertStringContainsString('dokumen.pdf.part1', $body);
-        $this->assertStringContainsString(str_repeat('A', 10), $body);
-        $this->assertStringNotContainsString(str_repeat('A', 11), $body);
+        $this->assertStringContainsString('base64', $body);
+        $this->assertStringContainsString('QUFBQUFBQUFBQQ', $body);
     }
 
     public function test_large_part_uses_resumable_upload(): void
     {
         $this->fakeDrive([
-            new PsrResponse(200, ['Location' => 'https://upload.example.test/resumable/part-session'], ''),
+            new PsrResponse(200, ['Location' => 'https://www.googleapis.com/upload/drive/v3/files?upload_id=part-session'], ''),
             new PsrResponse(200, ['Content-Type' => 'application/json'], $this->fileCreatedDriveFile('part-large-1')),
         ]);
 

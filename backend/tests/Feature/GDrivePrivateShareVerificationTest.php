@@ -211,9 +211,8 @@ class GDrivePrivateShareVerificationTest extends TestCase
         $this->account->gdrive_root_folder_id = 'root_folder_id';
         $this->account->save();
 
-        // Resumable upload sequence:
-        //  1. POST initiate upload  → 200 + Location (resume URI)
-        //  2. PUT final chunk       → 200 + DriveFile JSON (selesai)
+        // 1-shot multipart upload response untuk file kecil (<= 5 MB):
+        // 1. POST create (multipart) → 200 + DriveFile JSON
         $finalFile = new DriveFile([
             'id' => 'gdrive_uploaded_1',
             'name' => 'dokumen.txt',
@@ -223,7 +222,6 @@ class GDrivePrivateShareVerificationTest extends TestCase
         ]);
 
         $this->fakeDrive([
-            new PsrResponse(200, ['Location' => 'https://upload.googleapis.com/resumable/session-1'], ''),
             new PsrResponse(200, ['Content-Type' => 'application/json'], json_encode($finalFile->toSimpleObject())),
         ]);
 
@@ -271,15 +269,15 @@ class GDrivePrivateShareVerificationTest extends TestCase
         );
 
         // Bukti pendukung: upload memang benar-benar berjalan (ada request
-        // ke /files dengan uploadType=resumable).
-        $sawResumable = false;
+        // ke /files dengan uploadType=multipart atau uploadType=resumable).
+        $sawUpload = false;
         foreach ($this->history as $entry) {
             $uri = (string) $entry['request']->getUri();
-            if (str_contains($uri, '/files') && str_contains($uri, 'uploadType=resumable')) {
-                $sawResumable = true;
+            if (str_contains($uri, '/files') && (str_contains($uri, 'uploadType=multipart') || str_contains($uri, 'uploadType=resumable'))) {
+                $sawUpload = true;
             }
         }
-        $this->assertTrue($sawResumable, 'upload resumable seharusnya dieksekusi');
+        $this->assertTrue($sawUpload, 'upload ke /files seharusnya dieksekusi');
     }
 
     public function test_upload_file_result_persists_shareable_link_and_gdrive_id_via_job(): void

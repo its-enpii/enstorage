@@ -5,6 +5,7 @@ namespace App\Services\Google;
 use App\Models\File as FileModel;
 use App\Models\Folder;
 use App\Models\GoogleAccount;
+use Google\Client;
 use Google\Http\MediaFileUpload;
 use Google\Service\Drive;
 use Google\Service\Drive\DriveFile;
@@ -18,12 +19,11 @@ class GoogleDriveUploader
     // round-trip untuk mayoritas file kecil secara signifikan.
     public const MULTIPART_THRESHOLD_BYTES = 5 * 1024 * 1024; // 5 MB (ambang batas 1-shot multipart)
 
-    // 50 MB per chunk (dari 25 MB). Google resumable upload API mewajibkan
-    // ukuran chunk kelipatan 256 KB (kecuali chunk terakhir) — 50 MB = 200 x
-    // 256 KB, aman. Chunk lebih besar = jauh lebih sedikit round-trip HTTP ke
-    // Drive untuk file besar (25 MB → 50 MB), sehingga file tidak menumpuk di
-    // server. Buffer fread 50 MB masih wajar untuk memory_limit backend 512M.
-    private const CHUNK_SIZE = 50 * 1024 * 1024; // 50 MB (dari 25 MB)
+    // 25 MB per chunk. Google resumable upload API mewajibkan ukuran chunk
+    // kelipatan 256 KB (kecuali chunk terakhir) — 25 MB = 100 x 256 KB, aman.
+    // Chunk 25 MB sangat optimal untuk throughput tanpa memakan memory CLI
+    // (aman dari ambang batas 128M/512M).
+    private const CHUNK_SIZE = 25 * 1024 * 1024; // 25 MB per chunk
 
     public function __construct(
         private readonly GoogleClientFactory $factory,
@@ -287,7 +287,7 @@ class GoogleDriveUploader
      * @return array{gdrive_file_id: string, shareable_link: ?string}
      */
     private function uploadMultipart(
-        \Google\Client $client,
+        Client $client,
         Drive $drive,
         FileModel $file,
         string $parentFolderId,
