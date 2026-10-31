@@ -58,7 +58,9 @@ import {
 import {
   BULK_REQUEST_CONCURRENCY,
   uploadBulkFiles,
+  type BulkUploadEntry,
 } from '@/lib/bulkUpload';
+import { uploadDirectBatch } from '@/lib/directBatchUpload';
 import { bytes, fileExtension } from '@/lib/format';
 import { usePageTitle } from '@/lib/usePageTitle';
 
@@ -1255,12 +1257,71 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   }
 
   /**
+   * Jalur 2 (Zero VPS Disk): multi-file batch uploads go straight from the
+   * browser to Google Drive via resumable session URIs minted by
+   * `POST /files/direct-batch-init`, then the backend is confirmed per file
+   * with `POST /files/{id}/direct-complete`. If the init step fails (no linked
+   * Google Drive account, 507 disk back-pressure, network, ...) the whole
+   * batch transparently falls back to the legacy multipart `uploadBulk` lane.
+   */
+  async function uploadBatchZeroDisk(
+    entries: { file: File; jobId: string }[],
+    targetFolderId: string | null,
+  ) {
+    if (entries.length === 0) return;
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE ?? '';
+    try {
+      await uploadDirectBatch(entries, {
+        baseUrl,
+        authToken: getToken(),
+        folderId: targetFolderId,
+        onProgress: (jobId, loaded, total) => {
+          setJobs((js) =>
+            js.map((j) => (j.id === jobId && j.status === 'uploading' ? { ...j, loaded, total } : j)),
+          );
+        },
+        onFileComplete: (jobId, fileId) => {
+          setJobs((js) =>
+            js.map((j) =>
+              j.id === jobId && j.status === 'uploading'
+                ? { ...j, status: 'done', fileId, loaded: j.total }
+                : j,
+            ),
+          );
+        },
+        onFileError: (jobId, error) => {
+          setJobs((js) =>
+            js.map((j) => (j.id === jobId && j.status === 'uploading' ? { ...j, status: 'failed', error } : j)),
+          );
+        },
+      });
+    } catch {
+      // Direct-batch init failed -> nothing was uploaded yet, so the same
+      // jobs can safely be retried through the multipart lane. Split by size
+      // so files over the chunked threshold still take the chunked path.
+      const large: BulkUploadEntry[] = [];
+      const small: BulkUploadEntry[] = [];
+      for (const entry of entries) {
+        if (entry.file.size > CHUNKED_THRESHOLD_BYTES) large.push(entry);
+        else small.push(entry);
+      }
+      const token = getToken() ?? '';
+      await Promise.all([
+        uploadBulk(small, targetFolderId),
+        uploadChunkedFiles(large, targetFolderId, token),
+      ]);
+    }
+  }
+
+  /**
    * Entry point for every upload (picker, folder picker, drag-drop):
    *  1. Reject files > MAX_UPLOAD_BYTES up front with a clear i18n message.
-   *  2. Files > 64 MiB → chunked upload, 3 files in parallel
-   *     (`uploadFilesChunked` in chunkedUpload.ts).
-   *  3. Files ≤ 64 MiB → existing `bulk-upload`, 10 files per request and
-   *     up to 3 requests in parallel.
+   *  2. More than one file → Jalur 2 Zero VPS Disk (`uploadDirectBatch`):
+   *     browser PUTs straight to Google Drive resumable sessions, falling
+   *     back to the lanes below when direct-batch init fails.
+   *  3. Single file > 64 MiB → chunked upload (`uploadFilesChunked` in
+   *     chunkedUpload.ts).
+   *  4. Single file ≤ 64 MiB → existing `bulk-upload` multipart lane.
    * Partial success: one file failing never cancels the others.
    */
   async function uploadFiles(fileList: FileList) {
@@ -1312,17 +1373,24 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       })),
     ]);
 
-    const token = getToken() ?? '';
-    // Chunked lane: 3 active files at once in-file (chunkedUpload.ts), each
-    // with its own 3-chunk pool. Runs alongside the multipart lane so a
-    // stalled small-file batch never blocks the large files.
-    const chunkedLane = uploadChunkedFiles(largeFiles, targetFolderId, token);
-    const tasks: Promise<void>[] = [
-      // Multipart lane: same 10-file batches as before.
-      uploadBulk(smallFiles, targetFolderId),
-      chunkedLane,
-    ];
-    await Promise.all(tasks);
+    if (accepted.length > 1) {
+      // Batch upload -> Jalur 2 (Zero VPS Disk): browser -> Google Drive
+      // directly, with automatic fallback to the multipart/chunked lanes.
+      await uploadBatchZeroDisk(accepted, targetFolderId);
+    } else {
+      // Single upload keeps the existing lanes unchanged.
+      const token = getToken() ?? '';
+      // Chunked lane: 3 active files at once in-file (chunkedUpload.ts), each
+      // with its own 3-chunk pool. Runs alongside the multipart lane so a
+      // stalled small-file batch never blocks the large files.
+      const chunkedLane = uploadChunkedFiles(largeFiles, targetFolderId, token);
+      const tasks: Promise<void>[] = [
+        // Multipart lane: same 10-file batches as before.
+        uploadBulk(smallFiles, targetFolderId),
+        chunkedLane,
+      ];
+      await Promise.all(tasks);
+    }
 
     // Single refresh once every upload has finished. Only refresh when
     // this view is still the upload destination: while the user is elsewhere
