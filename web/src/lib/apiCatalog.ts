@@ -44,6 +44,7 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
       { method: 'PATCH', path: '/auth/me', scope: 'sanctum', key: 'updateMe' },
       { method: 'POST', path: '/auth/change-password', scope: 'sanctum', key: 'changePassword' },
       { method: 'PATCH', path: '/auth/locale', scope: 'sanctum', key: 'locale' },
+      { method: 'PATCH', path: '/auth/preferences', scope: 'sanctum', key: 'preferences' },
       { method: 'POST', path: '/auth/google', scope: 'public', key: 'googleAuth' },
       { method: 'GET', path: '/auth/google/redirect', scope: 'sanctum', key: 'googleRedirect' },
       { method: 'GET', path: '/auth/google/callback', scope: 'public', key: 'googleCallback' },
@@ -107,6 +108,7 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
       { method: 'GET', path: '/files/by-hashes', scope: 'read', key: 'byHashes' },
       { method: 'POST', path: '/files/by-metadata', scope: 'read', key: 'byMetadata' },
       { method: 'GET', path: '/files/{id}', scope: 'read', key: 'showFile' },
+      { method: 'GET', path: '/files/{id}/detail', scope: 'read', key: 'fileDetail' },
       { method: 'GET', path: '/files/{id}/status', scope: 'read', key: 'fileStatus' },
       { method: 'GET', path: '/files/{id}/download', scope: 'read', key: 'downloadFile' },
       { method: 'GET', path: '/files/{id}/thumbnail', scope: 'read', key: 'thumbnail' },
@@ -115,6 +117,8 @@ export const ENDPOINT_GROUPS: EndpointGroup[] = [
       { method: 'POST', path: '/files/upload/init', scope: 'write', key: 'uploadInit' },
       { method: 'POST', path: '/files/upload/{fileId}/chunk/{chunkIndex}', scope: 'write', key: 'uploadChunk' },
       { method: 'POST', path: '/files/upload/{fileId}/complete', scope: 'write', key: 'uploadComplete' },
+      { method: 'POST', path: '/files/direct-batch-init', scope: 'write', key: 'directBatchInit' },
+      { method: 'POST', path: '/files/{fileId}/direct-complete', scope: 'write', key: 'directComplete' },
       { method: 'PATCH', path: '/files/{id}', scope: 'write', key: 'updateFile' },
       { method: 'PUT', path: '/files/{id}/move', scope: 'write', key: 'moveFile' },
       { method: 'DELETE', path: '/files/{id}', scope: 'delete', key: 'deleteFile' },
@@ -776,6 +780,40 @@ export const REFERENCE: ReferenceEntry[] = [
     errors: ['401', '422'],
   },
   {
+    id: 'auth-preferences',
+    group: 'auth',
+    method: 'PATCH',
+    path: '/auth/preferences',
+    scope: 'sanctum',
+    key: 'preferences',
+    call: {
+      method: 'PATCH',
+      path: '/auth/preferences',
+      body: { sort: 'name', dir: 'asc' },
+      expect: '200 OK',
+      notes: ['Simpan preferensi pengurutan (name, size, created_at, uploaded_at) dan arah (asc, desc) ke users.preferences.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    bodyRows: [
+      { name: 'sort', type: 'string', required: true, key: 'sortField', default: 'name' },
+      { name: 'dir', type: 'string', required: true, key: 'dirField', default: 'asc' },
+    ],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "preferences": {
+      "sort": "name",
+      "dir": "asc"
+    }
+  },
+  "message": "Preferensi berhasil diperbarui."
+}`,
+    },
+    errors: ['401', '422'],
+  },
+  {
     id: 'auth-google',
     group: 'auth',
     method: 'POST',
@@ -985,6 +1023,44 @@ export const REFERENCE: ReferenceEntry[] = [
   "data": ${FILE_RESOURCE_SAMPLE.split('\n').join('\n  ')},
   "message": "Detail file.",
   "meta": {}
+}`,
+    },
+    errors: ['401', '404'],
+  },
+  {
+    id: 'files-detail',
+    group: 'files',
+    method: 'GET',
+    path: '/files/{id}/detail',
+    scope: 'read',
+    key: 'fileDetail',
+    call: {
+      method: 'GET',
+      path: '/files/9f1c2b64-77e5-4a10-8ad3-5c0b2e9d41f7/detail',
+      expect: '200 OK',
+      notes: ['Detail metadata lengkap: menggabungkan atribut berkas dengan path folder hierarki, status lock, dimensi, dan jumlah halaman.'],
+    },
+    headerRows: [AUTH_ROW],
+    pathRows: [{ name: 'id', type: 'uuid', required: true, key: 'fileId' }],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "id": "9f1c2b64-77e5-4a10-8ad3-5c0b2e9d41f7",
+    "name": "laporan-q3.pdf",
+    "original_name": "laporan-q3.pdf",
+    "mime_type": "application/pdf",
+    "size": 820341,
+    "folder": {
+      "id": "4d0cbe31-0a58-4c6f-9d2b-7f1e5a3c8b64",
+      "name": "Laporan",
+      "path": "Dokumen/Laporan"
+    },
+    "pages": 12,
+    "upload_status": "done"
+  },
+  "message": "Detail file."
 }`,
     },
     errors: ['401', '404'],
@@ -1494,6 +1570,88 @@ Content-Length: 18244
     errors: ['404', '409', '422'],
   },
 
+  {
+    id: 'files-direct-batch-init',
+    group: 'files',
+    method: 'POST',
+    path: '/files/direct-batch-init',
+    scope: 'write',
+    key: 'directBatchInit',
+    call: {
+      method: 'POST',
+      path: '/files/direct-batch-init',
+      body: {
+        files: [
+          { name: 'foto1.jpg', size: 2450000, mime_type: 'image/jpeg', client_key: 'job-1' },
+          { name: 'dokumen.pdf', size: 520000, mime_type: 'application/pdf', client_key: 'job-2' }
+        ]
+      },
+      expect: '200 OK',
+      notes: ['Jalur 2 (Zero VPS Disk): Backend meminta Resumable Session URI Google Drive dan mengembalikan upload_url untuk di-PUT browser langsung.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    bodyRows: [
+      { name: 'files', type: 'object[]', required: true, key: 'filesBatchField' },
+    ],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "file_id": "9f1c2b64-77e5-4a10-8ad3-5c0b2e9d41f7",
+        "upload_url": "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=xxx",
+        "original_name": "foto1.jpg",
+        "client_key": "job-1",
+        "size": 2450000
+      }
+    ]
+  },
+  "message": "Sesi direct upload batch berhasil dibuat."
+}`,
+    },
+    errors: ['401', '422', '507'],
+  },
+  {
+    id: 'files-direct-complete',
+    group: 'files',
+    method: 'POST',
+    path: '/files/{fileId}/direct-complete',
+    scope: 'write',
+    key: 'directComplete',
+    call: {
+      method: 'POST',
+      path: '/files/9f1c2b64-77e5-4a10-8ad3-5c0b2e9d41f7/direct-complete',
+      body: {
+        gdrive_file_id: '1aBcDeFgHiJkLmNoPqRsTuVwXyZ',
+        size: 2450000,
+        shareable_link: 'https://drive.google.com/file/d/1aBcDeFgHiJkLmNoPqRsTuVwXyZ/view'
+      },
+      expect: '200 OK',
+      notes: ['Konfirmasi setelah browser selesai mentransfer byte langsung ke Google Drive. Menandai berkas done dan memicu event realtime.'],
+    },
+    headerRows: [AUTH_ROW, CT_JSON_ROW],
+    bodyRows: [
+      { name: 'gdrive_file_id', type: 'string', required: true, key: 'gdriveFileIdField' },
+      { name: 'size', type: 'integer', key: 'sizeField' },
+      { name: 'shareable_link', type: 'string', key: 'shareableLinkField' },
+    ],
+    response: {
+      status: '200',
+      code: `{
+  "success": true,
+  "data": {
+    "file_id": "9f1c2b64-77e5-4a10-8ad3-5c0b2e9d41f7",
+    "name": "foto1.jpg",
+    "size": 2450000,
+    "status": "done"
+  },
+  "message": "Upload file selesai."
+}`,
+    },
+    errors: ['401', '404', '422'],
+  },
   /* -------------------------------- folders ------------------------------- */
   {
     id: 'folders-create',

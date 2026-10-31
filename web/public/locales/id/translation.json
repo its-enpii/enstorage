@@ -1328,7 +1328,11 @@
       "unlockFolder": "Buka kunci folder sementara (30 menit).",
       "updateFolderLockPassword": "Ganti kata sandi kunci folder.",
       "destroyFolderLock": "Lepas kunci folder (butuh kata sandi).",
-      "publicShareUnlock": "Buka kunci share link folder dengan kata sandi."
+      "publicShareUnlock": "Buka kunci share link folder dengan kata sandi.",
+      "preferences": "Simpan preferensi urutan berkas dan tampilan pengguna.",
+      "fileDetail": "Metadata lengkap berkas beserta hierarki folder dan dimensi.",
+      "directBatchInit": "Inisialisasi sesi batch upload zero VPS disk langsung ke Google Drive.",
+      "directComplete": "Konfirmasi selesai upload langsung dari peramban ke Google Drive."
     },
     "envelope": {
       "eyebrow": "Kontrak",
@@ -1876,6 +1880,22 @@
         "publicShareUnlock": {
           "title": "Buka kunci share",
           "body": "Buka kunci share folder dengan sandi."
+        },
+        "preferences": {
+          "title": "Preferensi akun",
+          "body": "Simpan preferensi urutan (name, size, created_at, uploaded_at) dan arah (asc, desc) ke users.preferences."
+        },
+        "fileDetail": {
+          "title": "Detail lengkap berkas",
+          "body": "Detail metadata lengkap: menggabungkan atribut berkas dengan path folder hierarki, status lock, dimensi, dan jumlah halaman."
+        },
+        "directBatchInit": {
+          "title": "Inisialisasi batch langsung",
+          "body": "Jalur 2 (Zero VPS Disk): Backend meminta Resumable Session URI Google Drive dan mengembalikan upload_url untuk di-PUT browser langsung."
+        },
+        "directComplete": {
+          "title": "Konfirmasi upload langsung",
+          "body": "Konfirmasi setelah browser selesai mentransfer byte langsung ke Google Drive. Menandai berkas done dan memicu event realtime."
         }
       }
     },
@@ -1965,7 +1985,12 @@
       "lockPassword": "Kata sandi kunci folder, minimal 6 karakter.",
       "passwordConfirmation": "Ulangi kata sandi kunci (harus sama).",
       "currentPassword": "Kata sandi kunci yang sedang berlaku.",
-      "newPassword": "Kata sandi kunci baru, minimal 6 karakter."
+      "newPassword": "Kata sandi kunci baru, minimal 6 karakter.",
+      "sortField": "Kolom acuan urut: `name`, `size`, `created_at`, atau `uploaded_at`.",
+      "dirField": "Arah urutan: `asc` (menaik) atau `desc` (menurun).",
+      "filesBatchField": "Daftar manifes berkas: name, size, mime_type, folder_id, client_key.",
+      "gdriveFileIdField": "ID berkas Google Drive yang dikembalikan setelah peramban selesai upload.",
+      "shareableLinkField": "Tautan pratinjau Google Drive (opsional)."
     },
     "filter": {
       "all": "Semua",

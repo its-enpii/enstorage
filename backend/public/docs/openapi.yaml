@@ -374,6 +374,53 @@ paths:
                   message: { type: string }
                   meta: { type: object }
         '422': { $ref: '#/components/responses/ValidationError' }
+  /files/direct-batch-init:
+    post:
+      tags: [Files]
+      summary: Inisialisasi batch upload zero VPS disk (Google Drive Resumable Session URI)
+      security: [{ sanctum: [] }, { apiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: object
+                    required: [name, size]
+                    properties:
+                      name: { type: string }
+                      size: { type: integer }
+                      mime_type: { type: string }
+                      folder_id: { type: string, format: uuid }
+                      client_key: { type: string }
+      responses:
+        '200':
+          description: OK — mengembalikan daftar upload_url Google Drive langsung untuk setiap file
+  /files/{fileId}/direct-complete:
+    post:
+      tags: [Files]
+      summary: Konfirmasi selesai upload langsung dari browser ke Google Drive
+      security: [{ sanctum: [] }, { apiKey: [] }]
+      parameters:
+        - { in: path, name: fileId, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [gdrive_file_id]
+              properties:
+                gdrive_file_id: { type: string }
+                size: { type: integer }
+                shareable_link: { type: string }
+      responses:
+        '200': { description: OK }
   /files:
     get:
       tags: [Files]

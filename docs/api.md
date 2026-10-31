@@ -378,6 +378,36 @@ Handle Google OAuth web redirect. Query: `?code=...&state=...`. Validates state 
 
 ---
 
+#### `PATCH /auth/preferences` — Sanctum-only
+
+Simpan preferensi tampilan pengguna (seperti mode pengurutan berkas) ke kolom JSONB `users.preferences`.
+
+**Request:**
+
+```json
+{
+  "sort": "name",
+  "dir": "asc"
+}
+```
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "preferences": {
+      "sort": "name",
+      "dir": "asc"
+    }
+  },
+  "message": "Preferensi berhasil diperbarui."
+}
+```
+
+---
+
 ### Vault
 
 #### `POST /vault/reset` — Sanctum-only
@@ -1353,6 +1383,125 @@ Finalisasi upload setelah semua chunk terkirim. Menggabungkan file secara sequen
 **Errors:**
 - `400`: File bukan chunked upload atau status tidak valid
 - `409`: Chunk belum lengkap (`received_chunks < total_chunks`)
+
+---
+
+#### `POST /files/direct-batch-init` — Scope: `write` (Jalur 2: Zero VPS Disk)
+
+Inisialisasi upload batch berkas langsung ke Google Drive via Resumable Session URI tanpa membebani harddisk atau bandwidth server VPS.
+
+**Request:**
+
+```json
+{
+  "files": [
+    {
+      "name": "foto1.jpg",
+      "size": 2450000,
+      "mime_type": "image/jpeg",
+      "folder_id": "uuid | null",
+      "client_key": "job-1"
+    },
+    {
+      "name": "dokumen.pdf",
+      "size": 520000,
+      "mime_type": "application/pdf",
+      "folder_id": "uuid | null",
+      "client_key": "job-2"
+    }
+  ]
+}
+```
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "file_id": "uuid-file-1",
+        "upload_url": "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=xxx",
+        "original_name": "foto1.jpg",
+        "client_key": "job-1",
+        "size": 2450000
+      },
+      {
+        "file_id": "uuid-file-2",
+        "upload_url": "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=yyy",
+        "original_name": "dokumen.pdf",
+        "client_key": "job-2",
+        "size": 520000
+      }
+    ]
+  },
+  "message": "Sesi direct upload batch berhasil dibuat."
+}
+```
+
+---
+
+#### `POST /files/{fileId}/direct-complete` — Scope: `write` (Jalur 2: Zero VPS Disk)
+
+Konfirmasi penyelesaian setelah browser selesai melakukan HTTP `PUT` byte data langsung ke `upload_url` Google Drive.
+
+**Request:**
+
+```json
+{
+  "gdrive_file_id": "1aBcDeFgHi...",
+  "size": 2450000,
+  "shareable_link": "https://drive.google.com/file/d/1aBcDeFgHi.../view"
+}
+```
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "file_id": "uuid-file-1",
+    "name": "foto1.jpg",
+    "size": 2450000,
+    "status": "done"
+  },
+  "message": "Upload file selesai."
+}
+```
+
+---
+
+#### `GET /files/{id}/detail` — Scope: `read`
+
+Metadata lengkap satu file (menggabungkan atribut `FileResource` dengan path folder hierarki, status lock folder induk, dimensi gambar, jumlah halaman PDF, dan metadata kontekstual).
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "name": "laporan.pdf",
+    "original_name": "laporan.pdf",
+    "mime_type": "application/pdf",
+    "size": 1048576,
+    "folder": {
+      "id": "uuid-folder",
+      "name": "Documents",
+      "path": "Work/Documents"
+    },
+    "dimensions": null,
+    "pages": 15,
+    "upload_status": "done",
+    "is_starred": false,
+    "has_thumbnail": false
+  },
+  "message": "Detail file."
+}
+```
 
 ---
 

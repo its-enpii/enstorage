@@ -198,42 +198,6 @@ Route::middleware('auth.apikey')->group(function () {
     });
 });
 
-// API Key scope + throttle + log — hanya berlaku jika request pakai API key
-// (CheckScope/ThrottleApiKey/ActivityLogApiKey skip otomatis untuk Sanctum).
-// `auth.apikey` WAJIB ada di sini: grup ini me-register ulang URI yang sama
-// (mis. google-accounts/{id}/scan) dan registrasi terakhir menang di Route
-// Collection. Tanpa auth.apikey, route tersebut jatuh tanpa user → controller
-// mengakses `$request->user()->id` pada null.
-Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(function () {
-    Route::middleware('check.scope:write')->group(function () {
-        Route::post('files/upload', [FileUploadController::class, 'upload'])->middleware('throttle:upload');
-        Route::post('files/upload-from-url', [FileUploadController::class, 'uploadFromUrl'])->middleware('throttle:upload');
-        Route::post('files/bulk-upload', [FileUploadController::class, 'bulkUpload'])->middleware('throttle:upload');
-        Route::post('files/upload/init', [FileUploadController::class, 'initChunked'])->middleware('throttle:upload');
-        Route::post('files/upload/{fileId}/chunk/{chunkIndex}', [FileUploadController::class, 'uploadChunk'])->middleware('throttle:upload');
-        Route::post('files/upload/{fileId}/complete', [FileUploadController::class, 'completeChunked'])->middleware('throttle:upload');
-        // Jalur 2: batch upload zero VPS disk.
-        Route::post('files/direct-batch-init', [FileUploadController::class, 'directBatchInit'])->middleware('throttle:upload');
-        Route::post('files/{fileId}/direct-complete', [FileUploadController::class, 'directComplete'])->middleware('throttle:upload');
-        Route::patch('files/{id}', [FileController::class, 'update']);
-        Route::put('files/{id}/move', [FileController::class, 'move']);
-        Route::post('files/{id}/extract', [FileController::class, 'extract']);
-        Route::post('folders', [FolderController::class, 'store']);
-        Route::patch('folders/{id}', [FolderController::class, 'update']);
-        Route::put('folders/{id}/move', [FolderController::class, 'move']);
-        Route::post('google-accounts/{id}/sync-quota', [GoogleAccountController::class, 'syncQuota']);
-        Route::post('google-accounts/scan', [GoogleAccountController::class, 'scan']);
-        Route::post('google-accounts/{id}/scan', [GoogleAccountController::class, 'scan']);
-        Route::post('google-accounts/{id}/import', [GoogleAccountController::class, 'import']);
-    });
-
-    Route::middleware('check.scope:delete')->group(function () {
-        Route::delete('google-accounts/{id}', [GoogleAccountController::class, 'destroy']);
-        Route::delete('files/{id}', [FileController::class, 'destroy']);
-        Route::delete('folders/{id}', [FolderController::class, 'destroy']);
-    });
-});
-
 /*
 |--------------------------------------------------------------------------
 | API Key routes (Sanctum OR X-API-Key, dengan scope check + log)
@@ -269,6 +233,9 @@ Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(funct
     // Write scope
     Route::middleware('check.scope:write')->group(function () {
         Route::post('google-accounts/{id}/sync-quota', [GoogleAccountController::class, 'syncQuota']);
+        Route::post('google-accounts/scan', [GoogleAccountController::class, 'scan']);
+        Route::post('google-accounts/{id}/scan', [GoogleAccountController::class, 'scan']);
+        Route::post('google-accounts/{id}/import', [GoogleAccountController::class, 'import']);
         Route::post('files/upload', [FileUploadController::class, 'upload'])->middleware('throttle:upload');
         Route::post('files/upload-from-url', [FileUploadController::class, 'uploadFromUrl'])->middleware('throttle:upload');
         Route::post('files/bulk-upload', [FileUploadController::class, 'bulkUpload'])->middleware('throttle:upload');

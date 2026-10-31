@@ -1328,7 +1328,11 @@
       "unlockFolder": "Temporarily unlock a folder (30 minutes).",
       "updateFolderLockPassword": "Change the folder lock password.",
       "destroyFolderLock": "Remove the folder lock (password required).",
-      "publicShareUnlock": "Unlock a shared folder link with a password."
+      "publicShareUnlock": "Unlock a shared folder link with a password.",
+      "preferences": "Save user sorting and display preferences.",
+      "fileDetail": "Complete file metadata including folder hierarchy and dimensions.",
+      "directBatchInit": "Initialize direct batch upload sessions to Google Drive (Zero VPS Disk).",
+      "directComplete": "Confirm completion of direct browser upload to Google Drive."
     },
     "envelope": {
       "eyebrow": "Contract",
@@ -1876,6 +1880,22 @@
         "publicShareUnlock": {
           "title": "Unlock shared folder",
           "body": "Unlock a shared folder with a password."
+        },
+        "preferences": {
+          "title": "Account preferences",
+          "body": "Save sorting preferences (name, size, created_at, uploaded_at) and direction (asc, desc) to users.preferences."
+        },
+        "fileDetail": {
+          "title": "Full file detail",
+          "body": "Full metadata details: combines file attributes with folder path hierarchy, lock status, dimensions, and page counts."
+        },
+        "directBatchInit": {
+          "title": "Direct batch init",
+          "body": "Path 2 (Zero VPS Disk): Backend requests Google Drive Resumable Session URIs and returns direct upload_urls for browser PUT."
+        },
+        "directComplete": {
+          "title": "Direct complete confirm",
+          "body": "Confirmation after browser finishes transferring bytes directly to Google Drive. Marks file as done and dispatches realtime events."
         }
       }
     },
@@ -1965,7 +1985,12 @@
       "lockPassword": "Folder lock password, at least 6 characters.",
       "passwordConfirmation": "Repeat the lock password (must match).",
       "currentPassword": "The current folder lock password.",
-      "newPassword": "The new folder lock password, at least 6 characters."
+      "newPassword": "The new folder lock password, at least 6 characters.",
+      "sortField": "Sort field: `name`, `size`, `created_at`, or `uploaded_at`.",
+      "dirField": "Sort direction: `asc` (ascending) or `desc` (descending).",
+      "filesBatchField": "List of file manifests: name, size, mime_type, folder_id, client_key.",
+      "gdriveFileIdField": "Google Drive file ID returned after browser upload completes.",
+      "shareableLinkField": "Google Drive preview webViewLink (optional)."
     },
     "filter": {
       "all": "All",
