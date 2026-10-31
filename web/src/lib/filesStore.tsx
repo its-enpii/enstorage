@@ -323,6 +323,15 @@ export function FilesStoreProvider({
   const loadFoldersPage = useCallback(
     async (page: number, mode: 'replace' | 'merge' = 'replace') => {
       if (!userId) return;
+      // Folder tidak punya tipe berkas: saat filter tipe aktif (mis. dari kartu
+      // Dashboard) tidak ada folder yang boleh tampil — jangan panggil API.
+      if (typeFilter) {
+        setFolders([]);
+        setFolderPage(0);
+        setFolderLastPage(0);
+        setFolderTotal(0);
+        return;
+      }
       const params = new URLSearchParams();
       params.set('page', String(page));
       params.set('per_page', String(PER_PAGE));
@@ -345,7 +354,7 @@ export function FilesStoreProvider({
       setFolderLastPage(meta?.last_page ?? page);
       setFolderTotal(meta?.total ?? 0);
     },
-    [userId, folderId],
+    [userId, folderId, typeFilter],
   );
 
   /**
@@ -397,17 +406,19 @@ export function FilesStoreProvider({
         setError(null);
       }
       try {
+        // Filter tipe aktif → folder tidak relevan sama sekali; lewati load folder.
+        const foldersTask = typeFilter ? null : loadFoldersPage(1, mode);
         if (showLoading) {
           // Fresh load (no cache): reset pages and replace state
           setFolderPage(0);
           setFilePage(0);
           setFolderTotal(0);
           setFileTotal(0);
-          await Promise.all([loadFoldersPage(1, mode), loadFilesPage(1, mode)]);
+          await Promise.all([foldersTask ?? Promise.resolve(), loadFilesPage(1, mode)]);
         } else {
           // Background revalidate: merge into existing state so optimistic
           // adds / cached items not in server's first page aren't dropped.
-          await Promise.all([loadFoldersPage(1, mode), loadFilesPage(1, mode)]);
+          await Promise.all([foldersTask ?? Promise.resolve(), loadFilesPage(1, mode)]);
         }
       } catch (e) {
         if (showLoading) {
@@ -418,7 +429,7 @@ export function FilesStoreProvider({
         setHydrated(true);
       }
     },
-    [userId, loadFoldersPage, loadFilesPage],
+    [userId, typeFilter, loadFoldersPage, loadFilesPage],
   );
 
   // Load on view change. Skip the fetch if only `userId` changed (e.g. when

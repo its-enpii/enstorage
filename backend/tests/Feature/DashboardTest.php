@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\File;
+use App\Models\Folder;
 use App\Models\GoogleAccount;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -126,5 +127,70 @@ class DashboardTest extends TestCase
         $this->assertTrue($archiveIds->contains($archive->id));
         $this->assertFalse($archiveIds->contains($app->id));
         $this->assertFalse($archiveIds->contains($other->id));
+    }
+
+    public function test_files_endpoint_with_type_filter_returns_files_inside_subfolders(): void
+    {
+        $user = $this->actingUser();
+        $account = GoogleAccount::factory()->create(['user_id' => $user->id]);
+
+        $folder = Folder::create([
+            'user_id' => $user->id,
+            'name' => 'Foto',
+            'path' => '/',
+        ]);
+        $nested = Folder::create([
+            'user_id' => $user->id,
+            'parent_id' => $folder->id,
+            'name' => 'Liburan',
+            'path' => '/Foto/',
+        ]);
+
+        $imageInSubfolder = $this->makeFile($user, $account, [
+            'name' => 'pantai.jpg',
+            'mime_type' => 'image/jpeg',
+            'folder_id' => $folder->id,
+        ]);
+        $imageDeep = $this->makeFile($user, $account, [
+            'name' => 'gunung.png',
+            'mime_type' => 'image/png',
+            'folder_id' => $nested->id,
+        ]);
+        $rootImage = $this->makeFile($user, $account, [
+            'name' => 'avatar.png',
+            'mime_type' => 'image/png',
+        ]);
+        $docInSubfolder = $this->makeFile($user, $account, [
+            'name' => 'catatan.pdf',
+            'mime_type' => 'application/pdf',
+            'folder_id' => $folder->id,
+        ]);
+
+        $response = $this->getJson('/api/v1/files?type=image')->assertStatus(200);
+        $ids = collect($response->json('data'))->pluck('id');
+
+        $this->assertTrue($ids->contains($imageInSubfolder->id));
+        $this->assertTrue($ids->contains($imageDeep->id));
+        $this->assertTrue($ids->contains($rootImage->id));
+        $this->assertFalse($ids->contains($docInSubfolder->id));
+    }
+
+    public function test_files_endpoint_without_filter_still_scopes_to_root(): void
+    {
+        $user = $this->actingUser();
+        $account = GoogleAccount::factory()->create(['user_id' => $user->id]);
+
+        $folder = Folder::create([
+            'user_id' => $user->id,
+            'name' => 'Arsip',
+            'path' => '/',
+        ]);
+        $rootFile = $this->makeFile($user, $account, ['name' => 'root.txt']);
+        $nestedFile = $this->makeFile($user, $account, ['name' => 'nested.txt', 'folder_id' => $folder->id]);
+
+        $ids = collect($this->getJson('/api/v1/files')->assertStatus(200)->json('data'))->pluck('id');
+
+        $this->assertTrue($ids->contains($rootFile->id));
+        $this->assertFalse($ids->contains($nestedFile->id));
     }
 }

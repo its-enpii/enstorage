@@ -37,6 +37,7 @@ import { FolderLockDialog, type FolderLockMode } from '@/components/FolderLockDi
 import { FolderDetailsDialog } from '@/components/FolderDetailsDialog';
 import { Input, Field } from '@/components/Input';
 import { Alert } from '@/components/Alert';
+import { Chip } from '@/components/Chip';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { FilesStoreProvider, readStoredSort, useFilesStore } from '@/lib/filesStore';
 import { FilesStoreBinder, useRealtime } from '@/lib/realtime/realtimeProvider';
@@ -1096,8 +1097,10 @@ function FilesContent({ currentPath }: { currentPath: string }) {
 
   async function applyFilter() {
     const sortChanged = draftSort !== sort || draftSortDir !== sortDir;
+    // Filter tipe hanya berlaku untuk berkas: paksa tab ke 'files'.
+    const nextTab: Tab = draftType !== '' ? 'files' : draftTab;
     setTypeFilter(draftType);
-    setTabFromUrl(draftTab);
+    setTabFromUrl(nextTab);
     setFilterOpen(false);
     if (sortChanged) await setSort(draftSort, draftSortDir);
   }
@@ -1125,11 +1128,17 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     { value: 'size:asc', label: t('files.sort.sizeAsc'), sort: 'size', dir: 'asc' },
   ];
 
-  // Cross-section disable: Tipe filter only applies to files, so it conflicts
-  // with Tampilkan=Folder. Computed against DRAFT state so user sees the
-  // disable update live as they toggle within the dialog.
-  const typeLocked = draftTab === 'folders';
-  const showLocked = !!draftType;
+  // Opsi tipe lengkap (sesuai query param `type` di docs/api.md §Files).
+  const typeOptions: { value: string; label: string }[] = [
+    { value: '', label: t('files.typeFilter.all') },
+    { value: 'image', label: t('files.typeFilter.image') },
+    { value: 'doc', label: t('files.typeFilter.doc') },
+    { value: 'pdf', label: t('files.typeFilter.pdf') },
+    { value: 'video', label: t('files.typeFilter.video') },
+    { value: 'audio', label: t('files.typeFilter.audio') },
+    { value: 'app', label: t('files.typeFilter.app') },
+    { value: 'archive', label: t('files.typeFilter.archive') },
+  ];
 
   async function createFolder() {
     const name = await prompt(t('folders.newFolderDesc'), { title: t('folders.newFolder'), placeholder: t('folders.newFolderPlaceholder') });
@@ -1935,7 +1944,22 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     triggerDirectDownload(url, fallbackName);
   }
 
-  const visibleFolders = tab === 'files' ? [] : folders;
+  // Folder tidak punya tipe berkas: saat filter tipe aktif (dari kartu
+  // Dashboard maupun filter), folder tidak boleh tampil sama sekali.
+  const visibleFolders = (tab === 'files' || Boolean(typeFilter)) ? [] : folders;
+  // Label chip untuk kategori tipe yang sedang aktif.
+  const typeChipKey: Record<string, string> = {
+    image: 'image',
+    pdf: 'pdf',
+    doc: 'document',
+    video: 'video',
+    audio: 'audio',
+    app: 'app',
+    archive: 'archive',
+  };
+  const categoryLabel = typeFilter
+    ? t(`categories.${typeChipKey[typeFilter] ?? 'other'}`)
+    : '';
   const visibleFiles = tab === 'folders' ? [] : files;
   const visibleCount = visibleFolders.length + visibleFiles.length;
   const allVisibleSelected =
@@ -2317,81 +2341,75 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       >
         {/* Section: Urutkan */}
         <div>
-          <h3 className="text-label-sm text-outline mb-2">{t('files.filter.sectionSort')}</h3>
-          <SegmentedControl
-            aria-label={t('files.filter.sectionSort')}
-            value={sortKey}
-            onChange={(v) => {
-              const opt = sortOptions.find((o) => o.value === v);
-              if (!opt) return;
-              setDraftSort(opt.sort);
-              setDraftSortDir(opt.dir);
-            }}
-            options={sortOptions.map((o) => ({ value: o.value, label: o.label }))}
-          />
+          <h3 className="text-label-sm text-outline mb-2.5 font-medium">{t('files.filter.sectionSort')}</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2" role="group" aria-label={t('files.filter.sectionSort')}>
+            {sortOptions.map((opt) => {
+              const active = sortKey === opt.value;
+              return (
+                <Button
+                  key={opt.value}
+                  type="button"
+                  variant={active ? 'primary' : 'secondary'}
+                  size="sm"
+                  aria-pressed={active}
+                  onClick={() => {
+                    setDraftSort(opt.sort);
+                    setDraftSortDir(opt.dir);
+                  }}
+                  className="!h-10 text-xs sm:text-sm font-medium !justify-center overflow-hidden"
+                >
+                  <span className="truncate block min-w-0">{opt.label}</span>
+                </Button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Section: Tipe */}
         <div className="mt-6">
-          <h3 className="text-label-sm text-outline mb-2">{t('files.filter.sectionType')}</h3>
-          <SegmentedControl
-            aria-label={t('files.filter.sectionType')}
-            value={draftType}
-            onChange={setDraftType}
-            options={[
-              { value: '', label: t('files.typeFilter.all') },
-              {
-                value: 'image',
-                label: t('files.typeFilter.image'),
-                disabled: typeLocked,
-                disabledHint: t('files.filter.typeLockedHint'),
-              },
-              {
-                value: 'pdf',
-                label: t('files.typeFilter.pdf'),
-                disabled: typeLocked,
-                disabledHint: t('files.filter.typeLockedHint'),
-              },
-              {
-                value: 'doc',
-                label: t('files.typeFilter.doc'),
-                disabled: typeLocked,
-                disabledHint: t('files.filter.typeLockedHint'),
-              },
-              {
-                value: 'video',
-                label: t('files.typeFilter.video'),
-                disabled: typeLocked,
-                disabledHint: t('files.filter.typeLockedHint'),
-              },
-              {
-                value: 'audio',
-                label: t('files.typeFilter.audio'),
-                disabled: typeLocked,
-                disabledHint: t('files.filter.typeLockedHint'),
-              },
-            ]}
-          />
+          <h3 className="text-label-sm text-outline mb-2.5 font-medium">{t('files.filter.sectionType')}</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="group" aria-label={t('files.filter.sectionType')}>
+            {typeOptions.map((opt) => {
+              const active = draftType === opt.value;
+              return (
+                <Button
+                  key={opt.value || 'all'}
+                  type="button"
+                  variant={active ? 'primary' : 'secondary'}
+                  size="sm"
+                  aria-pressed={active}
+                  onClick={() => {
+                    setDraftType(opt.value);
+                    if (opt.value !== '') setDraftTab('files');
+                  }}
+                  className="!h-10 text-xs sm:text-sm font-medium !justify-center overflow-hidden"
+                >
+                  <span className="truncate block min-w-0">{opt.label}</span>
+                </Button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Section: Tampilkan */}
         <div className="mt-6">
-          <h3 className="text-label-sm text-outline mb-2">{t('files.filter.sectionShow')}</h3>
-          <SegmentedControl<Tab>
-            aria-label={t('files.filter.sectionShow')}
-            value={draftTab}
-            onChange={setDraftTab}
-            options={[
-              { value: 'all', label: t('files.filter.showAll') },
-              {
-                value: 'folders',
-                label: t('files.filter.showFolders'),
-                disabled: showLocked,
-                disabledHint: t('files.filter.showLockedHint'),
-              },
-              { value: 'files', label: t('files.filter.showFiles') },
-            ]}
-          />
+          <h3 className="text-label-sm text-outline mb-2.5 font-medium">{t('files.filter.sectionShow')}</h3>
+          {draftType !== '' ? (
+            <p className="text-xs text-outline italic" data-testid="files-type-locked-note">
+              {t('files.filter.typeLockedToFiles')}
+            </p>
+          ) : (
+            <SegmentedControl<Tab>
+              aria-label={t('files.filter.sectionShow')}
+              value={draftTab}
+              onChange={setDraftTab}
+              options={[
+                { value: 'all', label: t('files.filter.showAll') },
+                { value: 'folders', label: t('files.filter.showFolders') },
+                { value: 'files', label: t('files.filter.showFiles') },
+              ]}
+            />
+          )}
         </div>
       </Dialog>
 
@@ -2408,9 +2426,31 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               className="flex items-center justify-between gap-2 h-11 min-h-11"
               data-testid="files-summary-row"
             >
-              <span className="text-metadata text-outline tabular-nums truncate min-w-0">
-                {t('files.filter.summary_folders', { count: totalFolders })} • {t('files.filter.summary_files', { count: totalFiles })}
-              </span>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-metadata text-outline tabular-nums truncate min-w-0">
+                  {typeFilter
+                    ? t('files.filter.summary_files', { count: totalFiles })
+                    : `${t('files.filter.summary_folders', { count: totalFolders })} • ${t('files.filter.summary_files', { count: totalFiles })}`}
+                </span>
+                {typeFilter && (
+                  <span
+                    className="inline-flex items-center gap-1 shrink-0 rounded-full border border-primary/40 bg-primary/10 pl-2.5 pr-1 py-0.5"
+                    data-testid="files-type-chip"
+                  >
+                    <span className="material-symbols-outlined !text-base text-primary" aria-hidden>filter_alt</span>
+                    <Chip variant="primary">{categoryLabel}</Chip>
+                    <IconButton
+                      bare
+                      size="sm"
+                      shape="circle"
+                      aria-label={t('files.clearTypeFilter')}
+                      onClick={() => setTypeFilter('')}
+                    >
+                      <span className="material-symbols-outlined !text-base" aria-hidden>close</span>
+                    </IconButton>
+                  </span>
+                )}
+              </div>
             </div>
           )}
           {/* Drop-to-root zone: visible whenever the view is inside a folder.

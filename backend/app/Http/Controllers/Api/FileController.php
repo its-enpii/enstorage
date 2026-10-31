@@ -91,7 +91,22 @@ class FileController extends Controller
                 }
             }
             $query->where('folder_id', $fid);
+        } elseif ($request->filled('type') || $request->filled('search')) {
+            // Filter tipe / pencarian global dari Dashboard: cari di SELURUH
+            // file milik user (termasuk yang di dalam subfolder). File di
+            // dalam folder terkunci yang belum di-unlock tetap dikecualikan.
+            $lockedFolderIds = Folder::where('user_id', $userId)
+                ->where('is_locked', true)
+                ->pluck('id')
+                ->all();
+            if (! empty($lockedFolderIds)) {
+                $query->where(function ($q) use ($lockedFolderIds) {
+                    $q->whereNotIn('folder_id', $lockedFolderIds)
+                        ->orWhereNull('folder_id');
+                });
+            }
         } else {
+            // Navigasi direktori standar root: tampilkan file root saja.
             $query->whereNull('folder_id');
         }
 

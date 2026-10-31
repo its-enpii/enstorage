@@ -80,8 +80,11 @@
       "pdf": "PDF",
       "doc": "Dokumen",
       "video": "Video",
-      "audio": "Musik/Audio"
+      "audio": "Musik/Audio",
+      "app": "Aplikasi",
+      "archive": "Arsip"
     },
+    "clearTypeFilter": "Hapus filter tipe",
     "filter": {
       "button": "Filter",
       "activeBadge": "Filter aktif",
@@ -102,7 +105,8 @@
       "typeLockedHint": "Pilih 'Tampilkan: Semua' dulu untuk filter tipe",
       "showLockedHint": "Reset filter tipe dulu untuk lihat folder saja",
       "sectionSort": "Urutan",
-      "cancel": "Batal"
+      "cancel": "Batal",
+      "typeLockedToFiles": "Filter tipe aktif: hanya menampilkan berkas (folder disembunyikan)."
     },
     "sort": {
       "button": "Urutkan",

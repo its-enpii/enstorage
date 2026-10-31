@@ -80,8 +80,11 @@
       "pdf": "PDF",
       "doc": "Documents",
       "video": "Video",
-      "audio": "Audio"
+      "audio": "Audio",
+      "app": "Apps",
+      "archive": "Archives"
     },
+    "clearTypeFilter": "Clear type filter",
     "filter": {
       "button": "Filter",
       "activeBadge": "Filter active",
@@ -102,7 +105,8 @@
       "typeLockedHint": "Switch 'Show: All' first to enable type filter",
       "showLockedHint": "Reset type filter to see folders only",
       "sectionSort": "Sort by",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "typeLockedToFiles": "Type filter active: displaying files only (folders hidden)."
     },
     "sort": {
       "button": "Sort",

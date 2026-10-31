@@ -53,14 +53,14 @@ export function SegmentedControl<T extends string | number = string>({
             aria-pressed={active}
             onClick={() => onChange(opt.value)}
             className={clsx(
-              '!h-auto flex-1 basis-0 min-w-0 !px-3 !py-1.5 !rounded-full !font-medium whitespace-nowrap',
+              '!h-auto flex-1 basis-0 min-w-0 !px-3 !py-1.5 !rounded-full !font-medium overflow-hidden',
               active
                 ? '!bg-primary !text-on-primary font-semibold hover:!bg-primary hover:!text-on-primary'
                 : '!bg-transparent !text-on-surface-variant hover:!text-on-surface hover:!bg-surface-container-highest/60',
               opt.disabled && 'opacity-40 cursor-not-allowed',
             )}
           >
-            {opt.label}
+            <span className="truncate block min-w-0">{opt.label}</span>
           </Button>
         );
       })}
