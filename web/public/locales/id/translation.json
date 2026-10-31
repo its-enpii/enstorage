@@ -28,7 +28,28 @@
     "webhooks": "Webhook",
     "logout": "Keluar",
     "storage": "Storage",
-    "home": "Beranda"
+    "home": "Beranda",
+    "dashboard": "Dashboard"
+  },
+  "dashboard": {
+    "storageTitle": "Kapasitas Penyimpanan",
+    "storageUsed": "{{used}} dari {{total}} terpakai",
+    "storageFree": "{{free}} tersisa",
+    "storageAccounts": "{{count}} akun Google terhubung",
+    "manageAccounts": "Kelola Akun",
+    "categoriesTitle": "Kategori Berkas",
+    "recentTitle": "File Baru Diupload",
+    "viewAll": "Lihat Semua",
+    "emptyRecent": "Belum ada file yang diupload."
+  },
+  "categories": {
+    "document": "Dokumen",
+    "image": "Gambar",
+    "video": "Video",
+    "audio": "Musik",
+    "app": "Aplikasi",
+    "archive": "Arsip",
+    "other": "Lainnya"
   },
   "search": {
     "placeholder": "Cari di seluruh cloud vault…",

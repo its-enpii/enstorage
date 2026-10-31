@@ -190,6 +190,32 @@ export type FileItem = {
   download_url?: string;
 };
 
+/** Satu kategori berkas pada ringkasan dashboard. */
+export type DashboardCategory = {
+  type: 'doc' | 'image' | 'video' | 'audio' | 'app' | 'archive' | 'other';
+  count: number;
+  size: number;
+};
+
+/** Respons `GET /dashboard` — ringkasan storage, kategori, dan berkas terbaru. */
+export type DashboardData = {
+  storage: {
+    total: number;
+    used: number;
+    free: number;
+    percentage: number;
+    accounts_count: number;
+  };
+  categories: DashboardCategory[];
+  recent_files: FileItem[];
+  summary: {
+    files_count: number;
+    files_size: number;
+    folders_count: number;
+    accounts_count: number;
+  };
+};
+
 export type PaginatedMeta = {
   page: number;
   per_page: number;

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\ApiKeyController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DocsController;
 use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Api\FileUploadController;
@@ -126,6 +127,9 @@ Route::middleware('auth.apikey')->group(function () {
     // Storage summary
     Route::get('storage/summary', [StorageController::class, 'summary']);
 
+    // Dashboard ringkasan (storage, kategori berkas, berkas terbaru)
+    Route::get('dashboard', [DashboardController::class, 'index']);
+
     // Files — rute upload pakai limiter `upload` (500/min), bukan `api` (300/min):
     // bulk + chunked stream butuh budget lebih besar dari navigasi.
     Route::post('files/upload', [FileUploadController::class, 'upload'])->middleware('throttle:upload');
@@ -236,6 +240,7 @@ Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(funct
     // Read scope
     Route::middleware('check.scope:read')->group(function () {
         Route::get('storage/summary', [StorageController::class, 'summary']);
+        Route::get('dashboard', [DashboardController::class, 'index']);
         Route::get('google-accounts', [GoogleAccountController::class, 'index']);
         Route::get('google-accounts/{id}', [GoogleAccountController::class, 'show']);
         Route::get('google-accounts/{id}/unreachable', [GoogleAccountController::class, 'unreachable']);

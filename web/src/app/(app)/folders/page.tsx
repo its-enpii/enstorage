@@ -1,8 +1,5 @@
-import { pageTitle } from '@/lib/serverMetadata';
-import FoldersClient from './FoldersClient';
-
-export const metadata = pageTitle('folders.title');
+import { redirect } from 'next/navigation';
 
 export default function Page() {
-  return <FoldersClient />;
+  redirect('/');
 }

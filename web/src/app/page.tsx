@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { pageTitle } from '@/lib/serverMetadata';
-import LandingClient from './LandingClient';
+import HomeClient from './HomeClient';
 
 // Description stays literal (like the root layout's) because metadata is
 // rendered once on the server and cannot follow the client locale switch.
@@ -12,5 +12,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <LandingClient />;
+  return <HomeClient />;
 }

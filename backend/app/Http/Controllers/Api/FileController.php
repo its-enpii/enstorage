@@ -104,10 +104,36 @@ class FileController extends Controller
                 'doc' => 'application/', // any document-like (word, excel, ppt, text, pdf all under application/)
                 'video' => 'video/',
                 'audio' => 'audio/',
+                'app' => 'application/',
+                'archive' => 'application/',
+            ];
+            // Tipe berbasis ekstensi (aplikasi & arsip) sering terkirim sebagai
+            // application/octet-stream — cocokkan mime ATAU ekstensi nama file.
+            $extensions = [
+                'app' => ['apk', 'exe', 'dmg', 'deb', 'rpm'],
+                'archive' => ['zip', 'rar', '7z', 'tar', 'gz'],
             ];
             if (isset($map[$type])) {
                 $prefix = $map[$type];
-                if ($prefix === 'application/pdf') {
+                if (isset($extensions[$type])) {
+                    $mimePatterns = [
+                        'app' => ['application/vnd.android.package-archive', 'application/x-msdownload', 'application/x-executable'],
+                        'archive' => ['application/zip', 'application/x-zip-compressed', 'application/x-7z-compressed', 'application/x-rar-compressed', 'application/gzip', 'application/x-tar'],
+                    ][$type];
+                    $query->where(function ($q) use ($extensions, $mimePatterns, $type) {
+                        // Kategori app/archive hanya dari mime khas + ekstensi —
+                        // mime generik `application/*` lain (mis. application/zip
+                        // saat filter app) tidak ikut cocok.
+                        $q->where(function ($m) use ($mimePatterns) {
+                            foreach ($mimePatterns as $pattern) {
+                                $m->orWhere('mime_type', 'like', $pattern.'%');
+                            }
+                        });
+                        foreach ($extensions[$type] as $ext) {
+                            $q->orWhere('name', 'ilike', '%.'.$ext);
+                        }
+                    });
+                } elseif ($prefix === 'application/pdf') {
                     $query->where('mime_type', '=', 'application/pdf');
                 } else {
                     $query->where('mime_type', 'like', $prefix.'%');

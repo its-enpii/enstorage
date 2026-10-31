@@ -28,7 +28,28 @@
     "webhooks": "Webhooks",
     "logout": "Sign Out",
     "storage": "Storage",
-    "home": "Home"
+    "home": "Home",
+    "dashboard": "Dashboard"
+  },
+  "dashboard": {
+    "storageTitle": "Storage Capacity",
+    "storageUsed": "{{used}} of {{total}} used",
+    "storageFree": "{{free}} available",
+    "storageAccounts": "{{count}} connected Google accounts",
+    "manageAccounts": "Manage Accounts",
+    "categoriesTitle": "File Categories",
+    "recentTitle": "Recently Uploaded Files",
+    "viewAll": "View All",
+    "emptyRecent": "No files uploaded yet."
+  },
+  "categories": {
+    "document": "Documents",
+    "image": "Images",
+    "video": "Videos",
+    "audio": "Audio",
+    "app": "Apps",
+    "archive": "Archives",
+    "other": "Others"
   },
   "search": {
     "placeholder": "Search across your cloud vault…",

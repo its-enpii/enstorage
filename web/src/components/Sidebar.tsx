@@ -10,6 +10,7 @@ import {
   GridView,
   Key,
   Group,
+  SpaceDashboard,
   Logout,
   Person,
   Settings,
@@ -114,8 +115,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
   }, [mobileOpen, onMobileClose]);
 
   const NAV: NavEntry[] = [
-    { href: '/files', labelKey: 'nav.files', icon: GridView },
-    { href: '/folders', labelKey: 'nav.folders', icon: Folder },
+    { href: '/', labelKey: 'nav.dashboard', icon: SpaceDashboard },
+    { href: '/files', labelKey: 'nav.files', icon: Folder },
     { href: '/starred', labelKey: 'nav.starred', icon: Star },
     { href: '/google-accounts', labelKey: 'nav.googleAccounts', icon: Group },
     { href: '/api-keys', labelKey: 'nav.apiKeys', icon: Key },
@@ -141,7 +142,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
       <nav className="flex flex-col gap-6 flex-1">
         {NAV.map((item) => {
           const Icon = item.icon;
-          const active = pathname.startsWith(item.href);
+          const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
           const label = t(item.labelKey);
           return (
             <Link
@@ -206,7 +207,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: Props) {
       <nav className="flex flex-col gap-1.5 flex-1 px-3 py-4 overflow-y-auto">
         {NAV.map((item) => {
           const Icon = item.icon;
-          const active = pathname.startsWith(item.href);
+          const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
           const label = t(item.labelKey);
           return (
             <Link
