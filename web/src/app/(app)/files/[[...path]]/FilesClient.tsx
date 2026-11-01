@@ -2339,6 +2339,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               // navigasinya terjadi (capture pada container header).
               onClickCapture={persistScroll}
               items={[
+                { id: 'dashboard', label: t('nav.dashboard'), href: '/' },
                 { id: null, label: t('files.title'), href: '/files' },
                 ...folderCrumbs.map((c, i) => ({
                   id: c.id,

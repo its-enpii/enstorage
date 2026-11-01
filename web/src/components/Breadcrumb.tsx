@@ -71,11 +71,11 @@ export function Breadcrumb({
   const chevronSize = isHeading ? '!text-xl md:!text-2xl' : '!text-base';
 
   const hrefOf = (c: Crumb, i: number) =>
-    c.id === null
-      ? rootHref
-      : (c.href
-        ?? (hrefForIndex ? hrefForIndex(c, i) : undefined)
-        ?? (hrefFor ? hrefFor(c.id) : `/files/${c.id}`));
+    c.href
+      ?? (c.id === null
+        ? rootHref
+        : ((hrefForIndex ? hrefForIndex(c, i) : undefined)
+          ?? (hrefFor ? hrefFor(c.id) : `/files/${c.id}`)));
 
   // Seluruh level jalur SELALU ditampilkan (tanpa chip "…"): satu baris,
   // tidak wrap, scroll horizontal halus bila melebihi lebar header. Halaman
