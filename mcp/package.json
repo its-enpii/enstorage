@@ -1,0 +1,43 @@
+{
+  "name": "@its-enpii/enstorage-mcp",
+  "version": "1.0.0",
+  "description": "Model Context Protocol (MCP) server for EnStorage — search, read, upload and manage files from AI agents (Claude Desktop, Cursor, Hermes Agent, Claude Code).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "enstorage-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "enstorage",
+    "claude",
+    "cursor"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node ./dist/index.js",
+    "test": "node test/test-server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "dotenv": "^18.0.9",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}
