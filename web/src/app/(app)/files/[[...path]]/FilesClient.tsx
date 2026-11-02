@@ -1289,6 +1289,8 @@ function FilesContent({ currentPath }: { currentPath: string }) {
    * with `POST /files/{id}/direct-complete`. If the init step fails (no linked
    * Google Drive account, 507 disk back-pressure, network, ...) the whole
    * batch transparently falls back to the legacy multipart `uploadBulk` lane.
+   * A partial failure (some files rejected by the direct PUT) retries only
+   * those files through `uploadBulk`.
    */
   async function uploadBatchZeroDisk(
     entries: { file: File; jobId: string }[],
@@ -1296,8 +1298,11 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   ) {
     if (entries.length === 0) return;
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE ?? '';
+    // Jobs that failed the direct PUT (network/CORS/session) are retried through
+    // the server multipart lane below so an upload never dies silently.
+    const failedEntries = new Set<{ file: File; jobId: string }>();
     try {
-      await uploadDirectBatch(entries, {
+      const res = await uploadDirectBatch(entries, {
         baseUrl,
         authToken: getToken(),
         folderId: targetFolderId,
@@ -1315,12 +1320,20 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             ),
           );
         },
-        onFileError: (jobId, error) => {
-          setJobs((js) =>
-            js.map((j) => (j.id === jobId && j.status === 'uploading' ? { ...j, status: 'failed', error } : j)),
-          );
+        onFileError: (jobId) => {
+          // Defer the failure state: the job stays `uploading` until the
+          // multipart fallback below either succeeds or reports its own error.
+          const entry = entries.find((e) => e.jobId === jobId);
+          if (entry) failedEntries.add(entry);
         },
       });
+      // Partial direct failure (e.g. network/CORS on the PUT to Drive):
+      // retry those files through the server multipart lane instead of
+      // leaving them failing silently.
+      if (res.failed > 0) {
+        const failed = entries.filter((entry) => failedEntries.has(entry));
+        if (failed.length > 0) await uploadBulk(failed, targetFolderId);
+      }
     } catch {
       // Direct-batch init failed -> nothing was uploaded yet, so the same
       // jobs can safely be retried through the multipart lane. Split by size

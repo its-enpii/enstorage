@@ -9,7 +9,9 @@ use Google\Client;
 use Google\Http\MediaFileUpload;
 use Google\Service\Drive;
 use Google\Service\Drive\DriveFile;
+use GuzzleHttp\Psr7\Request as Psr7Request;
 use Illuminate\Support\Facades\Log;
+use Psr\Http\Message\RequestInterface;
 
 class GoogleDriveUploader
 {
@@ -261,6 +263,7 @@ class GoogleDriveUploader
     public function createResumableSession(
         GoogleAccount $account,
         FileModel $file,
+        ?string $origin = null,
     ): string {
         $this->tokens->ensureFreshToken($account);
 
@@ -277,6 +280,20 @@ class GoogleDriveUploader
             'uploadType' => 'resumable',
         ]);
 
+        // Google Drive hanya mengembalikan header `Access-Control-Allow-Origin`
+        // pada PUT klien bila `Origin` dikirim saat sesi resumable diinisialisasi.
+        // Tanpa ini browser memblokir upload langsung (net::ERR_FAILED 200).
+        $origin = trim((string) ($origin ?: config('app.frontend_url', 'https://enstorage.enpiistudio.com')));
+        if ($origin !== '') {
+            $parsed = parse_url($origin);
+            $scheme = $parsed['scheme'] ?? 'https';
+            $host = $parsed['host'] ?? '';
+            if ($host !== '') {
+                $cleanOrigin = $scheme.'://'.$host.(isset($parsed['port']) ? ':'.$parsed['port'] : '');
+                $request = self::withOriginHeader($request, $cleanOrigin);
+            }
+        }
+
         $uploader = new MediaFileUpload(
             $client,
             $request,
@@ -287,6 +304,29 @@ class GoogleDriveUploader
         $uploader->setFileSize((int) $file->size);
 
         return $uploader->getResumeUri();
+    }
+
+    /**
+     * Sisipkan header `Origin` ke request Drive.
+     *
+     * `RequestInterface` hanya punya `withHeader()` yang mengembalikan request
+     * BARU. Ada client (mis. mock/PSR-7 terbatas) yang mengembalikan `$this`,
+     * sehingga header hilang. Buat ulang request bila header belum terbawa.
+     */
+    private static function withOriginHeader(RequestInterface $request, string $origin): RequestInterface
+    {
+        $updated = $request->withHeader('Origin', $origin);
+        if ($updated->hasHeader('Origin')) {
+            return $updated;
+        }
+
+        return new Psr7Request(
+            $request->getMethod(),
+            $request->getUri(),
+            array_merge($request->getHeaders(), ['Origin' => $origin]),
+            $request->getBody(),
+            $request->getProtocolVersion(),
+        );
     }
 
     /**

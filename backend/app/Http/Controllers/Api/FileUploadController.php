@@ -436,6 +436,9 @@ class FileUploadController extends Controller
         }
 
         $uploader = app(GoogleDriveUploader::class);
+        // Origin browser diwariskan ke Google Drive saat membuat sesi resumable
+        // agar respons PUT klien memuat Access-Control-Allow-Origin yang tepat.
+        $origin = $request->header('Origin') ?: config('app.frontend_url');
         $results = [];
 
         foreach ($items as $fileData) {
@@ -483,7 +486,7 @@ class FileUploadController extends Controller
             }
 
             try {
-                $uploadUrl = $uploader->createResumableSession($account, $fileRecord);
+                $uploadUrl = $uploader->createResumableSession($account, $fileRecord, $origin);
             } catch (Throwable $e) {
                 // Sesi resumable gagal dibuat → record tidak akan pernah
                 // di-complete; tandai gagal supaya tidak menggantung.

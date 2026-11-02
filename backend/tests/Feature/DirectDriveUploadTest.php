@@ -124,6 +124,8 @@ class DirectDriveUploadTest extends TestCase
                 ['name' => 'foto-hero.png', 'size' => 2048, 'mime_type' => 'image/png', 'client_key' => 'ck-direct-1'],
                 ['name' => 'catatan.txt', 'size' => 512],
             ],
+        ], [
+            'Origin' => 'https://enstorage.enpiistudio.com',
         ]);
 
         $response->assertStatus(201)
@@ -158,6 +160,11 @@ class DirectDriveUploadTest extends TestCase
         foreach ($this->history as $entry) {
             $this->assertSame('POST', $entry['request']->getMethod());
             $this->assertStringContainsString('uploadType=resumable', (string) $entry['request']->getUri());
+
+            // Origin harus diteruskan ke Drive agar respons PUT klien memuat
+            // Access-Control-Allow-Origin (CORS direct upload).
+            $this->assertTrue($entry['request']->hasHeader('Origin'));
+            $this->assertSame('https://enstorage.enpiistudio.com', $entry['request']->getHeaderLine('Origin'));
         }
     }
 
