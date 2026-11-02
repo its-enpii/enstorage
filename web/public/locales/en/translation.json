@@ -172,7 +172,8 @@
       "oauthStartFailed": "Failed to start OAuth.",
       "syncFailed": "Sync failed.",
       "disconnectFailed": "Failed to disconnect.",
-      "uploadNetwork": "Network error while uploading."
+      "uploadNetwork": "Network error while uploading.",
+      "uploadProcessingFailed": "Failed to process the upload to Drive. Please try again."
     },
     "upload": {
       "tooLarge": "File size exceeds the maximum {{limit}} (1,073,741,824 bytes).",

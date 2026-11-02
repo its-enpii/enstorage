@@ -172,7 +172,8 @@
       "oauthStartFailed": "Gagal mulai OAuth.",
       "syncFailed": "Sync gagal.",
       "disconnectFailed": "Gagal menghapus.",
-      "uploadNetwork": "Kesalahan jaringan saat mengupload."
+      "uploadNetwork": "Kesalahan jaringan saat mengupload.",
+      "uploadProcessingFailed": "Gagal memproses upload ke Drive. Silakan coba lagi."
     },
     "upload": {
       "tooLarge": "Ukuran file melebihi batas maksimum {{limit}} (1.073.741.824 byte).",

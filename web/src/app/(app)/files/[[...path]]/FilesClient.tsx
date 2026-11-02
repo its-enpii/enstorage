@@ -716,6 +716,7 @@ function FilesStoreBinderHost({
         mutators={{
           upsertFile: store.upsertFile,
           removeFile: store.removeFile,
+          markUploadFailed: store.markUploadFailed,
           upsertFolder: store.upsertFolder,
           removeFolder: store.removeFolder,
           updateFolderCounts: store.updateFolderCounts,
@@ -1163,6 +1164,13 @@ function FilesContent({ currentPath }: { currentPath: string }) {
    * of 10 and up to three chunks run concurrently. Progress is honest: we only learn per-file
    * outcomes when the request finishes, so files stay at 0% ("uploading").
    * A failure of one file only marks that job as failed.
+   *
+   * Anti-false-success: the server answering `success` only means the file was
+   * ACCEPTED into the background queue — not that it reached Drive. Those jobs
+   * therefore stay `uploading` at 100% until `pollStatus` / the realtime
+   * observer confirms `done`, and flip to `failed` (with a readable reason)
+   * when the background worker reports `failed` (see docs/architecture.md
+   * §Realtime Broadcasts: FileUploadedBroadcast / FileUploadFailedBroadcast).
    */
   async function uploadBulk(
     entries: { file: File; jobId: string }[],
@@ -1190,16 +1198,31 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       },
       onBatchResult: (outcomes) => {
         const byJobId = new Map(outcomes.map((outcome) => [outcome.jobId, outcome]));
+        // Jobs accepted by the server but not yet confirmed by the background
+        // worker: their name/fileId pair is handed to the status watcher.
+        const accepted: { name: string; fileId: string }[] = [];
         setJobs((js) =>
           js.map((j) => {
             const outcome = byJobId.get(j.id);
             if (!outcome || j.status !== 'uploading') return j;
-            if (outcome.success) {
+            if (outcome.success && outcome.fileId) {
+              // Queued, NOT done. Keep the progress bar full but the job in
+              // `uploading` until `pollStatus` / WS observes `done`|`failed`.
+              accepted.push({ name: j.name, fileId: outcome.fileId });
               return {
                 ...j,
-                fileId: outcome.fileId ?? j.fileId,
-                status: 'done',
+                fileId: outcome.fileId,
+                status: 'uploading',
                 loaded: j.total,
+              };
+            }
+            if (outcome.success) {
+              // Accepted without a file id: nothing to watch. Stay honest and
+              // surface it as a failure instead of a silent success.
+              return {
+                ...j,
+                status: 'failed',
+                error: t('files.errors.uploadFailed'),
               };
             }
             return {
@@ -1209,6 +1232,9 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             };
           }),
         );
+        for (const { name, fileId } of accepted) {
+          pollStatus(name, fileId, () => void refreshReplace());
+        }
       },
     });
   }
@@ -1506,7 +1532,12 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           `/files/${fileId}/status`,
         );
         if (s.status === 'done' || s.status === 'failed') {
-          finishJob(fileId, name, s.status, s.status === 'failed' ? t('files.errors.uploadFailed') : undefined);
+          finishJob(
+            fileId,
+            name,
+            s.status,
+            s.status === 'failed' ? t('files.errors.uploadProcessingFailed') : undefined,
+          );
         }
       } catch {
         // ignore polling errors
@@ -1523,7 +1554,12 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     for (const f of files) {
       if (!watchedFileIdsRef.current.has(f.id)) continue;
       if (f.upload_status === 'done' || f.upload_status === 'failed') {
-        finishJob(f.id, f.name, f.upload_status, f.upload_status === 'failed' ? 'Upload failed' : undefined);
+        finishJob(
+          f.id,
+          f.name,
+          f.upload_status,
+          f.upload_status === 'failed' ? t('files.errors.uploadProcessingFailed') : undefined,
+        );
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

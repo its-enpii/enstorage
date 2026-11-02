@@ -143,6 +143,8 @@ type Ctx = {
   setFileStarred: (id: string, starred: boolean) => void;
   removeFolder: (id: string) => void;
   removeFile: (id: string) => void;
+  /** Flip a row to `upload_status: 'failed'` (realtime FileUploadFailedBroadcast). */
+  markUploadFailed: (id: string, reason?: string) => void;
   /**
    * Pindahkan folder (optimistik) ke parent baru (`null` = root) di
    * `allFolders` dan `folders` view. Server tetap sumber kebenaran — caller
@@ -618,6 +620,18 @@ export function FilesStoreProvider({
     setFiles((prev) => prev.filter((f) => f.id !== id));
   }, []);
 
+  // Realtime FileUploadFailedBroadcast: keep the row but flag it failed so
+  // the upload job card can surface the failure instead of the row vanishing
+  // (that silent removal was the false-success bug). A row that is not in
+  // the current view is a no-op; FilesClient falls back to status polling.
+  const markUploadFailed = useCallback((id: string) => {
+    setFiles((prev) =>
+      prev.some((f) => f.id === id && f.upload_status !== 'failed')
+        ? prev.map((f) => (f.id === id ? { ...f, upload_status: 'failed' } : f))
+        : prev,
+    );
+  }, []);
+
   const moveFolder = useCallback((id: string, newParentId: string | null) => {
     const patch = (prev: FolderType[]) =>
       prev.map((f) => (f.id === id ? { ...f, parent_id: newParentId } : f));
@@ -759,6 +773,7 @@ export function FilesStoreProvider({
     setFileStarred,
     removeFolder,
     removeFile,
+    markUploadFailed,
     moveFolder,
     upsertFolder,
     upsertFile,
