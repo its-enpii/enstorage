@@ -2,7 +2,7 @@
 
 import { useEffect, type ReactNode } from 'react';
 import { I18nextProvider, useTranslation } from 'react-i18next';
-import i18n, { setLocale, getLocale } from '@/lib/i18n';
+import i18n, { setLocale, getLocale, STORAGE_KEY } from '@/lib/i18n';
 
 type Props = {
   children: ReactNode;
@@ -16,13 +16,15 @@ type Props = {
 function Syncer({ initialLocale }: { initialLocale?: string }) {
   const { i18n: i18nInstance } = useTranslation();
 
-  // Sync to user.locale on first render if provided (e.g. after login)
+  // Apply the stored / server-provided locale only after hydration, so the
+  // first client render matches the server HTML (avoids React #418).
   useEffect(() => {
-    if (initialLocale && initialLocale !== getLocale()) {
-      setLocale(initialLocale);
+    const stored = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+    const target = initialLocale || stored;
+    if (target && target !== i18nInstance.language) {
+      setLocale(target);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialLocale, i18nInstance]);
 
   // Sync <html lang> with the active language: once on mount (the server can
   // only prerender `lang="id"`, since the real locale lives in localStorage),
