@@ -27,6 +27,7 @@ import type { FileItem, Folder as FolderType } from '@/lib/api';
 export type StoreMutators = {
   upsertFile: (f: FileItem) => void;
   removeFile: (id: string) => void;
+  markUploadFailed: (id: string) => void;
   upsertFolder: (f: FolderType) => void;
   removeFolder: (id: string) => void;
   updateFolderCounts: (id: string, deltaFiles: number, deltaSize: number) => void;
@@ -85,12 +86,13 @@ export function applyEvent(e: RealtimeEvent, ctx: ApplyContext): boolean {
     }
 
     case 'file.upload_failed': {
-      // Mark existing pending row as failed (if visible).
+      // Keep the row and mark it failed (visible only in the current view).
+      // Removing it here made a failed background upload vanish silently:
+      // FilesClient's upload watcher keys off `upload_status === 'failed'`
+      // to flip the job card to "failed" with a readable reason
+      // (docs/architecture.md §Realtime Broadcasts: FileUploadFailedBroadcast).
       if (matchesView(e.folderId, currentFolderId)) {
-        // Remove from optimistic list — UI will refetch to see the final
-        // state. Best-effort: if the row is absent, the next revalidate
-        // picks it up correctly.
-        store.removeFile(e.fileId);
+        store.markUploadFailed(e.fileId);
         return true;
       }
       return false;
