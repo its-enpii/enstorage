@@ -244,10 +244,7 @@ class QuotaManager
             return $account->gdrive_root_folder_id;
         }
 
-        $client = $this->factory->makeFor($account);
-        $this->tokens->ensureFreshToken($account);
-        $client->setAccessToken($account->access_token);
-        $drive = new Drive($client);
+        $drive = $this->makeDrive($account);
 
         // Cari folder dengan nama EnStorage di root
         $query = "mimeType='application/vnd.google-apps.folder' and name='".self::ROOT_FOLDER_NAME."' and trashed=false and 'root' in parents";
@@ -276,6 +273,28 @@ class QuotaManager
         $account->save();
 
         return $folder->getId();
+    }
+
+    /**
+     * Bangun Drive service untuk akun ini (root folder EnStorage).
+     * Memakai hook TEST-ONLY `GoogleDriveFolderService::$factorySpy` agar
+     * traversal folder bisa diuji hermetik tanpa jaringan.
+     */
+    private function makeDrive(GoogleAccount $account): Drive
+    {
+        $spy = GoogleDriveFolderService::$factorySpy;
+        if ($spy) {
+            $client = $spy($account, $this->factory);
+            $client->setAccessToken($account->access_token);
+
+            return new Drive($client);
+        }
+
+        $client = $this->factory->makeFor($account);
+        $this->tokens->ensureFreshToken($account);
+        $client->setAccessToken($account->access_token);
+
+        return new Drive($client);
     }
 
     private function cacheKey(GoogleAccount $account): string

@@ -13,6 +13,7 @@ use App\Http\Resources\FolderResource;
 use App\Jobs\PurgeFolderTree;
 use App\Models\ActivityLog;
 use App\Models\File;
+use App\Models\File as FileModel;
 use App\Models\Folder;
 use App\Models\GoogleAccount;
 use App\Models\ShareLink;
@@ -103,8 +104,13 @@ class FolderController extends Controller
         }
 
         $folders = $query
-            ->withCount(['files', 'children as folders_count'])
-            ->withSum('files', 'size');
+            ->withCount([
+                'files' => fn ($q) => $q->where('upload_status', FileModel::STATUS_DONE),
+                'children as folders_count',
+            ])
+            ->withSum([
+                'files' => fn ($q) => $q->where('upload_status', FileModel::STATUS_DONE),
+            ], 'size');
 
         if ($request->boolean('starred')) {
             $folders = $folders->where('is_starred', true);
@@ -132,8 +138,13 @@ class FolderController extends Controller
     private function folderTree(string $userId): JsonResponse
     {
         $folders = Folder::where('user_id', $userId)
-            ->withCount(['files', 'children as folders_count'])
-            ->withSum('files', 'size')
+            ->withCount([
+                'files' => fn ($q) => $q->where('upload_status', FileModel::STATUS_DONE),
+                'children as folders_count',
+            ])
+            ->withSum([
+                'files' => fn ($q) => $q->where('upload_status', FileModel::STATUS_DONE),
+            ], 'size')
             ->get();
 
         $byParent = [];
@@ -188,8 +199,13 @@ class FolderController extends Controller
         }
 
         $subfoldersQ = Folder::where('parent_id', $folder->id)
-            ->withCount(['files', 'children as folders_count'])
-            ->withSum('files', 'size');
+            ->withCount([
+                'files' => fn ($q) => $q->where('upload_status', FileModel::STATUS_DONE),
+                'children as folders_count',
+            ])
+            ->withSum([
+                'files' => fn ($q) => $q->where('upload_status', FileModel::STATUS_DONE),
+            ], 'size');
         if ($sort === 'name') {
             $subfoldersQ->orderBy('name', $dir);
         } else {
@@ -257,8 +273,13 @@ class FolderController extends Controller
 
         $folder = Folder::where('user_id', $request->user()->id)
             ->where('path', $normalized)
-            ->withCount(['files', 'children as folders_count'])
-            ->withSum('files', 'size')
+            ->withCount([
+                'files' => fn ($q) => $q->where('upload_status', FileModel::STATUS_DONE),
+                'children as folders_count',
+            ])
+            ->withSum([
+                'files' => fn ($q) => $q->where('upload_status', FileModel::STATUS_DONE),
+            ], 'size')
             ->first();
 
         if (! $folder) {
@@ -914,8 +935,13 @@ class FolderController extends Controller
     {
         return Folder::where('id', $id)
             ->where('user_id', $request->user()->id)
-            ->withCount(['files', 'children as folders_count'])
-            ->withSum('files', 'size')
+            ->withCount([
+                'files' => fn ($q) => $q->where('upload_status', FileModel::STATUS_DONE),
+                'children as folders_count',
+            ])
+            ->withSum([
+                'files' => fn ($q) => $q->where('upload_status', FileModel::STATUS_DONE),
+            ], 'size')
             ->first();
     }
 

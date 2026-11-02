@@ -8,6 +8,7 @@ use App\Models\GoogleAccount;
 use App\Services\Folder\FolderPathService;
 use Google\Service\Drive;
 use Google\Service\Drive\DriveFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -19,6 +20,8 @@ class GoogleDriveFolderService
 
     private const SHORTCUT_MIME_TYPE = 'application/vnd.google-apps.shortcut';
 
+    public static ?\Closure $factorySpy = null;
+
     public function __construct(
         private readonly GoogleClientFactory $factory,
         private readonly GoogleTokenService $tokens,
@@ -27,35 +30,68 @@ class GoogleDriveFolderService
     ) {}
 
     /**
-     * Memastikan folder di EnStorage memiliki folder 1:1 di Google Drive.
-     * Mengembalikan ID folder Google Drive.
+     * Memastikan folder di EnStorage memiliki folder 1:1 di Google Drive
+     * pada AKUN TARGET (`$account`) dan mengembalikan ID folder Google Drive.
+     *
+     * Folder EnStorage adalah entitas lintas akun: satu `Folder` bisa berisi
+     * berkas yang tersebar di beberapa akun Google Drive (multi-drive).
+     * Kolom `folders.gdrive_folder_id` hanya menyimpan ID pada akun PERTAMA
+     * yang membuatnya, sehingga ID itu TIDAK valid di akun lain (Google
+     * membalas 404 File not found). Karena itu pemetaan folder per akun
+     * disimpan di cache: `gdrive_folder_map:{account_id}:{folder_id}`.
      */
     public function ensureFolderOnDrive(GoogleAccount $account, Folder $folder): string
     {
-        if ($folder->gdrive_folder_id) {
-            return $folder->gdrive_folder_id;
+        $cacheKey = $this->folderCacheKey($account, $folder);
+
+        // Verifikasi cepat: ID di cache / DB harus benar-benar ada di akun
+        // ini. Untuk item dengan scope drive.file, files.get bisa membalas
+        // 404 walau item valid (dibuat di luar sesi OAuth ini); 404 hanya
+        // dianggap "tidak valid" bila files.list juga tidak menemukannya.
+        $knownId = Cache::get($cacheKey) ?: $folder->gdrive_folder_id;
+        if ($knownId && $this->folderExistsOnAccount($account, (string) $knownId)) {
+            if (! Cache::has($cacheKey)) {
+                Cache::forever($cacheKey, (string) $knownId);
+            }
+
+            return (string) $knownId;
         }
 
-        $this->tokens->ensureFreshToken($account);
-        $client = $this->factory->makeFor($account);
-        $client->setAccessToken($account->access_token);
-        $drive = new Drive($client);
-
-        // 1. Tentukan parent GDrive ID
+        // 1. Tentukan parent GDrive ID pada akun target.
         $parentGDriveId = null;
         if ($folder->parent_id) {
             $parentFolder = Folder::find($folder->parent_id);
-            if ($parentFolder) {
-                $parentGDriveId = $this->ensureFolderOnDrive($account, $parentFolder);
-            }
+            $parentGDriveId = $parentFolder
+                ? $this->ensureFolderOnDrive($account, $parentFolder)
+                : $this->quota->ensureRootFolder($account);
         }
 
         if (! $parentGDriveId) {
             $parentGDriveId = $this->quota->ensureRootFolder($account);
         }
 
-        // 2. Cari apakah folder dengan nama yang sama sudah ada di parent GDrive
-        $query = "mimeType='application/vnd.google-apps.folder' and name='".addslashes($folder->name)."' and '".$parentGDriveId."' in parents and trashed=false";
+        // 2. Pastikan parent valid di akun ini; fallback ke root EnStorage akun.
+        //    Parent bisa milik akun lain (ID dari kolom gdrive_folder_id atau
+        //    dari rekursi yang ditolak Google) — memakainya sebagai parent
+        //    berujung 404 `File not found` saat create.
+        if (! $this->folderExistsOnAccount($account, $parentGDriveId)) {
+            Log::warning('GDrive parent folder tidak valid di akun target, fallback ke root', [
+                'account_id' => $account->id,
+                'folder_id' => $folder->id,
+                'parent_gdrive_id' => $parentGDriveId,
+            ]);
+            $parentGDriveId = $this->quota->ensureRootFolder($account);
+        }
+
+        $drive = $this->drive($account);
+
+        // 3. Cari folder dengan nama sama di parent yang valid pada akun ini.
+        $query = "'".$this->escapeQueryString($parentGDriveId)."' in parents"
+            .' and trashed=false'
+            ." and name='".$this->escapeQueryString($folder->name)."'"
+            ." and mimeType='".self::FOLDER_MIME_TYPE."'";
+
+        $existingId = null;
         try {
             $list = $drive->files->listFiles([
                 'q' => $query,
@@ -64,27 +100,112 @@ class GoogleDriveFolderService
             ]);
 
             foreach ($list->getFiles() as $existing) {
-                $folder->gdrive_folder_id = $existing->getId();
-                $folder->save();
-
-                return $existing->getId();
+                $existingId = $existing->getId();
+                break;
             }
         } catch (Throwable $e) {
-            Log::warning('GDrive listFiles search folder failed: '.$e->getMessage());
+            Log::warning('GDrive listFiles search folder failed: '.$e->getMessage(), [
+                'account_id' => $account->id,
+                'folder_id' => $folder->id,
+            ]);
         }
 
-        // 3. Jika belum ada, buat folder baru di Google Drive
-        $metadata = new DriveFile([
-            'name' => $folder->name,
-            'mimeType' => 'application/vnd.google-apps.folder',
-            'parents' => [$parentGDriveId],
-        ]);
+        // 4. Buat baru bila belum ada, di bawah parent yang valid.
+        if (! $existingId) {
+            $metadata = new DriveFile([
+                'name' => $folder->name,
+                'mimeType' => self::FOLDER_MIME_TYPE,
+                'parents' => [$parentGDriveId],
+            ]);
 
-        $created = $drive->files->create($metadata, ['fields' => 'id']);
-        $folder->gdrive_folder_id = $created->getId();
-        $folder->save();
+            $created = $drive->files->create($metadata, ['fields' => 'id']);
+            $existingId = $created->getId();
+        }
 
-        return $created->getId();
+        $id = (string) $existingId;
+        Cache::forever($cacheKey, $id);
+
+        // Backwards compatibility: isi kolom lama bila masih kosong.
+        if (! $folder->gdrive_folder_id) {
+            $folder->gdrive_folder_id = $id;
+            $folder->save();
+        }
+
+        return $id;
+    }
+
+    /**
+     * Cache key pemetaan folder EnStorage → folder Google Drive per akun.
+     */
+    public function folderCacheKey(GoogleAccount $account, Folder $folder): string
+    {
+        return "gdrive_folder_map:{$account->id}:{$folder->id}";
+    }
+
+    /**
+     * Apakah `$gdriveId` benar-benar ada (dan bukan folder sampah) pada akun
+     * ini? Tidak melempar exception — kegagalan apa pun dianggap tidak ada.
+     */
+    private function folderExistsOnAccount(GoogleAccount $account, string $gdriveId): bool
+    {
+        if ($gdriveId === '') {
+            return false;
+        }
+
+        try {
+            $drive = $this->drive($account);
+            $drive->files->get($gdriveId, ['fields' => 'id,trashed']);
+
+            return true;
+        } catch (Throwable) {
+            // Jatuh ke pengecekan via list (idempotent, untuk scope drive.file).
+        }
+
+        try {
+            $list = $this->drive($account)->files->listFiles([
+                'q' => "'".$this->escapeQueryString($gdriveId)."' in parents and trashed=false",
+                'fields' => 'files(id)',
+                'pageSize' => 1,
+            ]);
+
+            return count($list->getFiles() ?? []) > 0;
+        } catch (Throwable $e) {
+            Log::warning('GDrive verifikasi folder gagal: '.$e->getMessage(), [
+                'account_id' => $account->id,
+                'gdrive_id' => $gdriveId,
+            ]);
+
+            return false;
+        }
+    }
+
+    /**
+     * Bangun Drive service terautentikasi untuk akun target.
+     */
+    private function drive(GoogleAccount $account): Drive
+    {
+        $spy = self::$factorySpy;
+        if ($spy) {
+            // Hook TEST-ONLY: client disuntikkan tanpa OAuth.
+            $client = $spy($account, $this->factory);
+            $client->setAccessToken($account->access_token);
+
+            return new Drive($client);
+        }
+
+        $client = $this->factory->makeFor($account);
+        $this->tokens->ensureFreshToken($account);
+        $client->setAccessToken($account->access_token);
+
+        return new Drive($client);
+    }
+
+    /**
+     * Escape nilai literal untuk query Drive API (`name`, id parent).
+     */
+    private function escapeQueryString(string $value): string
+    {
+        return str_replace(['\\', "'"], ['\\\\', "\\'"], $value);
     }
 
     /**
@@ -276,7 +397,7 @@ class GoogleDriveFolderService
     protected function makeDrive(GoogleAccount $account): Drive
     {
         $this->tokens->ensureFreshToken($account);
-        $client = $this->factory->makeFor($account);
+        $client = self::$factorySpy ? (self::$factorySpy)($account, $this->factory) : $this->factory->makeFor($account);
         $client->setAccessToken($account->access_token);
 
         return new Drive($client);
