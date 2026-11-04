@@ -3,16 +3,18 @@
 import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Close, ChevronLeft, ChevronRight, Download, ContentCopy, Check, Slideshow, Add, Remove, Fullscreen, FullscreenExit } from '@mui/icons-material';
+import { Download, ContentCopy, Check, Slideshow, Add, Remove, Fullscreen, FullscreenExit } from '@mui/icons-material';
 import JSZip from 'jszip';
 import type { FileItem } from '@/lib/api';
-import { getToken } from '@/lib/api';
 import { bytes } from '@/lib/format';
 import { getFileDownloadUrl } from '@/lib/download';
-import { DropdownMenu, type MenuItem } from '@/components/DropdownMenu';
+import type { MenuItem } from '@/components/DropdownMenu';
 import { Tabs } from '@/components/Tabs';
 import { Button, IconButton, LinkButton, TextAction } from '@/components/Button';
-import { Tooltip } from '@/components/Tooltip';
+import { FileViewerShell, fileUrl } from '@/components/FileViewerShell';
+import { DocxViewer } from '@/components/office/DocxViewer';
+import { XlsxViewer } from '@/components/office/XlsxViewer';
+import { ArchiveViewer, metadataEntryCount } from '@/components/office/ArchiveViewer';
 import { renderMarkdownWithDiagrams, useMermaid } from '@/components/MermaidMarkdown';
 
 type Props = {
@@ -22,15 +24,6 @@ type Props = {
   onNavigate?: (file: FileItem) => void;
   actions?: MenuItem[];
 };
-
-function fileUrl(file: FileItem): string {
-  if (file.stream_url) return file.stream_url;
-  const token = getToken();
-  const base = `${process.env.NEXT_PUBLIC_API_BASE}/files/${file.id}/download`;
-  const params = new URLSearchParams({ inline: '1' });
-  if (token) params.set('token', token);
-  return `${base}?${params.toString()}`;
-}
 
 type MimeCategory = 'image' | 'video' | 'audio' | 'pdf' | 'office' | 'markdown' | 'code' | 'text' | 'other';
 
@@ -924,33 +917,80 @@ function PlainTextViewer({ file, downloadUrl }: { file: FileItem; downloadUrl: s
   );
 }
 
+/** Office-like previews own their keyboard handling — file nav stays off. */
+type OfficeKind = 'pptx' | 'docx' | 'xlsx' | 'archive';
+
+function officeKind(file: FileItem): OfficeKind | null {
+  const mime = file.mime_type.toLowerCase();
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.docx') || mime.includes('wordprocessingml')) return 'docx';
+  if (name.endsWith('.xlsx') || mime.includes('spreadsheetml')) return 'xlsx';
+  if (name.endsWith('.pptx') || mime.includes('presentationml')) return 'pptx';
+  if (name.endsWith('.zip') || mime === 'application/zip' || mime === 'application/x-zip-compressed') return 'archive';
+  return null;
+}
+
+/** DOCX / XLSX / ZIP-listing render inside the SAME overlay shell as every other preview. */
+function OfficePreview({ file, kind, onClose, files, onNavigate, actions }: Props & { kind: OfficeKind }) {
+  const downloadUrl = file.download_url || getFileDownloadUrl(file);
+  const src = fileUrl(file);
+  const shared = {
+    fileId: file.id,
+    fileName: file.name,
+    fileSize: file.size,
+    src,
+    downloadUrl,
+  };
+
+  let viewer: ReactNode;
+  switch (kind) {
+    case 'docx': viewer = <DocxViewer {...shared} />; break;
+    case 'xlsx': viewer = <XlsxViewer {...shared} />; break;
+    case 'archive':
+      viewer = <ArchiveViewer {...shared} entryCount={metadataEntryCount(file.metadata)} />;
+      break;
+    default: viewer = <PptxSlidePresenter file={file} />; break;
+  }
+
+  return (
+    <FileViewerShell
+      file={file}
+      files={files}
+      onClose={onClose}
+      onNavigate={onNavigate}
+      actions={actions}
+      navLocked
+      viewer={viewer}
+    />
+  );
+}
+
 function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props) {
   const { t } = useTranslation();
   const category = mimeCategory(file);
   const downloadUrl = file.download_url || getFileDownloadUrl(file);
-  const currentIndex = files ? files.findIndex((f) => f.id === file.id) : -1;
-  const hasNav = files && files.length > 1;
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      if (hasNav && category !== 'office' && e.key === 'ArrowLeft' && currentIndex > 0) onNavigate?.(files![currentIndex - 1]);
-      if (hasNav && category !== 'office' && e.key === 'ArrowRight' && currentIndex < files!.length - 1) onNavigate?.(files![currentIndex + 1]);
-    };
-    document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
-    };
-  }, [onClose, onNavigate, hasNav, currentIndex, files]);
+  const office = officeKind(file);
 
   let viewer: ReactNode;
+  if (office) {
+    return (
+      <OfficePreview
+        file={file}
+        files={files}
+        onClose={onClose}
+        onNavigate={onNavigate}
+        actions={actions}
+        kind={office}
+      />
+    );
+  }
+
   switch (category) {
     case 'image':    viewer = <ImageViewer file={file} onClose={onClose} />; break;
     case 'video':    viewer = <VideoViewer file={file} onClose={onClose} />; break;
     case 'audio':    viewer = <AudioViewer file={file} onClose={onClose} />; break;
     case 'pdf':      viewer = <PdfViewer file={file} onClose={onClose} />; break;
+    // DOCX/XLSX/ZIP are routed to OfficePreview above; PPTX (and legacy ppt) lands here.
     case 'office':   viewer = <PptxSlidePresenter file={file} />; break;
     case 'markdown': viewer = <MarkdownViewer file={file} />; break;
     case 'code':
@@ -979,127 +1019,15 @@ function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props)
   }
 
   return (
-    <div className="fixed inset-0 z-[1000] z-viewer">
-      {/*
-        Backdrop layer: fills the viewport, dims + blurs the app behind the
-        preview, and carries click-to-close. It is a plain DIV on purpose —
-        it is NOT a button (Escape and the single X are the keyboard /
-        visible affordances). Because the close button is a SIBLING rendered
-        after it (same stacking context), the X is never covered by it.
-      */}
-      <div
-        data-testid="file-viewer-backdrop"
-        aria-hidden="true"
-        className="absolute inset-0 bg-background/90 backdrop-blur-md"
-        onClick={onClose}
-      />
-
-      {/* Visual shell — pointer-events pass through to the backdrop so
-          clicking empty areas still closes, while the header/controls
-          themselves remain clickable. */}
-      <div className="pointer-events-none absolute inset-0 flex flex-col">
-        <div
-          data-testid="file-viewer-header"
-          className="pointer-events-auto flex items-center justify-between pl-3 pr-14 sm:pl-6 sm:pr-20 py-2 sm:py-3 shrink-0 border-b border-outline-variant/10"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <p className="text-on-surface font-display text-base truncate">{file.name}</p>
-            <span className="text-outline text-sm shrink-0">{bytes(file.size)}</span>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            {actions && actions.length > 0 && (
-              <DropdownMenu
-                align="right"
-                trigger={
-                  <Tooltip label={t('preview.menu')} placement="bottom">
-                    <IconButton
-                      bare
-                      shape="circle"
-                      size="xl"
-                      aria-label={t('preview.menu')}
-                    >
-                      <span className="material-symbols-outlined !text-xl" aria-hidden>more_vert</span>
-                    </IconButton>
-                  </Tooltip>
-                }
-                items={actions}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Main Viewer Body */}
-        <div
-          className="pointer-events-auto flex-1 flex items-center justify-center min-h-0 relative"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) onClose();
-          }}
-        >
-          {hasNav && currentIndex > 0 && category !== 'office' && (
-            <IconButton
-              shape="circle"
-              size="xl"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNavigate?.(files![currentIndex - 1]);
-              }}
-              className="pointer-events-auto absolute left-2 sm:left-4 z-10 !bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest shadow-lg"
-              aria-label={t('preview.prev')}
-            >
-              <ChevronLeft />
-            </IconButton>
-          )}
-
-          {/* Viewers already stop click propagation on their own surface, so
-              clicks that land inside them never reach the backdrop layer. */}
-          <div
-            className="flex-1 min-w-0 h-full flex"
-            data-testid="file-viewer-body"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) onClose();
-            }}
-          >
-            {viewer}
-          </div>
-
-          {hasNav && currentIndex < files!.length - 1 && category !== 'office' && (
-            <IconButton
-              shape="circle"
-              size="xl"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNavigate?.(files![currentIndex + 1]);
-              }}
-              className="pointer-events-auto absolute right-2 sm:right-4 z-10 !bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest shadow-lg"
-              aria-label={t('preview.next')}
-            >
-              <ChevronRight />
-            </IconButton>
-          )}
-        </div>
-      </div>
-
-      {/*
-        The ONE visible close control of the preview (top-right X). It is a
-        plain child of the full-viewport root (no transformed/filtered
-        ancestor), so `absolute` resolves against the viewport-sized overlay.
-      */}
-      <Tooltip label={t('preview.close')} placement="bottom">
-        <IconButton
-          shape="circle"
-          size="xl"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
-          aria-label={t('preview.close')}
-          data-testid="file-viewer-close"
-          className="absolute top-2 right-2 sm:top-3 sm:right-3 z-20 !bg-surface-container/80 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest shadow-lg"
-        >
-          <Close className="!text-xl" />
-        </IconButton>
-      </Tooltip>
-    </div>
+    <FileViewerShell
+      file={file}
+      files={files}
+      onClose={onClose}
+      onNavigate={onNavigate}
+      actions={actions}
+      navLocked={category === 'office'}
+      viewer={viewer}
+    />
   );
 }
 
