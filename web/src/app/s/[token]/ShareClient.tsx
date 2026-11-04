@@ -78,6 +78,7 @@ type ListingState =
 
 /** Page rhythm shared with the other public surfaces (see LandingClient/DocsClient). */
 const SHELL_CONTENT = 'mx-auto w-full max-w-2xl px-4 py-10 sm:px-6';
+const SHELL_CONTENT_WIDE = 'mx-auto w-full max-w-4xl px-4 py-10 sm:px-6';
 
 type DownloadAllState =
   | { status: 'idle' }
@@ -864,7 +865,7 @@ function FilePreview({
 
   return (
     <PublicShell>
-      <div className={clsx(SHELL_CONTENT, 'flex justify-center')}>
+      <div className={clsx(SHELL_CONTENT_WIDE, 'flex justify-center')}>
       <Card className="w-full max-w-3xl">
         <div className="flex flex-col items-center text-center">
           <div className="w-16 h-16 rounded-2xl bg-primary-container flex items-center justify-center mb-4">
