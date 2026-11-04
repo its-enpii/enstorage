@@ -2,11 +2,9 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download } from '@mui/icons-material';
 import { bytes } from '@/lib/format';
 import { parseArchive, type ArchiveEntry, type ArchiveListing } from '@/lib/office-parsers';
 import { Alert } from '@/components/Alert';
-import { LinkButton } from '@/components/Button';
 import { Spinner } from '@/components/Spinner';
 import { PreviewFallback } from '@/components/office/DocxViewer';
 
@@ -178,19 +176,7 @@ export function ArchiveViewer({ fileId, fileName, fileSize, src, downloadUrl, en
       className="flex-1 flex flex-col overflow-hidden min-h-0 h-full w-full max-w-4xl mx-auto px-3 sm:px-6 py-3 sm:py-4"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
-        <span className="text-xs text-outline truncate">{t('preview.archiveLabel')}</span>
-        <LinkButton
-          variant="secondary"
-          size="sm"
-          href={downloadUrl}
-          download
-          leftIcon={<Download className="!text-base" />}
-          className="!px-3 !py-1.5 !h-auto text-xs"
-        >
-          {t('preview.downloadFile')}
-        </LinkButton>
-      </div>
+      <p className="text-xs text-outline truncate mb-2 shrink-0">{t('preview.archiveLabel')}</p>
       {body}
     </div>
   );

@@ -2,11 +2,9 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download } from '@mui/icons-material';
 import { bytes } from '@/lib/format';
 import { parseXlsx, xlsxColumnLabel, type ParsedWorkbook } from '@/lib/office-parsers';
 import { Alert } from '@/components/Alert';
-import { LinkButton } from '@/components/Button';
 import { Spinner } from '@/components/Spinner';
 import { Tabs } from '@/components/Tabs';
 import { DataTable, type DataTableCell } from '@/components/DataTable';
@@ -139,26 +137,14 @@ export function XlsxViewer({ fileId, fileName, fileSize, src, downloadUrl }: Pro
       className="flex-1 flex flex-col overflow-hidden min-h-0 h-full w-full max-w-6xl mx-auto px-2 sm:px-4 py-3 sm:py-4"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
-        <div className="min-w-0 overflow-x-auto">
-          {workbook && workbook.sheets.length > 0 && (
-            <Tabs
-              tabs={workbook.sheets.map((s, i) => ({ value: String(i), label: s.name }))}
-              value={String(active)}
-              onChange={(v) => setActive(Number(v))}
-            />
-          )}
-        </div>
-        <LinkButton
-          variant="secondary"
-          size="sm"
-          href={downloadUrl}
-          download
-          leftIcon={<Download className="!text-base" />}
-          className="!px-3 !py-1.5 !h-auto text-xs shrink-0"
-        >
-          {t('preview.downloadFile')}
-        </LinkButton>
+      <div className="min-w-0 overflow-x-auto mb-2 shrink-0">
+        {workbook && workbook.sheets.length > 0 && (
+          <Tabs
+            tabs={workbook.sheets.map((s, i) => ({ value: String(i), label: s.name }))}
+            value={String(active)}
+            onChange={(v) => setActive(Number(v))}
+          />
+        )}
       </div>
       {body}
     </div>

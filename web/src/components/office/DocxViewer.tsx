@@ -167,19 +167,7 @@ export function DocxViewer({ fileId, fileName, fileSize, src, downloadUrl }: Pro
   }
 
   const toolbar = (
-    <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
-      <span className="text-xs text-outline truncate">{t('preview.docxLabel')}</span>
-      <LinkButton
-        variant="secondary"
-        size="sm"
-        href={downloadUrl}
-        download
-        leftIcon={<Download className="!text-base" />}
-        className="!px-3 !py-1.5 !h-auto text-xs"
-      >
-        {t('preview.downloadFile')}
-      </LinkButton>
-    </div>
+    <p className="text-xs text-outline truncate mb-2 shrink-0">{t('preview.docxLabel')}</p>
   );
 
   let body: ReactNode;
