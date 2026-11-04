@@ -865,7 +865,7 @@ function FilePreview({
   return (
     <PublicShell>
       <div className={clsx(SHELL_CONTENT, 'flex justify-center')}>
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-3xl">
         <div className="flex flex-col items-center text-center">
           <div className="w-16 h-16 rounded-2xl bg-primary-container flex items-center justify-center mb-4">
             <span className="material-symbols-outlined !text-4xl fill text-on-primary-container">
@@ -1126,7 +1126,7 @@ function TextPreview({ streamUrl }: { streamUrl: string }) {
       )}
       {error && <p className="text-sm text-error p-4">{error}</p>}
       {content !== null && (
-        <pre className="text-xs text-on-surface p-4 overflow-x-auto max-h-[70vh] whitespace-pre-wrap break-words font-mono">
+        <pre className="text-sm sm:text-base text-on-surface p-6 overflow-x-auto max-h-[70vh] whitespace-pre-wrap break-words font-mono">
           {content}
         </pre>
       )}
@@ -1158,15 +1158,17 @@ function TextPreviewDark({ streamUrl }: { streamUrl: string }) {
 
   return (
     <div className="w-full h-full overflow-auto p-6">
+      <div className="mx-auto max-w-3xl">
       {content === null && error === null && (
         <p className="text-sm text-on-media-muted">{t('common.loading')}</p>
       )}
       {error && <p className="text-sm text-error">{error}</p>}
       {content !== null && (
-        <pre className="text-xs text-on-media whitespace-pre-wrap break-words font-mono">
+        <pre className="text-base text-on-media whitespace-pre-wrap break-words font-mono">
           {content}
         </pre>
       )}
+      </div>
     </div>
   );
 }
@@ -1208,7 +1210,7 @@ function MarkdownPreview({ streamUrl }: { streamUrl: string }) {
       {content !== null && (
         <div
           ref={ref}
-          className="prose markdown-body max-w-none text-on-surface leading-relaxed text-sm p-4 max-h-[70vh] overflow-auto"
+          className="prose markdown-body max-w-none text-on-surface leading-relaxed text-base p-6 max-h-[70vh] overflow-auto"
           dangerouslySetInnerHTML={{ __html: html }}
         />
       )}
@@ -1222,6 +1224,7 @@ function MarkdownPreviewDark({ streamUrl }: { streamUrl: string }) {
 
   return (
     <div className="w-full h-full overflow-auto p-6">
+      <div className="mx-auto max-w-3xl">
       {content === null && error === null && (
         <p className="text-sm text-on-media-muted">{t('common.loading')}</p>
       )}
@@ -1229,10 +1232,11 @@ function MarkdownPreviewDark({ streamUrl }: { streamUrl: string }) {
       {content !== null && (
         <div
           ref={ref}
-          className="prose markdown-body max-w-none text-on-media leading-relaxed text-sm"
+          className="prose markdown-body max-w-none text-on-media leading-relaxed text-base"
           dangerouslySetInnerHTML={{ __html: html }}
         />
       )}
+      </div>
     </div>
   );
 }
