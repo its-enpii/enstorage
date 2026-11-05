@@ -16,6 +16,7 @@ import { DocxViewer } from '@/components/office/DocxViewer';
 import { XlsxViewer } from '@/components/office/XlsxViewer';
 import { ArchiveViewer, metadataEntryCount } from '@/components/office/ArchiveViewer';
 import { renderMarkdownWithDiagrams, useMermaid } from '@/components/MermaidMarkdown';
+import { getCachedText, setCachedText, invalidateCachedText } from '@/lib/textPreviewCache';
 
 type Props = {
   file: FileItem;
@@ -687,15 +688,45 @@ function MarkdownViewer({ file }: { file: FileItem }) {
 function CodeTextViewer({ file }: { file: FileItem }) {
   const { t } = useTranslation();
   const [content, setContent] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    fetch(fileUrl(file))
-      .then((r) => r.text())
-      .then(setContent)
-      .catch(() => setContent(t('preview.errorText')))
-      .finally(() => setLoading(false));
+    const cached = getCachedText(file.id);
+    if (cached !== null) {
+      setContent(cached);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+    setContent('');
+    setError(null);
+    setLoading(true);
+    fetch(fileUrl(file), { signal: controller.signal })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.text();
+      })
+      .then((text) => {
+        if (cancelled) return;
+        setCachedText(file.id, text);
+        setContent(text);
+      })
+      .catch((err: unknown) => {
+        if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return;
+        invalidateCachedText(file.id);
+        setError(t('preview.errorText'));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [file.id, t]);
 
   const copyToClipboard = () => {
@@ -705,6 +736,17 @@ function CodeTextViewer({ file }: { file: FileItem }) {
   };
 
   if (loading) return <TextSurfaceLoading label={t('preview.loadingText')} />;
+
+  if (error) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center p-6">
+        <span className="material-symbols-outlined !text-4xl text-error">error</span>
+        <p className="text-on-surface font-medium">{error}</p>
+        <p className="text-outline text-sm break-all">{file.name}</p>
+        <p className="text-outline text-sm">{bytes(file.size)}</p>
+      </div>
+    );
+  }
 
   const lines = content.split('\n');
 
@@ -818,6 +860,13 @@ function PlainTextViewer({ file, downloadUrl }: { file: FileItem; downloadUrl: s
       setLoading(false);
       return;
     }
+    const cached = getCachedText(file.id);
+    if (cached !== null) {
+      setContent(cached);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     const controller = new AbortController();
     setContent(null);
@@ -829,10 +878,13 @@ function PlainTextViewer({ file, downloadUrl }: { file: FileItem; downloadUrl: s
         return r.text();
       })
       .then((text) => {
-        if (!cancelled) setContent(text);
+        if (cancelled) return;
+        setCachedText(file.id, text);
+        setContent(text);
       })
       .catch((err: unknown) => {
         if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return;
+        invalidateCachedText(file.id);
         setError(t('preview.errorText'));
       })
       .finally(() => {
@@ -997,21 +1049,9 @@ function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props)
     case 'text':     viewer = <CodeTextViewer file={file} />; break;
     default:
       if (isPlainText(file)) {
-        // Plain text is the one preview rendered directly on the overlay
-        // (no header, opaque body). Portal it so it sits ON TOP of the
-        // overlay header bar — the header is flex-shrink-0 and would
-        // otherwise push it down / the backdrop click layer would cover it.
-        viewer = createPortal(
-          <div
-            className="fixed inset-0 z-[1000] z-viewer flex flex-col pt-14 sm:pt-16"
-            // Stop clicks inside the text surface from reaching the
-            // overlay's click-to-close backdrop layer.
-            onClick={(e) => e.stopPropagation()}
-          >
-            <PlainTextViewer file={file} downloadUrl={downloadUrl} />
-          </div>,
-          document.body,
-        );
+        // Rendered inside the shared shell like every other viewer so the
+        // header (name + size + menu + close) stays identical across types.
+        viewer = <PlainTextViewer file={file} downloadUrl={downloadUrl} />;
       } else {
         viewer = <OtherViewer file={file} downloadUrl={downloadUrl} onClose={onClose} />;
       }
