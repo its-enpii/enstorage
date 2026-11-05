@@ -286,24 +286,12 @@ class SearchController extends Controller
 
     /**
      * Ambil semua descendant folder IDs dari given folder, termasuk folder itu sendiri.
-     * Pakai Postgres recursive CTE via raw query (lebih cepat dari loop di app).
      *
      * @return array<int, string>
      */
     private function descendantFolderIds(string $userId, string $rootFolderId): array
     {
-        $rows = DB::select('
-            WITH RECURSIVE subtree AS (
-                SELECT id FROM folders WHERE id = ? AND user_id = ?
-                UNION ALL
-                SELECT f.id FROM folders f
-                INNER JOIN subtree s ON f.parent_id = s.id
-                WHERE f.user_id = ?
-            )
-            SELECT id FROM subtree
-        ', [$rootFolderId, $userId, $userId]);
-
-        return array_map(fn ($r) => $r->id, $rows);
+        return $this->lockGuard->descendantFolderIds($userId, (string) $rootFolderId);
     }
 
     /**
@@ -377,19 +365,6 @@ class SearchController extends Controller
      */
     private function lockedFolderIds(string $userId): array
     {
-        $locked = Folder::where('user_id', $userId)
-            ->where('is_locked', true)
-            ->get();
-
-        $ids = [];
-        foreach ($locked as $folder) {
-            if ($this->lockGuard->unlocked($folder, $userId)) {
-                continue;
-            }
-
-            $ids = array_merge($ids, $this->descendantFolderIds($userId, (string) $folder->id));
-        }
-
-        return array_values(array_unique($ids));
+        return $this->lockGuard->lockedFolderIds($userId);
     }
 }
