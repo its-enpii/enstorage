@@ -7,6 +7,7 @@ use App\Http\Resources\FileResource;
 use App\Models\File as FileModel;
 use App\Models\Folder;
 use App\Models\GoogleAccount;
+use App\Services\FolderLockGuard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -14,6 +15,8 @@ class DashboardController extends Controller
 {
     /** Kategori berkas yang dikembalikan endpoint dashboard. */
     private const CATEGORIES = ['doc', 'image', 'video', 'audio', 'app', 'archive', 'other'];
+
+    public function __construct(private readonly FolderLockGuard $lockGuard) {}
 
     /**
      * GET /dashboard
@@ -33,9 +36,12 @@ class DashboardController extends Controller
         $percentage = $totalQuota > 0 ? round(($usedQuota / $totalQuota) * 100, 1) : 0;
 
         // 2. Kategori berkas — hanya file yang selesai diunggah.
-        $files = FileModel::where('user_id', $user->id)
-            ->where('upload_status', FileModel::STATUS_DONE)
-            ->get(['id', 'name', 'original_name', 'mime_type', 'size']);
+        // File di dalam folder terkunci (semua kedalaman, belum di-unlock)
+        // tidak dihitung di metrik kategori. Kuota storage tidak disentuh.
+        $filesQuery = FileModel::where('user_id', $user->id)
+            ->where('upload_status', FileModel::STATUS_DONE);
+        $this->lockGuard->excludeLockedFiles($filesQuery, (string) $user->id);
+        $files = $filesQuery->get(['id', 'name', 'original_name', 'mime_type', 'size']);
 
         $buckets = array_fill_keys(self::CATEGORIES, ['count' => 0, 'size' => 0]);
         foreach ($files as $file) {
@@ -54,8 +60,10 @@ class DashboardController extends Controller
         }
 
         // 3. Berkas terbaru.
-        $recent = FileModel::where('user_id', $user->id)
-            ->where('upload_status', FileModel::STATUS_DONE)
+        $recentQuery = FileModel::where('user_id', $user->id)
+            ->where('upload_status', FileModel::STATUS_DONE);
+        $this->lockGuard->excludeLockedFiles($recentQuery, (string) $user->id);
+        $recent = $recentQuery
             ->with(['thumbnail:id,file_id', 'folder:id,name,path'])
             ->orderByDesc('created_at')
             ->limit(10)

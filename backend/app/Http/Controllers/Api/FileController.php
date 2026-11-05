@@ -78,7 +78,12 @@ class FileController extends Controller
         // a missing param should NOT mean "no filter" because that would
         // leak files from every folder into the root view. Clients that
         // want all files must explicitly pass `folder_id=` (or `null`).
-        if ($request->has('folder_id')) {
+        // Starred = daftar lintas folder (halaman Favorit). Klien mengirim
+        // `/files?starred=true` tanpa folder_id; tanpa pengecualian ini
+        // cabang `else` akan memaksa `folder_id IS NULL` sehingga hanya file
+        // root yang tampil (bahkan kalau folder_id dikirim kosong, middleware
+        // ConvertEmptyStringsToNull mengubahnya jadi null).
+        if ($request->has('folder_id') && ! $request->boolean('starred')) {
             $fid = $request->query('folder_id');
             $fid = $fid === 'null' || $fid === '' ? null : $fid;
             if ($fid !== null) {
@@ -91,20 +96,11 @@ class FileController extends Controller
                 }
             }
             $query->where('folder_id', $fid);
-        } elseif ($request->filled('type') || $request->filled('search')) {
+        } elseif ($request->boolean('starred') || $request->filled('type') || $request->filled('search')) {
             // Filter tipe / pencarian global dari Dashboard: cari di SELURUH
             // file milik user (termasuk yang di dalam subfolder). File di
             // dalam folder terkunci yang belum di-unlock tetap dikecualikan.
-            $lockedFolderIds = Folder::where('user_id', $userId)
-                ->where('is_locked', true)
-                ->pluck('id')
-                ->all();
-            if (! empty($lockedFolderIds)) {
-                $query->where(function ($q) use ($lockedFolderIds) {
-                    $q->whereNotIn('folder_id', $lockedFolderIds)
-                        ->orWhereNull('folder_id');
-                });
-            }
+            $this->lockGuard->excludeLockedFiles($query, (string) $userId);
         } else {
             // Navigasi direktori standar root: tampilkan file root saja.
             $query->whereNull('folder_id');
@@ -190,9 +186,11 @@ class FileController extends Controller
             $query->where('upload_status', '!=', FileModel::STATUS_FAILED);
         }
 
-        // Filter starred
+        // Filter starred — file di dalam folder terkunci (semua kedalaman)
+        // yang belum di-unlock tidak boleh tampil di /starred.
         if ($request->boolean('starred')) {
             $query->where('is_starred', true);
+            $this->lockGuard->excludeLockedFiles($query, (string) $userId);
         }
 
         // Sort

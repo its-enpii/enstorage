@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Models\File;
 use App\Models\Folder;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Satu-satunya tempat logika kunci folder (folder lock).
@@ -171,6 +173,77 @@ class FolderLockGuard
     public function forgetUnlocked(Folder $folder, string $userId): void
     {
         Cache::forget($this->cacheKey((string) $folder->id, $userId));
+    }
+
+    /**
+     * Semua id folder yang berada di subtree terkunci (belum di-unlock) milik
+     * user — termasuk folder terkunci itu sendiri dan SELURUH keturunannya
+     * (nested), serta folder terkunci lain di dalam subtree tersebut.
+     *
+     * Dipakai untuk mengecualikan file dari dashboard/recent/starred:
+     * file dengan folder_id di daftar ini tidak boleh tampil di luar
+     * pembukaan foldernya.
+     *
+     * @return array<int, string>
+     */
+    public function lockedFolderIds(string $userId): array
+    {
+        $locked = Folder::where('user_id', $userId)
+            ->where('is_locked', true)
+            ->get();
+
+        $ids = [];
+        foreach ($locked as $folder) {
+            if ($this->unlocked($folder, $userId)) {
+                continue;
+            }
+
+            $ids = array_merge($ids, $this->descendantFolderIds($userId, (string) $folder->id));
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * Ambil semua descendant folder IDs dari given folder, termasuk folder itu sendiri.
+     * Pakai Postgres recursive CTE via raw query (lebih cepat dari loop di app).
+     *
+     * @return array<int, string>
+     */
+    public function descendantFolderIds(string $userId, string $rootFolderId): array
+    {
+        $rows = DB::select('
+            WITH RECURSIVE subtree AS (
+                SELECT id FROM folders WHERE id = ? AND user_id = ?
+                UNION ALL
+                SELECT f.id FROM folders f
+                INNER JOIN subtree s ON f.parent_id = s.id
+                WHERE f.user_id = ?
+            )
+            SELECT id FROM subtree
+        ', [$rootFolderId, $userId, $userId]);
+
+        return array_map(fn ($r) => $r->id, $rows);
+    }
+
+    /**
+     * Tambahkan kondisi ke query builder agar file di subtree terkunci
+     * (semua kedalaman) dikecualikan.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<File>  $query
+     */
+    public function excludeLockedFiles(Builder $query, string $userId): void
+    {
+        $lockedFolderIds = $this->lockedFolderIds($userId);
+
+        if (empty($lockedFolderIds)) {
+            return;
+        }
+
+        $query->where(function ($q) use ($lockedFolderIds) {
+            $q->whereNull('folder_id')
+                ->orWhereNotIn('folder_id', $lockedFolderIds);
+        });
     }
 
     public function cacheKey(string $folderId, string $userId): string
