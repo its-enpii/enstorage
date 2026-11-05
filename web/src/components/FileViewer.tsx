@@ -80,10 +80,11 @@ function mimeCategory(file: FileItem): MimeCategory {
  * top of the fitted image, and panning happens on the scroll container.
  *
  *   - default zoom = 1 (= "fit screen"); 1x always re-fits the screen
- *   - zoom in/out steps through 100 % → 300 %
+ *   - zoom steps through 25 % → 300 %; <100 % shrinks the fitted image
+ *     visually (scale < 1), it never enlarges past the viewport
  *   - at >100 % the container can be dragged (wheel is forwarded to zoom)
  */
-const ZOOM_MIN = 1;
+const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.25;
 
@@ -92,9 +93,34 @@ function ImageViewer({ file, onClose }: { file: FileItem; onClose?: () => void }
   const [zoom, setZoom] = useState(1);
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [panning, setPanning] = useState(false);
+  // Zoom pill auto-hides after a short idle period so it never sits on top
+  // of a portrait image; stays mounted (opacity only) to avoid re-mounts.
+  const [pillVisible, setPillVisible] = useState(true);
+  const pillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const hasDraggedRef = useRef(false);
+
+  const showPill = () => {
+    setPillVisible(true);
+    if (pillTimerRef.current) clearTimeout(pillTimerRef.current);
+    pillTimerRef.current = setTimeout(() => setPillVisible(false), 2000);
+  };
+
+  useEffect(() => {
+    if (pillTimerRef.current) clearTimeout(pillTimerRef.current);
+    pillTimerRef.current = setTimeout(() => setPillVisible(false), 2000);
+    return () => {
+      if (pillTimerRef.current) clearTimeout(pillTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Any zoom change re-reveals the pill and restarts the idle timer.
+    if (pillTimerRef.current) clearTimeout(pillTimerRef.current);
+    setPillVisible(true);
+    pillTimerRef.current = setTimeout(() => setPillVisible(false), 2000);
+  }, [zoom]);
 
   const clamp = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100));
   const zoomIn = () => setZoom((z) => clamp(z + ZOOM_STEP));
@@ -177,11 +203,14 @@ function ImageViewer({ file, onClose }: { file: FileItem; onClose?: () => void }
         ref={viewportRef}
         data-testid="viewer-image-viewport"
         className={
-          'flex-1 min-h-0 w-full overflow-auto overscroll-contain flex items-center justify-center p-3 sm:p-6 ' +
+          'flex-1 min-h-0 w-full overflow-auto overscroll-contain flex items-center justify-center p-3 pb-16 sm:p-6 sm:pb-20 ' +
           (panning ? 'cursor-grabbing select-none' : zoom > 1 ? 'cursor-grab' : '')
         }
         onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
+        onPointerMove={(e) => {
+          showPill();
+          onPointerMove(e);
+        }}
         onPointerUp={endPan}
         onPointerCancel={endPan}
         onClick={(e) => {
@@ -206,7 +235,12 @@ function ImageViewer({ file, onClose }: { file: FileItem; onClose?: () => void }
       <div
         data-testid="viewer-zoom-controls"
         onClick={(e) => e.stopPropagation()}
-        className="absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-surface-container/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-outline-variant/20 shadow-lg"
+        onPointerEnter={showPill}
+        onPointerMove={showPill}
+        className={
+          'absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-surface-container/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-outline-variant/20 shadow-lg transition-opacity duration-200 ease-out ' +
+          (pillVisible ? 'opacity-100' : 'opacity-0 pointer-events-none')
+        }
       >
         <IconButton onClick={zoomOut} aria-label={t('preview.zoomOut')} disabled={zoom <= ZOOM_MIN} className="!w-11 !h-11">
           <Remove className="!text-sm" />
@@ -687,6 +721,8 @@ function MarkdownViewer({ file }: { file: FileItem }) {
 
 function CodeTextViewer({ file }: { file: FileItem }) {
   const { t } = useTranslation();
+  // `content` keeps the previous file's text while the next file loads, so
+  // navigation shows the old body dimmed instead of a blank spinner.
   const [content, setContent] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -702,7 +738,6 @@ function CodeTextViewer({ file }: { file: FileItem }) {
     }
     let cancelled = false;
     const controller = new AbortController();
-    setContent('');
     setError(null);
     setLoading(true);
     fetch(fileUrl(file), { signal: controller.signal })
@@ -718,6 +753,7 @@ function CodeTextViewer({ file }: { file: FileItem }) {
       .catch((err: unknown) => {
         if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return;
         invalidateCachedText(file.id);
+        setContent('');
         setError(t('preview.errorText'));
       })
       .finally(() => {
@@ -735,7 +771,8 @@ function CodeTextViewer({ file }: { file: FileItem }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (loading) return <TextSurfaceLoading label={t('preview.loadingText')} />;
+  // Cache miss with nothing to show yet → full loading surface.
+  if (loading && content === '') return <TextSurfaceLoading label={t('preview.loadingText')} />;
 
   if (error) {
     return (
@@ -748,6 +785,9 @@ function CodeTextViewer({ file }: { file: FileItem }) {
     );
   }
 
+  // Deferred header swap: keep the previous body visible (dimmed) until the
+  // new file arrives, with a small loading hint in the corner.
+  const stale = loading && content !== '';
   const lines = content.split('\n');
 
   // Single surface: no inner card/frame/padding — the overlay is the backdrop.
@@ -755,13 +795,20 @@ function CodeTextViewer({ file }: { file: FileItem }) {
     <div
       data-testid="file-text-viewer"
       data-viewer-kind="code"
-      className="flex-1 flex flex-col overflow-hidden min-h-0 h-full w-full max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4"
+      aria-busy={loading || undefined}
+      className={
+        'flex-1 flex flex-col overflow-hidden min-h-0 h-full w-full max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4 transition-opacity duration-150 ease-out ' +
+        (stale ? 'opacity-60' : 'opacity-100')
+      }
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
         <span className="text-xs text-outline font-mono truncate">
           {t('viewer.textViewerLabel')}
           <span className="sr-only">{t('preview.lineCount', { count: lines.length })}</span>
+          {stale && (
+            <span className="ml-2 text-primary" role="status">{t('preview.loadingText')}</span>
+          )}
         </span>
         <Button
           variant="secondary"
@@ -869,7 +916,7 @@ function PlainTextViewer({ file, downloadUrl }: { file: FileItem; downloadUrl: s
     }
     let cancelled = false;
     const controller = new AbortController();
-    setContent(null);
+    // Keep the previous body while fetching — see render below.
     setError(null);
     setLoading(true);
     fetch(fileUrl(file), { signal: controller.signal })
@@ -885,6 +932,7 @@ function PlainTextViewer({ file, downloadUrl }: { file: FileItem; downloadUrl: s
       .catch((err: unknown) => {
         if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return;
         invalidateCachedText(file.id);
+        setContent(null);
         setError(t('preview.errorText'));
       })
       .finally(() => {
@@ -912,7 +960,7 @@ function PlainTextViewer({ file, downloadUrl }: { file: FileItem; downloadUrl: s
         <p className="text-outline text-sm">{bytes(file.size)}</p>
       </div>
     );
-  } else if (loading) {
+  } else if (loading && content === null) {
     body = <div className="flex-1 flex items-center justify-center text-outline">{t('preview.loadingText')}</div>;
   } else if (error) {
     body = (
@@ -924,10 +972,22 @@ function PlainTextViewer({ file, downloadUrl }: { file: FileItem; downloadUrl: s
     );
   } else {
     // Single surface: transparent PRE, symmetric padding, no inner frame.
+    // Deferred header swap: the previous body stays dimmed while loading.
+    const stale = loading && content !== null;
     body = (
-      <pre className="m-0 p-0 min-w-0 flex-1 min-h-0 overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] break-words bg-transparent border-0 font-mono text-sm leading-relaxed text-on-surface">
-        {content}
-      </pre>
+      <div className="flex-1 flex flex-col min-h-0">
+        {stale && (
+          <span className="text-xs text-primary self-end" role="status">{t('preview.loadingText')}</span>
+        )}
+        <pre
+          className={
+            'm-0 p-0 min-w-0 flex-1 min-h-0 overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] break-words bg-transparent border-0 font-mono text-sm leading-relaxed text-on-surface transition-opacity duration-150 ease-out ' +
+            (stale ? 'opacity-60' : 'opacity-100')
+          }
+        >
+          {content}
+        </pre>
+      </div>
     );
   }
 

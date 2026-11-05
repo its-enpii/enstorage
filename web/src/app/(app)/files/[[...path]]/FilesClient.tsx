@@ -818,6 +818,9 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   // leftover timers regardless.
   const pollRefs = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
   const dragCounter = useRef(0);
+  // Safety net: clears the drop overlay when no further drag event arrives
+  // (e.g. the OS cancels the drag without a drop / dragend).
+  const dragResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const folderIdRef = useRef<string | null>(folderId);
   useEffect(() => {
     folderIdRef.current = folderId;
@@ -1011,10 +1014,25 @@ function FilesContent({ currentPath }: { currentPath: string }) {
 
   // Global drag/drop overlay — works whether the page is empty or not
   useEffect(() => {
+    const clearOverlay = () => {
+      dragCounter.current = 0;
+      setDragOver(false);
+    };
+    const clearTimer = () => {
+      if (dragResetTimerRef.current) {
+        clearTimeout(dragResetTimerRef.current);
+        dragResetTimerRef.current = null;
+      }
+    };
+    const armTimer = () => {
+      clearTimer();
+      dragResetTimerRef.current = setTimeout(clearOverlay, 300);
+    };
     const onDragEnter = (e: DragEvent) => {
       if (!hasExternalFiles(e.dataTransfer)) return;
       dragCounter.current += 1;
       setDragOver(true);
+      armTimer();
     };
     const onDragLeave = () => {
       dragCounter.current -= 1;
@@ -1022,18 +1040,27 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         dragCounter.current = 0;
         setDragOver(false);
       }
+      armTimer();
     };
     const onDragOver = (e: DragEvent) => {
       // Jalur internal: biarkan handler folder/root yang menangani.
       if (!hasExternalFiles(e.dataTransfer)) return;
       e.preventDefault();
+      armTimer();
+    };
+    // `dragend` fires on the SOURCE element and does not bubble; a window
+    // listener must use capture to see it (fires before the drop default).
+    const onDragEnd = () => {
+      clearTimer();
+      clearOverlay();
     };
     const onDrop = (e: DragEvent) => {
+      // Reset FIRST so every drop (internal or external) hides the overlay.
+      clearTimer();
+      clearOverlay();
       // Drop internal (move) bukan urusan upload.
       if (isInternalDrag(e.dataTransfer) || !hasExternalFiles(e.dataTransfer)) return;
       e.preventDefault();
-      dragCounter.current = 0;
-      setDragOver(false);
       if (e.dataTransfer?.files?.length) {
         void uploadFiles(e.dataTransfer.files);
       }
@@ -1041,11 +1068,14 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     window.addEventListener('dragenter', onDragEnter);
     window.addEventListener('dragleave', onDragLeave);
     window.addEventListener('dragover', onDragOver);
+    window.addEventListener('dragend', onDragEnd, true);
     window.addEventListener('drop', onDrop);
     return () => {
+      clearTimer();
       window.removeEventListener('dragenter', onDragEnter);
       window.removeEventListener('dragleave', onDragLeave);
       window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('dragend', onDragEnd, true);
       window.removeEventListener('drop', onDrop);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1454,31 +1484,30 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     return `/files${basePath}${qs ? '?' + qs : ''}`;
   };
 
+  const previewOpenedRef = useRef<string | null>(null);
+
+  // `viewerFile` is the single source of truth. The URL mirrors it one way:
+  // this effect runs after every change and `replace`s (never pushes) so the
+  // Next router re-renders `useSearchParams` without adding history entries.
+  useEffect(() => {
+    const target = fileViewerUrl(viewerFile);
+    const current = `/files${basePath}${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
+    if (target !== current) router.replace(target, { scroll: false });
+    if (!viewerFile) previewOpenedRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewerFile]);
+
   function closeViewer() {
-    if (viewerFile && searchParams.get('preview')) {
-      window.history.replaceState(window.history.state, '', fileViewerUrl(null));
-    }
     setViewerFile(null);
   }
 
   function openViewer(file: FileItem) {
-    window.history.replaceState(window.history.state, '', fileViewerUrl(file));
     setViewerFile(file);
   }
-
-  // `?preview=` can be dropped by an in-app navigation that reuses this
-  // component; make sure the overlay does not stay on top of another folder.
-  // (The overlay itself blocks body scroll, so this only fires on pop/back.)
-  useEffect(() => {
-    const id = searchParams.get('preview');
-    if (!id && viewerFile) setViewerFile(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
 
   // Deep-link: `?preview=<id>` opens the image/video on mount (e.g. reload
   // after a same-tab navigation restored the document). Re-open only when
   // the id changes so a local close is not fought by this effect.
-  const previewOpenedRef = useRef<string | null>(null);
   useEffect(() => {
     const id = searchParams.get('preview');
     if (!id || id === previewOpenedRef.current || files.length === 0) return;
@@ -2820,10 +2849,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           file={viewerFile}
           files={visibleFiles.filter((f) => f.upload_status === 'done')}
           onClose={closeViewer}
-          onNavigate={(f) => {
-            window.history.replaceState(window.history.state, '', fileViewerUrl(f));
-            setViewerFile(f);
-          }}
+          onNavigate={(f) => setViewerFile(f)}
           actions={buildFileMenuItems(viewerFile)}
         />
       )}
