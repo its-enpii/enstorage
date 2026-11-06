@@ -44,7 +44,6 @@ export function FileViewerShell({ file, files, onClose, onNavigate, actions, nav
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
       if (hasNav && !navLocked && e.key === 'ArrowLeft' && currentIndex > 0) onNavigate?.(files![currentIndex - 1]);
       if (hasNav && !navLocked && e.key === 'ArrowRight' && currentIndex < files!.length - 1) onNavigate?.(files![currentIndex + 1]);
     };
@@ -54,27 +53,25 @@ export function FileViewerShell({ file, files, onClose, onNavigate, actions, nav
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
     };
-  }, [onClose, onNavigate, hasNav, currentIndex, files, navLocked]);
+  }, [onNavigate, hasNav, currentIndex, files, navLocked]);
 
   return (
     <div className="fixed inset-0 z-[1000] z-viewer">
       {/*
         Backdrop layer: fills the viewport, dims + blurs the app behind the
-        preview, and carries click-to-close. It is a plain DIV on purpose —
-        it is NOT a button (Escape and the single X are the keyboard /
-        visible affordances). Because the close button is a SIBLING rendered
+        preview. It carries no close handler: the ONE visible X button is
+        the only way to close the preview. It is a plain DIV on purpose —
+        it is NOT a button. Because the close button is a SIBLING rendered
         after it (same stacking context), the X is never covered by it.
       */}
       <div
         data-testid="file-viewer-backdrop"
         aria-hidden="true"
         className="absolute inset-0 bg-background/90 backdrop-blur-md"
-        onClick={onClose}
       />
 
-      {/* Visual shell — pointer-events pass through to the backdrop so
-          clicking empty areas still closes, while the header/controls
-          themselves remain clickable. */}
+      {/* Visual shell — pointer-events-none lets non-interactive layer pass
+          through, while the header/controls themselves remain clickable. */}
       <div className="pointer-events-none absolute inset-0 flex flex-col">
         <div
           data-testid="file-viewer-header"
@@ -102,12 +99,7 @@ export function FileViewerShell({ file, files, onClose, onNavigate, actions, nav
         </div>
 
         {/* Main Viewer Body */}
-        <div
-          className="pointer-events-auto flex-1 flex items-center justify-center min-h-0 relative"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) onClose();
-          }}
-        >
+        <div className="pointer-events-auto flex-1 flex items-center justify-center min-h-0 relative">
           {hasNav && !navLocked && currentIndex > 0 && (
             <IconButton
               shape="circle"
@@ -123,15 +115,7 @@ export function FileViewerShell({ file, files, onClose, onNavigate, actions, nav
             </IconButton>
           )}
 
-          {/* Viewers already stop click propagation on their own surface, so
-              clicks that land inside them never reach the backdrop layer. */}
-          <div
-            className="flex-1 min-w-0 h-full flex"
-            data-testid="file-viewer-body"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) onClose();
-            }}
-          >
+          <div className="flex-1 min-w-0 h-full flex" data-testid="file-viewer-body">
             {viewer}
           </div>
 

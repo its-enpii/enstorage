@@ -88,7 +88,7 @@ const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.25;
 
-function ImageViewer({ file, onClose }: { file: FileItem; onClose?: () => void }) {
+function ImageViewer({ file }: { file: FileItem }) {
   const { t } = useTranslation();
   const [zoom, setZoom] = useState(1);
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
@@ -99,7 +99,6 @@ function ImageViewer({ file, onClose }: { file: FileItem; onClose?: () => void }
   const pillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
-  const hasDraggedRef = useRef(false);
 
   const showPill = () => {
     setPillVisible(true);
@@ -151,7 +150,6 @@ function ImageViewer({ file, onClose }: { file: FileItem; onClose?: () => void }
   }, []);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    hasDraggedRef.current = false;
     if (zoom <= 1 || e.button !== 0) return;
     const el = viewportRef.current;
     if (!el) return;
@@ -163,9 +161,6 @@ function ImageViewer({ file, onClose }: { file: FileItem; onClose?: () => void }
     const d = dragRef.current;
     const el = viewportRef.current;
     if (!d || !el) return;
-    if (Math.abs(e.clientX - d.x) > 3 || Math.abs(e.clientY - d.y) > 3) {
-      hasDraggedRef.current = true;
-    }
     el.scrollLeft = d.left - (e.clientX - d.x);
     el.scrollTop = d.top - (e.clientY - d.y);
   };
@@ -180,12 +175,7 @@ function ImageViewer({ file, onClose }: { file: FileItem; onClose?: () => void }
       // `flex-1` box combined with tall absolute controls pushed its
       // height over the visible area, hiding the image under the header).
       className="relative flex-1 h-full min-h-0 w-full flex flex-col overflow-hidden"
-      onClick={(e) => {
-        e.stopPropagation();
-        if (e.target === e.currentTarget) {
-          onClose?.();
-        }
-      }}
+      onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => {
         if (e.target === viewportRef.current || e.target === e.currentTarget) return;
         e.stopPropagation();
@@ -213,11 +203,6 @@ function ImageViewer({ file, onClose }: { file: FileItem; onClose?: () => void }
         }}
         onPointerUp={endPan}
         onPointerCancel={endPan}
-        onClick={(e) => {
-          if (e.target === e.currentTarget && !hasDraggedRef.current) {
-            onClose?.();
-          }
-        }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -269,28 +254,22 @@ function ImageViewer({ file, onClose }: { file: FileItem; onClose?: () => void }
   );
 }
 
-function VideoViewer({ file, onClose }: { file: FileItem; onClose?: () => void }) {
+function VideoViewer({ file }: { file: FileItem }) {
   return (
     <div
       className="flex-1 flex items-center justify-center p-4"
-      onClick={(e) => {
-        e.stopPropagation();
-        if (e.target === e.currentTarget) onClose?.();
-      }}
+      onClick={(e) => e.stopPropagation()}
     >
       <video controls autoPlay className="max-w-full max-h-full rounded-lg" src={fileUrl(file)} />
     </div>
   );
 }
 
-function AudioViewer({ file, onClose }: { file: FileItem; onClose?: () => void }) {
+function AudioViewer({ file }: { file: FileItem }) {
   return (
     <div
       className="flex-1 flex flex-col items-center justify-center gap-6 p-4"
-      onClick={(e) => {
-        e.stopPropagation();
-        if (e.target === e.currentTarget) onClose?.();
-      }}
+      onClick={(e) => e.stopPropagation()}
     >
       <div className="w-32 h-32 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container shadow-ambient">
         <span className="material-symbols-outlined !text-6xl">graphic_eq</span>
@@ -300,14 +279,11 @@ function AudioViewer({ file, onClose }: { file: FileItem; onClose?: () => void }
   );
 }
 
-function PdfViewer({ file, onClose }: { file: FileItem; onClose?: () => void }) {
+function PdfViewer({ file }: { file: FileItem }) {
   return (
     <div
       className="flex-1 flex flex-col w-full h-full p-2 sm:p-4"
-      onClick={(e) => {
-        e.stopPropagation();
-        if (e.target === e.currentTarget) onClose?.();
-      }}
+      onClick={(e) => e.stopPropagation()}
     >
       <iframe
         src={fileUrl(file)}
@@ -834,15 +810,12 @@ function CodeTextViewer({ file }: { file: FileItem }) {
   );
 }
 
-function OtherViewer({ file, downloadUrl, onClose }: { file: FileItem; downloadUrl: string; onClose?: () => void }) {
+function OtherViewer({ file, downloadUrl }: { file: FileItem; downloadUrl: string }) {
   const { t } = useTranslation();
   return (
     <div
       className="flex-1 flex flex-col items-center justify-center gap-4 p-4"
-      onClick={(e) => {
-        e.stopPropagation();
-        if (e.target === e.currentTarget) onClose?.();
-      }}
+      onClick={(e) => e.stopPropagation()}
     >
       <div className="w-24 h-24 rounded-full bg-surface-container flex items-center justify-center">
         <span className="material-symbols-outlined !text-5xl fill text-primary">description</span>
@@ -1098,10 +1071,10 @@ function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props)
   }
 
   switch (category) {
-    case 'image':    viewer = <ImageViewer file={file} onClose={onClose} />; break;
-    case 'video':    viewer = <VideoViewer file={file} onClose={onClose} />; break;
-    case 'audio':    viewer = <AudioViewer file={file} onClose={onClose} />; break;
-    case 'pdf':      viewer = <PdfViewer file={file} onClose={onClose} />; break;
+    case 'image':    viewer = <ImageViewer file={file} />; break;
+    case 'video':    viewer = <VideoViewer file={file} />; break;
+    case 'audio':    viewer = <AudioViewer file={file} />; break;
+    case 'pdf':      viewer = <PdfViewer file={file} />; break;
     // DOCX/XLSX/ZIP are routed to OfficePreview above; PPTX (and legacy ppt) lands here.
     case 'office':   viewer = <PptxSlidePresenter file={file} />; break;
     case 'markdown': viewer = <MarkdownViewer file={file} />; break;
@@ -1113,7 +1086,7 @@ function FileViewerOverlay({ file, files, onClose, onNavigate, actions }: Props)
         // header (name + size + menu + close) stays identical across types.
         viewer = <PlainTextViewer file={file} downloadUrl={downloadUrl} />;
       } else {
-        viewer = <OtherViewer file={file} downloadUrl={downloadUrl} onClose={onClose} />;
+        viewer = <OtherViewer file={file} downloadUrl={downloadUrl} />;
       }
       break;
   }
