@@ -372,10 +372,10 @@ type LockedInfo = {
 };
 
 /**
- * Modal prompt shown when the current folder resolve/show fetch returns
- * HTTP 423 `folder_locked`. Submits the password to `POST /folders/{id}/unlock`
- * and, on success, asks the caller to refetch the folder. The prompt stays
- * open with an inline error when the password is wrong (422).
+ * Modal password prompt for a locked folder. Shared by the hard-load flow
+ * (resolve returns HTTP 423 `folder_locked`) and an in-place click on a locked
+ * FolderCard. Submits to `POST /folders/{id}/unlock`; on success the caller
+ * decides what happens next. Stays open with an inline error on wrong (422).
  */
 function FolderUnlockPrompt({
   locked,
@@ -799,6 +799,12 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   const [deleteFolderTarget, setDeleteFolderTarget] = useState<FolderType | null>(null);
   // Folder lock dialog: which folder + which mode, or null when closed.
   const [lockTarget, setLockTarget] = useState<{ folder: FolderType; mode: FolderLockMode } | null>(null);
+  // Folder whose card was clicked while locked: the password prompt is shown
+  // as an overlay on top of the current view — nothing navigates until the
+  // unlock succeeds. `path` is the destination to open on success.
+  const [clickUnlock, setClickUnlock] = useState<
+    { folderId: string; folderName: string; path: string } | null
+  >(null);
   const [detailsTarget, setDetailsTarget] = useState<FolderType | null>(null);
   const [moveFiles, setMoveFiles] = useState<FileItem[] | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
@@ -2702,7 +2708,11 @@ function FilesContent({ currentPath }: { currentPath: string }) {
                 itemsLabel={t('folders.items')}
                 totalSize={size > 0 ? bytes(size) : undefined}
                 isDropTarget={isDropTarget}
-                onClick={() => navigateToFolder(f.path)}
+                onClick={() =>
+                  f.is_locked
+                    ? setClickUnlock({ folderId: f.id, folderName: f.name, path: f.path })
+                    : navigateToFolder(f.path)
+                }
                 actions={
                   <DropdownMenu
                     align="right"
@@ -2958,6 +2968,21 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             </p>
           </div>
         </div>
+      )}
+
+      {clickUnlock && (
+        <FolderUnlockPrompt
+          locked={{ folderId: clickUnlock.folderId, folderName: clickUnlock.folderName, message: null }}
+          onUnlocked={() => {
+            const target = clickUnlock.path;
+            setClickUnlock(null);
+            // Same destination a normal FolderCard click would open.
+            if (target && target !== '/') navigateAway(`/files${target}`);
+            else navigateAway('/files');
+          }}
+          // Cancel → close only; no navigation, stay in the current folder.
+          onCancel={() => setClickUnlock(null)}
+        />
       )}
     </div>
   );
