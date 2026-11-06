@@ -594,7 +594,14 @@ function FilesRoute() {
           setLocked(null);
           setReloadKey((k) => k + 1);
         }}
-        onCancel={() => setLocked(null)}
+        onCancel={() => {
+          setLocked(null);
+          // Navigate to the parent folder (the folder may itself be the
+          // locked one, so staying put would only re-trigger the 423).
+          const parentPath =
+            currentPath === '/' ? '/' : currentPath.replace(/\/[^/]+$/, '') || '/';
+          router.push(`/files${parentPath === '/' ? '' : parentPath}`);
+        }}
       />
     );
   }
