@@ -228,13 +228,15 @@ class FolderLockGuard
     }
 
     /**
-     * Semua id folder yang berada di subtree terkunci (belum di-unlock) milik
-     * user — termasuk folder terkunci itu sendiri dan SELURUH keturunannya
-     * (nested), serta folder terkunci lain di dalam subtree tersebut.
+     * Semua id folder yang berada di subtree terkunci milik user — termasuk
+     * folder terkunci itu sendiri dan SELURUH keturunannya (nested), serta
+     * folder terkunci lain di dalam subtree tersebut.
      *
-     * Dipakai untuk mengecualikan file dari dashboard/recent/starred:
-     * file dengan folder_id di daftar ini tidak boleh tampil di luar
-     * pembukaan foldernya.
+     * Status unlock SEMENTARA sengaja diabaikan: unlock hanya membuka
+     * browsing/download di dalam folder (gateForFolder/gateForFile), tidak
+     * pernah membuka visibilitas listing. Dipakai untuk mengecualikan file
+     * dari dashboard/recent/starred/search: file dengan folder_id di daftar
+     * ini tidak boleh tampil di luar pembukaan foldernya.
      *
      * @return array<int, string>
      */
@@ -246,10 +248,6 @@ class FolderLockGuard
 
         $ids = [];
         foreach ($locked as $folder) {
-            if ($this->unlocked($folder, $userId)) {
-                continue;
-            }
-
             $ids = array_merge($ids, $this->descendantFolderIds($userId, (string) $folder->id));
         }
 

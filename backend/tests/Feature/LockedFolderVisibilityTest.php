@@ -127,18 +127,34 @@ class LockedFolderVisibilityTest extends TestCase
         $this->assertContains('BintangPublik.txt', $names);
     }
 
-    public function test_unlocked_folder_files_reappear_in_recent_and_starred(): void
+    public function test_unlocked_folder_files_stay_hidden_from_recent_and_starred(): void
     {
-        $file = $this->makeFile('Rahasia.txt', $this->nested, ['is_starred' => true]);
+        $this->makeFile('Rahasia.txt', $this->nested, ['is_starred' => true]);
+        $this->makeFile('Root.txt', null);
 
         $this->assertNotContains('Rahasia.txt', $this->recentNames());
         $this->assertNotContains('Rahasia.txt', $this->starredNames());
 
-        // Unlock folder terkunci (like FolderController@unlock does).
+        // Unlock sementara (seperti FolderController@unlock) hanya membuka
+        // browsing/download di dalam folder — bukan visibilitas listing.
         app(FolderLockGuard::class)->markUnlocked($this->locked->fresh(), (string) $this->owner->id);
 
-        $this->assertContains($file->name, $this->recentNames());
-        $this->assertContains($file->name, $this->starredNames());
+        $this->assertNotContains('Rahasia.txt', $this->recentNames());
+        $this->assertNotContains('Rahasia.txt', $this->starredNames());
+        $this->assertContains('Root.txt', $this->recentNames());
+    }
+
+    public function test_unlocked_folder_files_stay_excluded_from_categories_count(): void
+    {
+        $this->makeFile('Rahasia.txt', $this->nested);
+        $this->makeFile('Publik.txt', $this->public);
+
+        app(FolderLockGuard::class)->markUnlocked($this->locked->fresh(), (string) $this->owner->id);
+
+        $dashboard = $this->getJson('/api/v1/dashboard')->assertOk();
+        $this->assertSame(1, $dashboard->json('data.summary.files_count'));
+        $doc = collect($dashboard->json('data.categories'))->firstWhere('type', 'doc');
+        $this->assertSame(1, $doc['count']);
     }
 
     public function test_files_outside_locked_folders_still_visible_and_counted(): void
