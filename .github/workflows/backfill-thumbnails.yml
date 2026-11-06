@@ -1,0 +1,45 @@
+name: Backfill Thumbnails
+
+# Manual maintenance job: menyusul file LAMA yang belum punya thumbnail video
+# atau belum punya snippet preview dokumen (teks/markdown/pdf/zip).
+# Idempoten — aman dijalankan berulang; run kedua tidak mengubah apa pun.
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Cakupan backfill'
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - videos
+          - docs
+      chunk:
+        description: 'Jumlah file per batch query'
+        required: true
+        default: '200'
+      since:
+        description: 'Untuk docs: hanya metadata NULL / lebih tua dari N hari (0 = semua)'
+        required: true
+        default: '0'
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 60m
+          script: |
+            set -euo pipefail
+            cd //home/enpii/studio/enstorage
+            COMPOSE="docker compose -f docker-compose.yml"
+            $COMPOSE exec -T app php artisan thumbnails:backfill \
+              --only=${{ inputs.only }} \
+              --chunk=${{ inputs.chunk }} \
+              --since=${{ inputs.since }}
