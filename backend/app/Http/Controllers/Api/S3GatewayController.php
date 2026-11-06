@@ -127,7 +127,7 @@ class S3GatewayController extends Controller
             directory: $dirPath,
         );
 
-        if ($locked = $this->lockGuard->gateForFolder($targetFolder, (string) $user->id)) {
+        if ($locked = $this->lockGuard->gateForFolderWithPassword($targetFolder && ! $targetFolder->is_locked ? $targetFolder : null, (string) $user->id, $request->header('X-Folder-Password'))) {
             return $this->xmlError(403, 'AccessDenied', 'Access Denied');
         }
 

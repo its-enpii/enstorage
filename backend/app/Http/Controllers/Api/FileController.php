@@ -1853,7 +1853,11 @@ class FileController extends Controller
      */
     private function lockGuardResponse(Request $request, ?Folder $folder): ?JsonResponse
     {
-        $locked = $this->lockGuard->gateForFolder($folder, $request->user()->id);
+        $locked = $this->lockGuard->gateForFolderWithPassword(
+            $folder,
+            (string) $request->user()->id,
+            $request->header('X-Folder-Password'),
+        );
 
         return $locked ? $this->lockedResponse($locked) : null;
     }
@@ -1863,7 +1867,7 @@ class FileController extends Controller
      */
     private function lockGuardResponseForFile(Request $request, ?FileModel $file): ?JsonResponse
     {
-        $locked = $this->lockGuard->gateForFile($file, $request->user()->id);
+        $locked = $this->lockGuard->gateForFile($file, $request->user()->id, $request->header('X-Folder-Password'));
 
         return $locked ? $this->lockedResponse($locked) : null;
     }

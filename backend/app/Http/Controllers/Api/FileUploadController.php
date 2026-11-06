@@ -88,7 +88,7 @@ class FileUploadController extends Controller
             if (! $folder) {
                 throw ValidationException::withMessages(['folder_id' => __('Folder tidak ditemukan.')]);
             }
-            if ($locked = $this->lockGuard->gateForFolder($folder, $userId)) {
+            if ($locked = $this->lockGuard->gateForFolderWithPassword($folder, $userId, $request->header('X-Folder-Password'))) {
                 return $this->lockGuardFail($locked);
             }
         }
@@ -281,7 +281,7 @@ class FileUploadController extends Controller
             if (! $folder) {
                 throw ValidationException::withMessages(['folder_id' => __('Folder tidak ditemukan.')]);
             }
-            if ($locked = $this->lockGuard->gateForFolder($folder, $userId)) {
+            if ($locked = $this->lockGuard->gateForFolderWithPassword($folder, $userId, $request->header('X-Folder-Password'))) {
                 return $this->lockGuardFail($locked);
             }
         }
@@ -408,7 +408,7 @@ class FileUploadController extends Controller
             if (! $folder) {
                 throw ValidationException::withMessages(['files' => __('Folder tidak ditemukan.')]);
             }
-            if ($locked = $this->lockGuard->gateForFolder($folder, $user->id)) {
+            if ($locked = $this->lockGuard->gateForFolderWithPassword($folder, (string) $user->id, $request->header('X-Folder-Password'))) {
                 return $this->lockGuardFail($locked);
             }
         }
@@ -641,7 +641,7 @@ class FileUploadController extends Controller
             if (! $folder) {
                 throw ValidationException::withMessages(['folder_id' => __('Folder tidak ditemukan.')]);
             }
-            if ($locked = $this->lockGuard->gateForFolder($folder, $userId)) {
+            if ($locked = $this->lockGuard->gateForFolderWithPassword($folder, $userId, $request->header('X-Folder-Password'))) {
                 return $this->lockGuardFail($locked);
             }
         }
@@ -914,7 +914,7 @@ class FileUploadController extends Controller
             if (! $folder) {
                 throw ValidationException::withMessages(['folder_id' => __('Folder tidak ditemukan.')]);
             }
-            if ($locked = $this->lockGuard->gateForFolder($folder, $userId)) {
+            if ($locked = $this->lockGuard->gateForFolderWithPassword($folder, $userId, $request->header('X-Folder-Password'))) {
                 return $this->lockGuardFail($locked);
             }
         }

@@ -7,6 +7,7 @@ use App\Models\Folder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 /**
  * Satu-satunya tempat logika kunci folder (folder lock).
@@ -101,10 +102,59 @@ class FolderLockGuard
     }
 
     /**
+     * Guard untuk folder dengan opsi password per-request (stateless).
+     *
+     * Untuk setiap nenek moyang terkunci: lolos jika cache unlock aktif,
+     * ATAU kalau $password cocok dengan hash kunci folder tersebut.
+     * Jalur header TIDAK menulis cache unlock — murni per-request.
+     */
+    public function gateForFolderWithPassword(?Folder $folder, string $userId, ?string $password): ?Folder
+    {
+        if (! $folder) {
+            return null;
+        }
+
+        foreach ($this->ancestorsIncludingSelf($folder) as $ancestor) {
+            if (! (bool) $ancestor->is_locked) {
+                continue;
+            }
+
+            if (Cache::has($this->cacheKey((string) $ancestor->id, $userId))) {
+                continue;
+            }
+
+            if ($this->passwordMatches($ancestor, $password)) {
+                continue;
+            }
+
+            return $ancestor;
+        }
+
+        return null;
+    }
+
+    /**
+     * Cocokkan password header dengan hash kunci satu folder. Password kosong,
+     * hash kosong, atau hash::check gagal → false (diperlakukan seperti salah).
+     */
+    private function passwordMatches(Folder $folder, ?string $password): bool
+    {
+        if ($password === null || $password === '' || ! $folder->lock_password_hash) {
+            return false;
+        }
+
+        try {
+            return Hash::check($password, $folder->lock_password_hash);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
      * Guard untuk file berdasarkan folder induknya (file root tidak mungkin
      * terkunci). Return folder terkunci yang menghalangi, atau null kalau OK.
      */
-    public function gateForFile(?File $file, string $userId): ?Folder
+    public function gateForFile(?File $file, string $userId, ?string $password = null): ?Folder
     {
         if (! $file || ! $file->folder_id) {
             return null;
@@ -114,7 +164,9 @@ class FolderLockGuard
             ? $file->folder
             : Folder::find($file->folder_id);
 
-        return $this->gateForFolder($folder, $userId);
+        return $password === null
+            ? $this->gateForFolder($folder, $userId)
+            : $this->gateForFolderWithPassword($folder, $userId, $password);
     }
 
     /**
@@ -230,7 +282,7 @@ class FolderLockGuard
      * Tambahkan kondisi ke query builder agar file di subtree terkunci
      * (semua kedalaman) dikecualikan.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<File>  $query
+     * @param  Builder<File>  $query
      */
     public function excludeLockedFiles(Builder $query, string $userId): void
     {
