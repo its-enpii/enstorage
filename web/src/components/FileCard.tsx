@@ -20,6 +20,8 @@ export type FileCardProps = {
   selectMode?: boolean;
   /** Image URL for the visual preview stage. */
   thumbnailUrl?: string | null;
+  /** Contextual metadata from the API (snippet for text/PDF previews). */
+  metadata?: Record<string, unknown> | null;
   onClick?: () => void;
   /** Action slot rendered top-right of the preview stage (menu trigger, …). */
   actions?: ReactNode;
@@ -90,6 +92,42 @@ function fileVisual(mimeType: string, name?: string): { tone: FileTone; symbol: 
 }
 
 /**
+ * Resolve a short textual preview for documents whose API metadata carries a
+ * `snippet` (text/markdown/code/PDF). Returns null for images/videos/audio and
+ * for files without a snippet — those keep the icon fallback.
+ */
+function previewSnippet(
+  mimeType: string,
+  name: string | undefined,
+  metadata: Record<string, unknown> | null | undefined,
+): string | null {
+  const mime = mimeType.toLowerCase();
+  if (mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/')) {
+    return null;
+  }
+
+  const isDocument =
+    mime === 'application/pdf' ||
+    mime.includes('pdf') ||
+    mime.startsWith('text/') ||
+    /json|javascript|typescript|xml|yaml|html|css|plain|script|code|markdown|x-markdown/.test(mime) ||
+    /zip|rar|tar|7z|gzip|compressed|archive/.test(mime) ||
+    /\.(txt|md|markdown|json|ya?ml|xml|csv|log|ts|tsx|js|jsx|py|rb|go|rs|php|sh)$/i.test(name ?? '');
+  if (!isDocument) {
+    return null;
+  }
+
+  const raw = metadata?.snippet;
+  if (typeof raw !== 'string') {
+    return null;
+  }
+
+  const trimmed = raw.trim();
+
+  return trimmed === '' ? null : trimmed;
+}
+
+/**
  * File card — a document/media tile with a dedicated visual preview stage,
  * a monospace extension chip and structured metadata underneath.
  */
@@ -104,6 +142,7 @@ export function FileCard({
   selected,
   selectMode,
   thumbnailUrl,
+  metadata,
   onClick,
   actions,
   className,
@@ -112,6 +151,7 @@ export function FileCard({
   const { tone, symbol } = fileVisual(mimeType, name);
   const showSelection = Boolean(selectMode || selected);
   const isDone = uploadStatus === 'done';
+  const snippet = previewSnippet(mimeType, name, metadata);
 
   return (
     <CardTile data-testid={dataTestId} onClick={onClick} selected={selected} className={className}>
@@ -128,6 +168,21 @@ export function FileCard({
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20 pointer-events-none" />
           </>
+        ) : snippet ? (
+          <div
+            className={clsx(
+              'relative inset-x-0 top-0 h-full w-full px-3 pt-2.5 pb-6 overflow-hidden text-left',
+              tone.box,
+            )}
+            data-testid="file-preview-snippet"
+          >
+            <span className={clsx('material-symbols-outlined absolute top-1.5 right-1.5 !text-sm opacity-70', tone.icon)} aria-hidden>
+              {symbol}
+            </span>
+            <p className="text-xs line-clamp-3 font-mono leading-relaxed whitespace-pre-wrap break-words opacity-80">
+              {snippet}
+            </p>
+          </div>
         ) : (
           <div
             className={clsx(

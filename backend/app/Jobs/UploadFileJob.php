@@ -174,7 +174,7 @@ class UploadFileJob implements ShouldBeUnique, ShouldQueue
                     GenerateThumbnailJob::dispatch($file->id);
                 }
             } elseif (str_starts_with($file->mime_type, 'video/')) {
-                // Video butuh ffmpeg — out of scope Fase 3, generate via background job.
+                // Video: frame grab via ffmpeg di GenerateThumbnailJob (background).
                 GenerateThumbnailJob::dispatch($file->id);
             }
 

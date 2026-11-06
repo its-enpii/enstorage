@@ -264,6 +264,7 @@ function StarredContent() {
               mimeType={f.mime_type}
               extension={fileExtension(f.name)}
               thumbnailUrl={fileThumbnailUrl(f)}
+              metadata={f.metadata}
               isStarred={f.is_starred}
               uploadStatus={f.upload_status}
               uploadStatusLabel={statusLabel(t, f.upload_status)}

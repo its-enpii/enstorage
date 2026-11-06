@@ -20,6 +20,7 @@ RUN apk add --no-cache \
         g++ \
         make \
         linux-headers \
+        ffmpeg \
         $PHPIZE_DEPS \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install pdo pgsql pdo_pgsql intl zip bcmath pcntl gd \

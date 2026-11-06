@@ -227,6 +227,7 @@ function DashboardContent() {
                   mimeType={file.mime_type}
                   extension={fileExtension(file.name)}
                   thumbnailUrl={thumbnailUrl(file)}
+                  metadata={file.metadata}
                   isStarred={file.is_starred}
                   uploadStatus={file.upload_status}
                   onClick={() => file.upload_status === 'done' && setViewerFile(file)}

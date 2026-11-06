@@ -283,6 +283,7 @@ export default function CategoryClient({ type }: { type: string }) {
                     mimeType={file.mime_type}
                     extension={fileExtension(file.name)}
                     thumbnailUrl={fileThumbnailUrl(file)}
+                    metadata={file.metadata}
                     isStarred={file.is_starred}
                     uploadStatus={file.upload_status}
                     onClick={() =>

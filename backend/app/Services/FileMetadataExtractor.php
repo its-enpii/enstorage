@@ -20,6 +20,9 @@ class FileMetadataExtractor
     /** Batas ukuran file teks yang dibaca (5 MB) — hindari makan memori. */
     private const TEXT_READ_MAX_BYTES = 5 * 1024 * 1024;
 
+    /** Panjang maksimum `snippet` preview teks/PDF. */
+    private const SNIPPET_MAX_CHARS = 500;
+
     /** Batas ukuran PDF yang di-parse (50 MB). */
     private const PDF_PARSE_MAX_BYTES = 50 * 1024 * 1024;
 
@@ -306,6 +309,14 @@ class FileMetadataExtractor
                 $out['page_count'] = count($pages);
             }
 
+            // Preview halaman 1 (teks mentah parser, max 500 char).
+            if (is_array($pages) && isset($pages[0])) {
+                $snippet = $this->snippet((string) $pages[0]->getText());
+                if ($snippet !== '') {
+                    $out['snippet'] = $snippet;
+                }
+            }
+
             $details = $pdf->getDetails();
             if (is_array($details)) {
                 foreach (['Title' => 'title', 'Author' => 'author'] as $srcKey => $dstKey) {
@@ -344,6 +355,7 @@ class FileMetadataExtractor
             }
 
             $entryCount = $zip->numFiles;
+            $firstEntry = $entryCount > 0 ? (string) $zip->getNameIndex(0) : '';
             $uncompressed = 0;
             for ($i = 0; $i < $entryCount; $i++) {
                 $stat = $zip->statIndex($i);
@@ -353,10 +365,15 @@ class FileMetadataExtractor
             }
             $zip->close();
 
-            return [
+            $out = [
                 'entry_count' => (int) $entryCount,
                 'uncompressed_size' => (int) $uncompressed,
             ];
+            if ($firstEntry !== '') {
+                $out['first_entry'] = $firstEntry;
+            }
+
+            return $out;
         } catch (\Throwable $e) {
             Log::warning('FileMetadataExtractor: ZipArchive gagal', ['path' => $path, 'error' => $e->getMessage()]);
 
@@ -381,15 +398,31 @@ class FileMetadataExtractor
 
             $lineCount = $content === '' ? 0 : substr_count($content, "\n") + 1;
 
-            return [
+            $out = [
                 'line_count' => (int) $lineCount,
                 'character_count' => (int) mb_strlen($content),
             ];
+
+            // Snippet untuk preview visual card — konten sudah dibaca, tanpa IO baru.
+            $snippet = $this->snippet($content);
+            if ($snippet !== '') {
+                $out['snippet'] = $snippet;
+            }
+
+            return $out;
         } catch (\Throwable $e) {
             Log::warning('FileMetadataExtractor: baca teks gagal', ['path' => $path, 'error' => $e->getMessage()]);
 
             return [];
         }
+    }
+
+    /** Potongan teks awal untuk preview card (maks 500 char, whitespace dirapatkan). */
+    private function snippet(string $content): string
+    {
+        $normalized = trim((string) preg_replace('/\s+/u', ' ', $content));
+
+        return mb_substr($normalized, 0, self::SNIPPET_MAX_CHARS);
     }
 
     private function isZipLike(string $mime): bool

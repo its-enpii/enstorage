@@ -18,12 +18,15 @@ use Throwable;
 
 /**
  * Fallback thumbnail job — dipanggil kalau inline generation di UploadFileJob
- * gagal, atau untuk video (butuh ffmpeg, out of scope Fase 3).
+ * gagal, atau untuk video (frame grab via ffmpeg).
  * Download file dari GDrive lalu panggil ThumbnailGenerator.
  */
 class GenerateThumbnailJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    /** Video di atas batas ini dilewati — hindari beban worker. */
+    public const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
 
     public int $tries = 2;
 
@@ -38,8 +41,18 @@ class GenerateThumbnailJob implements ShouldQueue
             return;
         }
 
-        // Hanya image — video butuh ffmpeg.
-        if (! str_starts_with($file->mime_type, 'image/')) {
+        $isImage = str_starts_with($file->mime_type, 'image/');
+        $isVideo = str_starts_with($file->mime_type, 'video/');
+        if (! $isImage && ! $isVideo) {
+            return;
+        }
+
+        if ($isVideo && (int) $file->size > self::MAX_VIDEO_BYTES) {
+            Log::warning('GenerateThumbnailJob: video terlalu besar, thumbnail dilewati', [
+                'file_id' => $file->id,
+                'size' => $file->size,
+            ]);
+
             return;
         }
 
@@ -48,8 +61,17 @@ class GenerateThumbnailJob implements ShouldQueue
             return;
         }
 
+        $framePath = null;
+
         try {
-            $generator->generate($file, $sourcePath);
+            if ($isVideo) {
+                $framePath = $this->grabVideoFrame($sourcePath);
+                if (! $framePath) {
+                    return;
+                }
+            }
+
+            $generator->generate($file, $framePath ?? $sourcePath);
         } catch (Throwable $e) {
             Log::warning('GenerateThumbnailJob gagal', [
                 'file_id' => $file->id,
@@ -57,7 +79,74 @@ class GenerateThumbnailJob implements ShouldQueue
             ]);
         } finally {
             @unlink($sourcePath);
+            if ($framePath) {
+                @unlink($framePath);
+            }
         }
+    }
+
+    /**
+     * Ekstrak satu frame (detik ke-1) dari video via ffmpeg.
+     * Tidak pernah melempar: ffmpeg absen/gagal → null + log warning.
+     */
+    private function grabVideoFrame(string $sourcePath): ?string
+    {
+        $ffmpeg = $this->detectFfmpeg();
+        if (! $ffmpeg) {
+            Log::warning('GenerateThumbnailJob: ffmpeg tidak tersedia, thumbnail video dilewati', [
+                'file_id' => $this->fileId,
+            ]);
+
+            return null;
+        }
+
+        $framePath = Storage::disk('local')->path('temp/'.$this->fileId.'.thumb_frame.jpg');
+
+        $cmd = sprintf(
+            '%s -y -ss 1 -i %s -frames:v 1 -f image2 %s 2>&1',
+            escapeshellarg($ffmpeg),
+            escapeshellarg($sourcePath),
+            escapeshellarg($framePath),
+        );
+
+        try {
+            exec($cmd, $output, $exitCode);
+        } catch (Throwable $e) {
+            Log::warning('GenerateThumbnailJob: ffmpeg gagal dijalankan', [
+                'file_id' => $this->fileId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if ($exitCode !== 0 || ! is_file($framePath) || filesize($framePath) === 0) {
+            @unlink($framePath);
+            Log::warning('GenerateThumbnailJob: ekstraksi frame video gagal', [
+                'file_id' => $this->fileId,
+                'exit_code' => $exitCode,
+            ]);
+
+            return null;
+        }
+
+        return $framePath;
+    }
+
+    /** Lokasi binary ffmpeg, atau null bila tidak terpasang. */
+    private function detectFfmpeg(): ?string
+    {
+        if (! function_exists('exec')) {
+            return null;
+        }
+
+        try {
+            $path = trim((string) @exec('which ffmpeg 2>/dev/null'));
+        } catch (Throwable $e) {
+            return null;
+        }
+
+        return $path !== '' && is_executable($path) ? $path : null;
     }
 
     private function downloadFromDrive(FileModel $file): ?string
