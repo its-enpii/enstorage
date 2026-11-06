@@ -7,6 +7,7 @@ use App\Jobs\UploadFileJob;
 use App\Models\File;
 use App\Models\User;
 use App\Services\FileMetadataExtractor;
+use App\Services\FileSourceFetcher;
 use App\Services\ThumbnailGenerator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -194,7 +195,7 @@ class FileMetadataExtractionTest extends TestCase
             'uploaded_at' => now(),
         ]);
 
-        (new GenerateThumbnailJob($file->id))->handle(app(ThumbnailGenerator::class));
+        (new GenerateThumbnailJob($file->id))->handle(app(ThumbnailGenerator::class), app(FileSourceFetcher::class));
 
         $this->assertNull($file->fresh()->thumbnail);
     }

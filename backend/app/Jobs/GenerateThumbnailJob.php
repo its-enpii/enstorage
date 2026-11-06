@@ -3,10 +3,8 @@
 namespace App\Jobs;
 
 use App\Models\File as FileModel;
-use App\Services\Google\GoogleClientFactory;
-use App\Services\Google\GoogleTokenService;
+use App\Services\FileSourceFetcher;
 use App\Services\ThumbnailGenerator;
-use Google\Service\Drive;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -34,7 +32,7 @@ class GenerateThumbnailJob implements ShouldQueue
 
     public function __construct(public string $fileId) {}
 
-    public function handle(ThumbnailGenerator $generator): void
+    public function handle(ThumbnailGenerator $generator, FileSourceFetcher $sources): void
     {
         $file = FileModel::find($this->fileId);
         if (! $file || ! $file->isDone()) {
@@ -56,7 +54,7 @@ class GenerateThumbnailJob implements ShouldQueue
             return;
         }
 
-        $sourcePath = $this->downloadFromDrive($file);
+        $sourcePath = $sources->downloadFromDrive($file);
         if (! $sourcePath) {
             return;
         }
@@ -147,35 +145,5 @@ class GenerateThumbnailJob implements ShouldQueue
         }
 
         return $path !== '' && is_executable($path) ? $path : null;
-    }
-
-    private function downloadFromDrive(FileModel $file): ?string
-    {
-        try {
-            $account = $file->googleAccount;
-            if (! $account) {
-                return null;
-            }
-
-            $client = app(GoogleClientFactory::class)->makeFor($account);
-            app(GoogleTokenService::class)->ensureFreshToken($account);
-            $client->setAccessToken($account->access_token);
-
-            $drive = new Drive($client);
-            $response = $drive->files->get($file->gdrive_file_id, ['alt' => 'media']);
-            $content = $response->getBody()->getContents();
-
-            $tmpPath = Storage::disk('local')->path('temp/'.$file->id.'.thumb_src');
-            file_put_contents($tmpPath, $content);
-
-            return $tmpPath;
-        } catch (Throwable $e) {
-            Log::warning('downloadFromDrive gagal', [
-                'file_id' => $file->id,
-                'error' => $e->getMessage(),
-            ]);
-
-            return null;
-        }
     }
 }

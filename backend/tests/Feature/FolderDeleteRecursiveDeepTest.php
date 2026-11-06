@@ -13,6 +13,7 @@ use App\Models\ShareLink;
 use App\Models\User;
 use App\Services\ActivityLogService;
 use App\Services\FileMetadataExtractor;
+use App\Services\FileSourceFetcher;
 use App\Services\Folder\FolderPathService;
 use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveFolderService;
@@ -359,7 +360,7 @@ class FolderDeleteRecursiveDeepTest extends TestCase
             app(ThumbnailGenerator::class),
             app(FileMetadataExtractor::class),
         );
-        $thumbJob->handle(app(ThumbnailGenerator::class));
+        $thumbJob->handle(app(ThumbnailGenerator::class), app(FileSourceFetcher::class));
         $this->assertTrue(true, 'kedua job selesai tanpa exception');
     }
 
