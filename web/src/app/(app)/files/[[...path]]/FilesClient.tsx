@@ -424,7 +424,7 @@ function FolderUnlockPrompt({
   }
 
   return (
-    <AppShell>
+    <>
       <Dialog
         open
         onClose={submitting ? () => {} : onCancel}
@@ -464,7 +464,7 @@ function FolderUnlockPrompt({
           {error && <Alert tone="danger">{error}</Alert>}
         </div>
       </Dialog>
-    </AppShell>
+    </>
   );
 }
 
