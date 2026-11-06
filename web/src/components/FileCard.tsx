@@ -159,7 +159,7 @@ export function FileCard({
 
         {actions && (
           <div
-            className="absolute top-1 right-1 backdrop-blur-md bg-background/70 hover:bg-background border border-outline-variant/25 rounded-lg transition-all"
+            className="absolute top-1 right-1"
             onClick={(e) => e.stopPropagation()}
           >
             {actions}
