@@ -371,11 +371,6 @@ type LockedInfo = {
   message: string | null;
 };
 
-/** Router helper shared by the unlock prompt's "cancel" affordance. */
-function navigateFilesRoot(router: ReturnType<typeof useRouter>) {
-  router.push('/files');
-}
-
 /**
  * Modal prompt shown when the current folder resolve/show fetch returns
  * HTTP 423 `folder_locked`. Submits the password to `POST /folders/{id}/unlock`
@@ -599,7 +594,7 @@ function FilesRoute() {
           setLocked(null);
           setReloadKey((k) => k + 1);
         }}
-        onCancel={() => navigateFilesRoot(router)}
+        onCancel={() => setLocked(null)}
       />
     );
   }
