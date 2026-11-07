@@ -11,32 +11,19 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          command_timeout: 25m
+          command_timeout: 20m
           script: |
             cd //home/enpii/studio/enstorage
             C="docker compose -f docker-compose.yml"
             $C exec -T app php artisan tinker --execute='
-              echo "=== 10 folder dengan file terbanyak: total vs done vs status lain ===", PHP_EOL;
-              $rows = DB::table("files")->select("folder_id", DB::raw("count(*) as total"))
-                ->whereNotNull("folder_id")->groupBy("folder_id")->orderByDesc("total")->limit(10)->get();
-              foreach ($rows as $r) {
-                $name = DB::table("folders")->where("id", $r->folder_id)->value("name");
-                $done = DB::table("files")->where("folder_id", $r->folder_id)->where("upload_status","done")->count();
-                $byStatus = DB::table("files")->where("folder_id", $r->folder_id)
-                  ->select("upload_status", DB::raw("count(*) as n"))->groupBy("upload_status")->pluck("n","upload_status")->all();
-                $s = []; foreach ($byStatus as $k=>$v) { $s[] = $k."=".$v; }
-                echo "  ", $r->folder_id, " | ", $name, " | total=", $r->total, " done=", $done, " [", implode(",", $s), "]", PHP_EOL;
-              }
-              echo "=== ringkasan status seluruh file ===", PHP_EOL;
-              foreach (DB::table("files")->select("upload_status", DB::raw("count(*) as n"))->groupBy("upload_status")->get() as $r) {
-                echo "  ", $r->upload_status, "=", $r->n, PHP_EOL;
-              }
-              echo "=== file dengan folder_id menunjuk folder yang TIDAK ADA (yatim) ===", PHP_EOL;
-              $orphan = DB::table("files as f")->leftJoin("folders as d","d.id","=","f.folder_id")
-                ->whereNotNull("f.folder_id")->whereNull("d.id")->count();
-              echo "  orphan_files=", $orphan, PHP_EOL;
-              echo "=== folder yatim (parent hilang) ===", PHP_EOL;
-              $of = DB::table("folders as c")->leftJoin("folders as p","p.id","=","c.parent_id")
-                ->whereNotNull("c.parent_id")->whereNull("p.id")->count();
-              echo "  orphan_folders=", $of, PHP_EOL;
+              $fid = DB::table("files")->whereNotNull("folder_id")->select("folder_id", DB::raw("count(*) as n"))
+                ->groupBy("folder_id")->orderByDesc("n")->value("folder_id");
+              $name = DB::table("folders")->where("id", $fid)->value("name");
+              $files = DB::table("files")->where("folder_id", $fid)->count();
+              $subs  = DB::table("folders")->where("parent_id", $fid)->count();
+              echo "FOLDER=", $name, " files=", $files, " subfolders=", $subs, PHP_EOL;
+              echo "per_page=50 -> last_page=", (int) ceil($files / 50), " halaman", PHP_EOL;
+              echo "hasMoreFolders=", ($subs > 0 ? "true" : "FALSE"), " hasMoreFiles=", ($files > 50 ? "TRUE" : "false"), PHP_EOL;
+              echo "=> sentinel enabled (tab=all) = hasMoreFolders = ", ($subs > 0 ? "true" : "FALSE"), PHP_EOL;
+              echo "=> file yang tampil sampai user scroll habis = ", ($subs > 0 ? "50+" : "50 SAJA dari ".$files), PHP_EOL;
             '
