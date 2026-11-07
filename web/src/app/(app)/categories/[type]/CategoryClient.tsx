@@ -17,11 +17,13 @@ import { EmptyState } from '@/components/EmptyState';
 import { FileCard } from '@/components/ItemCard';
 import { FileViewer } from '@/components/FileViewer';
 import { Loading } from '@/components/Loading';
+import { Spinner } from '@/components/Spinner';
 import { Alert } from '@/components/Alert';
 import { Tooltip } from '@/components/Tooltip';
 import { bytes, fileExtension } from '@/lib/format';
 import { getFileDownloadUrl, triggerDirectDownload } from '@/lib/download';
 import { usePageTitle } from '@/lib/usePageTitle';
+import { useInfiniteScroll } from '@/lib/useInfiniteScroll';
 import { IconSymbol } from '@/lib/icons';
 
 const CATEGORY_MAP: Record<
@@ -144,6 +146,13 @@ export default function CategoryClient({ type }: { type: string }) {
   useEffect(() => {
     void loadFiles(1, false);
   }, [loadFiles]);
+  const stableLoadMore = useCallback(() => {
+    if (loadingMore || loading) return;
+    void loadFiles(page + 1, true);
+  }, [loadingMore, loading, loadFiles, page]);
+  const loadMoreSentinel = useInfiniteScroll(stableLoadMore, {
+    enabled: hasMore && !loadingMore && !loading,
+  });
 
   const sortMenuItems: MenuItem[] = [
     {
@@ -315,15 +324,19 @@ export default function CategoryClient({ type }: { type: string }) {
               })}
             </div>
 
-            {hasMore && (
-              <div className="flex justify-center pt-6">
-                <Button
-                  variant="secondary"
-                  size="md"
-                  loading={loadingMore}
-                  onClick={() => void loadFiles(page + 1, true)}
-                >
-                  {loadingMore ? t('common.memuatLagi') : t('common.muatLagi')}
+            <div ref={loadMoreSentinel} aria-hidden className="h-1 w-full" />
+            <div role="status" aria-live="polite" className={loadingMore ? 'flex items-center justify-center gap-2 pt-6 text-metadata text-on-surface-variant' : 'sr-only'}>
+              {loadingMore && (
+                <>
+                  <Spinner size="sm" />
+                  <span>{t('common.memuatLagi')}</span>
+                </>
+              )}
+            </div>
+            {hasMore && !loadingMore && (
+              <div className="flex justify-center pt-2">
+                <Button variant="ghost" size="sm" onClick={stableLoadMore}>
+                  {t('common.muatLagi')}
                 </Button>
               </div>
             )}

@@ -10,6 +10,7 @@ import { Input } from '@/components/Input';
 import { FolderCard } from '@/components/ItemCard';
 import { UploadToolbar } from '@/components/UploadToolbar';
 import { Loading } from '@/components/Loading';
+import { Spinner } from '@/components/Spinner';
 import { Alert } from '@/components/Alert';
 import { EmptyState } from '@/components/EmptyState';
 import { DeleteFolderDialog } from '@/components/DeleteFolderDialog';
@@ -30,6 +31,7 @@ import {
 import { bytes } from '@/lib/format';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { usePageTitle } from '@/lib/usePageTitle';
+import { useInfiniteScroll } from '@/lib/useInfiniteScroll';
 
 type FoldersView = { current: FolderWithChildren | null; list: FolderType[] };
 type FilesViewShape = { folders: FolderType[]; files: unknown[]; breadcrumb: { id: string; name: string }[] };
@@ -178,6 +180,13 @@ function FoldersContent() {
       setLoadingMore(false);
     }
   }, [loadingMore, folderPage, folderLastPage, userId, currentId]);
+  const stableLoadMore = useCallback(() => {
+    if (loadingMore) return;
+    void loadMore();
+  }, [loadMore, loadingMore]);
+  const loadMoreSentinel = useInfiniteScroll(stableLoadMore, {
+    enabled: hasMoreFolders && !loading && !loadingMore,
+  });
 
   // Initial state already hydrated from cache in useState lazy initializer.
   // We only need to kick off a background revalidate here, and only if we
@@ -498,24 +507,23 @@ function FoldersContent() {
         </div>
       )}
 
-      {/* Load more button — manual trigger, no auto scroll. */}
-      {!loading && hasMoreFolders && folders.length > 0 && (
-        <div className="flex items-center justify-center pt-10 pb-4">
-          <Button
-            variant="secondary"
-            size="md"
-            disabled={loadingMore}
-            onClick={() => void loadMore()}
-          >
-            {loadingMore ? (
+      {/* Infinite-scroll sentinel + subtle loading indicator. */}
+      {hasMoreFolders && folders.length > 0 && !loading && (
+        <div className="flex flex-col items-center pt-10 pb-4 gap-2">
+          <div ref={loadMoreSentinel} aria-hidden className="h-1 w-full" />
+          <div role="status" aria-live="polite" className={loadingMore ? 'flex items-center gap-2 text-metadata text-on-surface-variant' : 'sr-only'}>
+            {loadingMore && (
               <>
-                <div className="w-4 h-4 rounded-full border-2 border-outline-variant border-t-primary animate-spin" />
-                {t('common.memuatLagi')}
+                <Spinner size="sm" />
+                <span>{t('common.memuatLagi')}</span>
               </>
-            ) : (
-              <>{t('common.muatLagi')}</>
             )}
-          </Button>
+          </div>
+          {!loadingMore && scrollY > 0 && (
+            <Button variant="ghost" size="sm" onClick={stableLoadMore}>
+              {t('common.muatLagi')}
+            </Button>
+          )}
         </div>
       )}
 

@@ -49,6 +49,7 @@ import { Tooltip } from '@/components/Tooltip';
 import { UploadProgress, type UploadJob } from '@/components/UploadProgress';
 import { EmptyDropZone } from '@/components/EmptyDropZone';
 import { Loading } from '@/components/Loading';
+import { Spinner } from '@/components/Spinner';
 import { usePrompt } from '@/components/usePrompt';
 import { useInfiniteScroll } from '@/lib/useInfiniteScroll';
 import {
@@ -3006,14 +3007,19 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       {!loading && hasMore && (visibleFolders.length > 0 || visibleFiles.length > 0) && (
         <div className="flex flex-col items-center pt-10 pb-4 gap-3">
           <div ref={loadMoreSentinel} aria-hidden className="h-1 w-full" />
-          <Button
-            variant="secondary"
-            size="md"
-            loading={loadingMore}
-            onClick={() => void loadMore()}
-          >
-            {loadingMore ? t('common.memuatLagi') : t('common.muatLagi')}
-          </Button>
+          <div role="status" aria-live="polite" className={loadingMore ? 'flex items-center gap-2 text-metadata text-on-surface-variant' : 'sr-only'}>
+            {loadingMore && (
+              <>
+                <Spinner size="sm" />
+                <span>{t('common.memuatLagi')}</span>
+              </>
+            )}
+          </div>
+          {hasMore && !loadingMore && scrollY > 0 && (
+            <Button variant="ghost" size="sm" onClick={stableLoadMore}>
+              {t('common.muatLagi')}
+            </Button>
+          )}
         </div>
       )}
 
