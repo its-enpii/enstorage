@@ -2,15 +2,24 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { apiRequest, apiRequestEnvelope, ApiError, type FileItem, type Folder as FolderType } from '@/lib/api';
+import {
+  apiRequest,
+  apiRequestEnvelope,
+  ApiError,
+  getToken,
+  type FileItem,
+  type Folder as FolderType,
+} from '@/lib/api';
+import { bytes, fileExtension } from '@/lib/format';
 import { Modal } from '@/components/Modal';
 import { Button } from '@/components/Button';
 import { IconButton } from '@/components/Button';
-import { Checkbox } from '@/components/Checkbox';
 import { SearchInput } from '@/components/SearchInput';
 import { EmptyState } from '@/components/EmptyState';
 import { Alert } from '@/components/Alert';
 import { Spinner } from '@/components/Spinner';
+import { FileCard } from '@/components/FileCard';
+import { FolderCard } from '@/components/FolderCard';
 
 type Props = {
   open: boolean;
@@ -31,6 +40,12 @@ export type AdoptResult = {
 type Crumb = { id: string | null; name: string };
 
 const PAGE_LIMIT = 100;
+
+function fileThumbnailUrl(file: FileItem): string | null {
+  if (!file.has_thumbnail || file.upload_status !== 'done') return null;
+  const token = getToken();
+  return `${process.env.NEXT_PUBLIC_API_BASE}/files/${file.id}/thumbnail${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+}
 
 /**
  * Dialog besar "Masukkan file" — HANYA dibuka dari dalam folder terkunci yang
@@ -213,26 +228,59 @@ export function AdoptItemsDialog({ open, targetFolderId, onClose, onAdopted }: P
             className="m-2"
           />
         ) : (
-          <ul className="divide-y divide-outline-variant/20">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 p-2">
             {items.map(({ kind, item }) => {
-              const checked = kind === 'folder' ? selectedFolders.has(item.id) : selectedFiles.has(item.id);
-              return (
-                <li key={`${kind}-${item.id}`} className="flex items-center gap-2 px-3 py-1">
-                  <Checkbox
-                    checked={checked}
-                    onChange={(c) => (kind === 'folder' ? toggleFolder(item.id, c) : toggleFile(item.id, c))}
-                    label={item.name}
-                    className="flex-1 min-w-0 py-2"
+              if (kind === 'folder') {
+                const folder = item;
+                const checked = selectedFolders.has(folder.id);
+                return (
+                  <FolderCard
+                    key={`folder-${folder.id}`}
+                    name={folder.name}
+                    description={folder.description}
+                    iconName={folder.icon}
+                    logoUrl={folder.logo_url}
+                    isStarred={folder.is_starred}
+                    isLocked={folder.is_locked}
+                    itemCount={(folder.files_count ?? 0) + (folder.folders_count ?? 0)}
+                    itemsLabel={t('folders.items')}
+                    totalSize={folder.total_size && folder.total_size > 0 ? bytes(folder.total_size) : undefined}
+                    selected={checked}
+                    onClick={() => toggleFolder(folder.id, !checked)}
+                    actions={
+                      <IconButton
+                        aria-label={t('files.move.adoptOpen')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          enterFolder(folder);
+                        }}
+                      >
+                        <span className="material-symbols-outlined !text-xl">chevron_right</span>
+                      </IconButton>
+                    }
                   />
-                  {kind === 'folder' && (
-                    <IconButton aria-label={t('files.move.adoptOpen')} onClick={() => enterFolder(item)}>
-                      <span className="material-symbols-outlined !text-xl">chevron_right</span>
-                    </IconButton>
-                  )}
-                </li>
+                );
+              }
+              const file = item;
+              const checked = selectedFiles.has(file.id);
+              return (
+                <FileCard
+                  key={`file-${file.id}`}
+                  name={file.name}
+                  extension={fileExtension(file.name)}
+                  mimeType={file.mime_type}
+                  size={bytes(file.size)}
+                  thumbnailUrl={fileThumbnailUrl(file)}
+                  metadata={file.metadata}
+                  isStarred={file.is_starred}
+                  uploadStatus={file.upload_status}
+                  selected={checked}
+                  selectMode
+                  onClick={() => toggleFile(file.id, !checked)}
+                />
               );
             })}
-          </ul>
+          </div>
         )}
       </div>
 
