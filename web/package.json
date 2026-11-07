@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "paging:verify": "node scripts/check-files-paging.mjs",
     "docs:verify": "node scripts/verify-api-docs.mjs",
-    "i18n:verify": "node scripts/check-i18n-placeholders.mjs"
+    "i18n:verify": "node scripts/check-i18n-placeholders.mjs",
+    "merge:verify": "node scripts/check-merge-invalidation.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

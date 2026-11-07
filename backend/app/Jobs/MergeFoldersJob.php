@@ -40,6 +40,14 @@ class MergeFoldersJob implements ShouldQueue
     public array $sourceFolderIds;
 
     /**
+     * Snapshot child_id => parent_id lama, dikumpulkan SEBELUM anak dipindah
+     * (dipakai untuk `previous_parent_id` pada broadcast setelah commit).
+     *
+     * @var array<int, string>
+     */
+    public array $previousParents = [];
+
+    /**
      * @param  array<int, string>  $sourceFolderIds
      */
     public function __construct(
@@ -62,6 +70,16 @@ class MergeFoldersJob implements ShouldQueue
         }
 
         $this->performMerge();
+
+        // Jalur async: transaksi job sudah commit → broadcast perpindahan
+        // anak (batch ≤100 per event loop tick, pola FilesDeletedBroadcast).
+        self::broadcastMovedChildren(
+            $this->userId,
+            $this->targetFolderId,
+            $this->previousParents,
+            100,
+            $this->sourceFolderIds,
+        );
     }
 
     /**
@@ -93,6 +111,12 @@ class MergeFoldersJob implements ShouldQueue
             ->orderBy('created_at')
             ->orderBy('id')
             ->get();
+
+        // Snapshot parent lama SEBELUM dipindah → dipakai untuk
+        // `previous_parent_id` saat broadcast setelah commit.
+        foreach ($folders as $folder) {
+            $this->previousParents[(string) $folder->id] = (string) $folder->parent_id;
+        }
 
         foreach ($folders as $folder) {
             [$action, $newName] = $this->resolveName($folder->name, $folderNames, false);
@@ -139,8 +163,13 @@ class MergeFoldersJob implements ShouldQueue
         $paths = app(FolderPathService::class);
         foreach ($touchedFolders as $folder) {
             $paths->cascadePathUpdate($folder);
-            FolderMovedBroadcast::dispatch($folder, $sourceIds[0] ?? null);
         }
+
+        // `FolderMovedBroadcast` TIDAK dikirim di sini: performMerge() juga
+        // berjalan di dalam DB::transaction controller, dan event dari
+        // transaksi yang bisa rollback akan menampilkan perpindahan palsu.
+        // Pemanggil mengirimnya lewat {@see broadcastMovedChildren()} setelah
+        // commit (dipisah batch ≤100/event loop tick).
 
         return [
             'moved_folders' => $movedFolders,
@@ -148,6 +177,37 @@ class MergeFoldersJob implements ShouldQueue
             'renamed' => $renamed,
             'skipped' => $skipped,
         ];
+    }
+
+    /**
+     * Kirim `FolderMovedBroadcast` untuk setiap anak yang sekarang berada di
+     * folder tujuan. Dipanggil SETELAH commit oleh controller (jalur sinkron)
+     * dan oleh {@see handle()} (jalur async), dipisah batch ≤100 per event
+     * loop tick supaya channel tidak dibanjiri saat ratusan anak pindah.
+     *
+     * @param  array<int, string>  $previousParents  child_id => parent_id lama (snapshot pra-merge)
+     * @param  int  $chunkSize  jumlah event per event loop tick (≤100)
+     * @return array<int, int> 1 elemen per batch: jumlah event di batch itu
+     */
+    public static function broadcastMovedChildren(string $userId, string $targetFolderId, array $previousParents, int $chunkSize = 100, ?array $sourceIds = null): array
+    {
+        $query = Folder::where('user_id', $userId)->where('parent_id', $targetFolderId);
+        if ($sourceIds !== null) {
+            // HANYA id anak yang memang berasal dari sumber sebuah merge —
+            // anak lama/manual di folder tujuan tidak ikut di-broadcast.
+            $query->whereIn('id', array_keys($previousParents));
+        }
+        $children = $query->orderBy('created_at')->orderBy('id')->get();
+
+        $batches = [];
+        foreach (array_chunk($children->all(), max(1, $chunkSize)) as $chunk) {
+            foreach ($chunk as $child) {
+                FolderMovedBroadcast::dispatch($child, $previousParents[(string) $child->id] ?? null);
+            }
+            $batches[] = count($chunk);
+        }
+
+        return $batches;
     }
 
     /**

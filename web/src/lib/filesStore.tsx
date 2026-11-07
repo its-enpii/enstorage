@@ -135,6 +135,14 @@ type Ctx = {
   revalidate: () => Promise<void>;
   /** Rebuild the full folder tree (bypass cache), e.g. after creating/moving a folder. */
   reloadAllFolders: () => Promise<void>;
+  /**
+   * Drop the `all-folders` localStorage entry AND empty the in-memory tree
+   * so the picker/parent selector never shows the OLD tree while
+   * `reloadAllFolders()` is still running. Call BEFORE `reloadAllFolders()`
+   * after a merge (source children moved, new folder appeared).
+   * Does not change the cache TTL — only forces a fresh read.
+   */
+  invalidateAllFoldersCache: () => void;
   loadMoreFolders: () => Promise<void>;
   loadMoreFiles: () => Promise<void>;
 
@@ -256,6 +264,12 @@ export function FilesStoreProvider({
   const allFoldersInFlightRef = useRef<Promise<void> | null>(null);
   /** Bumped on reload; stale in-flight builds are discarded. */
   const allFoldersSeqRef = useRef(0);
+  /**
+   * Set by `invalidateAllFoldersCache()`: the bootstrap effect must not seed
+   * `allFoldersRaw` from localStorage until a fresh build lands (otherwise
+   * the just-emptied tree is immediately refilled with the stale snapshot).
+   */
+  const allFoldersInvalidatedRef = useRef(false);
 
   const allFolders = useMemo(() => sortFolderTree(allFoldersRaw), [allFoldersRaw]);
 
@@ -573,6 +587,7 @@ export function FilesStoreProvider({
         }
       }
       if (seq !== allFoldersSeqRef.current) return;
+      allFoldersInvalidatedRef.current = false;
       setAllFoldersRaw(collected);
       cacheSet(userId, ALL_FOLDERS_CACHE_KEY, collected, ALL_FOLDERS_TTL_MS);
     } catch {
@@ -595,13 +610,23 @@ export function FilesStoreProvider({
     return p;
   }, [buildAllFolders]);
 
-  // Muat sekali per user; cache localStorage dipakai sebagai seed instan.
+  // Muat sekali per user; cache localStorage dipakai sebagai seed instan —
+  // KECUALI saat invalidasi aktif (jangan seed ulang pohon lama).
   useEffect(() => {
     if (!userId) return;
-    const cached = cacheGet<FolderType[]>(userId, ALL_FOLDERS_CACHE_KEY) ?? [];
-    setAllFoldersRaw(cached);
+    if (!allFoldersInvalidatedRef.current) {
+      const cached = cacheGet<FolderType[]>(userId, ALL_FOLDERS_CACHE_KEY) ?? [];
+      setAllFoldersRaw(cached);
+    }
     void reloadAllFolders();
   }, [userId, reloadAllFolders]);
+
+  const invalidateAllFoldersCache = useCallback(() => {
+    if (!userId) return;
+    allFoldersInvalidatedRef.current = true;
+    cacheRemove(userId, ALL_FOLDERS_CACHE_KEY);
+    setAllFoldersRaw([]);
+  }, [userId]);
 
   const loadMoreFolders = useCallback(async () => {
     if (loadingMoreRef.current) return;
@@ -798,6 +823,7 @@ export function FilesStoreProvider({
     hydrated,
     revalidate,
     reloadAllFolders,
+    invalidateAllFoldersCache,
     loadMoreFolders,
     loadMoreFiles,
     setFolderStarred,

@@ -771,6 +771,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     invalidateCurrentCache,
     allFolders,
     reloadAllFolders,
+    invalidateAllFoldersCache,
     hydrated,
     folderPage,
     filePage,
@@ -1718,18 +1719,84 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     if (allFolders.length === 0) void reloadAllFolders();
   }
 
+  /** Timer poling merge yang masih berjalan (dibersihkan saat unmount). */
+  const mergePollTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+
+  /**
+   * Hapus posisi scroll tersimpan untuk folder sumber dan folder baru hasil
+   * merge — isinya sudah berubah, restore ke posisi lama akan menampilkan
+   * view yang tidak lagi relevan. Pakai util `filesScroll` yang ada.
+   */
+  function invalidateMergedScroll(result: MergeResult) {
+    const uid = getLocalUserId();
+    if (!uid) return;
+    const paths = new Set<string>();
+    for (const src of mergeSources ?? []) {
+      if (src.path) paths.add(src.path);
+    }
+    if (result.folder?.path) paths.add(result.folder.path);
+    for (const path of paths) clearFilesScroll(uid, path);
+  }
+
+  /**
+   * Jadwalkan maksimal 5 refresh (jeda 3 dtk) setelah merge masuk antrean.
+   * Setiap tick memuat ulang pohon folder + view aktif; berhenti lebih awal
+   * begitu `moved_folders` terlihat (job selesai) atau batas tercapai.
+   * Timer disimpan di ref dan dibersihkan saat komponen unmount.
+   */
+  function scheduleQueuedMergeRefresh(result: MergeResult) {
+    const sourceIds = new Set((mergeSources ?? []).map((s) => s.id));
+    let attempts = 0;
+    const tick = () => {
+      attempts += 1;
+      void refreshReplace();
+      void reloadAllFolders();
+      void apiRequestEnvelope<FolderType[]>(`/folders?tree=1`)
+        .then((res) => {
+          const moved = (res.data ?? []).filter(
+            (f) => !!f.parent_id && sourceIds.has(f.parent_id),
+          ).length;
+          if (moved === 0 && attempts < 5) {
+            mergePollTimersRef.current.push(setTimeout(tick, 3000));
+          }
+        })
+        .catch(() => {
+          if (attempts < 5) {
+            mergePollTimersRef.current.push(setTimeout(tick, 3000));
+          }
+        });
+    };
+    mergePollTimersRef.current.push(setTimeout(tick, 3000));
+  }
+
+  // Bersihkan timer poling merge saat komponen unmount (tidak ada interval
+  // yang hidup tanpa pemiliknya).
+  useEffect(() => () => {
+    for (const timer of mergePollTimersRef.current) clearTimeout(timer);
+    mergePollTimersRef.current = [];
+  }, []);
+
   /**
    * Hasil MergeFoldersDialog: dialog sudah ditutup, sinkronkan cache/view/pohon
    * lalu tampilkan ringkasan (jumlah folder/file + catatan rename otomatis).
    */
   async function handleMerged(result: MergeResult) {
+    // Semua lapisan invalidasi: view aktif, halaman /folders, pohon folder
+    // (`all-folders` DIHAPUS eksplisit, bukan hanya ditimpa reload async),
+    // dan posisi scroll folder sumber + folder baru.
     invalidateCurrentCache();
     invalidateFoldersPageCache();
+    invalidateAllFoldersCache();
     void refreshReplace();
     void reloadAllFolders();
     clearSelection();
+    invalidateMergedScroll(result);
     if (result.status === 'queued') {
       await alert(t('folders.merge.queued'), { title: t('folders.merge.title') });
+      // Job berjalan di latar belakang: poling ringan (maks 5×, jeda 3 dtk)
+      // sampai `moved_folders` terlihat atau batas tercapai. Timer dibersihkan
+      // saat provider unmount — tidak ada setInterval tanpa pembersihan.
+      scheduleQueuedMergeRefresh(result);
       return;
     }
     const lines = [

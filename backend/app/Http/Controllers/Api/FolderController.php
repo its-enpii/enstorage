@@ -72,6 +72,14 @@ class FolderController extends Controller
     public const MERGE_SYNC_LIMIT = 200;
 
     /**
+     * Jumlah perpindahan folder per event loop tick saat merge mengirim
+     * `FolderMovedBroadcast` (pola `FilesDeletedBroadcast` /
+     * `PurgeFolderTree::BROADCAST_CHUNK`): maksimal 100 broadcast per tick
+     * supaya channel/payload tidak dibanjiri saat memindahkan ratusan anak.
+     */
+    public const MERGE_BROADCAST_CHUNK = 100;
+
+    /**
      * Hook TEST-ONLY (tidak pernah di-set di produksi): dipanggil dengan
      * daftar target folder Drive (leaf → root) oleh `PurgeFolderTree`
      * sebelum baris folder dihapus. Tidak mengubah perilaku saat null.
@@ -740,17 +748,41 @@ class FolderController extends Controller
             ], __('Penggabungan folder dijadwalkan.'));
         }
 
+        $job = null;
         try {
-            [$newFolder, $summary] = DB::transaction(function () use ($userId, $sourceIds, $parentId, $data, $conflict) {
+            [$newFolder, $summary] = DB::transaction(function () use ($userId, $sourceIds, $parentId, $data, $conflict, &$job) {
                 $newFolder = $this->createMergeTarget($userId, $parentId, $data['name']);
 
-                $summary = (new MergeFoldersJob($userId, $newFolder->id, $sourceIds, $conflict, ''))
-                    ->performMerge();
+                $job = new MergeFoldersJob($userId, $newFolder->id, $sourceIds, $conflict, '');
+                $summary = $job->performMerge();
 
                 return [$newFolder, $summary];
             });
         } catch (MergeConflictException $e) {
             return $this->fail($e->getMessage(), 422);
+        }
+
+        // Broadcast perpindahan setiap anak yang dipindah — pola SAMA dengan
+        // `move()`: subscriber lain (tab/device lain) harus mendengar
+        // AA/AB/BA berpindah parent. Dikirim SETELAH commit (bukan dari dalam
+        // transaksi yang bisa rollback) dan dipecah ≤100 event per tick (pola
+        // `FilesDeletedBroadcast`) agar channel tidak dibanjiri.
+        MergeFoldersJob::broadcastMovedChildren(
+            (string) $userId,
+            (string) $newFolder->id,
+            $job->previousParents,
+            self::MERGE_BROADCAST_CHUNK,
+            $sourceIds,
+        );
+
+        // Sesi unlock folder sumber tidak boleh hidup untuk folder yang isinya
+        // sudah pindah: entri `folder_unlock:<user>:<id>` yang tertinggal bisa
+        // membuat endpoint pemeriksa ancestor menganggap A/B masih terbuka.
+        // Folder baru D sengaja TIDAK disentuh (belum tentu terkunci).
+        foreach ($sourceIds as $sid) {
+            if ($sources->has($sid)) {
+                $this->lockGuard->forgetUnlocked($sources[$sid], (string) $userId);
+            }
         }
 
         $this->syncMergeToDrive($userId, $newFolder, $sourceIds);
