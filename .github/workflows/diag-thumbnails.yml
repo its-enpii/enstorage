@@ -18,25 +18,26 @@ jobs:
             set -uo pipefail
             cd //home/enpii/studio/enstorage
             C="docker compose -f docker-compose.yml"
-            echo "── disk host ──"
-            df -h / /var/lib/docker 2>/dev/null | head -4
-            echo "── 3 row terbaru (path + ada/tidak) ──"
+            echo "== A. hitung row per jam (30 terakhir) vs file fisik =="
             $C exec -T app php artisan tinker --execute='
-              $rows = DB::table("thumbnails")->orderByDesc("generated_at")->limit(5)->get();
-              foreach ($rows as $r) {
-                $p = storage_path("app/" . $r->path);
-                echo "path=", $r->path, " size=", $r->size, " gen=", $r->generated_at,
-                     " exists=", (int) is_file($p), " basename_exists=", (int) is_file(storage_path("app/thumbnails/" . basename($r->path))), PHP_EOL;
-              }
+              $rows = DB::table("thumbnails")->where("generated_at", ">", now()->subHour())->get();
+              echo "rows_last_hour=", $rows->count(), PHP_EOL;
+              $ok = 0; foreach ($rows as $r) { if (is_file(storage_path("app/" . $r->path))) { $ok++; } }
+              echo "rows_last_hour_file_ok=", $ok, PHP_EOL;
               echo "rows_total=", DB::table("thumbnails")->count(), PHP_EOL;
-              echo "distinct_paths=", DB::table("thumbnails")->distinct()->count("path"), PHP_EOL;
+              echo "files_on_disk=", count(glob(storage_path("app/thumbnails/*.webp"))), PHP_EOL;
             '
-            echo "── isi direktori (10 nama) ──"
-            $C exec -T app sh -lc 'ls /var/www/html/storage/app/thumbnails | head -10'
-            echo "── jumlah per ekstensi di dir ──"
-            $C exec -T app sh -lc 'ls /var/www/html/storage/app/thumbnails | sed "s/.*\.//" | sort | uniq -c'
-            echo "── log worker: ThumbnailGenerator gagal / error ──"
-            $C logs --no-log-prefix --tail=6000 worker 2>&1 | grep -iE "ThumbnailGenerator gagal|ekstraksi frame|ffmpeg|No space|SQLSTATE" | tail -12 || echo NO_LOG
-            echo "── antrean ──"
-            $C exec -T app php artisan queue:monitor default 2>/dev/null | head -3 || true
-            $C exec -T redis sh -lc 'redis-cli LLEN queues:default 2>/dev/null || redis-cli LLEN default 2>/dev/null' 2>/dev/null || echo no-redis-cli
+            echo "== B. 3 row terbaru: umur file dir =="
+            $C exec -T app sh -lc 'ls -lt --time-style=+%Y-%m-%dT%H:%M /var/www/html/storage/app/thumbnails | head -4'
+            echo "== C. apakah ada yang menulis ke path lain (find semua *.webp) =="
+            $C exec -T app sh -lc 'find /var/www/html/storage -name "*.webp" 2>/dev/null | sed "s|/[^/]*$||" | sort | uniq -c'
+            echo "== D. uji tulis langsung: buat file, cek dari worker juga =="
+            $C exec -T app sh -lc 'echo probe > /var/www/html/storage/app/thumbnails/_probe.txt; ls -l /var/www/html/storage/app/thumbnails/_probe.txt'
+            $C exec -T worker sh -lc 'ls -l /var/www/html/storage/app/thumbnails/_probe.txt 2>&1'
+            $C exec -T app sh -lc 'rm -f /var/www/html/storage/app/thumbnails/_probe.txt'
+            echo "== E. jumlah worker & konfigurasi antrean =="
+            $C exec -T worker sh -lc 'ps aux | grep -c "[q]ueue:work"'
+            $C exec -T redis sh -lc 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning LLEN queues:default' 2>/dev/null || echo redis_len_unavailable
+            echo "== F. permission direktori =="
+            $C exec -T app sh -lc 'ls -ld /var/www/html/storage/app/thumbnails; id www-data 2>/dev/null || id'
+            $C exec -T worker sh -lc 'ls -ld /var/www/html/storage/app/thumbnails'
