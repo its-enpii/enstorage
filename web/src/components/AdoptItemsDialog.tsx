@@ -246,6 +246,7 @@ export function AdoptItemsDialog({ open, targetFolderId, onClose, onAdopted }: P
                     itemsLabel={t('folders.items')}
                     totalSize={folder.total_size && folder.total_size > 0 ? bytes(folder.total_size) : undefined}
                     selected={checked}
+                    selectMode
                     onClick={() => toggleFolder(folder.id, !checked)}
                     actions={
                       <IconButton

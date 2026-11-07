@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FolderIcon, FolderSpecialIcon, StarIcon } from '@/lib/icons';
+import { SelectionIndicator } from '@/components/Checkbox';
 import { CardMedia, CardTile, CardTileMeta, CardTileTitle } from '@/components/Card';
 
 export type FolderCardProps = {
@@ -23,6 +24,7 @@ export type FolderCardProps = {
   /** Renders a lock badge over the glyph when the folder is password-locked. */
   isLocked?: boolean;
   selected?: boolean;
+  selectMode?: boolean;
   isDropTarget?: boolean;
   onClick?: () => void;
   /** Slot swapped in place of the title while inline-renaming. */
@@ -51,6 +53,7 @@ export function FolderCard({
   isStarred,
   isLocked,
   selected,
+  selectMode,
   isDropTarget,
   onClick,
   editSlot,
@@ -59,6 +62,7 @@ export function FolderCard({
   'data-testid': dataTestId,
 }: FolderCardProps) {
   const { t } = useTranslation();
+  const showSelection = Boolean(selectMode || selected);
   const metaLabel = itemCount !== undefined
     ? `${itemCount} ${itemsLabel ?? ''}`.trim()
     : t('folders.emptyItems');
@@ -107,10 +111,16 @@ export function FolderCard({
           </span>
         )}
 
-        {isStarred && (
-          <span className="absolute top-2 left-2 p-1 rounded-lg bg-background/80 backdrop-blur-md border border-secondary/30 text-secondary shadow-sm flex items-center justify-center">
-            <StarIcon className="!text-sm" />
-          </span>
+        {(showSelection || isStarred) && (
+          <div className="absolute top-2 left-2 flex items-center gap-1.5">
+            {showSelection ? (
+              <SelectionIndicator selected={Boolean(selected)} />
+            ) : (
+              <span className="p-1 rounded-lg bg-background/80 backdrop-blur-md border border-secondary/30 text-secondary shadow-sm flex items-center justify-center">
+                <StarIcon className="!text-sm" />
+              </span>
+            )}
+          </div>
         )}
 
         {actions && (
