@@ -129,7 +129,8 @@
       "share": "Share Link",
       "copy": "Copy File",
       "delete": "Delete",
-      "menu": "Menu"
+      "menu": "Menu",
+      "merge": "Merge…"
     },
     "selection": {
       "selectAll": "Select all",
@@ -295,7 +296,38 @@
     "iconLabel": "Icon selection",
     "logoUrlLabel": "Logo / Image URL",
     "logoUrlPlaceholder": "https://domain.com/logo.png",
-    "previewLabel": "Link preview"
+    "previewLabel": "Link preview",
+    "merge": {
+      "title": "Merge folders",
+      "subtitle": "Create one new folder and move everything from the selected folders into it.",
+      "nameLabel": "New folder name",
+      "namePlaceholder": "e.g. Combined",
+      "locationLabel": "Location of the new folder",
+      "addSource": "Add another folder",
+      "minTwo": "Pick at least 2 folders.",
+      "conflictLabel": "If a name is already taken",
+      "conflictRename": "Rename automatically",
+      "conflictSkip": "Skip conflicting",
+      "conflictFail": "Cancel all",
+      "summary": "{{folders}} folder(s) and {{files}} file(s) will be moved into \"{{name}}\".",
+      "submit": "Merge",
+      "queued": "The merge is being processed in the background. We'll let you know when it's done.",
+      "success": "{{folders}} folder(s) and {{files}} file(s) were moved into \"{{name}}\".",
+      "renamedNote": "{{count}} item(s) were renamed automatically.",
+      "defaultName": "Combined",
+      "sourcesLabel": "Source folders",
+      "sourceCount": "{{folders}} folders · {{files}} files",
+      "removeSource": "Remove this source folder",
+      "noOtherFolders": "No other folder available.",
+      "lockedSource": "Locked folders cannot be merged. Remove the lock first.",
+      "unlockAction": "Unlock folder",
+      "locationBlocked": "This folder is (or is inside) one of the sources.",
+      "locationLocked": "Locked folders cannot be used as a location.",
+      "submitting": "Merging…",
+      "failed": "Could not merge the folders. Please try again.",
+      "unlockHint": "One of the folders is locked. Unlock it first?",
+      "resolveError": "Could not check the lock status. Open the folder and unlock it first."
+    }
   },
   "profile": {
     "title": "Profile",
