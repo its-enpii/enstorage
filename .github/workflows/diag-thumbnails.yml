@@ -13,31 +13,38 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          command_timeout: 20m
+          command_timeout: 25m
           script: |
             set -uo pipefail
             cd //home/enpii/studio/enstorage
             C="docker compose -f docker-compose.yml"
-            echo "== A. hitung row per jam (30 terakhir) vs file fisik =="
+            echo "== A. hitung file di volume host langsung =="
+            sudo ls /var/lib/docker/volumes/enstorage_app-storage/_data/app/thumbnails 2>/dev/null | wc -l || \
+              ls /var/lib/docker/volumes/enstorage_app-storage/_data/app/thumbnails 2>/dev/null | wc -l
+            echo "== B. cari semua *.webp baru di SELURUH host (maks 20) =="
+            find / -xdev -name "*.webp" -newermt "-3 hours" 2>/dev/null | head -20
+            echo "== C. semua container yang punya storage/app/thumbnails berbeda =="
+            for c in $(docker ps --format '{{.Names}}'); do
+              n=$(docker exec "$c" sh -lc 'ls -1 /var/www/html/storage/app/thumbnails 2>/dev/null | wc -l' 2>/dev/null || echo NA)
+              echo "$c -> $n"
+            done
+            echo "== D. proses queue:work dan container-nya =="
+            docker ps --format '{{.Names}}\t{{.Image}}' | grep -iE "worker|app"
+            for c in enstorage-worker enstorage-app; do
+              echo "--- $c ---"
+              docker exec "$c" sh -lc 'ps aux | grep "[q]ueue:work" | head -3' 2>/dev/null || echo none
+            done
+            echo "== E. generated_at vs mtime file terbaru di dir =="
             $C exec -T app php artisan tinker --execute='
-              $rows = DB::table("thumbnails")->where("generated_at", ">", now()->subHour())->get();
-              echo "rows_last_hour=", $rows->count(), PHP_EOL;
-              $ok = 0; foreach ($rows as $r) { if (is_file(storage_path("app/" . $r->path))) { $ok++; } }
-              echo "rows_last_hour_file_ok=", $ok, PHP_EOL;
-              echo "rows_total=", DB::table("thumbnails")->count(), PHP_EOL;
-              echo "files_on_disk=", count(glob(storage_path("app/thumbnails/*.webp"))), PHP_EOL;
+              $r = DB::table("thumbnails")->orderByDesc("generated_at")->first();
+              echo "newest_row_generated_at=", $r->generated_at ?? "-", PHP_EOL;
+              echo "newest_row_size=", $r->size ?? "-", PHP_EOL;
+              $p = storage_path("app/" . ($r->path ?? ""));
+              echo "path_exists_now=", (int) is_file($p), PHP_EOL;
+              $dir = storage_path("app/thumbnails");
+              $files = glob($dir . "/*.webp");
+              echo "dir_webp_count=", count($files), PHP_EOL;
+              if ($files) { echo "newest_file_mtime=", date("c", max(array_map("filemtime", $files))), PHP_EOL; }
             '
-            echo "== B. 3 row terbaru: umur file dir =="
-            $C exec -T app sh -lc 'ls -lt --time-style=+%Y-%m-%dT%H:%M /var/www/html/storage/app/thumbnails | head -4'
-            echo "== C. apakah ada yang menulis ke path lain (find semua *.webp) =="
-            $C exec -T app sh -lc 'find /var/www/html/storage -name "*.webp" 2>/dev/null | sed "s|/[^/]*$||" | sort | uniq -c'
-            echo "== D. uji tulis langsung: buat file, cek dari worker juga =="
-            $C exec -T app sh -lc 'echo probe > /var/www/html/storage/app/thumbnails/_probe.txt; ls -l /var/www/html/storage/app/thumbnails/_probe.txt'
-            $C exec -T worker sh -lc 'ls -l /var/www/html/storage/app/thumbnails/_probe.txt 2>&1'
-            $C exec -T app sh -lc 'rm -f /var/www/html/storage/app/thumbnails/_probe.txt'
-            echo "== E. jumlah worker & konfigurasi antrean =="
-            $C exec -T worker sh -lc 'ps aux | grep -c "[q]ueue:work"'
-            $C exec -T redis sh -lc 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning LLEN queues:default' 2>/dev/null || echo redis_len_unavailable
-            echo "== F. permission direktori =="
-            $C exec -T app sh -lc 'ls -ld /var/www/html/storage/app/thumbnails; id www-data 2>/dev/null || id'
-            $C exec -T worker sh -lc 'ls -ld /var/www/html/storage/app/thumbnails'
+            echo "== F. ukuran dir + inode mount =="
+            $C exec -T app sh -lc 'du -sh /var/www/html/storage/app/thumbnails; df -h /var/www/html/storage/app/thumbnails | tail -1; mount | grep -E "html/storage" | head -3'
