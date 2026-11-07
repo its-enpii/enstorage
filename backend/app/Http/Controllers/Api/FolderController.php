@@ -13,6 +13,7 @@ use App\Http\Resources\FolderResource;
 use App\Jobs\MergeFoldersJob;
 use App\Jobs\PurgeFolderTree;
 use App\Jobs\SyncFileMoveToDriveJob;
+use App\Jobs\SyncFolderMoveToDriveJob;
 use App\Models\ActivityLog;
 use App\Models\File;
 use App\Models\File as FileModel;
@@ -28,7 +29,6 @@ use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
-use App\Services\Google\QuotaManager;
 use App\Services\WebhookService;
 use App\Support\BulkQuery;
 use App\Support\StreamPump;
@@ -605,22 +605,7 @@ class FolderController extends Controller
         // Update path semua descendant
         $this->paths->cascadePathUpdate($folder);
 
-        // Sync folder move di Google Drive
-        try {
-            $accounts = GoogleAccount::where('user_id', $request->user()->id)->get();
-            $gdriveFolderService = app(GoogleDriveFolderService::class);
-            $targetParent = $newParentId ? Folder::find($newParentId) : null;
-            $quota = app(QuotaManager::class);
-
-            foreach ($accounts as $acc) {
-                $newParentGDriveId = $targetParent
-                    ? $gdriveFolderService->ensureFolderOnDrive($acc, $targetParent)
-                    : $quota->ensureRootFolder($acc);
-                $gdriveFolderService->moveFolderOnDrive($acc, $folder, null, $newParentGDriveId);
-            }
-        } catch (Throwable $e) {
-            Log::warning('GDrive move folder sync failed: '.$e->getMessage());
-        }
+        SyncFolderMoveToDriveJob::dispatch($folder->id, $newParentId);
 
         $this->activityLog->log(
             ActivityLog::ACTION_FOLDER_MOVE ?? 'FOLDER_MOVE',
