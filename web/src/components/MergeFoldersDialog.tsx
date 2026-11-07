@@ -11,6 +11,7 @@ import { Alert } from '@/components/Alert';
 import { Tooltip } from '@/components/Tooltip';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { usePrompt } from '@/components/usePrompt';
+import { isLockedScope } from '@/lib/folderLock';
 
 type ConflictMode = 'rename' | 'skip' | 'fail';
 
@@ -35,21 +36,6 @@ type Props = {
   /** Dipanggil saat server membalas 423 dan pengguna setuju membuka kunci. */
   onUnlockRequest?: (folderId: string) => void;
 };
-
-/** Folder terkunci / di dalam folder terkunci tidak boleh dipakai. */
-function isLockedScope(f: FolderType, byId: Map<string, FolderType>): boolean {
-  if (f.is_locked) return true;
-  let cur = f.parent_id;
-  const guard = new Set<string>();
-  while (cur && !guard.has(cur)) {
-    guard.add(cur);
-    const parent = byId.get(cur);
-    if (!parent) return false;
-    if (parent.is_locked) return true;
-    cur = parent.parent_id;
-  }
-  return false;
-}
 
 /**
  * Dialog "Gabungkan folder": membuat satu folder baru lalu memindahkan isi

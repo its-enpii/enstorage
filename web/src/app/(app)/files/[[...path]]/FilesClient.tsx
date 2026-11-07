@@ -3080,6 +3080,15 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           currentFolderId={folderId}
           open={true}
           onClose={() => setMoveFiles(null)}
+          onUnlockRequest={(lockedId) => {
+            const target = allFolders.find((f) => f.id === lockedId);
+            setMoveFiles(null);
+            setClickUnlock({
+              folderId: lockedId,
+              folderName: target?.name ?? '',
+              path: target?.path ?? '',
+            });
+          }}
           onMoved={(results) => void handleMoved(results)}
         />
       )}
@@ -3092,6 +3101,15 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           allFolders={allFolders}
           open={true}
           onClose={() => setMoveFolders(null)}
+          onUnlockRequest={(lockedId) => {
+            const target = allFolders.find((f) => f.id === lockedId);
+            setMoveFolders(null);
+            setClickUnlock({
+              folderId: lockedId,
+              folderName: target?.name ?? '',
+              path: target?.path ?? '',
+            });
+          }}
           onMoved={(results) => handleFolderMoved(results as unknown as FolderType[])}
         />
       )}

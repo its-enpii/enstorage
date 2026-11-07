@@ -166,14 +166,19 @@ class UploadFileJob implements ShouldBeUnique, ShouldQueue
                 $file->save();
             }
 
-            // Generate thumbnail INLINE untuk image (skip round-trip kedua ke GDrive).
-            // Pakai local file yang baru di-upload. Fallback ke background job kalau gagal.
-            if (str_starts_with($file->mime_type, 'image/')) {
+            // Sumber kebenaran tunggal: MIME dulu, lalu ekstensi nama file
+            // (MP4 sering tersimpan sebagai `application/octet-stream`, sehingga
+            // gate MIME mentah membuat thumbnail tidak pernah dibuat).
+            $kind = ThumbnailGenerator::mediaKind($file);
+
+            if ($kind === 'image') {
+                // Inline: pakai local file yang baru di-upload (skip round-trip
+                // kedua ke GDrive). Fallback ke background job kalau gagal.
                 $ok = $thumbnails->tryGenerate($file, $localPath);
                 if (! $ok) {
                     GenerateThumbnailJob::dispatch($file->id);
                 }
-            } elseif (str_starts_with($file->mime_type, 'video/')) {
+            } elseif ($kind === 'video') {
                 // Video: frame grab via ffmpeg di GenerateThumbnailJob (background).
                 GenerateThumbnailJob::dispatch($file->id);
             }

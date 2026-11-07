@@ -8,6 +8,8 @@ import { apiRequest, ApiError, type FileItem, type Folder as FolderType } from '
 import { Dialog } from '@/components/Dialog';
 import { Button } from '@/components/Button';
 import { useFilesStore } from '@/lib/filesStore';
+import { isLockedScope, lockedAncestorOf } from '@/lib/folderLock';
+import { usePrompt } from '@/components/usePrompt';
 
 type Props = {
   /** `file` (default) → PUT /files/{id}/move; `folder` → PUT /folders/{id}/move. */
@@ -35,6 +37,8 @@ type Props = {
    * file yang di-auto-rename server karena nama bentrok).
    */
   onMoved: (results: MovedFileResult[]) => void;
+  /** Dipanggil saat server membalas 423 dan pengguna setuju membuka kunci. */
+  onUnlockRequest?: (folderId: string) => void;
 };
 
 export type MovedFileResult = FileItem & { renamed: boolean; previous_name: string | null };
@@ -58,8 +62,10 @@ export function MoveDialog({
   open,
   onClose,
   onMoved,
+  onUnlockRequest,
 }: Props) {
   const { t } = useTranslation();
+  const { confirm } = usePrompt();
   const store = useFilesStore();
   const isFolder = kind === 'folder';
 
@@ -134,6 +140,9 @@ export function MoveDialog({
     return map;
   }, [treeFolders]);
 
+  /** Folder tujuan (atau ancestor-nya) yang berada dalam scope terkunci. */
+  const isFolderLocked = (f: FolderType): boolean => isLockedScope(f, folderById);
+
   const depthOf = (f: FolderType): number => {
     const byPath = (f.path || '').split('/').filter(Boolean).length;
     if (byPath > 0) return byPath;
@@ -195,6 +204,35 @@ export function MoveDialog({
           results.push(res);
         }
       } catch (e) {
+        if (e instanceof ApiError && e.status === 423) {
+          // Folder terkunci: hentikan loop (target sama untuk semua item),
+          // lalu tawarkan prompt unlock seperti MergeFoldersDialog.
+          setSubmitting(false);
+          if (results.length > 0) onMoved(results);
+          const targetFolder = target ? folderById.get(target) : undefined;
+          const lockedId = targetFolder
+            ? lockedAncestorOf(targetFolder, folderById) ?? targetFolder.id
+            : null;
+          const proceed =
+            lockedId !== null
+              ? await confirm(t('files.move.unlockHint'), {
+                  title: titleLabel,
+                  confirmLabel: t('files.move.unlockAction'),
+                  cancelLabel: t('common.cancel'),
+                })
+              : false;
+          if (proceed && lockedId !== null && onUnlockRequest) {
+            onUnlockRequest(lockedId);
+            onClose();
+            return;
+          }
+          setError(
+            targetFolder
+              ? t('files.move.errors.folderLocked', { target: targetFolder.name })
+              : t('files.move.errors.folderLockedRoot'),
+          );
+          return;
+        }
         failed += 1;
         if (e instanceof ApiError && e.message) lastMessage = e.message;
       }
@@ -280,6 +318,7 @@ export function MoveDialog({
         ) : (
           sortedFolders.map((f) => {
             const blocked = blockedIds.has(f.id);
+            const locked = isFolderLocked(f);
             return (
               <TargetRow
                 key={f.id}
@@ -290,6 +329,7 @@ export function MoveDialog({
                 onClick={() => pick(f.id)}
                 testId={`move-folder-${f.id}`}
                 depth={depthOf(f)}
+                locked={locked}
               />
             );
           })
@@ -314,6 +354,7 @@ function TargetRow({
   onClick,
   testId,
   depth = 0,
+  locked = false,
 }: {
   label: string;
   active: boolean;
@@ -322,7 +363,9 @@ function TargetRow({
   onClick: () => void;
   testId: string;
   depth?: number;
+  locked?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <Button
       type="button"
@@ -348,6 +391,16 @@ function TargetRow({
       }
     >
       <span className={clsx('truncate block text-left', indentClass(depth))}>{label}</span>
+      {locked && (
+        <span
+          className="material-symbols-outlined !text-base shrink-0 ml-auto text-on-surface-variant"
+          aria-label={t('files.move.folderLocked')}
+          title={t('files.move.folderLocked')}
+          data-testid={`${testId}-locked`}
+        >
+          lock
+        </span>
+      )}
     </Button>
   );
 }
