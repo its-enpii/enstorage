@@ -17,6 +17,6 @@ jobs:
             docker compose -f docker-compose.yml exec -T app php artisan tinker --execute='
               $fid = "01a0e68d-160e-708f-90f9-d634f9808fcc";
               $u = App\Models\User::find(DB::table("folders")->where("id",$fid)->value("user_id"));
-              $u->tokens()->where("name","ui-verify4")->delete();
-              echo "TOKEN=", $u->createToken("ui-verify4")->plainTextToken, PHP_EOL;
+              $u->tokens()->where("name","ui-vol")->delete();
+              echo "TOKEN=", $u->createToken("ui-vol")->plainTextToken, PHP_EOL;
             '
