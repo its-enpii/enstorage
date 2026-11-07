@@ -1,0 +1,58 @@
+name: Diag Thumbnails
+
+# Diagnostik sementara: sebaran file TANPA thumbnail di produksi, per kategori mime.
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 20m
+          script: |
+            set -uo pipefail
+            cd //home/enpii/studio/enstorage
+            C="docker compose -f docker-compose.yml"
+            $C exec -T app php artisan tinker --execute='
+              $done = App\Models\File::where("upload_status","done")->count();
+              $withThumb = App\Models\File::where("upload_status","done")->whereHas("thumbnail")->count();
+              echo "files_done=", $done, PHP_EOL;
+              echo "with_thumb=", $withThumb, PHP_EOL;
+              echo "without_thumb=", $done - $withThumb, PHP_EOL;
+
+              $cats = [
+                "image" => "image/%",
+                "video" => "video/%",
+                "audio" => "audio/%",
+                "pdf"   => "%pdf%",
+                "text"  => "text/%",
+                "json"  => "%json%",
+                "zip"   => "%zip%",
+                "gzip"  => "%gzip%",
+                "office"=> "%officedocument%",
+                "other" => null,
+              ];
+              foreach ($cats as $label => $like) {
+                $q = App\Models\File::where("upload_status","done")->whereDoesntHave("thumbnail");
+                if ($like) { $q->where("mime_type","like",$like); }
+                $n = $q->count();
+                if ($n) {
+                  $sizes = (clone $q)->orderByDesc("size")->limit(3)->pluck("name")->all();
+                  echo "MISS ", $label, "=", $n, " | contoh: ", implode(" ; ", $sizes), PHP_EOL;
+                }
+              }
+              echo "--- storage_driver ---", PHP_EOL;
+              foreach (["local","gdrive","google_drive"] as $d) {
+                $n = App\Models\File::where("upload_status","done")->where("storage_driver",$d)->count();
+                $m = App\Models\File::where("upload_status","done")->where("storage_driver",$d)->whereDoesntHave("thumbnail")->count();
+                echo "  driver=", $d, " total=", $n, " missing_thumb=", $m, PHP_EOL;
+              }
+              $cols = Schema::getColumnListing("files");
+              echo "has_storage_driver_col=", (int) in_array("storage_driver", $cols, true), PHP_EOL;
+            '
