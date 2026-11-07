@@ -182,7 +182,7 @@ export type FileItem = {
   share_token?: string | null;
   upload_status: 'pending' | 'uploading' | 'done' | 'failed';
   uploaded_at: string | null;
-  has_thumbnail: boolean;
+  has_thumbnail?: boolean;
   metadata?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;

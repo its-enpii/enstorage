@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Events\FileUpdatedBroadcast;
 use App\Models\File as FileModel;
 use App\Services\FileSourceFetcher;
 use App\Services\ThumbnailGenerator;
@@ -100,6 +101,7 @@ class GenerateThumbnailJob implements ShouldQueue
         }
 
         $framePath = null;
+        $generated = false;
 
         try {
             if ($isVideo) {
@@ -126,6 +128,7 @@ class GenerateThumbnailJob implements ShouldQueue
             }
 
             $generator->generate($file, $framePath ?? $sourcePath);
+            $generated = true;
         } catch (Throwable $e) {
             Log::warning('GenerateThumbnailJob gagal', [
                 'file_id' => $file->id,
@@ -139,6 +142,25 @@ class GenerateThumbnailJob implements ShouldQueue
             if ($framePath) {
                 @unlink($framePath);
             }
+        }
+
+        if (! $generated) {
+            return;
+        }
+
+        // Klien perlu tahu thumbnail baru tersedia: payload upload/move dibangun
+        // SEBELUM thumbnail ada (video & direct-upload), jadi tanpa event ini kartu
+        // file tetap menampilkan placeholder sampai halaman di-reload.
+        try {
+            $file->refresh();
+            $file->load('thumbnail');
+            FileUpdatedBroadcast::dispatch($file);
+        } catch (Throwable $e) {
+            // Broadcast gagal bukan alasan job gagal — thumbnail sudah tersimpan.
+            Log::warning('GenerateThumbnailJob: broadcast FileUpdatedBroadcast gagal', [
+                'file_id' => $file->id,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

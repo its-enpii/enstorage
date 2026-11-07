@@ -249,7 +249,11 @@ function normaliseFile(data: Record<string, unknown>): FileItem | null {
     share_token: (data.share_token as string | null) ?? null,
     upload_status: ((data.upload_status as FileItem['upload_status']) ?? 'done'),
     uploaded_at: uploadedAt,
-    has_thumbnail: Boolean(data.has_thumbnail ?? false),
+    // Payload lama (sebelum fix backend) tidak membawa has_thumbnail. Kalau field
+    // tidak ada, JANGAN mengarang false — biarkan undefined agar kartu memakai
+    // nilai dari cache/REST, bukan placeholder palsu. Backend sekarang selalu
+    // mengirim field ini; fallback ini hanya untuk payload yang belum di-deploy.
+    has_thumbnail: 'has_thumbnail' in data ? Boolean(data.has_thumbnail) : undefined,
     created_at: String(data.created_at ?? uploadedAt ?? new Date().toISOString()),
     updated_at: String(data.updated_at ?? uploadedAt ?? new Date().toISOString()),
   };
