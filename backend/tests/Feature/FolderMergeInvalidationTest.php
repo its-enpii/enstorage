@@ -4,17 +4,20 @@ namespace Tests\Feature;
 
 use App\Events\FolderCreatedBroadcast;
 use App\Events\FolderMovedBroadcast;
+use App\Jobs\MergeFoldersJob;
 use App\Models\File;
 use App\Models\Folder;
 use App\Models\GoogleAccount;
 use App\Models\User;
 use App\Services\Folder\FolderPathService;
 use App\Services\FolderLockGuard;
+use App\Services\Google\GoogleDriveFolderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Mockery;
 use Tests\TestCase;
 
 /**
@@ -207,5 +210,65 @@ class FolderMergeInvalidationTest extends TestCase
         $d = Folder::where('name', 'D')->firstOrFail();
         $this->assertSame(3, Folder::where('parent_id', $d->id)->count());
         $this->assertSame(2, File::where('folder_id', $d->id)->count());
+    }
+
+    public function test_async_merge_forgets_unlocked_source_folders(): void
+    {
+        $guard = app(FolderLockGuard::class);
+        $a = $this->makeFolder('A');
+        $b = $this->makeFolder('B');
+        for ($i = 0; $i < 60; $i++) {
+            $this->makeFolder('AF'.$i, $a);
+            $this->makeFolder('BF'.$i, $b);
+        }
+        $a->fresh()->forceFill(['is_locked' => true])->save();
+        $b->fresh()->forceFill(['is_locked' => true])->save();
+        $guard->markUnlocked($a->fresh(), $this->user->id);
+        $guard->markUnlocked($b->fresh(), $this->user->id);
+
+        $keyA = $guard->cacheKey($a->id, $this->user->id);
+        $keyB = $guard->cacheKey($b->id, $this->user->id);
+        $this->assertTrue(Cache::has($keyA), 'prasyarat: unlock A tersimpan');
+        $this->assertTrue(Cache::has($keyB), 'prasyarat: unlock B tersimpan');
+
+        $d = $this->makeFolder('D');
+        $job = new MergeFoldersJob($this->user->id, $d->id, [$a->id, $b->id]);
+        $job->handle();
+
+        $this->assertFalse(Cache::has($keyA), 'jalur async harus membersihkan unlock folder sumber A');
+        $this->assertFalse(Cache::has($keyB), 'jalur async harus membersihkan unlock folder sumber B');
+    }
+
+    public function test_async_merge_syncs_structure_to_google_drive(): void
+    {
+        $a = $this->makeFolder('A');
+        $b = $this->makeFolder('B');
+        $aa = $this->makeFolder('AA', $a);
+        $ba = $this->makeFolder('BA', $b);
+        $fileA = $this->makeFile('a.txt', $a);
+        $fileB = $this->makeFile('b.txt', $b);
+
+        $drive = Mockery::mock(GoogleDriveFolderService::class);
+        $drive->shouldReceive('ensureFolderOnDrive')->andReturnUsing(fn ($acc, Folder $f) => 'gd_'.$f->id);
+        $moveFolderCalls = [];
+        $drive->shouldReceive('moveFolderOnDrive')->andReturnUsing(function ($acc, Folder $f, $old, $new) use (&$moveFolderCalls) {
+            $moveFolderCalls[(string) $f->id] = $new;
+        });
+        $moveFileCalls = [];
+        $drive->shouldReceive('moveFileOnDrive')->andReturnUsing(function ($acc, File $f, $new) use (&$moveFileCalls) {
+            $moveFileCalls[(string) $f->id] = $new;
+        });
+        $this->app->instance(GoogleDriveFolderService::class, $drive);
+
+        $d = $this->makeFolder('D');
+        $job = new MergeFoldersJob($this->user->id, $d->id, [$a->id, $b->id]);
+        $job->handle();
+
+        $targetDriveId = 'gd_'.$d->id;
+        $this->assertSame($targetDriveId, $moveFolderCalls[$aa->id] ?? null, 'subfolder AA harus dipindah ke Drive folder D');
+        $this->assertSame($targetDriveId, $moveFolderCalls[$ba->id] ?? null, 'subfolder BA harus dipindah ke Drive folder D');
+        $this->assertSame($targetDriveId, $moveFileCalls[$fileA->id] ?? null, 'file A harus dipindah ke Drive folder D');
+        $this->assertSame($targetDriveId, $moveFileCalls[$fileB->id] ?? null, 'file B harus dipindah ke Drive folder D');
+        $this->assertArrayHasKey($d->id, $moveFolderCalls, 'folder tujuan D harus dibuat/dipindah di Drive');
     }
 }

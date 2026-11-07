@@ -775,17 +775,10 @@ class FolderController extends Controller
             $sourceIds,
         );
 
-        // Sesi unlock folder sumber tidak boleh hidup untuk folder yang isinya
-        // sudah pindah: entri `folder_unlock:<user>:<id>` yang tertinggal bisa
-        // membuat endpoint pemeriksa ancestor menganggap A/B masih terbuka.
-        // Folder baru D sengaja TIDAK disentuh (belum tentu terkunci).
-        foreach ($sourceIds as $sid) {
-            if ($sources->has($sid)) {
-                $this->lockGuard->forgetUnlocked($sources[$sid], (string) $userId);
-            }
-        }
-
-        $this->syncMergeToDrive($userId, $newFolder, $sourceIds);
+        // Invalidation pasca-commit (forgetUnlocked folder sumber + sinkron
+        // Drive) dipakai BERSAMA dengan jalur async `MergeFoldersJob::handle()`
+        // supaya kedua jalur tidak menyimpang.
+        $job->invalidateAfterMerge();
 
         $this->activityLog->log(
             ActivityLog::ACTION_FOLDER_MERGE,
@@ -831,41 +824,6 @@ class FolderController extends Controller
      * Sinkron Drive untuk merge: buat folder tujuan di Drive lalu pindahkan
      * anak-anak yang sudah berada di DB ke folder Drive tujuan. Best-effort.
      */
-    private function syncMergeToDrive(string $userId, Folder $newFolder, array $sourceIds): void
-    {
-        try {
-            $accounts = GoogleAccount::where('user_id', $userId)->get();
-            if ($accounts->isEmpty()) {
-                return;
-            }
-            $folderService = app(GoogleDriveFolderService::class);
-            $quota = app(QuotaManager::class);
-            $parent = $newFolder->parent_id ? Folder::find($newFolder->parent_id) : null;
-
-            foreach ($accounts as $acc) {
-                $targetDriveId = $folderService->ensureFolderOnDrive($acc, $newFolder);
-                if (! $targetDriveId) {
-                    continue;
-                }
-                $parentDriveId = $parent
-                    ? $folderService->ensureFolderOnDrive($acc, $parent)
-                    : $quota->ensureRootFolder($acc);
-                if ($parentDriveId) {
-                    $folderService->moveFolderOnDrive($acc, $newFolder, null, $parentDriveId);
-                }
-
-                foreach (Folder::where('parent_id', $newFolder->id)->get() as $child) {
-                    $folderService->moveFolderOnDrive($acc, $child, null, $targetDriveId);
-                }
-                foreach (File::where('folder_id', $newFolder->id)->get() as $file) {
-                    $folderService->moveFileOnDrive($acc, $file, $targetDriveId);
-                }
-            }
-        } catch (Throwable $e) {
-            Log::warning('GDrive merge folder sync failed: '.$e->getMessage());
-        }
-    }
-
     /**
      * Dapatkan semua folder ID turunan (termasuk folder ini sendiri).
      */

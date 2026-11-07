@@ -5,14 +5,19 @@ namespace App\Jobs;
 use App\Events\FolderMovedBroadcast;
 use App\Models\File as FileModel;
 use App\Models\Folder;
+use App\Models\GoogleAccount;
 use App\Services\Folder\FolderPathService;
 use App\Services\Folder\MergeConflictException;
+use App\Services\FolderLockGuard;
+use App\Services\Google\GoogleDriveFolderService;
+use App\Services\Google\QuotaManager;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -80,6 +85,74 @@ class MergeFoldersJob implements ShouldQueue
             100,
             $this->sourceFolderIds,
         );
+
+        $this->invalidateAfterMerge();
+    }
+
+    /**
+     * Invalidation SETELAH merge commit — wajib dipanggil oleh jalur sinkron
+     * (controller) DAN asinkron (handle()). Tanpa ini, merge >200 item
+     * meninggalkan sesi unlock folder sumber dan tidak menyinkronkan Drive.
+     */
+    public function invalidateAfterMerge(): void
+    {
+        // Sesi unlock folder sumber tidak boleh hidup untuk folder yang isinya
+        // sudah pindah: entri `folder_unlock:<user>:<id>` yang tertinggal bisa
+        // membuat endpoint pemeriksa ancestor menganggap A/B masih terbuka.
+        // Folder tujuan sengaja TIDAK disentuh (belum tentu terkunci).
+        $guard = app(FolderLockGuard::class);
+        foreach ($this->sourceFolderIds as $sid) {
+            $folder = Folder::find($sid);
+            if ($folder) {
+                $guard->forgetUnlocked($folder, $this->userId);
+            }
+        }
+
+        $this->syncToDrive();
+    }
+
+    /**
+     * Sinkron Drive untuk merge: buat folder tujuan di Drive lalu pindahkan
+     * anak-anak yang sudah berada di DB ke folder Drive tujuan. Best-effort.
+     * Dipakai kedua jalur lewat {@see invalidateAfterMerge()}.
+     */
+    public function syncToDrive(): void
+    {
+        try {
+            $accounts = GoogleAccount::where('user_id', $this->userId)->get();
+            if ($accounts->isEmpty()) {
+                return;
+            }
+            $newFolder = Folder::find($this->targetFolderId);
+            if (! $newFolder) {
+                return;
+            }
+            $folderService = app(GoogleDriveFolderService::class);
+            $quota = app(QuotaManager::class);
+            $parent = $newFolder->parent_id ? Folder::find($newFolder->parent_id) : null;
+
+            foreach ($accounts as $acc) {
+                $targetDriveId = $folderService->ensureFolderOnDrive($acc, $newFolder);
+                if (! $targetDriveId) {
+                    continue;
+                }
+                $parentDriveId = $parent
+                    ? $folderService->ensureFolderOnDrive($acc, $parent)
+                    : $quota->ensureRootFolder($acc);
+                if ($parentDriveId) {
+                    $folderService->moveFolderOnDrive($acc, $newFolder, null, $parentDriveId);
+                }
+
+                foreach (Folder::where('parent_id', $newFolder->id)->get() as $child) {
+                    $folderService->moveFolderOnDrive($acc, $child, null, $targetDriveId);
+                }
+                foreach (FileModel::where('folder_id', $newFolder->id)->get() as $file) {
+                    $folderService->moveFileOnDrive($acc, $file, $targetDriveId);
+                }
+            }
+        } catch (Throwable $e) {
+            Log::warning('GDrive merge folder sync failed: '.$e->getMessage());
+        }
     }
 
     /**
