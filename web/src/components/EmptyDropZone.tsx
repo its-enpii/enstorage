@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { CloudUpload } from '@mui/icons-material';
 import { FileInput, type FileInputHandle } from '@/components/FileInput';
 import clsx from 'clsx';
@@ -9,10 +9,13 @@ export function EmptyDropZone({
   onDrop,
   hint = 'Drop files here or click to browse',
   multiple = true,
+  action,
 }: {
   onDrop: (files: FileList) => void;
   hint?: string;
   multiple?: boolean;
+  /** Extra call-to-action rendered inside the zone (e.g. "Add files"). */
+  action?: ReactNode;
 }) {
   const pickerRef = useRef<FileInputHandle>(null);
   const [over, setOver] = useState(false);
@@ -55,6 +58,11 @@ export function EmptyDropZone({
         <CloudUpload />
       </div>
       <span className="text-sm sm:text-base text-on-surface-variant text-center px-2">{hint}</span>
+      {action && (
+        <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          {action}
+        </div>
+      )}
       <FileInput ref={pickerRef} multiple={multiple} onSelect={onDrop} />
     </div>
   );

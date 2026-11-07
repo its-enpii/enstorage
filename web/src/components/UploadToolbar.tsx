@@ -11,6 +11,7 @@ import {
   Add,
   Checklist,
   CreateNewFolder,
+  MoveToInbox,
   UploadFile,
   DriveFolderUpload,
 } from '@mui/icons-material';
@@ -20,6 +21,9 @@ type Props = {
   onUploadFiles: (files: FileList) => void;
   onUploadFolder?: (files: FileList) => void;
   onSelectMode?: () => void;
+  /** "Add files" (adopt) entry — only supplied inside an unlocked locked folder. */
+  onAdopt?: () => void;
+  adoptLabel?: string;
 };
 
 type Action = {
@@ -37,7 +41,7 @@ type Action = {
  * `role="button"` wrapper), which fixes pointer targets being intercepted by
  * the surrounding cards.
  */
-export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSelectMode }: Props) {
+export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSelectMode, onAdopt, adoptLabel }: Props) {
   const { t } = useTranslation();
   const fileRef = useRef<FileInputHandle>(null);
   const folderRef = useRef<FileInputHandle>(null);
@@ -106,6 +110,20 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
           },
         ]
       : []),
+    ...(onAdopt && adoptLabel
+      ? [
+          {
+            key: 'adopt',
+            label: adoptLabel,
+            icon: <MoveToInbox className="!text-2xl" />,
+            onClick: () => {
+              closeFab();
+              onAdopt();
+            },
+            bgClass: 'bg-surface-container-high text-on-surface',
+          },
+        ]
+      : []),
     ...(onSelectMode
       ? [
           {
@@ -145,6 +163,17 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
             label: t('upload.uploadFolder'),
             icon: <DriveFolderUpload className="!text-xl" />,
             onClick: () => folderRef.current?.open(),
+            bgClass: 'text-on-surface',
+          },
+        ]
+      : []),
+    ...(onAdopt && adoptLabel
+      ? [
+          {
+            key: 'adopt',
+            label: adoptLabel,
+            icon: <MoveToInbox className="!text-xl" />,
+            onClick: onAdopt,
             bgClass: 'text-on-surface',
           },
         ]

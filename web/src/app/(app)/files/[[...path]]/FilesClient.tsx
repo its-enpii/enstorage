@@ -2629,6 +2629,18 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           {/* Always beside the breadcrumb (never its own row unless the
               width truly cannot fit). 44px targets on phones. */}
           <div className="flex items-center justify-end gap-1.5 md:gap-2 shrink-0 self-start md:self-auto md:min-h-11">
+          {folderId && canAdopt && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="!h-11 min-h-11 shrink-0 px-2.5 sm:px-3"
+              onClick={() => setAdoptOpen(true)}
+              aria-label={t('files.move.adoptAction')}
+            >
+              <span className="material-symbols-outlined !text-xl" aria-hidden>move_to_inbox</span>
+              <span className="hidden sm:inline whitespace-nowrap">{t('files.move.adoptAction')}</span>
+            </Button>
+          )}
           {folderId && (
             <Tooltip label={t('folders.downloadFolder')}>
               <IconButton
@@ -2969,7 +2981,18 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           ))}
           {visibleFolders.length === 0 && visibleFiles.length === 0 && (
             <div className="col-span-full">
-              <EmptyDropZone onDrop={uploadFiles} hint={t('files.empty')} />
+              <EmptyDropZone
+                onDrop={uploadFiles}
+                hint={t('files.empty')}
+                action={
+                  canAdopt ? (
+                    <Button variant="primary" size="md" onClick={() => setAdoptOpen(true)}>
+                      <span className="material-symbols-outlined !text-xl" aria-hidden>move_to_inbox</span>
+                      {t('files.move.adoptAction')}
+                    </Button>
+                  ) : undefined
+                }
+              />
             </div>
           )}
           </div>
@@ -3055,6 +3078,8 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         </div>
       ) : (
         <UploadToolbar
+          onAdopt={canAdopt ? () => setAdoptOpen(true) : undefined}
+          adoptLabel={t('files.move.adoptAction')}
           onNewFolder={createFolder}
           onUploadFiles={uploadFiles}
           onUploadFolder={(files) => uploadFiles(files)}
