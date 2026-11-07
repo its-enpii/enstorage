@@ -1,0 +1,27 @@
+name: Retry Failed Thumbnails
+on:
+  workflow_dispatch:
+jobs:
+  r:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 25m
+          script: |
+            cd //home/enpii/studio/enstorage
+            C="docker compose -f docker-compose.yml"
+            echo "== sebelum =="
+            $C exec -T app php artisan tinker --execute='echo "failed_jobs=",DB::table("failed_jobs")->count(),PHP_EOL;'
+            echo "== restart worker (ambil config baru) =="
+            $C restart worker
+            sleep 8
+            $C exec -T worker sh -lc 'ps aux | grep -c "[q]ueue:work"'
+            echo "== retry semua failed jobs =="
+            $C exec -T app php artisan queue:retry all 2>&1 | tail -3
+            echo "== buang entry failed_jobs yang sudah di-retry (yang tidak bisa, tetap) =="
+            $C exec -T app php artisan tinker --execute='echo "failed_jobs_now=",DB::table("failed_jobs")->count(),PHP_EOL;'
