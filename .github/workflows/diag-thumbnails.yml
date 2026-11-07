@@ -13,38 +13,18 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          command_timeout: 25m
+          command_timeout: 20m
           script: |
             set -uo pipefail
             cd //home/enpii/studio/enstorage
             C="docker compose -f docker-compose.yml"
-            echo "== A. hitung file di volume host langsung =="
-            sudo ls /var/lib/docker/volumes/enstorage_app-storage/_data/app/thumbnails 2>/dev/null | wc -l || \
-              ls /var/lib/docker/volumes/enstorage_app-storage/_data/app/thumbnails 2>/dev/null | wc -l
-            echo "== B. cari semua *.webp baru di SELURUH host (maks 20) =="
-            find / -xdev -name "*.webp" -newermt "-3 hours" 2>/dev/null | head -20
-            echo "== C. semua container yang punya storage/app/thumbnails berbeda =="
-            for c in $(docker ps --format '{{.Names}}'); do
-              n=$(docker exec "$c" sh -lc 'ls -1 /var/www/html/storage/app/thumbnails 2>/dev/null | wc -l' 2>/dev/null || echo NA)
-              echo "$c -> $n"
-            done
-            echo "== D. proses queue:work dan container-nya =="
-            docker ps --format '{{.Names}}\t{{.Image}}' | grep -iE "worker|app"
-            for c in enstorage-worker enstorage-app; do
-              echo "--- $c ---"
-              docker exec "$c" sh -lc 'ps aux | grep "[q]ueue:work" | head -3' 2>/dev/null || echo none
-            done
-            echo "== E. generated_at vs mtime file terbaru di dir =="
-            $C exec -T app php artisan tinker --execute='
-              $r = DB::table("thumbnails")->orderByDesc("generated_at")->first();
-              echo "newest_row_generated_at=", $r->generated_at ?? "-", PHP_EOL;
-              echo "newest_row_size=", $r->size ?? "-", PHP_EOL;
-              $p = storage_path("app/" . ($r->path ?? ""));
-              echo "path_exists_now=", (int) is_file($p), PHP_EOL;
-              $dir = storage_path("app/thumbnails");
-              $files = glob($dir . "/*.webp");
-              echo "dir_webp_count=", count($files), PHP_EOL;
-              if ($files) { echo "newest_file_mtime=", date("c", max(array_map("filemtime", $files))), PHP_EOL; }
-            '
-            echo "== F. ukuran dir + inode mount =="
-            $C exec -T app sh -lc 'du -sh /var/www/html/storage/app/thumbnails; df -h /var/www/html/storage/app/thumbnails | tail -1; mount | grep -E "html/storage" | head -3'
+            echo -n "app/thumbnails        : "; $C exec -T app sh -lc 'ls -1 /var/www/html/storage/app/thumbnails 2>/dev/null | wc -l'
+            echo -n "app/private/thumbnails: "; $C exec -T app sh -lc 'ls -1 /var/www/html/storage/app/private/thumbnails 2>/dev/null | wc -l'
+            echo "── 3 nama di private ──"
+            $C exec -T app sh -lc 'ls /var/www/html/storage/app/private/thumbnails 2>/dev/null | head -3'
+            echo "── ukuran private ──"
+            $C exec -T app sh -lc 'du -sh /var/www/html/storage/app/private/thumbnails 2>/dev/null'
+            echo "── generator: lokasi tulis ──"
+            $C exec -T app sh -lc 'grep -n "disk(\x27local\x27)->path\|\$relative" /var/www/html/app/Services/ThumbnailGenerator.php | head -6'
+            echo "── endpoint: lokasi baca ──"
+            $C exec -T app sh -lc 'grep -rn "thumbnail->path" /var/www/html/app/Http/Controllers/Api/FileController.php | head -4'
