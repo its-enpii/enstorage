@@ -18,39 +18,62 @@ jobs:
             set -uo pipefail
             cd //home/enpii/studio/enstorage
             C="docker compose -f docker-compose.yml"
-            echo "── jumlah file fisik thumbnail ──"
-            $C exec -T app sh -lc 'ls -1 /var/www/html/storage/app/thumbnails 2>/dev/null | wc -l'
-            echo "── ukuran direktori ──"
-            $C exec -T app sh -lc 'du -sh /var/www/html/storage/app/thumbnails 2>/dev/null'
+            echo "── file fisik vs DB ──"
+            $C exec -T app sh -lc 'ls -1 /var/www/html/storage/app/thumbnails 2>/dev/null | wc -l; du -sh /var/www/html/storage/app/thumbnails 2>/dev/null'
             $C exec -T app php artisan tinker --execute='
               $rows = DB::table("thumbnails")->get();
-              $ok = 0; $gone = 0; $goneRecent = 0;
+              $ok = 0; $gone = 0; $recent = 0;
               foreach ($rows as $r) {
-                if (is_file(storage_path("app/".$r->path))) { $ok++; }
-                else { $gone++; if (strtotime($r->generated_at ?? "2000-01-01") > strtotime("-3 days")) { $goneRecent++; } }
+                if (is_file(storage_path("app/" . $r->path))) { $ok++; }
+                else { $gone++; if (strtotime((string) $r->generated_at) > strtotime("-3 days")) { $recent++; } }
               }
-              echo "rows=", $rows->count(), " file_ok=", $ok, " file_gone=", $gone, " gone_recent=", $goneRecent, PHP_EOL;
-
-              echo "=== file yang BUTUH thumbnail (row hilang ATAU file hilang) ===", PHP_EOL;
-              $base = App\Models\File::where("upload_status","done");
-              $need = 0; $cat = [];
-              foreach ((clone $base)->with("thumbnail")->chunkById(500, function ($files) use (&$need, &$cat) {
+              echo "rows=", $rows->count(), " file_ok=", $ok, " file_gone=", $gone, " gone_recent=", $recent, PHP_EOL;
+              $oldestGone = null; $newestGone = null;
+              foreach ($rows as $r) {
+                if (is_file(storage_path("app/" . $r->path))) { continue; }
+                $g = strtotime((string) $r->generated_at);
+                if ($g <= 0) { continue; }
+                if ($oldestGone === null || $g < $oldestGone) { $oldestGone = $g; }
+                if ($newestGone === null || $g > $newestGone) { $newestGone = $g; }
+              }
+              echo "gone_oldest=", $oldestGone ? date("Y-m-d", $oldestGone) : "-",
+                   " gone_newest=", $newestGone ? date("Y-m-d", $newestGone) : "-", PHP_EOL;
+            '
+            echo "── kandidat thumbnail sebenarnya (row hilang / file hilang) ──"
+            $C exec -T app php artisan tinker --execute='
+              $cats = [];
+              $total = 0;
+              App\Models\File::where("upload_status","done")->with("thumbnail")->chunkById(500, function ($files) use (&$cats, &$total) {
                 foreach ($files as $f) {
                   $t = $f->thumbnail;
-                  $bad = (! $t) || (! is_file(storage_path("app/".$t->path)));
-                  if (! $bad) { continue; }
-                  $need++;
-                  $m = strtolower($f->mime_type ?? "");
-                  $ext = strtolower(pathinfo($f->name, PATHINFO_EXTENSION));
-                  $k = str_starts_with($m,"image/") ? "image"
-                     : (str_starts_with($m,"video/") ? "video"
-                     : (in_array($ext,["mp4","webm","mkv","mov","avi"],true) ? "video_by_ext"
-                     : (str_starts_with($m,"audio/") ? "audio"
-                     : (in_array($ext,["png","jpg","jpeg","webp","gif","avif"],true) ? "image_by_ext" : "other"))));
-                  $cat[$k] = ($cat[$k] ?? 0) + 1;
+                  if ($t && is_file(storage_path("app/" . $t->path))) { continue; }
+                  $m = strtolower((string) $f->mime_type);
+                  $ext = strtolower(pathinfo((string) $f->name, PATHINFO_EXTENSION));
+                  if (str_starts_with($m, "image/") || in_array($ext, ["png","jpg","jpeg","webp","gif","avif"], true)) { $k = "image"; }
+                  elseif (str_starts_with($m, "video/") || in_array($ext, ["mp4","webm","mkv","mov","avi"], true)) { $k = "video"; }
+                  elseif (str_starts_with($m, "audio/")) { $k = "audio"; }
+                  else { $k = "doc"; }
+                  $cats[$k] = ($cats[$k] ?? 0) + 1;
+                  $total++;
                 }
-              })) {}
-              echo "need_total=", $need, PHP_EOL;
-              arsort($cat);
-              foreach ($cat as $k => $n) { echo "  need_", $k, "=", $n, PHP_EOL; }
+              });
+              echo "need_total=", $total, PHP_EOL;
+              arsort($cats);
+              foreach ($cats as $k => $n) { echo "  need_", $k, "=", $n, PHP_EOL; }
+            '
+            echo "── umur file image/video yang butuh thumb ──"
+            $C exec -T app php artisan tinker --execute='
+              $q = App\Models\File::where("upload_status","done")->with("thumbnail")
+                    ->where(function ($x) { $x->where("mime_type","like","image/%")->orWhere("mime_type","like","video/%"); });
+              $byMonth = [];
+              $q->chunkById(500, function ($files) use (&$byMonth) {
+                foreach ($files as $f) {
+                  $t = $f->thumbnail;
+                  if ($t && is_file(storage_path("app/" . $t->path))) { continue; }
+                  $k = $f->created_at ? $f->created_at->format("Y-m") : "?";
+                  $byMonth[$k] = ($byMonth[$k] ?? 0) + 1;
+                }
+              });
+              ksort($byMonth);
+              foreach ($byMonth as $k => $n) { echo "  month=", $k, " need=", $n, PHP_EOL; }
             '
