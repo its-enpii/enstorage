@@ -1,0 +1,25 @@
+name: Diag Merge
+on:
+  workflow_dispatch:
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 10m
+          script: |
+            cd //home/enpii/studio/enstorage
+            docker compose -f docker-compose.yml exec -T app php artisan tinker --execute='
+              foreach (DB::table("folders")->where("name","like","MG%")->orderBy("created_at")->get() as $r) {
+                echo $r->name, " | id=", $r->id, " | parent=", ($r->parent_id ?? "NULL"), " | path=", $r->path, PHP_EOL;
+              }
+              echo "--- files ---", PHP_EOL;
+              foreach (DB::table("files")->where("name","like","f%559937%")->get() as $r) {
+                echo $r->name, " | folder_id=", ($r->folder_id ?? "NULL"), PHP_EOL;
+              }
+            '
