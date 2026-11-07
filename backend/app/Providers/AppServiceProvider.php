@@ -37,6 +37,17 @@ class AppServiceProvider extends ServiceProvider
                 return Limit::none();
             }
 
+            // Thumbnail DIKECUALIKAN: satu halaman daftar file (50 file)
+            // memuat 50 thumbnail sekaligus, jadi budget 300/menit membuat
+            // folder besar (ratusan file = belasan halaman) mustahil dibuka
+            // — halaman ke-6/7 langsung 429. Thumbnail adalah aset gambar
+            // kecil yang sudah public-cache 24 jam; memperlakukannya sama
+            // mahalnya dengan query daftar file adalah kesalahan desain
+            // limiter. Limit 300 tetap berlaku untuk rute lain (anti abuse).
+            if (self::isAssetRoute($request)) {
+                return Limit::none();
+            }
+
             return Limit::perMinute(300)->by($request->user()?->id ?: $request->ip());
         });
 
@@ -62,5 +73,16 @@ class AppServiceProvider extends ServiceProvider
     private static function isUploadRoute(Request $request): bool
     {
         return $request->is('api/v1/files/upload*', 'api/v1/files/bulk-upload*');
+    }
+
+    /**
+     * Apakah request menuju aset gambar kecil yang dimuat massal per halaman.
+     *
+     * Saat ini: `GET api/v1/files/{id}/thumbnail` (lihat routes/api.php).
+     * Gateway S3 tidak punya rute thumbnail, jadi tidak ada pola `s3/...`.
+     */
+    private static function isAssetRoute(Request $request): bool
+    {
+        return $request->is('api/v1/files/*/thumbnail');
     }
 }

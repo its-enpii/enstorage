@@ -18,6 +18,23 @@ import {
 } from '@/lib/api';
 import { cacheGet, cacheRemove, cacheSet } from '@/lib/cache';
 import { useAuth } from '@/components/AuthProvider';
+import i18n from '@/lib/i18n';
+
+/**
+ * Pesan untuk kegagalan halaman lanjutan ("Muat lagi" / infinite scroll).
+ * Paging tidak boleh gagal diam-diam: 429 diberi pesan yang bisa
+ * ditindaklanjuti, 5xx/network diteruskan, sementara 401/423 dibiarkan
+ * `null` karena jalur yang sudah ada yang menanganinya (logout / unlock).
+ */
+function pagingErrorMessage(e: unknown): string | null {
+  if (e instanceof ApiError) {
+    if (e.status === 429) return i18n.t('files.paging.rateLimited');
+    if (e.status === 401 || e.status === 423) return null;
+    return e.message || i18n.t('files.errors.loadFailed');
+  }
+  // Network / TypeError / abort → tetap beri tahu user.
+  return i18n.t('files.errors.loadFailed');
+}
 
 /**
  * Active sort preference (field + direction), read without a provider so the
@@ -636,7 +653,11 @@ export function FilesStoreProvider({
     try {
       await loadFoldersPage(folderPageRef.current + 1);
     } catch (e) {
-      // Silent: don't disrupt the UI; user can retry by scrolling again
+      // Jangan telan error paging: 429/5xx/network harus terlihat. `hasMore`
+      // tidak berubah saat gagal, jadi tombol "Muat lagi" tetap render dan
+      // user bisa mengulang setelah jeda.
+      const message = pagingErrorMessage(e);
+      if (message) setError(message);
     } finally {
       loadingMoreRef.current = false;
       setLoadingMore(false);
@@ -651,7 +672,11 @@ export function FilesStoreProvider({
     try {
       await loadFilesPage(filePageRef.current + 1);
     } catch (e) {
-      // Silent
+      // Jangan telan error paging: 429/5xx/network harus terlihat. `hasMore`
+      // tidak berubah saat gagal, jadi tombol "Muat lagi" tetap render dan
+      // user bisa mengulang setelah jeda.
+      const message = pagingErrorMessage(e);
+      if (message) setError(message);
     } finally {
       loadingMoreRef.current = false;
       setLoadingMore(false);

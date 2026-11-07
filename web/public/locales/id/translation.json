@@ -248,6 +248,9 @@
       "unsupported": "File ini bukan arsip yang didukung (hanya ZIP).",
       "notFound": "File atau arsip tidak ditemukan.",
       "failed": "Gagal mengekstrak arsip."
+    },
+    "paging": {
+      "rateLimited": "Terlalu banyak permintaan. Tunggu beberapa detik lalu coba lagi."
     }
   },
   "folders": {
