@@ -1,6 +1,7 @@
 name: Verify Thumbnails
 
-# Verifikasi produksi: endpoint thumbnail, pilih file yang TIDAK di folder terkunci.
+# Verifikasi endpoint thumbnail: buka sesi unlock resmi (markUnlocked) untuk folder
+# pemilik file uji, ukur endpoint HTTP, lalu tutup kembali sesinya.
 on:
   workflow_dispatch:
 
@@ -20,26 +21,33 @@ jobs:
             cd //home/enpii/studio/enstorage
             COMPOSE="docker compose -f docker-compose.yml"
             $COMPOSE exec -T app php artisan tinker --execute='
-              $locked = app(App\Services\FolderLockGuard::class)->lockedFolderIds(App\Models\User::first()->id);
-              $q = App\Models\File::with(["thumbnail","folder"])
-                    ->where("mime_type","like","video/%")->whereHas("thumbnail");
-              if (count($locked)) { $q->where(fn($x) => $x->whereNull("folder_id")->orWhereNotIn("folder_id", $locked)); }
-              $f = $q->first();
-              if (!$f) { echo "NO_UNLOCKED_VIDEO", PHP_EOL; exit; }
+              $f = App\Models\File::with(["thumbnail","folder"])->where("mime_type","like","video/%")->whereHas("thumbnail")->first();
               $owner = App\Models\User::find($f->user_id);
+              $guard = app(App\Services\FolderLockGuard::class);
+              if ($f->folder) { $guard->markUnlocked($f->folder, $owner->id); }
               $owner->tokens()->where("name","ci-verify")->delete();
               echo "FID=", $f->id, PHP_EOL;
               echo "FNAME=", $f->name, PHP_EOL;
               echo "OWNER=", $owner->email, PHP_EOL;
               echo "TPATH=", $f->thumbnail->path, PHP_EOL;
-              echo "EXISTS=", (int) file_exists(storage_path("app/".$f->thumbnail->path)), PHP_EOL;
+              echo "EXISTS_APP_ROOT=", (int) file_exists(storage_path("app/".$f->thumbnail->path)), PHP_EOL;
+              echo "EXISTS_PRIVATE=", (int) file_exists(storage_path("app/private/".$f->thumbnail->path)), PHP_EOL;
+              echo "FOLDER=", $f->folder?->name ?? "(root)", PHP_EOL;
               echo "TOKEN=", $owner->createToken("ci-verify")->plainTextToken, PHP_EOL;
             ' > /tmp/t.txt 2>&1
-            grep -E "FNAME=|OWNER=|TPATH=|EXISTS=|NO_UNLOCKED" /tmp/t.txt
+            grep -E "^[A-Z_]+=" /tmp/t.txt
             TOKEN=$(grep '^TOKEN=' /tmp/t.txt | cut -d= -f2-)
             FID=$(grep '^FID=' /tmp/t.txt | cut -d= -f2-)
-            echo "── endpoint thumbnail ──"
+            echo "── endpoint thumbnail (sesi unlock aktif) ──"
             $COMPOSE exec -T nginx sh -lc "curl -s -o /tmp/v.bin -w 'http=%{http_code} bytes=%{size_download} type=%{content_type}\n' -H 'Authorization: Bearer $TOKEN' http://localhost/api/v1/files/$FID/thumbnail"
-            $COMPOSE exec -T nginx sh -lc 'head -c 16 /tmp/v.bin | xxd | head -1'
-            $COMPOSE exec -T nginx sh -lc "curl -s -H 'Authorization: Bearer $TOKEN' 'http://localhost/api/v1/files?per_page=200' -o /tmp/list.json; php -r '\$j=json_decode(file_get_contents(\"/tmp/list.json\"),true); \$d=\$j[\"data\"]??[]; \$v=array_filter(\$d,fn(\$x)=>str_starts_with(\$x[\"mime_type\"]??\"\",\"video/\")); echo \"video_in_list=\",count(\$v),PHP_EOL; foreach(\$v as \$x){echo \"  \",\$x[\"name\"],\" has_thumbnail=\",(int)(\$x[\"has_thumbnail\"]??0),PHP_EOL;}'"
-            $COMPOSE exec -T app php artisan tinker --execute='foreach (App\Models\ApiToken::all() as $t) { if ($t->name === "ci-verify") { $t->delete(); } } echo "token_revoked", PHP_EOL;' 2>/dev/null || $COMPOSE exec -T app php artisan tinker --execute='echo "revoke_skip", PHP_EOL;'
+            $COMPOSE exec -T nginx sh -lc 'xxd -l 16 /tmp/v.bin'
+            echo "── list API ──"
+            $COMPOSE exec -T nginx sh -lc "curl -s -H 'Authorization: Bearer $TOKEN' 'http://localhost/api/v1/files?per_page=200' -o /tmp/l.json; php -r '\$j=json_decode(file_get_contents(\"/tmp/l.json\"),true); echo \"list_count=\",count(\$j[\"data\"]??[]),PHP_EOL;'"
+            echo "── cleanup ──"
+            $COMPOSE exec -T app php artisan tinker --execute='
+              $f = App\Models\File::with("folder")->where("mime_type","like","video/%")->whereHas("thumbnail")->first();
+              $owner = App\Models\User::find($f->user_id);
+              $owner->tokens()->where("name","ci-verify")->delete();
+              if ($f->folder) { app(App\Services\FolderLockGuard::class)->forgetUnlocked($f->folder, $owner->id); }
+              echo "cleanup_done", PHP_EOL;
+            '
