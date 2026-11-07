@@ -15,6 +15,7 @@ use App\Services\FolderLockGuard;
 use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
+use App\Services\ThumbnailGenerator;
 use Carbon\Carbon;
 use Google\Service\Drive;
 use Illuminate\Http\Request;
@@ -1328,8 +1329,8 @@ class S3GatewayController extends Controller
         $driver = $file->storage_driver;
         $storagePath = $file->storage_path;
 
-        if ($file->thumbnail) {
-            @unlink(storage_path('app/'.$file->thumbnail->path));
+        if ($file->thumbnail && ($p = ThumbnailGenerator::absolutePath((string) $file->thumbnail->path))) {
+            @unlink($p);
         }
 
         @unlink(storage_path('app/temp/'.$file->id));

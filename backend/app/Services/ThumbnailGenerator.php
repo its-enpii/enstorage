@@ -56,14 +56,52 @@ class ThumbnailGenerator
         return null;
     }
 
+    /**
+     * Path absolut berkas thumbnail, atau null bila tidak ada.
+     *
+     * Sumber kebenaran TUNGGAL: disk `local` (root `storage_path('app/private')`),
+     * tempat `generate()` menulis. File lama (sebelum refactor disk `local`)
+     * masih ada di `storage_path('app/'.$relative)` — untuk kompatibilitas,
+     * urutan pencarian: (1) disk `local`, (2) legacy. Path yang tidak ada
+     * tidak pernah dikembalikan (null).
+     */
+    public static function absolutePath(string $relative): ?string
+    {
+        if ($relative === '') {
+            return null;
+        }
+
+        try {
+            $canonical = Storage::disk('local')->path($relative);
+            if (is_file($canonical)) {
+                return $canonical;
+            }
+        } catch (Throwable $e) {
+            // disk tidak tersedia → coba legacy di bawah
+        }
+
+        $legacy = storage_path('app/'.$relative);
+        if (is_file($legacy)) {
+            return $legacy;
+        }
+
+        return null;
+    }
+
+    /** True bila berkas thumbnail ada (dipakai backfill/purge). */
+    public static function exists(string $relative): bool
+    {
+        return self::absolutePath($relative) !== null;
+    }
+
     public function generate(FileModel $file, string $sourcePath): void
     {
         $manager = new ImageManager(new GdDriver);
         $image = $manager->read($sourcePath);
         $image->scaleDown(width: 400, height: 400);
 
-        // Tulis lewat disk `local` — sumber yang SAMA dipakai endpoint preview
-        // (`storage_path('app/'.$thumbnail->path)`). Menulis ke
+        // Tulis lewat disk `local` — sumber yang SAMA dipakai
+        // `absolutePath()` untuk semua pembaca/penghapus. Menulis ke
         // `storage/app/thumbnails` langsung akan menghasilkan baris yang
         // berkasnya "hilang" di disk dan dipurge sebagai yatim.
         $disk = Storage::disk('local');

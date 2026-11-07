@@ -77,6 +77,13 @@ class BackfillThumbnailsCommand extends Command
         $chunk = max(1, min(self::MAX_BATCH, (int) $this->option('chunk')));
         $wantsMedia = in_array($only, ['videos', 'images', 'all'], true);
 
+        // Pindahkan berkas thumbnail lama (ditulis sebelum refactor disk
+        // `local`) ke lokasi kanonik SEBELUM pemindaian stale, supaya baris
+        // hidup tidak salah dipurge. Idempoten: run kedua = 0.
+        if ($wantsMedia) {
+            $this->migrateLegacyThumbFiles();
+        }
+
         // Pemindaian stale SEKALI di awal (bukan per chunk): baris yatim =
         // baris thumbnails yang berkasnya sudah tidak ada di disk.
         $staleFileIds = $wantsMedia ? $this->purgeStaleThumbRows() : [];
@@ -147,24 +154,73 @@ class BackfillThumbnailsCommand extends Command
     }
 
     /**
-     * Apakah berkas thumbnail ada? Path baris disimpan relatif ke disk
-     * `local` (root = storage/app/private, tempat generator menulis), tapi
-     * endpoint preview lama mencarinya di `storage_path('app/'.$path)` —
-     * terima keduanya supaya baris hidup tidak salah dipurge.
+     * Apakah berkas thumbnail ada? Delegasi ke sumber kebenaran tunggal
+     * (`ThumbnailGenerator::exists()`): disk `local` dulu, legacy
+     * `storage_path('app/'.$relative)` sebagai kompatibilitas.
      */
     private static function thumbExists(string $relative): bool
     {
-        if ($relative === '') {
-            return false;
-        }
-        if (is_file(storage_path('app/'.$relative))) {
-            return true;
-        }
+        return ThumbnailGenerator::exists($relative);
+    }
 
-        try {
-            return is_file(Storage::disk('local')->path($relative));
-        } catch (Throwable $e) {
-            return false;
+    /**
+     * Pindahkan berkas thumbnail lama dari `storage_path('app/'.$path)`
+     * (root lama, sebelum refactor disk `local`) ke disk `local`.
+     *
+     * Hanya bila: legacy ADA dan kanonik TIDAK ADA. Copy → verifikasi
+     * `filesize` sama → hapus legacy. Idempoten: berkas yang sudah di
+     * kanonik dilewati, run kedua `legacy_moved=0`.
+     */
+    private function migrateLegacyThumbFiles(): void
+    {
+        $moved = 0;
+        $failed = 0;
+        $disk = Storage::disk('local');
+
+        DB::table('thumbnails')->select('path')->orderBy('path')->chunk(500, function (Collection $rows) use (&$moved, &$failed, $disk): void {
+            foreach ($rows as $row) {
+                $relative = (string) $row->path;
+                if ($relative === '') {
+                    continue;
+                }
+
+                $legacy = storage_path('app/'.$relative);
+                if (! is_file($legacy)) {
+                    continue;
+                }
+
+                try {
+                    $canonical = $disk->path($relative);
+                } catch (Throwable $e) {
+                    $failed++;
+
+                    continue;
+                }
+                if (is_file($canonical)) {
+                    continue; // sudah di kanonik — biarkan legacy apa adanya
+                }
+
+                $dir = dirname($canonical);
+                if (! is_dir($dir) && ! @mkdir($dir, 0775, true) && ! is_dir($dir)) {
+                    $failed++;
+
+                    continue;
+                }
+
+                if (! @copy($legacy, $canonical) || ! is_file($canonical) || filesize($canonical) !== filesize($legacy)) {
+                    $failed++;
+
+                    continue;
+                }
+
+                @unlink($legacy);
+                $moved++;
+            }
+        });
+
+        $this->line(sprintf('legacy_moved=%d', $moved));
+        if ($failed > 0) {
+            $this->line(sprintf('legacy_migrate_failed=%d', $failed));
         }
     }
 

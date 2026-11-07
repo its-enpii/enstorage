@@ -6,6 +6,7 @@ use App\Models\GoogleAccount;
 use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\QuotaManager;
+use App\Services\ThumbnailGenerator;
 use App\Support\BulkQuery;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -108,7 +109,9 @@ class PurgeUserAccount implements ShouldQueue
             $unlinked = 0;
             BulkQuery::eachChunk($this->thumbnailPaths, function (array $chunk) use (&$unlinked) {
                 foreach ($chunk as $path) {
-                    @unlink(storage_path('app/'.$path));
+                    if ($p = ThumbnailGenerator::absolutePath((string) $path)) {
+                        @unlink($p);
+                    }
                     $unlinked++;
                 }
             });

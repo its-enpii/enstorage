@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\GoogleAccount;
 use App\Services\Google\QuotaManager;
+use App\Services\ThumbnailGenerator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -95,8 +96,10 @@ class PurgeVault implements ShouldQueue
 
             $thumbnails = 0;
             foreach ($thumbnailPaths as $thumbnailPath) {
-                if (@unlink(storage_path('app/'.$thumbnailPath))) {
-                    $thumbnails++;
+                if ($p = ThumbnailGenerator::absolutePath((string) $thumbnailPath)) {
+                    if (@unlink($p)) {
+                        $thumbnails++;
+                    }
                 }
             }
 

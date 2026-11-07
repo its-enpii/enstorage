@@ -15,6 +15,7 @@ use App\Models\Webhook;
 use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleDriveUploader;
 use App\Services\WebhookService;
+use App\Services\ThumbnailGenerator;
 use App\Support\BulkQuery;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -185,7 +186,9 @@ class PurgeFolderTree implements ShouldQueue
                     ->get(['id', 'file_id', 'path']);
 
                 foreach ($thumbRows as $thumb) {
-                    @unlink(storage_path('app/'.$thumb->path));
+                    if ($p = ThumbnailGenerator::absolutePath((string) $thumb->path)) {
+                        @unlink($p);
+                    }
                 }
                 $stats['thumbnails'] += BulkQuery::deleteInChunks(
                     'thumbnails',

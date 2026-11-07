@@ -23,6 +23,7 @@ use App\Services\Google\GoogleTokenService;
 use App\Services\Google\QuotaManager;
 use App\Services\UnsupportedArchiveException;
 use App\Services\WebhookService;
+use App\Services\ThumbnailGenerator;
 use App\Support\ByteRange;
 use App\Support\ClosureStream;
 use App\Support\StreamPump;
@@ -668,8 +669,8 @@ class FileController extends Controller
             return $this->notFound(__('Thumbnail belum tersedia.'));
         }
 
-        $path = storage_path('app/'.$thumb->path);
-        if (! file_exists($path)) {
+        $path = ThumbnailGenerator::absolutePath($thumb->path);
+        if ($path === null) {
             return $this->notFound(__('File thumbnail tidak ditemukan di storage.'));
         }
 
@@ -1406,8 +1407,8 @@ class FileController extends Controller
         }
 
         if ($request->boolean('thumbnail') && $file->thumbnail) {
-            $path = storage_path('app/'.$file->thumbnail->path);
-            if (file_exists($path)) {
+            $path = ThumbnailGenerator::absolutePath($file->thumbnail->path);
+            if ($path !== null) {
                 return response()->file($path, [
                     'Content-Type' => 'image/webp',
                     'Cache-Control' => 'public, max-age=86400',
@@ -1750,7 +1751,9 @@ class FileController extends Controller
             ? ($file->thumbnail ? [$file->thumbnail] : [])
             : DB::table('thumbnails')->where('file_id', $fileId)->get(['id', 'file_id', 'path'])->all();
         foreach ($thumbnails as $thumbnail) {
-            @unlink(storage_path('app/'.$thumbnail->path));
+            if ($p = ThumbnailGenerator::absolutePath((string) $thumbnail->path)) {
+                @unlink($p);
+            }
         }
 
         // share_links bersifat polymorphic TANPA FK → tidak ikut ter-cascade
