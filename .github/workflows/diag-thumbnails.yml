@@ -18,32 +18,39 @@ jobs:
             set -uo pipefail
             cd //home/enpii/studio/enstorage
             C="docker compose -f docker-compose.yml"
-            echo "── file fisik di storage/app/thumbnails ──"
-            $C exec -T app sh -lc 'ls /var/www/html/storage/app/thumbnails 2>/dev/null | wc -l; ls /var/www/html/storage/app/thumbnails 2>/dev/null | head -3'
-            echo "── file fisik di storage/app/private/thumbnails ──"
-            $C exec -T app sh -lc 'ls /var/www/html/storage/app/private/thumbnails 2>/dev/null | wc -l'
-            echo "── lokasi lain (find) ──"
-            $C exec -T app sh -lc 'find /var/www/html/storage -type d -name thumbnails 2>/dev/null'
-            echo "── hitung DB vs disk per base ──"
+            echo "── jumlah file fisik thumbnail ──"
+            $C exec -T app sh -lc 'ls -1 /var/www/html/storage/app/thumbnails 2>/dev/null | wc -l'
+            echo "── ukuran direktori ──"
+            $C exec -T app sh -lc 'du -sh /var/www/html/storage/app/thumbnails 2>/dev/null'
             $C exec -T app php artisan tinker --execute='
-              $paths = DB::table("thumbnails")->pluck("path")->all();
-              $bases = [
-                "app"          => storage_path("app"),
-                "app/private"  => storage_path("app/private"),
-                "app/public"   => storage_path("app/public"),
-              ];
-              echo "db_rows=", count($paths), PHP_EOL;
-              foreach ($bases as $label => $base) {
-                $hit = 0;
-                foreach ($paths as $p) { if (is_file($base."/".$p)) { $hit++; } }
-                echo "  base=", $label, " exists=", $hit, PHP_EOL;
+              $rows = DB::table("thumbnails")->get();
+              $ok = 0; $gone = 0; $goneRecent = 0;
+              foreach ($rows as $r) {
+                if (is_file(storage_path("app/".$r->path))) { $ok++; }
+                else { $gone++; if (strtotime($r->generated_at ?? "2000-01-01") > strtotime("-3 days")) { $goneRecent++; } }
               }
-              echo "  sample_db_path=", $paths[0] ?? "(none)", PHP_EOL;
-              $firstFound = null;
-              foreach ($paths as $p) { if (is_file(storage_path("app/".$p))) { $firstFound = $p; break; } }
-              echo "  sample_found_path=", $firstFound ?? "(none)", PHP_EOL;
+              echo "rows=", $rows->count(), " file_ok=", $ok, " file_gone=", $gone, " gone_recent=", $goneRecent, PHP_EOL;
+
+              echo "=== file yang BUTUH thumbnail (row hilang ATAU file hilang) ===", PHP_EOL;
+              $base = App\Models\File::where("upload_status","done");
+              $need = 0; $cat = [];
+              foreach ((clone $base)->with("thumbnail")->chunkById(500, function ($files) use (&$need, &$cat) {
+                foreach ($files as $f) {
+                  $t = $f->thumbnail;
+                  $bad = (! $t) || (! is_file(storage_path("app/".$t->path)));
+                  if (! $bad) { continue; }
+                  $need++;
+                  $m = strtolower($f->mime_type ?? "");
+                  $ext = strtolower(pathinfo($f->name, PATHINFO_EXTENSION));
+                  $k = str_starts_with($m,"image/") ? "image"
+                     : (str_starts_with($m,"video/") ? "video"
+                     : (in_array($ext,["mp4","webm","mkv","mov","avi"],true) ? "video_by_ext"
+                     : (str_starts_with($m,"audio/") ? "audio"
+                     : (in_array($ext,["png","jpg","jpeg","webp","gif","avif"],true) ? "image_by_ext" : "other"))));
+                  $cat[$k] = ($cat[$k] ?? 0) + 1;
+                }
+              })) {}
+              echo "need_total=", $need, PHP_EOL;
+              arsort($cat);
+              foreach ($cat as $k => $n) { echo "  need_", $k, "=", $n, PHP_EOL; }
             '
-            echo "── apakah file contoh benar-benar ada (ls) ──"
-            $C exec -T app sh -lc 'ls -l /var/www/html/storage/app/thumbnails/ 2>/dev/null | head -5'
-            echo "── volume mount ──"
-            docker inspect enstorage-app --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}' | grep -i stor
