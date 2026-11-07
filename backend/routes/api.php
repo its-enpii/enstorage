@@ -169,6 +169,8 @@ Route::middleware('auth.apikey')->group(function () {
     // Resolve by materialized path — WAJIB sebelum `folders/{id}` agar
     // literal "resolve" tidak tertelan sebagai parameter {id}.
     Route::get('folders/resolve', [FolderController::class, 'resolveByPath']);
+    // Merge WAJIB sebelum `folders/{id}` (kalau tidak "merge" dibaca sebagai id).
+    Route::post('folders/merge', [FolderController::class, 'merge']);
     Route::get('folders/{id}', [FolderController::class, 'show']);
     Route::get('folders/{id}/download', [FolderController::class, 'download']);
     Route::patch('folders/{id}', [FolderController::class, 'update']);

@@ -10,6 +10,7 @@ use App\Events\FolderSharedBroadcast;
 use App\Events\FolderUnsharedBroadcast;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FolderResource;
+use App\Jobs\MergeFoldersJob;
 use App\Jobs\PurgeFolderTree;
 use App\Models\ActivityLog;
 use App\Models\File;
@@ -19,6 +20,7 @@ use App\Models\GoogleAccount;
 use App\Models\ShareLink;
 use App\Services\ActivityLogService;
 use App\Services\Folder\FolderPathService;
+use App\Services\Folder\MergeConflictException;
 use App\Services\FolderLockGuard;
 use App\Services\FolderZipStreamer;
 use App\Services\Google\GoogleClientFactory;
@@ -62,6 +64,12 @@ class FolderController extends Controller
      * `S3GatewayController::STREAM_LIMIT_SECONDS`.
      */
     public const STREAM_LIMIT_SECONDS = StreamPump::DEFAULT_LIMIT_SECONDS;
+
+    /**
+     * Batas item (anak folder + file) untuk merge sinkron. Di atas batas ini
+     * folder baru dibuat langsung lalu sisanya dikerjakan MergeFoldersJob.
+     */
+    public const MERGE_SYNC_LIMIT = 200;
 
     /**
      * Hook TEST-ONLY (tidak pernah di-set di produksi): dipanggil dengan
@@ -576,6 +584,254 @@ class FolderController extends Controller
         FolderMovedBroadcast::dispatch($folder, $previousParentId);
 
         return $this->ok(new FolderResource($folder->fresh()), __('Folder berhasil dipindahkan.'));
+    }
+
+    /**
+     * POST /folders/merge — buat folder baru lalu PINDAHKAN semua isi langsung
+     * dari setiap folder sumber ke folder baru itu.
+     *
+     * Kontrak: `name`, `parent_id` (nullable), `source_folder_ids` (2..50),
+     * `conflict` = rename|skip|fail. Sumber TIDAK dihapus (boleh kosong).
+     * Semua perubahan DB dalam satu transaksi; > 200 item dijadwalkan ke
+     * {@see MergeFoldersJob} (status queued). Drive sync best-effort.
+     */
+    public function merge(Request $request): JsonResponse
+    {
+        $userId = $request->user()->id;
+
+        $rules = [
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                'regex:/^[^\\\\\\/:*?"<>|]+$/',
+            ],
+            'parent_id' => ['nullable', 'string', 'uuid'],
+            'source_folder_ids' => ['required', 'array', 'min:2', 'max:50'],
+            'source_folder_ids.*' => ['required', 'string', 'uuid', 'distinct'],
+            'conflict' => ['nullable', 'string', 'in:rename,skip,fail'],
+        ];
+        // Pesan generik untuk uuid tidak valid / duplikat: tidak boleh
+        // membocorkan keberadaan folder user lain.
+        $data = $request->validate($rules, [
+            'source_folder_ids.min' => __('Pilih minimal 2 folder untuk digabungkan.'),
+            'source_folder_ids.max' => __('Maksimal 50 folder dapat digabungkan sekaligus.'),
+            'source_folder_ids.*.distinct' => __('Daftar folder sumber tidak boleh berisi id duplikat.'),
+            'source_folder_ids.*.uuid' => __('Daftar folder sumber tidak valid.'),
+            'name.regex' => __('Nama folder tidak boleh mengandung karakter khusus (\\ / : * ? " < > |).'),
+        ]);
+
+        $sourceIds = array_values(array_unique($data['source_folder_ids']));
+        $parentId = $data['parent_id'] ?? null;
+        $conflict = $data['conflict'] ?? 'rename';
+
+        // Semua sumber harus milik user. Folder yang tidak dimiliki dilaporkan
+        // sebagai id yang gagal (tanpa membedakan "tidak ada" vs "milik orang lain").
+        $sources = Folder::where('user_id', $userId)
+            ->whereIn('id', $sourceIds)
+            ->get()
+            ->keyBy('id');
+
+        $missing = array_values(array_diff($sourceIds, $sources->keys()->all()));
+        if ($missing) {
+            return $this->fail(__('Beberapa folder sumber tidak dapat digabungkan.'), 422, null, [
+                'failed_source_ids' => $missing,
+            ]);
+        }
+
+        foreach ($sourceIds as $sid) {
+            if ($sid === $parentId) {
+                return $this->fail(__('Folder baru tidak boleh berada di dalam folder sumber.'), 422);
+            }
+        }
+
+        $parent = null;
+        if ($parentId) {
+            $parent = Folder::where('id', $parentId)->where('user_id', $userId)->first();
+            if (! $parent) {
+                return $this->fail(__('Parent folder tujuan tidak ditemukan.'), 422);
+            }
+            // Parent tujuan tidak boleh berada di dalam salah satu sumber.
+            foreach ($sourceIds as $sid) {
+                if ($this->isDescendantOf($parentId, $sid)) {
+                    return $this->fail(__('Folder baru tidak boleh berada di dalam folder sumber.'), 422);
+                }
+            }
+        }
+
+        // Tidak boleh ada sumber yang ancestor/descendant sumber lain:
+        // isi anak akan dipindah dua kali.
+        foreach ($sourceIds as $sid) {
+            foreach ($sourceIds as $other) {
+                if ($sid !== $other && $this->isDescendantOf($sid, $other)) {
+                    return $this->fail(__('Folder sumber tidak boleh saling bersarang.'), 422);
+                }
+            }
+        }
+
+        // Lock guard: semua sumber + parent tujuan.
+        foreach ($sourceIds as $sid) {
+            if ($blocked = $this->lockGuardResponse($request, $sources[$sid])) {
+                return $blocked;
+            }
+        }
+        if ($parent && ($blocked = $this->lockGuardResponse($request, $parent))) {
+            return $blocked;
+        }
+
+        // Nama folder baru harus unik di parent tujuan (tanpa auto-suffix).
+        $duplicate = Folder::where('user_id', $userId)
+            ->where('parent_id', $parentId)
+            ->where('name', $data['name'])
+            ->exists();
+        if ($duplicate) {
+            throw ValidationException::withMessages([
+                'name' => [__('Sudah ada folder dengan nama ":name" di lokasi tujuan.', ['name' => $data['name']])],
+            ]);
+        }
+
+        // Snapshot ringan untuk menentukan jalur sinkron vs queued.
+        $childFolders = Folder::where('user_id', $userId)
+            ->whereIn('parent_id', $sourceIds)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['id', 'parent_id', 'name']);
+        $childFiles = FileModel::where('user_id', $userId)
+            ->whereIn('folder_id', $sourceIds)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['id', 'folder_id', 'name']);
+
+        $totalItems = $childFolders->count() + $childFiles->count();
+
+        if ($totalItems > self::MERGE_SYNC_LIMIT) {
+            $newFolder = DB::transaction(function () use ($userId, $parentId, $data) {
+                return $this->createMergeTarget($userId, $parentId, $data['name']);
+            });
+
+            $jobId = (string) Str::uuid();
+            MergeFoldersJob::dispatch($userId, $newFolder->id, $sourceIds, $conflict, $jobId);
+
+            $this->activityLog->log(
+                ActivityLog::ACTION_FOLDER_MERGE,
+                userId: $userId,
+                subject: $newFolder,
+                metadata: [
+                    'new_folder_id' => $newFolder->id,
+                    'source_folder_ids' => $sourceIds,
+                    'moved_folders' => 0,
+                    'moved_files' => 0,
+                    'queued' => true,
+                    'job_id' => $jobId,
+                ],
+                request: $request,
+            );
+
+            FolderCreatedBroadcast::dispatch($newFolder);
+
+            return $this->accepted([
+                'folder' => (new FolderResource($newFolder->fresh()))->resolve($request),
+                'moved_folders' => 0,
+                'moved_files' => 0,
+                'renamed' => [],
+                'skipped' => [],
+                'status' => 'queued',
+                'job_id' => $jobId,
+            ], __('Penggabungan folder dijadwalkan.'));
+        }
+
+        try {
+            [$newFolder, $summary] = DB::transaction(function () use ($userId, $sourceIds, $parentId, $data, $conflict) {
+                $newFolder = $this->createMergeTarget($userId, $parentId, $data['name']);
+
+                $summary = (new MergeFoldersJob($userId, $newFolder->id, $sourceIds, $conflict, ''))
+                    ->performMerge();
+
+                return [$newFolder, $summary];
+            });
+        } catch (MergeConflictException $e) {
+            return $this->fail($e->getMessage(), 422);
+        }
+
+        $this->syncMergeToDrive($userId, $newFolder, $sourceIds);
+
+        $this->activityLog->log(
+            ActivityLog::ACTION_FOLDER_MERGE,
+            userId: $userId,
+            subject: $newFolder,
+            metadata: [
+                'new_folder_id' => $newFolder->id,
+                'source_folder_ids' => $sourceIds,
+                'moved_folders' => $summary['moved_folders'],
+                'moved_files' => $summary['moved_files'],
+            ],
+            request: $request,
+        );
+
+        FolderCreatedBroadcast::dispatch($newFolder);
+
+        return $this->ok([
+            'folder' => (new FolderResource($newFolder->fresh()))->resolve($request),
+            'moved_folders' => $summary['moved_folders'],
+            'moved_files' => $summary['moved_files'],
+            'renamed' => $summary['renamed'],
+            'skipped' => $summary['skipped'],
+            'status' => 'done',
+        ], __('Folder berhasil digabungkan.'));
+    }
+
+    /**
+     * Buat baris folder tujuan merge (nama unik di parent sudah divalidasi).
+     */
+    private function createMergeTarget(string $userId, ?string $parentId, string $name): Folder
+    {
+        $folder = new Folder;
+        $folder->user_id = $userId;
+        $folder->parent_id = $parentId;
+        $folder->name = $name;
+        $folder->path = $this->paths->computePath($folder);
+        $folder->save();
+
+        return $folder;
+    }
+
+    /**
+     * Sinkron Drive untuk merge: buat folder tujuan di Drive lalu pindahkan
+     * anak-anak yang sudah berada di DB ke folder Drive tujuan. Best-effort.
+     */
+    private function syncMergeToDrive(string $userId, Folder $newFolder, array $sourceIds): void
+    {
+        try {
+            $accounts = GoogleAccount::where('user_id', $userId)->get();
+            if ($accounts->isEmpty()) {
+                return;
+            }
+            $folderService = app(GoogleDriveFolderService::class);
+            $quota = app(QuotaManager::class);
+            $parent = $newFolder->parent_id ? Folder::find($newFolder->parent_id) : null;
+
+            foreach ($accounts as $acc) {
+                $targetDriveId = $folderService->ensureFolderOnDrive($acc, $newFolder);
+                if (! $targetDriveId) {
+                    continue;
+                }
+                $parentDriveId = $parent
+                    ? $folderService->ensureFolderOnDrive($acc, $parent)
+                    : $quota->ensureRootFolder($acc);
+                if ($parentDriveId) {
+                    $folderService->moveFolderOnDrive($acc, $newFolder, null, $parentDriveId);
+                }
+
+                foreach (Folder::where('parent_id', $newFolder->id)->get() as $child) {
+                    $folderService->moveFolderOnDrive($acc, $child, null, $targetDriveId);
+                }
+                foreach (File::where('folder_id', $newFolder->id)->get() as $file) {
+                    $folderService->moveFileOnDrive($acc, $file, $targetDriveId);
+                }
+            }
+        } catch (Throwable $e) {
+            Log::warning('GDrive merge folder sync failed: '.$e->getMessage());
+        }
     }
 
     /**
