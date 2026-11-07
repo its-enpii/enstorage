@@ -19,49 +19,30 @@ jobs:
             cd //home/enpii/studio/enstorage
             C="docker compose -f docker-compose.yml"
             $C exec -T app php artisan tinker --execute='
-              $base = App\Models\File::where("upload_status","done");
-              $miss = (clone $base)->whereDoesntHave("thumbnail");
+              $miss = App\Models\File::where("upload_status","done")->whereDoesntHave("thumbnail");
+              echo "=== octet-stream tanpa thumb: sebaran ekstensi ===", PHP_EOL;
+              $oct = (clone $miss)->where("mime_type","like","%octet-stream%")->get();
+              $byExt = [];
+              foreach ($oct as $f) {
+                $e = strtolower(pathinfo($f->name, PATHINFO_EXTENSION)) ?: "(none)";
+                $byExt[$e] = ($byExt[$e] ?? 0) + 1;
+              }
+              arsort($byExt);
+              foreach ($byExt as $e => $n) { echo "  ext=", $e, " n=", $n, PHP_EOL; }
+              echo "  oct_total=", $oct->count(), PHP_EOL;
 
-              echo "=== per mime utama (tidak overlap) ===", PHP_EOL;
-              $buckets = [
-                "image"  => fn($q) => $q->where("mime_type","like","image/%"),
-                "video"  => fn($q) => $q->where("mime_type","like","video/%"),
-                "audio"  => fn($q) => $q->where("mime_type","like","audio/%"),
-                "pdf"    => fn($q) => $q->where("mime_type","like","%pdf%"),
-                "text"   => fn($q) => $q->where("mime_type","like","text/%"),
-                "json"   => fn($q) => $q->where("mime_type","like","%json%"),
-                "zip"    => fn($q) => $q->where("mime_type","like","%zip%"),
-                "gzip"   => fn($q) => $q->where("mime_type","like","%gzip%"),
-                "office" => fn($q) => $q->where("mime_type","like","%officedocument%")
-                                        ->orWhere("mime_type","like","%msword%")
-                                        ->orWhere("mime_type","like","%ms-excel%"),
-                "octet"  => fn($q) => $q->where("mime_type","like","%octet-stream%"),
-              ];
-              $sum = 0;
-              foreach ($buckets as $label => $f) {
-                $n = $f((clone $miss))->count();
-                $sum += $n;
-                if ($n) { echo "  MISS ", $label, "=", $n, PHP_EOL; }
-              }
-              echo "  TOTAL_BUCKET=", $sum, " (without_thumb=", (clone $miss)->count(), ")", PHP_EOL;
+              echo "=== image tanpa thumb: sebaran ekstensi + umur ===", PHP_EOL;
+              $img = (clone $miss)->where("mime_type","like","image/%")->get();
+              $ie = [];
+              foreach ($img as $f) { $e = strtolower(pathinfo($f->name, PATHINFO_EXTENSION)) ?: "(none)"; $ie[$e] = ($ie[$e] ?? 0) + 1; }
+              arsort($ie);
+              foreach ($ie as $e => $n) { echo "  img_ext=", $e, " n=", $n, PHP_EOL; }
+              echo "  image_total=", $img->count(), PHP_EOL;
+              echo "  image_oldest=", $img->min("created_at"), " newest=", $img->max("created_at"), PHP_EOL;
 
-              echo "=== driver untuk IMAGE tanpa thumb ===", PHP_EOL;
-              $imgMiss = (clone $miss)->where("mime_type","like","image/%");
-              foreach (["local","gdrive","google_drive"] as $d) {
-                echo "  image driver=", $d, " n=", (clone $imgMiss)->where("storage_driver",$d)->count(), PHP_EOL;
-              }
-              echo "=== contoh IMAGE tanpa thumb ===", PHP_EOL;
-              foreach ((clone $imgMiss)->orderByDesc("size")->limit(6)->get() as $f) {
-                echo "  ", $f->name, " | ", $f->mime_type, " | size=", $f->size,
-                     " | driver=", $f->storage_driver, " | status=", $f->upload_status,
-                     " | created=", $f->created_at?->toDateString(), PHP_EOL;
-              }
-              echo "=== bucket octet-stream contoh ===", PHP_EOL;
-              foreach ((clone $miss)->where("mime_type","like","%octet-stream%")->orderByDesc("size")->limit(8)->get() as $f) {
-                echo "  ", $f->name, " | size=", $f->size, " | driver=", $f->storage_driver, PHP_EOL;
-              }
-              echo "=== audio (tidak butuh thumb) ===", PHP_EOL;
-              echo "  audio_missing=", (clone $miss)->where("mime_type","like","audio/%")->count(), PHP_EOL;
+              echo "=== apakah ada thumb yang filenya hilang dari disk? ===", PHP_EOL;
+              $rows = DB::table("thumbnails")->select("path")->limit(3000)->get();
+              $gone = 0;
+              foreach ($rows as $r) { if (! is_file(storage_path("app/".$r->path))) { $gone++; } }
+              echo "  thumb_rows=", $rows->count(), " file_missing=", $gone, PHP_EOL;
             '
-            echo "── error thumbnail terakhir di worker ──"
-            $C logs --no-log-prefix --tail=3000 worker 2>&1 | grep -iE "GenerateThumbnail|thumbnail|ffmpeg" | tail -15 || echo NO_LOG
