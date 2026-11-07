@@ -129,7 +129,8 @@
       "share": "Bagikan Tautan",
       "copy": "Salin File",
       "delete": "Hapus",
-      "menu": "Menu"
+      "menu": "Menu",
+      "merge": "Gabungkan…"
     },
     "selection": {
       "selectAll": "Pilih semua",
@@ -295,7 +296,38 @@
     "iconLabel": "Pilihan Ikon",
     "logoUrlLabel": "URL Logo / Gambar",
     "logoUrlPlaceholder": "https://domain.com/logo.png",
-    "previewLabel": "Pratinjau Tampilan Link"
+    "previewLabel": "Pratinjau Tampilan Link",
+    "merge": {
+      "title": "Gabungkan folder",
+      "subtitle": "Buat satu folder baru dan pindahkan semua isi folder terpilih ke dalamnya.",
+      "nameLabel": "Nama folder baru",
+      "namePlaceholder": "mis. Gabungan",
+      "locationLabel": "Lokasi folder baru",
+      "addSource": "Tambah folder lain",
+      "minTwo": "Pilih minimal 2 folder.",
+      "conflictLabel": "Jika nama sudah dipakai",
+      "conflictRename": "Ganti nama otomatis",
+      "conflictSkip": "Lewati yang bentrok",
+      "conflictFail": "Batalkan semua",
+      "summary": "{{folders}} folder dan {{files}} file akan dipindahkan ke \"{{name}}\".",
+      "submit": "Gabungkan",
+      "queued": "Penggabungan diproses di latar belakang. Kami beri tahu setelah selesai.",
+      "success": "{{folders}} folder dan {{files}} file dipindahkan ke \"{{name}}\".",
+      "renamedNote": "{{count}} item diganti nama otomatis.",
+      "defaultName": "Gabungan",
+      "sourcesLabel": "Folder sumber",
+      "sourceCount": "{{folders}} folder · {{files}} file",
+      "removeSource": "Hapus folder sumber ini",
+      "noOtherFolders": "Tidak ada folder lain yang tersedia.",
+      "lockedSource": "Folder terkunci tidak bisa digabungkan. Lepas kuncinya dulu.",
+      "unlockAction": "Buka kunci folder",
+      "locationBlocked": "Folder ini (atau di dalam) salah satu sumber.",
+      "locationLocked": "Folder terkunci tidak bisa dipakai sebagai lokasi.",
+      "submitting": "Menggabungkan…",
+      "failed": "Gagal menggabungkan folder. Coba lagi.",
+      "unlockHint": "Salah satu folder terkunci. Buka kuncinya dulu?",
+      "resolveError": "Gagal memeriksa status kunci. Buka folder dan buka kuncinya dulu."
+    }
   },
   "profile": {
     "title": "Profil",

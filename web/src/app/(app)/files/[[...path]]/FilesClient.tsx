@@ -33,6 +33,7 @@ import { FileViewer } from '@/components/FileViewer';
 import { FolderCard, FileCard } from '@/components/ItemCard';
 import { ShareDialog } from '@/components/ShareDialog';
 import { MoveDialog, type MovedFileResult } from '@/components/MoveDialog';
+import { MergeFoldersDialog, type MergeResult } from '@/components/MergeFoldersDialog';
 import { DeleteFolderDialog } from '@/components/DeleteFolderDialog';
 import { FolderLockDialog, type FolderLockMode } from '@/components/FolderLockDialog';
 import { FolderDetailsDialog } from '@/components/FolderDetailsDialog';
@@ -810,6 +811,8 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   const [moveFiles, setMoveFiles] = useState<FileItem[] | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [moveFolders, setMoveFolders] = useState<FolderType[] | null>(null);
+  // Dialog gabungkan folder: daftar folder sumber, atau null saat tertutup.
+  const [mergeSources, setMergeSources] = useState<FolderType[] | null>(null);
 
   /**
    * Drag internal (card file / spreadsheet-like app) membawa mime custom
@@ -1709,6 +1712,39 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     if (allFolders.length === 0) void reloadAllFolders();
   }
 
+  function openMergeDialog(foldersToMerge: FolderType[]) {
+    if (foldersToMerge.length === 0) return;
+    setMergeSources(foldersToMerge);
+    if (allFolders.length === 0) void reloadAllFolders();
+  }
+
+  /**
+   * Hasil MergeFoldersDialog: dialog sudah ditutup, sinkronkan cache/view/pohon
+   * lalu tampilkan ringkasan (jumlah folder/file + catatan rename otomatis).
+   */
+  async function handleMerged(result: MergeResult) {
+    invalidateCurrentCache();
+    invalidateFoldersPageCache();
+    void refreshReplace();
+    void reloadAllFolders();
+    clearSelection();
+    if (result.status === 'queued') {
+      await alert(t('folders.merge.queued'), { title: t('folders.merge.title') });
+      return;
+    }
+    const lines = [
+      t('folders.merge.success', {
+        folders: result.moved_folders,
+        files: result.moved_files,
+        name: result.folder?.name ?? '',
+      }),
+    ];
+    if (result.renamed && result.renamed.length > 0) {
+      lines.push(t('folders.merge.renamedNote', { count: result.renamed.length }));
+    }
+    await alert(lines.join('\n'), { title: t('folders.merge.title') });
+  }
+
   /**
    * Payload drag internal (move). Satu format untuk file DAN folder:
    * `text/x-move-payload` = JSON `{ files: string[], folders: string[] }`.
@@ -2116,6 +2152,8 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     ? t(`categories.${typeChipKey[typeFilter] ?? 'other'}`)
     : '';
   const visibleFiles = tab === 'folders' ? [] : files;
+  // Folder terpilih (untuk tombol "Gabungkan" di toolbar seleksi).
+  const selectedFoldersInView = visibleFolders.filter((f) => selected.has(f.id));
   const visibleCount = visibleFolders.length + visibleFiles.length;
   const allVisibleSelected =
     visibleCount > 0 &&
@@ -2289,6 +2327,12 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         ariaLabel: t('folders.moveFolder'),
         icon: <DriveFileMoveIcon />,
         onClick: () => openFolderMoveDialog([f]),
+      },
+      {
+        label: t('files.actions.merge'),
+        ariaLabel: t('files.actions.merge'),
+        icon: <span className="material-symbols-outlined !text-base">merge</span>,
+        onClick: () => openMergeDialog([f]),
       },
       {
         label: t('folders.downloadFolder') || t('files.actions.download'),
@@ -2823,6 +2867,19 @@ function FilesContent({ currentPath }: { currentPath: string }) {
                 </IconButton>
               </Tooltip>
             )}
+            {selectedFoldersInView.length >= 2 && (
+              <Tooltip label={t('files.actions.merge')}>
+                <IconButton
+                  size="xl"
+                  shape="circle"
+                  onClick={() => openMergeDialog(selectedFoldersInView)}
+                  aria-label={t('files.actions.merge')}
+                  data-testid="files-selection-merge"
+                >
+                  <span className="material-symbols-outlined !text-xl" aria-hidden>merge</span>
+                </IconButton>
+              </Tooltip>
+            )}
             <Tooltip label={t('files.moveAll')}>
               <IconButton
                 size="xl"
@@ -2969,6 +3026,26 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           open={true}
           onClose={() => setMoveFolders(null)}
           onMoved={(results) => handleFolderMoved(results as unknown as FolderType[])}
+        />
+      )}
+
+      {mergeSources && (
+        <MergeFoldersDialog
+          open={true}
+          sources={mergeSources}
+          allFolders={allFolders}
+          currentFolderId={folderId}
+          onClose={() => setMergeSources(null)}
+          onMerged={(result) => void handleMerged(result)}
+          onUnlockRequest={(lockedId) => {
+            const target = allFolders.find((f) => f.id === lockedId);
+            setMergeSources(null);
+            setClickUnlock({
+              folderId: lockedId,
+              folderName: target?.name ?? '',
+              path: target?.path ?? '',
+            });
+          }}
         />
       )}
 
