@@ -247,6 +247,9 @@
       "unsupported": "This file is not a supported archive (ZIP only).",
       "notFound": "File or archive not found.",
       "failed": "Failed to extract archive."
+    },
+    "paging": {
+      "rateLimited": "Too many requests. Please wait a few seconds and try again."
     }
   },
   "folders": {
