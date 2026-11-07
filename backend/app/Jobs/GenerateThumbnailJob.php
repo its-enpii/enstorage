@@ -46,6 +46,9 @@ class GenerateThumbnailJob implements ShouldQueue
     /** Jeda antar percobaan (detik) agar Drive tidak dihantam beruntun. */
     public int $backoff = 60;
 
+    /** Exit code ffmpeg terakhir dari `extractVideoFrame()` (untuk log fallback). */
+    private ?int $lastFfmpegExitCode = null;
+
     public function __construct(public string $fileId) {}
 
     public function handle(ThumbnailGenerator $generator, FileSourceFetcher $sources): void
@@ -83,11 +86,13 @@ class GenerateThumbnailJob implements ShouldQueue
         // MaxAttemptsExceededException.
         $sourcePath = null;
         $sourceTemporary = false;
+        $sourceTruncated = false;
         if ($isVideo) {
             $fetched = $sources->downloadFromDriveStreamed($file, self::VIDEO_PROBE_BYTES);
             if ($fetched) {
                 $sourcePath = $fetched['path'];
                 $sourceTemporary = true;
+                $sourceTruncated = (bool) ($fetched['truncated'] ?? false);
             }
         }
 
@@ -105,19 +110,31 @@ class GenerateThumbnailJob implements ShouldQueue
 
         try {
             if ($isVideo) {
-                // Video: unduh bertahap, cukup untuk satu frame. Menampung
-                // seluruh body (100-340 MB) membuat job kehabisan waktu.
-                $framePath = $this->grabVideoFrame($sourcePath);
+                $framePath = $this->extractVideoFrame($sourcePath);
 
-                if (! $framePath && $sourceTemporary) {
-                    // Fallback: file terpotong tidak terbaca ffmpeg — coba sekali
-                    // dengan unduhan penuh, jangan melempar keluar.
-                    $full = $sources->downloadFromDrive($file);
-                    if ($full) {
-                        try {
-                            $framePath = $this->grabVideoFrame($full);
-                        } finally {
-                            @unlink($full);
+                if (! $framePath && $sourceTruncated) {
+                    // MP4 menaruh `moov atom` di akhir file: probe 24 MB
+                    // menghasilkan file tanpa metadata (ffmpeg exit 183).
+                    // Unduh UTUH (0 = tanpa batas, ditulis ke disk) lalu coba
+                    // sekali lagi — terbukti 2.8s & memori tetap ~90 MB.
+                    $fullPath = null;
+                    try {
+                        $full = $sources->downloadFromDriveStreamed($file, 0);
+                        if ($full) {
+                            $fullPath = $full['path'];
+                            $framePath = $this->extractVideoFrame($fullPath);
+                        }
+
+                        if (! $framePath) {
+                            Log::warning('GenerateThumbnailJob: ekstraksi frame video gagal', [
+                                'file_id' => $file->id,
+                                'exit_code' => $this->lastFfmpegExitCode,
+                                'after_full_download' => true,
+                            ]);
+                        }
+                    } finally {
+                        if ($fullPath !== null) {
+                            @unlink($fullPath);
                         }
                     }
                 }
@@ -142,6 +159,11 @@ class GenerateThumbnailJob implements ShouldQueue
             if ($framePath) {
                 @unlink($framePath);
             }
+            // Sisa temp probe/frame tidak boleh tertinggal untuk semua jalur
+            // (sukses, gagal, skip).
+            $tempDir = Storage::disk('local')->path('temp');
+            @unlink($tempDir.'/'.$this->fileId.'.stream_src');
+            @unlink($tempDir.'/'.$this->fileId.'.thumb_frame.jpg');
         }
 
         if (! $generated) {
@@ -168,7 +190,7 @@ class GenerateThumbnailJob implements ShouldQueue
      * Ekstrak satu frame (detik ke-1) dari video via ffmpeg.
      * Tidak pernah melempar: ffmpeg absen/gagal → null + log warning.
      */
-    private function grabVideoFrame(string $sourcePath): ?string
+    private function extractVideoFrame(string $sourcePath): ?string
     {
         $ffmpeg = $this->detectFfmpeg();
         if (! $ffmpeg) {
@@ -181,8 +203,10 @@ class GenerateThumbnailJob implements ShouldQueue
 
         $framePath = Storage::disk('local')->path('temp/'.$this->fileId.'.thumb_frame.jpg');
 
+        // `-update 1` membersihkan peringatan "does not contain an image
+        // sequence pattern" dari muxer image2.
         $cmd = sprintf(
-            '%s -y -ss 1 -i %s -frames:v 1 -f image2 %s 2>&1',
+            '%s -y -ss 1 -i %s -frames:v 1 -f image2 -update 1 %s 2>&1',
             escapeshellarg($ffmpeg),
             escapeshellarg($sourcePath),
             escapeshellarg($framePath),
@@ -199,9 +223,11 @@ class GenerateThumbnailJob implements ShouldQueue
             return null;
         }
 
+        $this->lastFfmpegExitCode = $exitCode;
+
         if ($exitCode !== 0 || ! is_file($framePath) || filesize($framePath) === 0) {
             @unlink($framePath);
-            Log::warning('GenerateThumbnailJob: ekstraksi frame video gagal', [
+            Log::info('GenerateThumbnailJob: ekstraksi frame video gagal', [
                 'file_id' => $this->fileId,
                 'exit_code' => $exitCode,
             ]);
