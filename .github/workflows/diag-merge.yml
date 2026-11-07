@@ -15,11 +15,21 @@ jobs:
           script: |
             cd //home/enpii/studio/enstorage
             docker compose -f docker-compose.yml exec -T app php artisan tinker --execute='
-              foreach (DB::table("folders")->where("name","like","MG%")->orderBy("created_at")->get() as $r) {
-                echo $r->name, " | id=", $r->id, " | parent=", ($r->parent_id ?? "NULL"), " | path=", $r->path, PHP_EOL;
+              $d = "01a1b5a2-571f-72cd-a8b4-0e8c1b6cb1f8";
+              echo "=== D itu sendiri ===", PHP_EOL;
+              $dr = DB::table("folders")->where("id",$d)->first();
+              echo ($dr->name ?? "MISSING"), " | path=", ($dr->path ?? "-"), PHP_EOL;
+              echo "=== anak langsung D (DB) ===", PHP_EOL;
+              foreach (DB::table("folders")->where("parent_id",$d)->orderBy("name")->get() as $r) {
+                echo "  FOLDER ", $r->name, " | path=", $r->path, PHP_EOL;
               }
-              echo "--- files ---", PHP_EOL;
-              foreach (DB::table("files")->where("name","like","f%559937%")->get() as $r) {
-                echo $r->name, " | folder_id=", ($r->folder_id ?? "NULL"), PHP_EOL;
+              foreach (DB::table("files")->where("folder_id",$d)->orderBy("name")->get() as $r) {
+                echo "  FILE   ", $r->name, " | status=", $r->upload_status, PHP_EOL;
+              }
+              echo "=== isi A dan B sekarang (harus 0 folder anak) ===", PHP_EOL;
+              foreach (["01a1b5a2-3bde-73b0-96bd-5c63999eaad1","01a1b5a2-3c70-7148-b5d9-a62374b22beb"] as $sid) {
+                $nm = DB::table("folders")->where("id",$sid)->value("name");
+                echo "  ", $nm, " anak=", DB::table("folders")->where("parent_id",$sid)->count(),
+                     " file=", DB::table("files")->where("folder_id",$sid)->count(), PHP_EOL;
               }
             '
