@@ -45,6 +45,8 @@ class ActivityLog extends Model
 
     public const ACTION_FOLDER_DELETE = 'FOLDER_DELETE';
 
+    public const ACTION_FOLDER_MERGE = 'FOLDER_MERGE';
+
     public const ACTION_FOLDER_STAR = 'FOLDER_STAR';
 
     public const ACTION_FOLDER_SHARE = 'FOLDER_SHARE';
