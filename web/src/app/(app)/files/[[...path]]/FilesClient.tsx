@@ -33,6 +33,7 @@ import { FileViewer } from '@/components/FileViewer';
 import { FolderCard, FileCard } from '@/components/ItemCard';
 import { ShareDialog } from '@/components/ShareDialog';
 import { MoveDialog, type MovedFileResult } from '@/components/MoveDialog';
+import { AdoptItemsDialog, type AdoptResult } from '@/components/AdoptItemsDialog';
 import { MergeFoldersDialog, type MergeResult } from '@/components/MergeFoldersDialog';
 import { DeleteFolderDialog } from '@/components/DeleteFolderDialog';
 import { FolderLockDialog, type FolderLockMode } from '@/components/FolderLockDialog';
@@ -814,6 +815,12 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   const [moveFolders, setMoveFolders] = useState<FolderType[] | null>(null);
   // Dialog gabungkan folder: daftar folder sumber, atau null saat tertutup.
   const [mergeSources, setMergeSources] = useState<FolderType[] | null>(null);
+  // Dialog "Masukkan file" — hanya dari dalam folder terkunci yang sudah unlock.
+  const [adoptOpen, setAdoptOpen] = useState(false);
+  /** Folder aktif terkunci (is_locked) yang sudah di-unlock sesi ini. */
+  const [activeLockedFolder, setActiveLockedFolder] = useState<
+    { id: string; unlocked: boolean } | null
+  >(null);
 
   /**
    * Drag internal (card file / spreadsheet-like app) membawa mime custom
@@ -2369,6 +2376,50 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     }
   }
 
+  // Penanda unlock folder aktif: "Masukkan file" (adopt) hanya tersedia di
+  // dalam folder terkunci yang sudah di-unlock. Sumber: `GET /folders/{id}`
+  // (butuh unlock, jadi tidak bisa ditebak dari listing biasa).
+  useEffect(() => {
+    if (!folderId || !hydrated) {
+      setActiveLockedFolder(null);
+      return;
+    }
+    let cancelled = false;
+    apiRequest<{
+      folder: { id: string; is_locked?: boolean; unlocked?: boolean };
+      breadcrumb?: { id: string }[];
+    }>(`/folders/${folderId}`)
+      .then((r) => {
+        if (cancelled) return;
+        const locked = r.folder.is_locked === true;
+        const unlocked = r.folder.unlocked === true;
+        setActiveLockedFolder(locked ? { id: r.folder.id, unlocked } : null);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveLockedFolder(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [folderId, hydrated]);
+
+  const canAdopt = activeLockedFolder?.unlocked === true;
+
+  /** Tutup dialog "Masukkan file" lalu sinkronkan folder aktif dari server. */
+  function handleAdopted(result: AdoptResult) {
+    setAdoptOpen(false);
+    setSelected(new Set());
+    invalidateCurrentCache();
+    invalidateFoldersPageCache();
+    void revalidate();
+    void reloadAllFolders();
+    if (result.count > 0) {
+      void alert(t('files.move.adoptSuccess', { count: result.count }), {
+        title: t('files.move.adoptAction'),
+      });
+    }
+  }
+
   function buildFolderMenuItems(f: FolderType): MenuItem[] {
     return [
       {
@@ -2401,6 +2452,17 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         icon: <span className="material-symbols-outlined !text-base">merge</span>,
         onClick: () => openMergeDialog([f]),
       },
+      // Hanya di dalam folder terkunci yang sudah di-unlock.
+      ...(canAdopt
+        ? [
+            {
+              label: t('files.move.adoptAction'),
+              ariaLabel: t('files.move.adoptAction'),
+              icon: <span className="material-symbols-outlined !text-base">move_to_inbox</span>,
+              onClick: () => setAdoptOpen(true),
+            } as MenuItem,
+          ]
+        : []),
       {
         label: t('folders.downloadFolder') || t('files.actions.download'),
         ariaLabel: t('folders.downloadFolder') || t('files.actions.download'),
@@ -2485,6 +2547,16 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         icon: <DriveFileMoveIcon />,
         onClick: () => openMoveDialog([f]),
       },
+      ...(canAdopt
+        ? [
+            {
+              label: t('files.move.adoptAction'),
+              ariaLabel: t('files.move.adoptAction'),
+              icon: <span className="material-symbols-outlined !text-base">move_to_inbox</span>,
+              onClick: () => setAdoptOpen(true),
+            } as MenuItem,
+          ]
+        : []),
       {
         label: t('files.actions.download'),
         ariaLabel: t('files.actions.download'),
@@ -3075,20 +3147,9 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         <MoveDialog
           kind="file"
           items={moveFiles}
-          folders={folders}
-          allFolders={allFolders}
           currentFolderId={folderId}
           open={true}
           onClose={() => setMoveFiles(null)}
-          onUnlockRequest={(lockedId) => {
-            const target = allFolders.find((f) => f.id === lockedId);
-            setMoveFiles(null);
-            setClickUnlock({
-              folderId: lockedId,
-              folderName: target?.name ?? '',
-              path: target?.path ?? '',
-            });
-          }}
           onMoved={(results) => void handleMoved(results)}
         />
       )}
@@ -3097,20 +3158,18 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         <MoveDialog
           kind="folder"
           items={moveFolders}
-          folders={folders}
-          allFolders={allFolders}
           open={true}
           onClose={() => setMoveFolders(null)}
-          onUnlockRequest={(lockedId) => {
-            const target = allFolders.find((f) => f.id === lockedId);
-            setMoveFolders(null);
-            setClickUnlock({
-              folderId: lockedId,
-              folderName: target?.name ?? '',
-              path: target?.path ?? '',
-            });
-          }}
           onMoved={(results) => handleFolderMoved(results as unknown as FolderType[])}
+        />
+      )}
+
+      {folderId && (
+        <AdoptItemsDialog
+          open={adoptOpen}
+          targetFolderId={folderId}
+          onClose={() => setAdoptOpen(false)}
+          onAdopted={handleAdopted}
         />
       )}
 

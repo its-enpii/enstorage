@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\Folder;
+use App\Services\FolderLockGuard;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -11,11 +12,18 @@ class FolderResource extends JsonResource
     public function toArray(Request $request): array
     {
         /** @var Folder $this */
+        $folder = $this->resource;
+        $unlocked = ! (bool) $folder->is_locked
+            || app(FolderLockGuard::class)->unlocked($folder, (string) $folder->user_id);
+
         return [
             'id' => $this->id,
             'name' => $this->name,
             'is_starred' => (bool) $this->is_starred,
             'is_locked' => (bool) $this->is_locked,
+            // Penanda unlock sementara (cache TTL) — dipakai klien untuk
+            // memutuskan apakah aksi "Masukkan file" (adopt) tersedia.
+            'unlocked' => $unlocked,
             'share_token' => $this->share_token,
             'path' => $this->path,
             'description' => $this->description,

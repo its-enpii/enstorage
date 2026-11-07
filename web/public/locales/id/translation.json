@@ -203,7 +203,18 @@
         "sameFolder": "File sudah berada di folder ini.",
         "allFailedWithReason": "Gagal memindahkan: {{reason}}"
       },
-      "disabledReason": "Tidak bisa dipilih: folder ini adalah sumber atau isinya."
+      "disabledReason": "Tidak bisa dipilih: folder ini adalah sumber atau isinya.",
+      "progress": "Memindahkan {{done}}/{{total}}…",
+      "adoptAction": "Masukkan file",
+      "adoptTitle": "Masukkan file ke folder terkunci",
+      "adoptDescription": "Pilih file atau folder dari luar folder ini. Item terkunci tidak bisa dipilih.",
+      "adoptSearch": "Cari file atau folder…",
+      "adoptEmpty": "Tidak ada file atau folder di sini.",
+      "adoptUp": "Naik satu folder",
+      "adoptOpen": "Buka folder",
+      "adoptSelected": "{{count}} item dipilih",
+      "adoptSubmit": "Masukkan ({{count}})",
+      "adoptSuccess": "{{count}} item dimasukkan ke folder terkunci."
     },
     "details": {
       "title": "Judul",

@@ -8,6 +8,7 @@ use App\Events\FileUpdatedBroadcast;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FileResource;
 use App\Http\Resources\FolderResource;
+use App\Jobs\SyncFileMoveToDriveJob;
 use App\Models\ActivityLog;
 use App\Models\File as FileModel;
 use App\Models\Folder;
@@ -17,13 +18,11 @@ use App\Services\ArchiveExtractor;
 use App\Services\FolderLockGuard;
 use App\Services\FolderZipStreamer;
 use App\Services\Google\GoogleClientFactory;
-use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleDriveUploader;
 use App\Services\Google\GoogleTokenService;
-use App\Services\Google\QuotaManager;
+use App\Services\ThumbnailGenerator;
 use App\Services\UnsupportedArchiveException;
 use App\Services\WebhookService;
-use App\Services\ThumbnailGenerator;
 use App\Support\ByteRange;
 use App\Support\ClosureStream;
 use App\Support\StreamPump;
@@ -751,45 +750,6 @@ class FileController extends Controller
      * - Folder_id == folder saat ini → no-op (200, renamed=false).
      * - Dispatch webhook `file.moved` ke semua subscriber user.
      */
-    /**
-     * Pindahkan file di Google Drive mengikuti `folder_id` baru.
-     *
-     * Best-effort: kegagalan Google TIDAK boleh menggagalkan move di DB.
-     * WAJIB tidak melempar exception yang tidak tertangkap — sebelumnya
-     * try/catch hanya membungkus bagian ini, sedangkan `ensureRootFolder()`
-     * memanggil `ensureFreshToken()` yang bisa throw di luar jangkauan.
-     */
-    private function syncGdriveMove(FileModel $file, ?string $newFolderId): void
-    {
-        try {
-            if (! $file->google_account_id) {
-                return;
-            }
-
-            $account = $file->googleAccount;
-            if (! $account || ! $account->is_active) {
-                return;
-            }
-
-            $folderService = app(GoogleDriveFolderService::class);
-            $newGDriveParentId = null;
-            if ($newFolderId) {
-                $targetFolder = Folder::where('id', $newFolderId)
-                    ->where('user_id', $file->user_id)
-                    ->first();
-                if ($targetFolder) {
-                    $newGDriveParentId = $folderService->ensureFolderOnDrive($account, $targetFolder);
-                }
-            }
-            if (! $newGDriveParentId) {
-                $newGDriveParentId = app(QuotaManager::class)->ensureRootFolder($account);
-            }
-            $folderService->moveFileOnDrive($account, $file, $newGDriveParentId);
-        } catch (Throwable $e) {
-            Log::warning('GDrive move file sync failed: '.$e->getMessage());
-        }
-    }
-
     public function move(Request $request, string $id): JsonResponse
     {
         $file = $this->findOwned($request, $id);
@@ -822,33 +782,14 @@ class FileController extends Controller
             }
         }
 
-        $renamed = false;
         $originalName = $file->name;
         // Capture previous folder id BEFORE transaction mutates $file->folder_id.
         // getOriginal() returns the column value before this request's updates.
         $previousFolderId = $file->getOriginal('folder_id');
 
-        DB::transaction(function () use ($file, $newFolderId, &$renamed) {
-            $file->folder_id = $newFolderId;
-
-            // Auto-rename kalau di folder tujuan sudah ada file dengan nama yang sama (kecuali diri sendiri).
-            $collision = FileModel::where('user_id', $file->user_id)
-                ->where('folder_id', $newFolderId)
-                ->where('name', $file->name)
-                ->where('id', '!=', $file->id)
-                ->exists();
-            if ($collision) {
-                $file->name = $this->makeUniqueNameInFolder(
-                    userId: $file->user_id,
-                    folderId: $newFolderId,
-                    desiredName: $file->name,
-                    excludeId: $file->id,
-                );
-                $renamed = true;
-            }
-
-            $file->save();
-        });
+        // Jalur mutasi SAMA dengan `folders.adopt` (lihat relocateFile).
+        $relocated = $this->relocateFile($file, $newFolderId);
+        $renamed = $relocated['renamed'];
 
         $this->activityLog->log(
             ActivityLog::ACTION_FILE_MOVE,
@@ -863,9 +804,9 @@ class FileController extends Controller
             request: $request,
         );
 
-        // Sync GDrive file move (1:1 folder hierarchy) — NAMA method
-        // dipertahankan (test lama memanggilnya), implementasi kini best-effort.
-        $this->syncGdriveMove($file, $newFolderId);
+        // Sync GDrive file move (1:1 folder hierarchy) DI LUAR jalur request:
+        // job best-effort, gagal Drive tidak menggagalkan move DB.
+        SyncFileMoveToDriveJob::dispatch($file->id, $newFolderId);
 
         // Broadcast event ke webhook subscriber.
         // Payload berisi field minimal + nama sebelum/sesudah rename agar
@@ -899,6 +840,43 @@ class FileController extends Controller
                 ? __('File berhasil dipindahkan dan di-rename menjadi ":name".', ['name' => $file->name])
                 : __('File berhasil dipindahkan.'),
         );
+    }
+
+    /**
+     * Pindahkan file ke folder lain di DB: pindah `folder_id`, auto-rename
+     * bila nama bentrok (kecuali dirinya sendiri). Satu-satunya implementasi
+     * mutasi move — dipakai `move` dan `folders.adopt`.
+     *
+     * @return array{renamed: bool, name: string, original_name: string}
+     */
+    public function relocateFile(FileModel $file, ?string $newFolderId): array
+    {
+        $originalName = $file->name;
+        $renamed = false;
+
+        DB::transaction(function () use ($file, $newFolderId, &$renamed) {
+            $file->folder_id = $newFolderId;
+
+            // Auto-rename kalau di folder tujuan sudah ada file dengan nama yang sama (kecuali diri sendiri).
+            $collision = FileModel::where('user_id', $file->user_id)
+                ->where('folder_id', $newFolderId)
+                ->where('name', $file->name)
+                ->where('id', '!=', $file->id)
+                ->exists();
+            if ($collision) {
+                $file->name = $this->makeUniqueNameInFolder(
+                    userId: $file->user_id,
+                    folderId: $newFolderId,
+                    desiredName: $file->name,
+                    excludeId: $file->id,
+                );
+                $renamed = true;
+            }
+
+            $file->save();
+        });
+
+        return ['renamed' => $renamed, 'name' => $file->name, 'original_name' => $originalName];
     }
 
     /**

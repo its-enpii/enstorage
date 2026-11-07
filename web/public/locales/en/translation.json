@@ -203,7 +203,18 @@
         "sameFolder": "The file is already in this folder.",
         "allFailedWithReason": "Failed to move: {{reason}}"
       },
-      "disabledReason": "Can't pick this: it is the source folder (or inside it)."
+      "disabledReason": "Can't pick this: it is the source folder (or inside it).",
+      "progress": "Moving {{done}}/{{total}}…",
+      "adoptAction": "Add files",
+      "adoptTitle": "Add files to locked folder",
+      "adoptDescription": "Pick files or folders from outside this folder. Locked items cannot be selected.",
+      "adoptSearch": "Search files or folders…",
+      "adoptEmpty": "No files or folders here.",
+      "adoptUp": "Go up one folder",
+      "adoptOpen": "Open folder",
+      "adoptSelected": "{{count}} item(s) selected",
+      "adoptSubmit": "Add ({{count}})",
+      "adoptSuccess": "{{count}} item(s) added to the locked folder."
     },
     "details": {
       "title": "Title",

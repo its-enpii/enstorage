@@ -169,6 +169,8 @@ Route::middleware('auth.apikey')->group(function () {
     // Resolve by materialized path — WAJIB sebelum `folders/{id}` agar
     // literal "resolve" tidak tertelan sebagai parameter {id}.
     Route::get('folders/resolve', [FolderController::class, 'resolveByPath']);
+    // Picker tujuan move: folder terkunci + descendant sudah dikecualikan.
+    Route::get('folders/movable-targets', [FolderController::class, 'movableTargets']);
     // Merge WAJIB sebelum `folders/{id}` (kalau tidak "merge" dibaca sebagai id).
     Route::post('folders/merge', [FolderController::class, 'merge']);
     Route::get('folders/{id}', [FolderController::class, 'show']);
@@ -180,6 +182,8 @@ Route::middleware('auth.apikey')->group(function () {
     Route::delete('folders/{id}/share', [FolderController::class, 'unshare']);
     Route::post('folders/{id}/lock', [FolderController::class, 'lock']);
     Route::post('folders/{id}/unlock', [FolderController::class, 'unlock']);
+    // Masukkan file/folder lain ke folder terkunci dari dalam foldernya.
+    Route::post('folders/{id}/adopt', [FolderController::class, 'adopt']);
     Route::put('folders/{id}/lock/password', [FolderController::class, 'updateLockPassword']);
     Route::delete('folders/{id}/lock', [FolderController::class, 'destroyLock']);
 
@@ -226,6 +230,7 @@ Route::middleware(['auth.apikey', 'throttle.apikey', 'log.apikey'])->group(funct
         Route::get('files/{id}/thumbnail', [FileController::class, 'thumbnail']);
         Route::get('folders', [FolderController::class, 'index']);
         Route::get('folders/resolve', [FolderController::class, 'resolveByPath']);
+        Route::get('folders/movable-targets', [FolderController::class, 'movableTargets']);
         Route::get('folders/{id}', [FolderController::class, 'show']);
         Route::get('folders/{id}/download', [FolderController::class, 'download']);
         Route::get('recent', [RecentController::class, 'index']);

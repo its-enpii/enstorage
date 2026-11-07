@@ -2,6 +2,7 @@
 
 namespace App\Services\Google;
 
+use App\Jobs\SyncFileMoveToDriveJob;
 use App\Models\File as FileModel;
 use App\Models\Folder;
 use App\Models\GoogleAccount;
@@ -240,6 +241,49 @@ class GoogleDriveFolderService
             Log::warning('GDrive moveFolderOnDrive failed: '.$e->getMessage(), [
                 'folder_id' => $folder->id,
                 'gdrive_folder_id' => $gdriveFolderId,
+            ]);
+        }
+    }
+
+    /**
+     * Pindahkan file EnStorage (best-effort) ke folder Drive 1:1 milik
+     * `$newFolderId` (null = root Drive akun). Dipakai
+     * {@see SyncFileMoveToDriveJob} — keluar dari jalur request
+     * `PUT /files/{id}/move` karena dua round-trip Drive di sana membuat
+     * move per file ~2,7 detik.
+     *
+     * SEMUA kegagalan (termasuk token) ditangkap: pemanggil tidak boleh
+     * gagal karena Drive.
+     */
+    public function moveFileToFolder(FileModel $file, ?string $newFolderId): void
+    {
+        try {
+            if (! $file->google_account_id) {
+                return;
+            }
+
+            $account = $file->googleAccount;
+            if (! $account || ! $account->is_active) {
+                return;
+            }
+
+            $newGDriveParentId = null;
+            if ($newFolderId) {
+                $targetFolder = Folder::where('id', $newFolderId)
+                    ->where('user_id', $file->user_id)
+                    ->first();
+                if ($targetFolder) {
+                    $newGDriveParentId = $this->ensureFolderOnDrive($account, $targetFolder);
+                }
+            }
+            if (! $newGDriveParentId) {
+                $newGDriveParentId = $this->quota->ensureRootFolder($account);
+            }
+
+            $this->moveFileOnDrive($account, $file, $newGDriveParentId);
+        } catch (Throwable $e) {
+            Log::warning('GDrive move file sync failed: '.$e->getMessage(), [
+                'file_id' => $file->id,
             ]);
         }
     }

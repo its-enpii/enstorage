@@ -12,6 +12,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\FolderResource;
 use App\Jobs\MergeFoldersJob;
 use App\Jobs\PurgeFolderTree;
+use App\Jobs\SyncFileMoveToDriveJob;
 use App\Models\ActivityLog;
 use App\Models\File;
 use App\Models\File as FileModel;
@@ -241,8 +242,14 @@ class FolderController extends Controller
         $subfolders = (clone $subfoldersQ)->paginate($perPage, ['*'], 'page', $page);
         $files = (clone $filesQ)->paginate($perPage, ['*'], 'page', $page);
 
+        $folderResource = (new FolderResource($folder))->resolve($request);
+        if ((bool) $folder->is_locked) {
+            // Unlock sementara hanya bermakna di folder yang sedang dibuka.
+            $folderResource['unlocked'] = $this->lockGuard->unlocked($folder, $request->user()->id);
+        }
+
         return $this->ok([
-            'folder' => new FolderResource($folder),
+            'folder' => $folderResource,
             'breadcrumb' => $this->breadcrumb($folder),
             'subfolders' => FolderResource::collection($subfolders->items()),
             'subfolders_meta' => [
@@ -310,6 +317,42 @@ class FolderController extends Controller
             'folder' => new FolderResource($folder),
             'breadcrumb' => $this->breadcrumb($folder),
         ], __('Detail folder.'));
+    }
+
+    /**
+     * GET /folders/movable-targets — daftar folder yang BOLEH jadi tujuan
+     * pindah (picker MoveDialog).
+     *
+     * Folder terkunci dan SELURUH keturunannya tidak pernah ditawarkan:
+     * server `move` memang menolaknya dengan 423, tetapi picker tidak boleh
+     * menawarkan jalur yang pasti gagal. Satu-satunya cara memasukkan item ke
+     * folder terkunci adalah `POST /folders/{id}/adopt` dari dalam foldernya.
+     *
+     * Hanya kolom yang dipakai picker ({id, name, path, parent_id}); status
+     * kunci tidak dikirim mentah ke klien.
+     */
+    public function movableTargets(Request $request): JsonResponse
+    {
+        $userId = (string) $request->user()->id;
+        $lockedIds = $this->lockGuard->lockedFolderIds($userId);
+
+        $query = Folder::where('user_id', $userId);
+        if ($lockedIds !== []) {
+            $query->whereNotIn('id', $lockedIds);
+        }
+
+        $targets = $query
+            ->orderBy('path', 'asc')
+            ->get(['id', 'name', 'path', 'parent_id'])
+            ->map(fn (Folder $f) => [
+                'id' => $f->id,
+                'name' => $f->name,
+                'path' => $f->path,
+                'parent_id' => $f->parent_id,
+            ])
+            ->all();
+
+        return $this->ok($targets, __('Folder tujuan yang tersedia.'));
     }
 
     /**
@@ -1210,6 +1253,160 @@ class FolderController extends Controller
         }
 
         return false;
+    }
+
+    /**
+     * POST /folders/{id}/adopt — masukkan file/folder LAIN ke dalam folder
+     * terkunci dari DALAM folder itu (satu-satunya jalur masuk ke folder
+     * terkunci; picker MoveDialog tidak menawarkan tujuan terkunci).
+     *
+     * Aturan:
+     * - `{id}` wajib folder terkunci milik user → 422 `target_not_locked`.
+     * - Penulis wajib sudah unlock (penanda sesi sama dengan `show()`) →
+     *   423 `folder_locked`.
+     * - Item dari subtree terkunci mana pun ditolak → 422 `cycle` (termasuk
+     *   `{id}` sendiri / descendant-nya: folder tidak boleh masuk ke isinya).
+     * - Item bukan milik user / tidak ada → `not_found`, request tetap 200.
+     * - Mutasi memakai jalur yang sama dengan `files.move` (helper service):
+     *   kolisi nama → rename unik, activityLog FILE_MOVE `via: adopt`, dan
+     *   sync Drive lewat job (bukan di jalur request).
+     */
+    public function adopt(Request $request, string $id): JsonResponse
+    {
+        $userId = (string) $request->user()->id;
+
+        $data = $request->validate([
+            'file_ids' => ['nullable', 'array', 'max:200'],
+            'file_ids.*' => ['required', 'string', 'uuid'],
+            'folder_ids' => ['nullable', 'array', 'max:200'],
+            'folder_ids.*' => ['required', 'string', 'uuid'],
+        ]);
+
+        $fileIds = array_values(array_unique($data['file_ids'] ?? []));
+        $folderIds = array_values(array_unique($data['folder_ids'] ?? []));
+
+        if ($fileIds === [] && $folderIds === []) {
+            return $this->fail(__('Pilih minimal satu file atau folder.'), 422, null, ['code' => 'empty_selection']);
+        }
+
+        $target = $this->findOwned($request, $id);
+        if (! $target) {
+            return $this->notFound(__('Folder tidak ditemukan.'));
+        }
+
+        if (! (bool) $target->is_locked) {
+            return $this->fail(
+                __('Folder tujuan tidak terkunci.'),
+                422,
+                null,
+                ['code' => 'target_not_locked'],
+            );
+        }
+
+        // Sama dengan show(): folder terkunci wajib sudah di-unlock sementara.
+        if ($blocked = $this->lockGuardResponse($request, $target)) {
+            return $blocked;
+        }
+
+        // Scope terkunci (termasuk target sendiri) tidak boleh jadi item.
+        $lockedScope = array_flip($this->lockGuard->lockedFolderIds($userId));
+
+        $files = FileModel::where('user_id', $userId)
+            ->whereIn('id', $fileIds)
+            ->get();
+        $folders = Folder::where('user_id', $userId)
+            ->whereIn('id', $folderIds)
+            ->get();
+
+        $notFound = array_values(array_diff(
+            array_merge($fileIds, $folderIds),
+            $files->pluck('id')->merge($folders->pluck('id'))->all(),
+        ));
+
+        foreach ($files as $file) {
+            if ($file->folder_id !== null && isset($lockedScope[(string) $file->folder_id])) {
+                return $this->fail(
+                    __('Item berasal dari folder terkunci dan tidak bisa dimasukkan.'),
+                    422,
+                    null,
+                    ['code' => 'cycle', 'file_id' => $file->id],
+                );
+            }
+        }
+
+        foreach ($folders as $folder) {
+            if (isset($lockedScope[(string) $folder->id]) || $this->isDescendantOf((string) $folder->id, (string) $target->id)) {
+                return $this->fail(
+                    __('Folder tidak bisa dimasukkan ke dirinya sendiri atau ke dalam isinya.'),
+                    422,
+                    null,
+                    ['code' => 'cycle', 'folder_id' => $folder->id],
+                );
+            }
+        }
+
+        $mover = app(FileController::class);
+        $moved = [];
+        $renamed = [];
+
+        foreach ($files as $file) {
+            $result = $mover->relocateFile($file, (string) $target->id);
+            $moved[] = $file->id;
+            if ($result['renamed']) {
+                $renamed[] = ['id' => $file->id, 'name' => $result['name']];
+            }
+
+            $this->activityLog->log(
+                ActivityLog::ACTION_FILE_MOVE,
+                userId: $userId,
+                subject: $file,
+                metadata: [
+                    'new_folder_id' => $target->id,
+                    'renamed' => $result['renamed'],
+                    'original_name' => $result['original_name'],
+                    'final_name' => $result['name'],
+                    'via' => 'adopt',
+                ],
+                request: $request,
+            );
+
+            SyncFileMoveToDriveJob::dispatch($file->id, (string) $target->id);
+        }
+
+        foreach ($folders as $folder) {
+            $previousParentId = $folder->parent_id;
+            $folder->parent_id = $target->id;
+
+            // Sama seperti move: nama unik per parent → rename "(n)" bila bentrok.
+            $uniqueName = $this->uniqueFolderName($userId, (string) $target->id, $folder->name);
+            if ($uniqueName !== $folder->name) {
+                $folder->name = $uniqueName;
+                $renamed[] = ['id' => $folder->id, 'name' => $folder->name];
+            }
+
+            $folder->path = $this->paths->computePath($folder);
+            $folder->save();
+            $this->paths->cascadePathUpdate($folder);
+
+            $moved[] = $folder->id;
+
+            $this->activityLog->log(
+                ActivityLog::ACTION_FOLDER_MOVE,
+                userId: $userId,
+                subject: $folder,
+                metadata: ['new_parent_id' => $target->id, 'via' => 'adopt'],
+                request: $request,
+            );
+
+            FolderMovedBroadcast::dispatch($folder, $previousParentId);
+        }
+
+        return $this->ok([
+            'moved' => $moved,
+            'renamed' => $renamed,
+            'not_found' => $notFound,
+            'count' => count($moved),
+        ], __(':count item berhasil dimasukkan.', ['count' => count($moved)]));
     }
 
     // =========================================================================
