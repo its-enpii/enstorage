@@ -26,9 +26,24 @@ class GenerateThumbnailJob implements ShouldQueue
     /** Video di atas batas ini dilewati — hindari beban worker. */
     public const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
 
-    public int $tries = 2;
+    /**
+     * Byte pertama video yang diunduh untuk mengambil satu frame (24 MB).
+     * Satu frame hanya butuh header + beberapa detik data; mengunduh utuh
+     * video 100-340 MB membuat job timeout.
+     */
+    public const VIDEO_PROBE_BYTES = 24 * 1024 * 1024;
 
-    public int $timeout = 300;
+    public int $tries = 3;
+
+    /**
+     * 15 menit: cukup untuk mengunduh video hingga MAX_VIDEO_BYTES dari Drive
+     * pada throughput nyata. Nilai 300 detik membuat video 100-340 MB habis
+     * waktu dan berakhir sebagai MaxAttemptsExceededException (159 failed_jobs).
+     */
+    public int $timeout = 900;
+
+    /** Jeda antar percobaan (detik) agar Drive tidak dihantam beruntun. */
+    public int $backoff = 60;
 
     public function __construct(public string $fileId) {}
 
@@ -54,7 +69,7 @@ class GenerateThumbnailJob implements ShouldQueue
         $isVideo = $kind === 'video';
 
         if ($isVideo && (int) $file->size > self::MAX_VIDEO_BYTES) {
-            Log::warning('GenerateThumbnailJob: video terlalu besar, thumbnail dilewati', [
+            Log::info('GenerateThumbnailJob: video di atas batas, dilewati', [
                 'file_id' => $file->id,
                 'size' => $file->size,
             ]);
@@ -62,18 +77,49 @@ class GenerateThumbnailJob implements ShouldQueue
             return;
         }
 
-        // fetch() menangani disk `local` (path asli) dan Google Drive (temp).
-        $sourcePath = $sources->fetch($file);
-        if (! $sourcePath) {
-            return;
+        // Video: unduh bertahap dulu (cukup untuk satu frame). Menampung
+        // seluruh body (100-340 MB) membuat job kehabisan waktu lalu
+        // MaxAttemptsExceededException.
+        $sourcePath = null;
+        $sourceTemporary = false;
+        if ($isVideo) {
+            $fetched = $sources->downloadFromDriveStreamed($file, self::VIDEO_PROBE_BYTES);
+            if ($fetched) {
+                $sourcePath = $fetched['path'];
+                $sourceTemporary = true;
+            }
         }
-        $sourceTemporary = $sources->isTemporary($file, $sourcePath);
+
+        if (! $sourcePath) {
+            // Image / video yang tidak bisa distream: pakai jalur biasa.
+            $sourcePath = $sources->fetch($file);
+            if (! $sourcePath) {
+                return;
+            }
+            $sourceTemporary = $sources->isTemporary($file, $sourcePath);
+        }
 
         $framePath = null;
 
         try {
             if ($isVideo) {
+                // Video: unduh bertahap, cukup untuk satu frame. Menampung
+                // seluruh body (100-340 MB) membuat job kehabisan waktu.
                 $framePath = $this->grabVideoFrame($sourcePath);
+
+                if (! $framePath && $sourceTemporary) {
+                    // Fallback: file terpotong tidak terbaca ffmpeg — coba sekali
+                    // dengan unduhan penuh, jangan melempar keluar.
+                    $full = $sources->downloadFromDrive($file);
+                    if ($full) {
+                        try {
+                            $framePath = $this->grabVideoFrame($full);
+                        } finally {
+                            @unlink($full);
+                        }
+                    }
+                }
+
                 if (! $framePath) {
                     return;
                 }

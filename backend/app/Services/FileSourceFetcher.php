@@ -97,6 +97,89 @@ class FileSourceFetcher
         return str_contains(basename($path), '.backfill_src');
     }
 
+    /**
+     * Unduh isi file dari Drive ke temp memakai stream bertahap, berhenti di
+     * `$maxBytes` (0 = tanpa batas).
+     *
+     * Video 100-340 MB tidak boleh ditampung utuh di memori: satu frame hanya
+     * butuh header + beberapa detik data. Pemanggil menghapus file temp.
+     *
+     * @return array{path:string,truncated:bool}|null
+     */
+    public function downloadFromDriveStreamed(FileModel $file, int $maxBytes = 0): ?array
+    {
+        try {
+            $account = $file->googleAccount;
+            if (! $account) {
+                return null;
+            }
+
+            $client = app(GoogleClientFactory::class)->makeFor($account);
+            app(GoogleTokenService::class)->ensureFreshToken($account);
+            $client->setAccessToken($account->access_token);
+
+            $drive = new Drive($client);
+            $response = $drive->files->get($file->gdrive_file_id, ['alt' => 'media']);
+            $body = $response->getBody();
+
+            $relative = 'temp/'.$file->id.'.stream_src';
+            $tmpPath = Storage::disk('local')->path($relative);
+            $dir = dirname($tmpPath);
+            if (! is_dir($dir)) {
+                @mkdir($dir, 0775, true);
+            }
+
+            $handle = @fopen($tmpPath, 'wb');
+            if ($handle === false) {
+                return null;
+            }
+
+            $written = 0;
+            $truncated = false;
+            try {
+                while (! $body->eof()) {
+                    try {
+                        $chunk = $body->read(1 << 20);
+                    } catch (Throwable $e) {
+                        // Stream Drive bisa terputus di tengah; pakai yang sudah ada
+                        // bila cukup untuk mengambil frame.
+                        $truncated = true;
+                        break;
+                    }
+                    if ($chunk === '') {
+                        break;
+                    }
+                    if ($maxBytes > 0 && $written + strlen($chunk) > $maxBytes) {
+                        $chunk = substr($chunk, 0, $maxBytes - $written);
+                        $truncated = true;
+                    }
+                    $written += (int) fwrite($handle, $chunk);
+                    if ($maxBytes > 0 && $written >= $maxBytes) {
+                        $truncated = true;
+                        break;
+                    }
+                }
+            } finally {
+                fclose($handle);
+            }
+
+            if ($written === 0) {
+                @unlink($tmpPath);
+
+                return null;
+            }
+
+            return ['path' => $tmpPath, 'truncated' => $truncated];
+        } catch (Throwable $e) {
+            Log::warning('downloadFromDriveStreamed gagal', [
+                'file_id' => $file->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
     /** Tulis konten ke temp file unik milik file ini. */
     private function writeTemp(FileModel $file, string $content): ?string
     {
