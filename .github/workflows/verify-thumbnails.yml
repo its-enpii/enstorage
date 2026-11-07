@@ -19,31 +19,20 @@ jobs:
             set -uo pipefail
             cd //home/enpii/studio/enstorage
             COMPOSE="docker compose -f docker-compose.yml"
+            echo "── thumbnail endpoint (internal) ──"
             $COMPOSE exec -T app php artisan tinker --execute='
-              $rows = DB::table("thumbnails as t")
-                ->join("files as f", "f.id", "=", "t.file_id")
-                ->where("f.mime_type", "like", "video/%")
-                ->select("f.name", "t.path", "t.width", "t.height", "t.size")
-                ->get();
-              echo "thumb_video_rows=", $rows->count(), PHP_EOL;
-              $okCount = 0; $badCount = 0;
-              foreach ($rows as $r) {
-                $cands = [
-                  \Illuminate\Support\Facades\Storage::disk("local")->path($r->path),
-                  storage_path("app/".$r->path),
-                  storage_path("app/public/".$r->path),
-                ];
-                $hit = null;
-                foreach ($cands as $c) { if (is_file($c) && filesize($c) > 0) { $hit = $c; break; } }
-                if ($hit) {
-                  $dim = @getimagesize($hit) ?: [0,0];
-                  $mime = $dim["mime"] ?? "?";
-                  echo "  OK  ", $r->name, " bytes=", filesize($hit), " dim=", $dim[0], "x", $dim[1], " mime=", $mime, PHP_EOL;
-                  $okCount++;
-                } else {
-                  echo "  BAD ", $r->name, " (no non-empty file at any root)", PHP_EOL;
-                  $badCount++;
-                }
-              }
-              echo "SUMMARY ok=", $okCount, " bad=", $badCount, PHP_EOL;
-            '
+              $f = App\Models\File::where("mime_type","like","video/%")->whereHas("thumbnail")->first();
+              if (!$f) { echo "NO_VIDEO_WITH_THUMB", PHP_EOL; exit; }
+              echo "file_id=", $f->id, " name=", $f->name, " has_thumbnail=", (int)$f->has_thumbnail, PHP_EOL;
+              $api = App\Models\User::find($f->user_id);
+              $token = $api->createToken("diag")->plainTextToken;
+              echo "TOKEN=", $token, PHP_EOL;
+            ' > /tmp/tok.txt 2>&1
+            cat /tmp/tok.txt
+            TOKEN=$(grep '^TOKEN=' /tmp/tok.txt | cut -d= -f2-)
+            FID=$(grep '^file_id=' /tmp/tok.txt | sed 's/.*file_id=\([^ ]*\).*/\1/')
+            echo "── bytes endpoint ──"
+            $COMPOSE exec -T app sh -lc "curl -s -o /tmp/t.webp -w 'http=%{http_code} bytes=%{size_download} type=%{content_type}\n' -H 'Authorization: Bearer $TOKEN' http://127.0.0.1/api/v1/files/$FID/thumbnail"
+            $COMPOSE exec -T app sh -lc 'php -r "\$i=@getimagesize(\"/tmp/t.webp\"); echo \"dim=\",\$i[0],\"x\",\$i[1],\" mime=\",\$i[\"mime\"],PHP_EOL;"'
+            echo "── has_thumbnail di list API ──"
+            $COMPOSE exec -T app sh -lc "curl -s -H 'Authorization: Bearer $TOKEN' 'http://127.0.0.1/api/v1/files?per_page=100' | php -r '\$j=json_decode(stream_get_contents(STDIN),true); \$d=\$j[\"data\"]??[]; \$v=array_filter(\$d, fn(\$x)=>str_starts_with(\$x[\"mime_type\"]??\"\",\"video/\")); echo \"video_in_list=\",count(\$v),PHP_EOL; foreach(\$v as \$x){echo \"  \",\$x[\"name\"],\" has_thumbnail=\",(int)(\$x[\"has_thumbnail\"]??0),PHP_EOL;}'"
