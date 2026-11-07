@@ -18,17 +18,25 @@ jobs:
             set -uo pipefail
             cd //home/enpii/studio/enstorage
             C="docker compose -f docker-compose.yml"
-            echo "── mounts app ──"
-            docker inspect enstorage-app --format '{{range .Mounts}}{{.Type}} {{.Name}} {{.Source}} -> {{.Destination}}{{"\n"}}{{end}}' | grep -E "storage|bootstrap"
-            echo "── mounts worker ──"
-            docker inspect enstorage-worker --format '{{range .Mounts}}{{.Type}} {{.Name}} {{.Source}} -> {{.Destination}}{{"\n"}}{{end}}' | grep -E "storage|bootstrap"
-            echo "── jumlah file thumbnails per container ──"
-            echo -n "app    : "; $C exec -T app sh -lc 'ls -1 /var/www/html/storage/app/thumbnails 2>/dev/null | wc -l'
-            echo -n "worker : "; $C exec -T worker sh -lc 'ls -1 /var/www/html/storage/app/thumbnails 2>/dev/null | wc -l'
-            echo "── inode dir (harus sama kalau volume sama) ──"
-            echo -n "app    : "; $C exec -T app sh -lc 'stat -c "%d:%i" /var/www/html/storage/app/thumbnails 2>/dev/null'
-            echo -n "worker : "; $C exec -T worker sh -lc 'stat -c "%d:%i" /var/www/html/storage/app/thumbnails 2>/dev/null'
-            echo "── 5 file terbaru di worker ──"
-            $C exec -T worker sh -lc 'ls -t /var/www/html/storage/app/thumbnails 2>/dev/null | head -5'
-            echo "── 5 file terbaru di app ──"
-            $C exec -T app sh -lc 'ls -t /var/www/html/storage/app/thumbnails 2>/dev/null | head -5'
+            echo "── disk host ──"
+            df -h / /var/lib/docker 2>/dev/null | head -4
+            echo "── 3 row terbaru (path + ada/tidak) ──"
+            $C exec -T app php artisan tinker --execute='
+              $rows = DB::table("thumbnails")->orderByDesc("generated_at")->limit(5)->get();
+              foreach ($rows as $r) {
+                $p = storage_path("app/" . $r->path);
+                echo "path=", $r->path, " size=", $r->size, " gen=", $r->generated_at,
+                     " exists=", (int) is_file($p), " basename_exists=", (int) is_file(storage_path("app/thumbnails/" . basename($r->path))), PHP_EOL;
+              }
+              echo "rows_total=", DB::table("thumbnails")->count(), PHP_EOL;
+              echo "distinct_paths=", DB::table("thumbnails")->distinct()->count("path"), PHP_EOL;
+            '
+            echo "── isi direktori (10 nama) ──"
+            $C exec -T app sh -lc 'ls /var/www/html/storage/app/thumbnails | head -10'
+            echo "── jumlah per ekstensi di dir ──"
+            $C exec -T app sh -lc 'ls /var/www/html/storage/app/thumbnails | sed "s/.*\.//" | sort | uniq -c'
+            echo "── log worker: ThumbnailGenerator gagal / error ──"
+            $C logs --no-log-prefix --tail=6000 worker 2>&1 | grep -iE "ThumbnailGenerator gagal|ekstraksi frame|ffmpeg|No space|SQLSTATE" | tail -12 || echo NO_LOG
+            echo "── antrean ──"
+            $C exec -T app php artisan queue:monitor default 2>/dev/null | head -3 || true
+            $C exec -T redis sh -lc 'redis-cli LLEN queues:default 2>/dev/null || redis-cli LLEN default 2>/dev/null' 2>/dev/null || echo no-redis-cli
