@@ -18,31 +18,32 @@ jobs:
             set -uo pipefail
             cd //home/enpii/studio/enstorage
             C="docker compose -f docker-compose.yml"
+            echo "── file fisik di storage/app/thumbnails ──"
+            $C exec -T app sh -lc 'ls /var/www/html/storage/app/thumbnails 2>/dev/null | wc -l; ls /var/www/html/storage/app/thumbnails 2>/dev/null | head -3'
+            echo "── file fisik di storage/app/private/thumbnails ──"
+            $C exec -T app sh -lc 'ls /var/www/html/storage/app/private/thumbnails 2>/dev/null | wc -l'
+            echo "── lokasi lain (find) ──"
+            $C exec -T app sh -lc 'find /var/www/html/storage -type d -name thumbnails 2>/dev/null'
+            echo "── hitung DB vs disk per base ──"
             $C exec -T app php artisan tinker --execute='
-              $miss = App\Models\File::where("upload_status","done")->whereDoesntHave("thumbnail");
-              echo "=== octet-stream tanpa thumb: sebaran ekstensi ===", PHP_EOL;
-              $oct = (clone $miss)->where("mime_type","like","%octet-stream%")->get();
-              $byExt = [];
-              foreach ($oct as $f) {
-                $e = strtolower(pathinfo($f->name, PATHINFO_EXTENSION)) ?: "(none)";
-                $byExt[$e] = ($byExt[$e] ?? 0) + 1;
+              $paths = DB::table("thumbnails")->pluck("path")->all();
+              $bases = [
+                "app"          => storage_path("app"),
+                "app/private"  => storage_path("app/private"),
+                "app/public"   => storage_path("app/public"),
+              ];
+              echo "db_rows=", count($paths), PHP_EOL;
+              foreach ($bases as $label => $base) {
+                $hit = 0;
+                foreach ($paths as $p) { if (is_file($base."/".$p)) { $hit++; } }
+                echo "  base=", $label, " exists=", $hit, PHP_EOL;
               }
-              arsort($byExt);
-              foreach ($byExt as $e => $n) { echo "  ext=", $e, " n=", $n, PHP_EOL; }
-              echo "  oct_total=", $oct->count(), PHP_EOL;
-
-              echo "=== image tanpa thumb: sebaran ekstensi + umur ===", PHP_EOL;
-              $img = (clone $miss)->where("mime_type","like","image/%")->get();
-              $ie = [];
-              foreach ($img as $f) { $e = strtolower(pathinfo($f->name, PATHINFO_EXTENSION)) ?: "(none)"; $ie[$e] = ($ie[$e] ?? 0) + 1; }
-              arsort($ie);
-              foreach ($ie as $e => $n) { echo "  img_ext=", $e, " n=", $n, PHP_EOL; }
-              echo "  image_total=", $img->count(), PHP_EOL;
-              echo "  image_oldest=", $img->min("created_at"), " newest=", $img->max("created_at"), PHP_EOL;
-
-              echo "=== apakah ada thumb yang filenya hilang dari disk? ===", PHP_EOL;
-              $rows = DB::table("thumbnails")->select("path")->limit(3000)->get();
-              $gone = 0;
-              foreach ($rows as $r) { if (! is_file(storage_path("app/".$r->path))) { $gone++; } }
-              echo "  thumb_rows=", $rows->count(), " file_missing=", $gone, PHP_EOL;
+              echo "  sample_db_path=", $paths[0] ?? "(none)", PHP_EOL;
+              $firstFound = null;
+              foreach ($paths as $p) { if (is_file(storage_path("app/".$p))) { $firstFound = $p; break; } }
+              echo "  sample_found_path=", $firstFound ?? "(none)", PHP_EOL;
             '
+            echo "── apakah file contoh benar-benar ada (ls) ──"
+            $C exec -T app sh -lc 'ls -l /var/www/html/storage/app/thumbnails/ 2>/dev/null | head -5'
+            echo "── volume mount ──"
+            docker inspect enstorage-app --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}' | grep -i stor
