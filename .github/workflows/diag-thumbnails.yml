@@ -15,10 +15,12 @@ jobs:
           script: |
             cd //home/enpii/studio/enstorage
             C="docker compose -f docker-compose.yml"
+            echo "== 3 failed_jobs terbaru =="
             $C exec -T app php artisan tinker --execute='
-              $ok=0;$bad=0;foreach (DB::table("thumbnails")->get() as $r) { if (App\Services\ThumbnailGenerator::exists((string)$r->path)) {$ok++;} else {$bad++;} }
-              echo "rows=",DB::table("thumbnails")->count()," resolvable=",$ok," missing=",$bad,PHP_EOL;
-              $need=0;$c=[];App\Models\File::where("upload_status","done")->with("thumbnail")->chunkById(500,function($fs) use (&$need,&$c){foreach($fs as $f){$t=$f->thumbnail;if($t&&App\Services\ThumbnailGenerator::exists((string)$t->path))continue;$k=App\Services\ThumbnailGenerator::mediaKind($f);if($k===null)continue;$need++;$c[$k]=($c[$k]??0)+1;}});
-              echo "media_without_thumb=",$need,PHP_EOL;foreach($c as $k=>$n){echo "  ",$k,"=",$n,PHP_EOL;}
-              echo "failed_jobs=",DB::table("failed_jobs")->count(),PHP_EOL;
+              foreach (DB::table("failed_jobs")->orderByDesc("failed_at")->limit(3)->get() as $j) {
+                echo "AT ", $j->failed_at, PHP_EOL;
+                echo "EXC ", substr(str_replace(chr(10), " | ", (string) $j->exception), 0, 500), PHP_EOL, PHP_EOL;
+              }
             '
+            echo "== log worker thumbnail (100 baris terakhir) =="
+            $C logs --no-log-prefix --tail=3000 worker 2>&1 | grep -iE "ThumbnailGenerator|thumb|ffmpeg" | tail -12 || echo NONE
