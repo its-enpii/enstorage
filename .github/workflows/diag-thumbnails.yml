@@ -1,0 +1,39 @@
+name: Diag Thumbnails
+
+# Diagnostik sementara: cek kenapa backfill video belum menghasilkan thumbnail
+# di server produksi (ffmpeg ada/tidak, error worker, sisa kandidat).
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 15m
+          script: |
+            set -uo pipefail
+            cd //home/enpii/studio/enstorage
+            COMPOSE="docker compose -f docker-compose.yml"
+            echo "── ffmpeg di app ──"
+            $COMPOSE exec -T app sh -lc 'command -v ffmpeg || echo FFMPEG_MISSING'
+            echo "── ffmpeg di worker ──"
+            $COMPOSE exec -T worker sh -lc 'command -v ffmpeg || echo FFMPEG_MISSING'
+            echo "── image build time ──"
+            $COMPOSE exec -T app php -r 'echo date("c", filemtime("/var/www/html/app/Jobs/GenerateThumbnailJob.php")), PHP_EOL;'
+            echo "── kandidat video tanpa thumbnail ──"
+            $COMPOSE exec -T app php artisan tinker --execute='
+              $q = App\Models\File::where("mime_type","like","video/%")
+                ->where("upload_status","done")
+                ->whereNotExists(function($s){ $s->select(DB::raw(1))->from("thumbnails")->whereColumn("thumbnails.file_id","files.id"); });
+              echo "video_kandidat=", $q->count(), PHP_EOL;
+              echo "thumbnail_total=", DB::table("thumbnails")->count(), PHP_EOL;
+              echo "docs_dgn_snippet=", App\Models\File::whereNotNull("metadata")->get()->filter(fn($f)=>isset($f->metadata["snippet"]))->count(), PHP_EOL;
+            '
+            echo "── error thumbnail di worker log ──"
+            $COMPOSE logs --no-log-prefix --tail=400 worker 2>&1 | grep -iE "thumbbnail|thumbnail|ffmpeg|GenerateThumbnail" | tail -20 || echo "NO_LOG_MATCH"
