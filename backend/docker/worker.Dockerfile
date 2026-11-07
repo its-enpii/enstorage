@@ -10,6 +10,7 @@ RUN apk add --no-cache \
         freetype-dev \
         libjpeg-turbo-dev \
         libwebp-dev \
+        ffmpeg \
         $PHPIZE_DEPS \
         autoconf g++ make linux-headers \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
