@@ -68,7 +68,11 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            // retry_after wajib > $timeout job terpanjang (GenerateThumbnailJob
+            // = 900s). Bila lebih kecil, worker mengklaim ulang job yang masih
+            // berjalan setiap retry_after detik, hitungan tries habis, dan
+            // MaxAttemptsExceeded muncul walau job sehat. Default 1800s.
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 1800),
             'block_for' => null,
             'after_commit' => false,
         ],
