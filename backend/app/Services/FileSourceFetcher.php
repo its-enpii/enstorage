@@ -77,6 +77,26 @@ class FileSourceFetcher
         return $this->downloadFromDrive($file);
     }
 
+    /**
+     * Apakah path hasil `fetch()` adalah salinan temp yang harus dihapus
+     * pemanggil? Path milik disk `local` (file asli) → false.
+     */
+    public function isTemporary(FileModel $file, string $path): bool
+    {
+        if ($file->storage_driver === 'local') {
+            try {
+                $original = Storage::disk('local')->path((string) $file->storage_path);
+                if ($original === $path) {
+                    return false;
+                }
+            } catch (Throwable $e) {
+                // jatuh ke pemeriksaan nama temp di bawah
+            }
+        }
+
+        return str_contains(basename($path), '.backfill_src');
+    }
+
     /** Tulis konten ke temp file unik milik file ini. */
     private function writeTemp(FileModel $file, string $content): ?string
     {

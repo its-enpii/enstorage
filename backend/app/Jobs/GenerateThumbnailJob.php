@@ -39,11 +39,19 @@ class GenerateThumbnailJob implements ShouldQueue
             return;
         }
 
-        $isImage = str_starts_with($file->mime_type, 'image/');
-        $isVideo = str_starts_with($file->mime_type, 'video/');
-        if (! $isImage && ! $isVideo) {
+        // MIME saja tidak cukup (MP4 sering `application/octet-stream`);
+        // helper bersama juga melihat ekstensi nama file.
+        $kind = ThumbnailGenerator::mediaKind($file);
+        if ($kind === null) {
+            Log::info('GenerateThumbnailJob: tipe file bukan image/video, dilewati', [
+                'file_id' => $file->id,
+                'mime_type' => $file->mime_type,
+                'name' => $file->name,
+            ]);
+
             return;
         }
+        $isVideo = $kind === 'video';
 
         if ($isVideo && (int) $file->size > self::MAX_VIDEO_BYTES) {
             Log::warning('GenerateThumbnailJob: video terlalu besar, thumbnail dilewati', [
@@ -54,10 +62,12 @@ class GenerateThumbnailJob implements ShouldQueue
             return;
         }
 
-        $sourcePath = $sources->downloadFromDrive($file);
+        // fetch() menangani disk `local` (path asli) dan Google Drive (temp).
+        $sourcePath = $sources->fetch($file);
         if (! $sourcePath) {
             return;
         }
+        $sourceTemporary = $sources->isTemporary($file, $sourcePath);
 
         $framePath = null;
 
@@ -76,7 +86,10 @@ class GenerateThumbnailJob implements ShouldQueue
                 'error' => $e->getMessage(),
             ]);
         } finally {
-            @unlink($sourcePath);
+            // JANGAN hapus file asli milik disk `local`.
+            if ($sourceTemporary) {
+                @unlink($sourcePath);
+            }
             if ($framePath) {
                 @unlink($framePath);
             }

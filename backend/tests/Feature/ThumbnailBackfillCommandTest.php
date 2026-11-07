@@ -37,6 +37,7 @@ class ThumbnailBackfillCommandTest extends TestCase
         parent::setUp();
         $this->owner = User::factory()->create();
         // Bersihkan artefak thumbnails/temp yang mungkin tertinggal.
+        Storage::disk('local')->deleteDirectory('thumbnails');
         foreach (glob(storage_path('app/thumbnails/*.webp')) ?: [] as $f) {
             @unlink($f);
         }
@@ -44,6 +45,7 @@ class ThumbnailBackfillCommandTest extends TestCase
 
     protected function tearDown(): void
     {
+        Storage::disk('local')->deleteDirectory('thumbnails');
         foreach (glob(storage_path('app/thumbnails/*.webp')) ?: [] as $f) {
             @unlink($f);
         }
@@ -68,10 +70,15 @@ class ThumbnailBackfillCommandTest extends TestCase
     private function localFile(string $name, string $mime, string $content, array $overrides = []): File
     {
         $id = (string) Str::uuid();
-        $path = 'files/backfill-test/'.$id.'_'.$name;
+        // Path disk `local` (root = storage/app/private) supaya fetch() &
+        // pemeriksaan berkas thumbnail melihat file yang sama.
+        $path = Storage::disk('local')->path('files/backfill-test/'.$id.'_'.$name);
         Storage::disk('local')->put($path, $content);
 
-        return File::create(array_merge([
+        // Model File memakai atribut #[Fillable] (bukan $fillable), sehingga
+        // `File::create([])` diam-diam menjadi no-op di test — pakai forceFill.
+        $file = new File;
+        $file->forceFill(array_merge([
             'id' => $id,
             'user_id' => $this->owner->id,
             'name' => $name,
@@ -83,7 +90,9 @@ class ThumbnailBackfillCommandTest extends TestCase
             'storage_driver' => 'local',
             'storage_path' => $path,
             'client_key' => strtolower($this->runner()),
-        ], $overrides));
+        ], $overrides))->save();
+
+        return $file;
     }
 
     private function runBackfill(array $options = []): string
@@ -109,12 +118,15 @@ class ThumbnailBackfillCommandTest extends TestCase
         $pending = $this->localFile('d.mp4', 'video/mp4', 'fake-video-d', [
             'upload_status' => File::STATUS_PENDING,
         ]);
+        // Berkas thumbnail nyata: baris tanpa berkas kini dianggap yatim
+        // (dipurge + re-dispatch), jadi fixture harus menulis file-nya.
+        Storage::disk('local')->put('thumbnails/'.$hasThumb->id.'.webp', 'webp');
         Thumbnail::create([
             'file_id' => $hasThumb->id,
             'path' => 'thumbnails/'.$hasThumb->id.'.webp',
             'width' => 1,
             'height' => 1,
-            'size' => 1,
+            'size' => 4,
         ]);
 
         // Docs — belum punya snippet
@@ -145,8 +157,8 @@ class ThumbnailBackfillCommandTest extends TestCase
 
         // 2 video dispatched (punya thumbnail / terlalu besar / belum done → skip)
         $this->assertSame(
-            [$videoA->id, $videoB->id],
-            self::dispatchedIds(),
+            collect([$videoA->id, $videoB->id])->sort()->values()->all(),
+            collect(self::dispatchedIds())->sort()->values()->all(),
             'hanya 2 video yang memenuhi syarat yang di-dispatch',
         );
         Bus::assertDispatchedTimes(GenerateThumbnailJob::class, 2);
@@ -169,20 +181,22 @@ class ThumbnailBackfillCommandTest extends TestCase
         $gdriveDoc->refresh();
         $this->assertNull($gdriveDoc->metadata);
 
-        $this->assertStringContainsString('videos dispatched: 2, docs updated: 2, skipped: 1', $out);
+        $this->assertStringContainsString('videos dispatched: 2, images dispatched: 0, docs updated: 2, stale_rows_deleted: 0, skipped: 1', $out);
 
         // Simulasi worker: job yang sudah di-dispatch menghasilkan baris
         // thumbnail. Bus::fake tidak menjalankan job, jadi tanpa ini NOT
         // EXISTS masih melihat video yang sama di run kedua.
+        Storage::disk('local')->put('thumbnails/'.$videoA->id.'.webp', 'webp');
         Thumbnail::create([
             'file_id' => $videoA->id,
             'path' => 'thumbnails/'.$videoA->id.'.webp',
-            'width' => 1, 'height' => 1, 'size' => 1,
+            'width' => 1, 'height' => 1, 'size' => 4,
         ]);
+        Storage::disk('local')->put('thumbnails/'.$videoB->id.'.webp', 'webp');
         Thumbnail::create([
             'file_id' => $videoB->id,
             'path' => 'thumbnails/'.$videoB->id.'.webp',
-            'width' => 1, 'height' => 1, 'size' => 1,
+            'width' => 1, 'height' => 1, 'size' => 4,
         ]);
 
         // Idempotent: run kedua tidak meng-update dokumen yang sudah beres.
@@ -194,7 +208,7 @@ class ThumbnailBackfillCommandTest extends TestCase
             'run kedua tidak boleh dispatch video lagi',
         );
         // Sisa 1 kandidat doc (driver gdrive tanpa akun) tetap skipped.
-        $this->assertStringContainsString('videos dispatched: 0, docs updated: 0, skipped: 1', $out2);
+        $this->assertStringContainsString('videos dispatched: 0, images dispatched: 0, docs updated: 0, stale_rows_deleted: 0, skipped: 1', $out2);
 
         // Tidak ada temp yang tertinggal.
         $this->assertEmpty(glob(storage_path('app/temp/*.backfill_src')) ?: []);

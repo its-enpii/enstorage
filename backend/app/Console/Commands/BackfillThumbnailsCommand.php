@@ -4,11 +4,16 @@ namespace App\Console\Commands;
 
 use App\Jobs\GenerateThumbnailJob;
 use App\Models\File as FileModel;
+use App\Models\Thumbnail;
 use App\Services\FileMetadataExtractor;
 use App\Services\FileSourceFetcher;
+use App\Services\ThumbnailGenerator;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 /**
@@ -17,7 +22,8 @@ use Throwable;
  * Fitur preview (komit 7ae2f26) hanya berlaku untuk upload baru; command
  * ini menyusul file yang sudah ter-upload sebelum fitur itu ada.
  *
- *  - `videos`: file `video/%` done, belum punya baris thumbnails, ukuran
+ *  - `videos` / `images`: file image/video (mime ATAU ekstensi) yang done,
+ *    belum punya baris thumbnails (atau barisnya yatim), ukuran video
  *    <= GenerateThumbnailJob::MAX_VIDEO_BYTES → dispatch GenerateThumbnailJob
  *    (job idempotent + guard retry sendiri). Tidak ada ekstraksi inline.
  *  - `docs`: teks/json/pdf/zip yang `metadata` NULL atau tanpa key
@@ -31,40 +37,56 @@ use Throwable;
  * diulang terus (snippet kosong pun sah untuk file kosong). `--since=0`
  * memaksa semua kandidat. Video tidak terpengaruh (filter NOT EXISTS).
  *
- * Idempoten: run kedua tidak mem-dispatch/meng-update apa pun lagi.
+ * Thumbnail (videos/images): kandidat = file yang BELUM punya baris
+ * `thumbnails` ATAU punya baris tapi berkas thumbnail-nya hilang di disk
+ * (baris yatim). Baris yatim dihapus lebih dulu (satu pemindaian stale di
+ * awal command) supaya job bisa `updateOrCreate` bersih. Klasifikasi
+ * image/video memakai `ThumbnailGenerator::mediaKind()` — sama dengan job —
+ * jadi MP4 ber-MIME `application/octet-stream` ikut terdeteksi dari ekstensi.
+ *
+ * Idempoten: run kedua tidak mem-dispatch/meng-update/menghapus apa pun lagi.
  */
 class BackfillThumbnailsCommand extends Command
 {
     protected $signature = 'thumbnails:backfill
         {--chunk=200 : Jumlah file per batch query}
-        {--only=all : videos|docs|all}
+        {--only=all : videos|images|docs|all}
         {--since=7 : Untuk docs: hanya file yang metadata-nya NULL / extracted_at lebih tua dari N hari (0 = semua)}';
 
-    protected $description = 'Backfill thumbnail video & snippet metadata untuk file lama.';
+    protected $description = 'Backfill thumbnail video/image & snippet metadata untuk file lama.';
 
     private const MAX_BATCH = 5000;
 
     /** Batas umur backfill docs (default 7 hari): jangan sentuh dokumen yang baru diproses. */
     private const DEFAULT_SINCE_DAYS = 7;
 
-    /** @var array{videos:int, docs:int, skipped:int, failed:int} */
-    private array $stats = ['videos' => 0, 'docs' => 0, 'skipped' => 0, 'failed' => 0];
+    /** @var array{videos:int, images:int, docs:int, stale_rows_deleted:int, skipped:int, failed:int} */
+    private array $stats = ['videos' => 0, 'images' => 0, 'docs' => 0, 'stale_rows_deleted' => 0, 'skipped' => 0, 'failed' => 0];
 
     public function handle(FileMetadataExtractor $extractor, FileSourceFetcher $sources): int
     {
-        $this->stats = ['videos' => 0, 'docs' => 0, 'skipped' => 0, 'failed' => 0];
+        $this->stats = ['videos' => 0, 'images' => 0, 'docs' => 0, 'stale_rows_deleted' => 0, 'skipped' => 0, 'failed' => 0];
 
         $only = strtolower((string) $this->option('only'));
-        if (! in_array($only, ['videos', 'docs', 'all'], true)) {
-            $this->error("Opsi --only tidak dikenal: {$only} (pakai videos|docs|all).");
+        if (! in_array($only, ['videos', 'images', 'docs', 'all'], true)) {
+            $this->error("Opsi --only tidak dikenal: {$only} (pakai videos|images|docs|all).");
 
             return self::INVALID;
         }
 
         $chunk = max(1, min(self::MAX_BATCH, (int) $this->option('chunk')));
+        $wantsMedia = in_array($only, ['videos', 'images', 'all'], true);
+
+        // Pemindaian stale SEKALI di awal (bukan per chunk): baris yatim =
+        // baris thumbnails yang berkasnya sudah tidak ada di disk.
+        $staleFileIds = $wantsMedia ? $this->purgeStaleThumbRows() : [];
 
         if ($only === 'videos' || $only === 'all') {
-            $this->processVideos($chunk);
+            $this->processMedia($chunk, 'video', $staleFileIds);
+        }
+
+        if ($only === 'images' || $only === 'all') {
+            $this->processMedia($chunk, 'image', $staleFileIds, skipDispatched: $only === 'all');
         }
 
         if ($only === 'docs' || $only === 'all') {
@@ -73,44 +95,148 @@ class BackfillThumbnailsCommand extends Command
 
         $this->newLine();
         $this->info(sprintf(
-            'videos dispatched: %d, docs updated: %d, skipped: %d',
+            'videos dispatched: %d, images dispatched: %d, docs updated: %d, stale_rows_deleted: %d, skipped: %d, failed: %d',
             $this->stats['videos'],
+            $this->stats['images'],
             $this->stats['docs'],
+            $this->stats['stale_rows_deleted'],
             $this->stats['skipped'],
+            $this->stats['failed'],
         ));
-        if ($this->stats['failed'] > 0) {
-            $this->warn('failed: '.$this->stats['failed']);
-        }
 
         return self::SUCCESS;
     }
 
     // ------------------------------------------------------------------
-    // Videos
+    // Media thumbnail (videos + images)
     // ------------------------------------------------------------------
 
-    private function processVideos(int $chunk): void
+    /**
+     * Hapus baris `thumbnails` yang berkasnya hilang di disk.
+     *
+     * 736 baris → murah untuk dipindai penuh per run. Baris yatim harus
+     * dihapus dulu: query kandidat memakai `whereNotExists(thumbnails)`,
+     * jadi baris yang ADA (tapi file-nya hilang) akan dianggap selesai dan
+     * tidak pernah dibuat ulang.
+     *
+     * @return list<string> file_id dari baris yang dipurge (untuk re-dispatch).
+     */
+    private function purgeStaleThumbRows(): array
     {
-        $base = FileModel::query()
-            ->where('mime_type', 'like', 'video/%')
-            ->where('upload_status', FileModel::STATUS_DONE)
-            ->where(function (Builder $q) {
-                $q->whereNull('size')->orWhere('size', '<=', GenerateThumbnailJob::MAX_VIDEO_BYTES);
-            })
-            ->whereNotExists(fn ($q) => $q->from('thumbnails')->whereColumn('thumbnails.file_id', 'files.id'));
+        $staleIds = [];
+        $staleFileIds = [];
 
-        $this->eachChunk($base, $chunk, function (FileModel $file): void {
+        DB::table('thumbnails')->select('id', 'file_id', 'path')->orderBy('id')->chunk(500, function (Collection $rows) use (&$staleIds, &$staleFileIds): void {
+            foreach ($rows as $row) {
+                if (self::thumbExists((string) $row->path)) {
+                    continue;
+                }
+                $staleIds[] = $row->id;
+                $staleFileIds[] = (string) $row->file_id;
+            }
+        });
+
+        $this->stats['failed'] += Thumbnail::purgeStaleByIds($staleIds);
+
+        $this->stats['stale_rows_deleted'] = count($staleIds);
+        if ($staleIds !== []) {
+            $this->line(sprintf('(stale) rows deleted: %d', count($staleIds)));
+        }
+
+        return array_values(array_unique($staleFileIds));
+    }
+
+    /**
+     * Apakah berkas thumbnail ada? Path baris disimpan relatif ke disk
+     * `local` (root = storage/app/private, tempat generator menulis), tapi
+     * endpoint preview lama mencarinya di `storage_path('app/'.$path)` —
+     * terima keduanya supaya baris hidup tidak salah dipurge.
+     */
+    private static function thumbExists(string $relative): bool
+    {
+        if ($relative === '') {
+            return false;
+        }
+        if (is_file(storage_path('app/'.$relative))) {
+            return true;
+        }
+
+        try {
+            return is_file(Storage::disk('local')->path($relative));
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Dispatch job thumbnail untuk satu jenis media.
+     *
+     * Kandidat: (tanpa baris thumbnails) ATAU (file_id ada di daftar stale
+     * yang barisnya baru dipurge). Klasifikasi mime/ekstensi memakai
+     * ThumbnailGenerator::mediaKind() — sama dengan job.
+     *
+     * @param  list<string>  $staleFileIds
+     */
+    private function processMedia(int $chunk, string $kind, array $staleFileIds, bool $skipDispatched = false): void
+    {
+        $label = $kind === 'video' ? 'videos' : 'images';
+
+        $base = FileModel::query()
+            ->where('upload_status', FileModel::STATUS_DONE)
+            ->where(function (Builder $q) use ($kind) {
+                $this->applyMediaKindFilter($q, $kind);
+            })
+            ->where(function (Builder $q) use ($staleFileIds) {
+                $q->whereNotExists(fn ($sub) => $sub->from('thumbnails')->whereColumn('thumbnails.file_id', 'files.id'));
+                if ($staleFileIds !== []) {
+                    $q->orWhereIn('id', $staleFileIds);
+                }
+            });
+
+        $this->eachChunk($base, $chunk, function (FileModel $file) use ($kind, $skipDispatched): void {
+            // Klasifikasi sebenarnya (mime ATAU ekstensi) — SQL hanya prefilter.
+            if (ThumbnailGenerator::mediaKind($file) !== $kind) {
+                return;
+            }
+            if ($skipDispatched && isset($this->dispatchedFileIds[$file->id])) {
+                return;
+            }
+            if ($kind === 'video' && $file->size !== null && (int) $file->size > GenerateThumbnailJob::MAX_VIDEO_BYTES) {
+                return;
+            }
+
             try {
                 GenerateThumbnailJob::dispatch($file->id);
-                $this->stats['videos']++;
+                $this->dispatchedFileIds[$file->id] = true;
+                $this->stats[$kind === 'video' ? 'videos' : 'images']++;
             } catch (Throwable $e) {
                 $this->stats['failed']++;
-                Log::warning('thumbnails:backfill dispatch video gagal', [
+                Log::warning('thumbnails:backfill dispatch thumbnail gagal', [
                     'file_id' => $file->id,
+                    'kind' => $kind,
                     'error' => $e->getMessage(),
                 ]);
             }
-        }, '(videos)');
+        }, '('.$label.')');
+    }
+
+    /** @var array<string, true> file yang sudah di-dispatch pada run ini. */
+    private array $dispatchedFileIds = [];
+
+    /**
+     * Prefilter SQL untuk kind media: mime prefix ATAU ekstensi nama file.
+     * Pasangan longgar dari ThumbnailGenerator::mediaKind() (yang final).
+     */
+    private function applyMediaKindFilter(Builder $q, string $kind): void
+    {
+        $exts = $kind === 'video' ? ThumbnailGenerator::VIDEO_EXTENSIONS : ThumbnailGenerator::IMAGE_EXTENSIONS;
+
+        $q->where('mime_type', 'like', $kind.'/%')
+            ->orWhere(function (Builder $sub) use ($exts) {
+                foreach ($exts as $ext) {
+                    $sub->orWhere('name', 'ilike', '%.'.$ext);
+                }
+            });
     }
 
     // ------------------------------------------------------------------
@@ -167,8 +293,7 @@ class BackfillThumbnailsCommand extends Command
 
                 return;
             }
-            $isTemp = $file->storage_driver !== 'local';
-            if ($isTemp) {
+            if ($sources->isTemporary($file, $path)) {
                 $tempPath = $path;
             }
 
