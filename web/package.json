@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "paging:verify": "node scripts/check-files-paging.mjs",
     "docs:verify": "node scripts/verify-api-docs.mjs",
     "i18n:verify": "node scripts/check-i18n-placeholders.mjs"
   },

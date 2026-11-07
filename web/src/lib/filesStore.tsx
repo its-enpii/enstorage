@@ -345,6 +345,12 @@ export function FilesStoreProvider({
       );
       const items = res.data ?? [];
       const meta = res.meta?.pagination;
+      // Advance paging refs eagerly so the next loadMore asks for a NEW page
+      // even before React commits state (otherwise a fast retry can re-request
+      // the same page while the ref still points at the old one).
+      const nextPage = meta?.page ?? page;
+      folderPageRef.current = nextPage;
+      folderLastPageRef.current = meta?.last_page ?? page;
       setFolders((prev) => {
         // Page 1 carries the server's canonical order for the active sort:
         // replace the whole list instead of merging in place (which would
@@ -352,8 +358,8 @@ export function FilesStoreProvider({
         if (page === 1) return items;
         return mergeUnique(prev, items);
       });
-      setFolderPage(meta?.page ?? page);
-      setFolderLastPage(meta?.last_page ?? page);
+      setFolderPage(nextPage);
+      setFolderLastPage(folderLastPageRef.current);
       setFolderTotal(meta?.total ?? 0);
     },
     [userId, folderId, typeFilter],
@@ -378,6 +384,10 @@ export function FilesStoreProvider({
       );
       const items = res.data ?? [];
       const meta = res.meta?.pagination;
+      // See loadFoldersPage: refs advance immediately, state mirrors them.
+      const nextPage = meta?.page ?? page;
+      filePageRef.current = nextPage;
+      fileLastPageRef.current = meta?.last_page ?? page;
       setFiles((prev) => {
         // Page 1 carries the server's canonical order for the active sort:
         // replace the whole list instead of merging in place (which would
@@ -385,8 +395,8 @@ export function FilesStoreProvider({
         if (page === 1) return items;
         return mergeUnique(prev, items);
       });
-      setFilePage(meta?.page ?? page);
-      setFileLastPage(meta?.last_page ?? page);
+      setFilePage(nextPage);
+      setFileLastPage(fileLastPageRef.current);
       setFileTotal(meta?.total ?? 0);
     },
     [userId, folderId, search, typeFilter],
@@ -585,6 +595,7 @@ export function FilesStoreProvider({
     } catch (e) {
       // Silent: don't disrupt the UI; user can retry by scrolling again
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
   }, [loadFoldersPage]);
@@ -598,6 +609,7 @@ export function FilesStoreProvider({
     } catch (e) {
       // Silent
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
   }, [loadFilesPage]);

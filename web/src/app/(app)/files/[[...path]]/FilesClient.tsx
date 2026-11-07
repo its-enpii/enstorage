@@ -16,6 +16,7 @@ import {
   type SavedScroll,
 } from '@/lib/filesScroll';
 import { getLocalUserId } from '@/lib/filesStore';
+import { resolvePaging, type FilesTab } from '@/lib/filesPaging.mjs';
 import {
   CloudDoneIcon,
   CloudOffIcon,
@@ -64,7 +65,7 @@ import { uploadDirectBatch } from '@/lib/directBatchUpload';
 import { bytes, fileExtension } from '@/lib/format';
 import { usePageTitle } from '@/lib/usePageTitle';
 
-type Tab = 'all' | 'folders' | 'files';
+type Tab = FilesTab;
 
 function fileThumbnailUrl(file: FileItem): string | null {
   if (!file.has_thumbnail || file.upload_status !== 'done') return null;
@@ -2122,15 +2123,21 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     visibleFolders.every((f) => selected.has(f.id)) &&
     visibleFiles.every((f) => selected.has(f.id));
 
-  // Determine if more pages are available for the currently visible list
-  const hasMore = tab === 'files' ? hasMoreFiles : hasMoreFolders;
-  const loadMore = tab === 'files' ? loadMoreFiles : loadMoreFolders;
+  // Determine if more pages are available for the currently visible list.
+  // Tab `all` shows folders + files together, so it stays live while either
+  // list has pages left (a file-heavy folder with no subfolders must not
+  // freeze the list at page 1).
+  const { hasMore, loadFolders, loadFiles } = resolvePaging(tab, hasMoreFolders, hasMoreFiles);
+  const loadMore = useCallback(() => {
+    if (loadFolders) void loadMoreFolders();
+    if (loadFiles) void loadMoreFiles();
+  }, [loadFolders, loadFiles, loadMoreFolders, loadMoreFiles]);
 
   // Auto-load next page when the sentinel scrolls into view. Manual "Load
   // more" button stays as a fallback if IntersectionObserver misfires.
   const stableLoadMore = useCallback(() => {
     if (loadingMore) return;
-    void loadMore();
+    loadMore();
   }, [loadMore, loadingMore]);
   const loadMoreSentinel = useInfiniteScroll(stableLoadMore, { enabled: hasMore });
 
@@ -2586,6 +2593,14 @@ function FilesContent({ currentPath }: { currentPath: string }) {
                   {typeFilter
                     ? t('files.filter.summary_files', { count: totalFiles })
                     : `${t('files.filter.summary_folders', { count: totalFolders })} • ${t('files.filter.summary_files', { count: totalFiles })}`}
+                  {files.length < totalFiles && (
+                    <span
+                      className="text-metadata text-on-surface-variant tabular-nums shrink-0"
+                      data-testid="files-loaded-count"
+                    >
+                      {`${files.length} / ${totalFiles} file`}
+                    </span>
+                  )}
                 </span>
                 {typeFilter && (
                   <span
