@@ -1,6 +1,5 @@
 name: Verify Thumbnails
 
-# Ambil thumbnail nyata sebagai base64 supaya orkestrator bisa memvalidasi piksel.
 on:
   workflow_dispatch:
 
@@ -16,14 +15,5 @@ jobs:
           port: ${{ secrets.VPS_PORT || 22 }}
           command_timeout: 15m
           script: |
-            set -uo pipefail
             cd //home/enpii/studio/enstorage
-            COMPOSE="docker compose -f docker-compose.yml"
-            $COMPOSE exec -T app php artisan tinker --execute='
-              $f = App\Models\File::with("thumbnail")->where("mime_type","like","video/%")->whereHas("thumbnail")->first();
-              $p = storage_path("app/".$f->thumbnail->path);
-              echo "NAME=", $f->name, PHP_EOL;
-              echo "B64START", PHP_EOL;
-              echo chunk_split(base64_encode(file_get_contents($p)), 200, PHP_EOL);
-              echo "B64END", PHP_EOL;
-            '
+            docker compose -f docker-compose.yml exec -T app php artisan tinker --execute='$f=App\Models\File::with("thumbnail")->where("mime_type","like","video/%")->whereHas("thumbnail")->first(); $p=storage_path("app/".$f->thumbnail->path); echo "XXNAMEXX", $f->name, PHP_EOL; echo "XXB64XX", base64_encode(file_get_contents($p)), "XXENDXX", PHP_EOL;'
