@@ -1,0 +1,25 @@
+name: Diag Thumbnails
+on:
+  workflow_dispatch:
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 20m
+          script: |
+            cd //home/enpii/studio/enstorage
+            C="docker compose -f docker-compose.yml"
+            $C exec -T app php artisan tinker --execute='
+              $ok=0;$bad=0;foreach (DB::table("thumbnails")->get() as $r) { if (App\Services\ThumbnailGenerator::exists((string)$r->path)) {$ok++;} else {$bad++;} }
+              echo "rows=",DB::table("thumbnails")->count()," resolvable=",$ok," missing=",$bad,PHP_EOL;
+              $need=0;$c=[];App\Models\File::where("upload_status","done")->with("thumbnail")->chunkById(500,function($fs) use (&$need,&$c){foreach($fs as $f){$t=$f->thumbnail;if($t&&App\Services\ThumbnailGenerator::exists((string)$t->path))continue;$k=App\Services\ThumbnailGenerator::mediaKind($f);if($k===null)continue;$need++;$c[$k]=($c[$k]??0)+1;}});
+              echo "media_without_thumb=",$need,PHP_EOL;foreach($c as $k=>$n){echo "  ",$k,"=",$n,PHP_EOL;}
+              echo "failed_jobs=",DB::table("failed_jobs")->count(),PHP_EOL;
+              echo "queue=",\Illuminate\Support\Facades\Queue::size("default"),PHP_EOL;
+            '
