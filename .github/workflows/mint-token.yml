@@ -15,8 +15,12 @@ jobs:
           script: |
             cd //home/enpii/studio/enstorage
             docker compose -f docker-compose.yml exec -T app php artisan tinker --execute='
+              $rows = DB::table("files as f")->join("folders as d","d.id","=","f.folder_id")
+                ->where("f.upload_status","done")
+                ->select("d.id","d.name","d.path", DB::raw("count(*) as n"))
+                ->groupBy("d.id","d.name","d.path")->orderByDesc("n")->limit(5)->get();
+              foreach ($rows as $r) { echo "FOLDER|", $r->id, "|", $r->name, "|", $r->path, "|", $r->n, PHP_EOL; }
               $u = App\Models\User::where("email","enpiiofficial@gmail.com")->first() ?? App\Models\User::first();
-              $u->tokens()->where("name","ui-verify")->delete();
-              echo "OWNER=", $u->email, PHP_EOL;
-              echo "TOKEN=", $u->createToken("ui-verify")->plainTextToken, PHP_EOL;
+              $u->tokens()->where("name","ui-verify2")->delete();
+              echo "TOKEN=", $u->createToken("ui-verify2")->plainTextToken, PHP_EOL;
             '
