@@ -8,6 +8,8 @@
  * Usage: node scripts/check-files-paging.mjs  (exit 0 = pass)
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const { resolvePaging } = await import('../src/lib/filesPaging.mjs');
 
@@ -56,6 +58,25 @@ check('all + both have more => both loaders active', () => {
   assert.equal(r.hasMore, true);
   assert.equal(r.loadFolders, true);
   assert.equal(r.loadFiles, true);
+});
+
+// f. Static invariant: paging refs must NOT be mirrored from state on render.
+// Writing `filePageRef.current = filePage` on every render overwrites the
+// eager ref advance done inside loadFilesPage, so loadMore keeps requesting
+// the same page forever (observed: page 7 requested 7x in production).
+check('filesStore does not overwrite paging refs from state on render', () => {
+  const src = readFileSync(
+    fileURLToPath(new URL('../src/lib/filesStore.tsx', import.meta.url)),
+    'utf8',
+  );
+  const forbidden = [
+    /\bfilePageRef\.current\s*=\s*filePage\s*;/g,
+    /\bfolderPageRef\.current\s*=\s*folderPage\s*;/g,
+  ];
+  for (const re of forbidden) {
+    const hits = src.match(re) ?? [];
+    assert.equal(hits.length, 0, `ref-overwrite regression: found ${re}`);
+  }
 });
 
 console.log(`\n${checks} checks passed`);

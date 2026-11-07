@@ -305,15 +305,29 @@ export function FilesStoreProvider({
   const fileLastPageRef = useRef(fileLastPage);
   const fileTotalRef = useRef(fileTotal);
   const loadingMoreRef = useRef(loadingMore);
+  // Data mirrors only. Paging/total refs are IMPERATIVE sources of truth:
+  // written by load*Page (after response) and by resetPages() on view change.
+  // Never mirror them from state here — a render triggered between advancing
+  // the ref and React committing state would reset it to the stale page,
+  // making loadMore request the same page forever.
   foldersRef.current = folders;
   filesRef.current = files;
-  folderPageRef.current = folderPage;
-  folderLastPageRef.current = folderLastPage;
-  folderTotalRef.current = folderTotal;
-  filePageRef.current = filePage;
-  fileLastPageRef.current = fileLastPage;
-  fileTotalRef.current = fileTotal;
-  loadingMoreRef.current = loadingMore;
+
+  /** Reset all paging refs + state together (view/search/filter/sort change). */
+  const resetPages = useCallback(() => {
+    folderPageRef.current = 0;
+    folderLastPageRef.current = 0;
+    folderTotalRef.current = 0;
+    setFolderPage(0);
+    setFolderLastPage(0);
+    setFolderTotal(0);
+    filePageRef.current = 0;
+    fileLastPageRef.current = 1;
+    fileTotalRef.current = 0;
+    setFilePage(0);
+    setFileLastPage(1);
+    setFileTotal(0);
+  }, []);
 
   /**
    * Load a single page of folders and append.
@@ -329,6 +343,9 @@ export function FilesStoreProvider({
       // Dashboard) tidak ada folder yang boleh tampil — jangan panggil API.
       if (typeFilter) {
         setFolders([]);
+        folderPageRef.current = 0;
+        folderLastPageRef.current = 0;
+        folderTotalRef.current = 0;
         setFolderPage(0);
         setFolderLastPage(0);
         setFolderTotal(0);
@@ -358,9 +375,10 @@ export function FilesStoreProvider({
         if (page === 1) return items;
         return mergeUnique(prev, items);
       });
+      folderTotalRef.current = meta?.total ?? 0;
       setFolderPage(nextPage);
       setFolderLastPage(folderLastPageRef.current);
-      setFolderTotal(meta?.total ?? 0);
+      setFolderTotal(folderTotalRef.current);
     },
     [userId, folderId, typeFilter],
   );
@@ -395,9 +413,10 @@ export function FilesStoreProvider({
         if (page === 1) return items;
         return mergeUnique(prev, items);
       });
+      fileTotalRef.current = meta?.total ?? 0;
       setFilePage(nextPage);
       setFileLastPage(fileLastPageRef.current);
-      setFileTotal(meta?.total ?? 0);
+      setFileTotal(fileTotalRef.current);
     },
     [userId, folderId, search, typeFilter],
   );
@@ -416,16 +435,14 @@ export function FilesStoreProvider({
       if (showLoading) {
         setLoading(true);
         setError(null);
+        // Fresh load (no cache / refreshReplace): reset refs + state together
+        // BEFORE page 1 so leftover old-page refs can't leak into the new view.
+        resetPages();
       }
       try {
         // Filter tipe aktif → folder tidak relevan sama sekali; lewati load folder.
         const foldersTask = typeFilter ? null : loadFoldersPage(1, mode);
         if (showLoading) {
-          // Fresh load (no cache): reset pages and replace state
-          setFolderPage(0);
-          setFilePage(0);
-          setFolderTotal(0);
-          setFileTotal(0);
           await Promise.all([foldersTask ?? Promise.resolve(), loadFilesPage(1, mode)]);
         } else {
           // Background revalidate: merge into existing state so optimistic
@@ -441,7 +458,7 @@ export function FilesStoreProvider({
         setHydrated(true);
       }
     },
-    [userId, typeFilter, loadFoldersPage, loadFilesPage],
+    [userId, typeFilter, loadFoldersPage, loadFilesPage, resetPages],
   );
 
   // Load on view change. Skip the fetch if only `userId` changed (e.g. when
@@ -589,6 +606,7 @@ export function FilesStoreProvider({
   const loadMoreFolders = useCallback(async () => {
     if (loadingMoreRef.current) return;
     if (folderPageRef.current >= folderLastPageRef.current) return;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       await loadFoldersPage(folderPageRef.current + 1);
@@ -603,6 +621,7 @@ export function FilesStoreProvider({
   const loadMoreFiles = useCallback(async () => {
     if (loadingMoreRef.current) return;
     if (filePageRef.current >= fileLastPageRef.current) return;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       await loadFilesPage(filePageRef.current + 1);
