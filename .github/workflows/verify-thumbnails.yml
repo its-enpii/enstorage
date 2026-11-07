@@ -1,0 +1,38 @@
+name: Verify Thumbnails
+
+# Verifikasi produksi: relasi thumbnail + endpoint HTTP nyata via nginx.
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 15m
+          script: |
+            set -uo pipefail
+            cd //home/enpii/studio/enstorage
+            COMPOSE="docker compose -f docker-compose.yml"
+            $COMPOSE exec -T app php artisan tinker --execute='
+              $u = App\Models\User::first();
+              $u->tokens()->where("name","ci-verify")->delete();
+              echo "TOKEN=", $u->createToken("ci-verify")->plainTextToken, PHP_EOL;
+              $f = App\Models\File::where("mime_type","like","video/%")->whereHas("thumbnail")->first();
+              echo "FID=", $f->id, PHP_EOL;
+              echo "FNAME=", $f->name, PHP_EOL;
+            ' > /tmp/t.txt 2>&1
+            TOKEN=$(grep '^TOKEN=' /tmp/t.txt | cut -d= -f2-)
+            FID=$(grep '^FID=' /tmp/t.txt | cut -d= -f2-)
+            grep -E '^(FNAME=)' /tmp/t.txt
+            echo "── endpoint thumbnail via nginx ──"
+            $COMPOSE exec -T nginx sh -lc "curl -s -o /tmp/v.webp -w 'http=%{http_code} bytes=%{size_download} type=%{content_type}\n' -H 'Authorization: Bearer $TOKEN' http://localhost/api/v1/files/$FID/thumbnail"
+            $COMPOSE exec -T nginx sh -lc "curl -s -H 'Authorization: Bearer $TOKEN' 'http://localhost/api/v1/files?per_page=200' -o /tmp/list.json; php -r '\$j=json_decode(file_get_contents(\"/tmp/list.json\"),true); \$d=\$j[\"data\"]??[]; \$v=array_filter(\$d,fn(\$x)=>str_starts_with(\$x[\"mime_type\"]??\"\",\"video/\")); echo \"video_in_list=\",count(\$v),PHP_EOL; foreach(\$v as \$x){echo \"  \",\$x[\"name\"],\" has_thumbnail=\",(int)(\$x[\"has_thumbnail\"]??0),PHP_EOL;}'"
+            echo "── thumbnail base64 (untuk inspeksi visual) ──"
+            $COMPOSE exec -T app sh -lc 'php -r "\$f=App\Models\File::where(\"mime_type\",\"like\",\"video/%\")->whereHas(\"thumbnail\")->first(); \$p=Storage::disk(\"local\")->path(\$f->thumbnail->path); echo \"B64_START\",PHP_EOL,base64_encode(file_get_contents(\$p)),PHP_EOL,\"B64_END\",PHP_EOL;"' | sed -n '/B64_START/,/B64_END/p'
+            $COMPOSE exec -T app php artisan tinker --execute='App\Models\User::first()->tokens()->where("name","ci-verify")->delete(); echo "token_revoked", PHP_EOL;'
