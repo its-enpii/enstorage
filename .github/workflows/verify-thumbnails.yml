@@ -24,16 +24,26 @@ jobs:
                 ->join("files as f", "f.id", "=", "t.file_id")
                 ->where("f.mime_type", "like", "video/%")
                 ->select("f.name", "t.path", "t.width", "t.height", "t.size")
-                ->limit(3)->get();
+                ->get();
+              echo "thumb_video_rows=", $rows->count(), PHP_EOL;
+              $okCount = 0; $badCount = 0;
               foreach ($rows as $r) {
-                echo "NAME=", $r->name, PHP_EOL;
-                echo "  db_path=", $r->path, " db_w=", $r->width, " db_h=", $r->height, " db_size=", $r->size, PHP_EOL;
+                $cands = [
+                  \Illuminate\Support\Facades\Storage::disk("local")->path($r->path),
+                  storage_path("app/".$r->path),
+                  storage_path("app/public/".$r->path),
+                ];
+                $hit = null;
+                foreach ($cands as $c) { if (is_file($c) && filesize($c) > 0) { $hit = $c; break; } }
+                if ($hit) {
+                  $dim = @getimagesize($hit) ?: [0,0];
+                  $mime = $dim["mime"] ?? "?";
+                  echo "  OK  ", $r->name, " bytes=", filesize($hit), " dim=", $dim[0], "x", $dim[1], " mime=", $mime, PHP_EOL;
+                  $okCount++;
+                } else {
+                  echo "  BAD ", $r->name, " (no non-empty file at any root)", PHP_EOL;
+                  $badCount++;
+                }
               }
-              echo "--- disk roots ---", PHP_EOL;
-              echo "local_root=", \Illuminate\Support\Facades\Storage::disk("local")->path(""), PHP_EOL;
-              echo "public_root=", \Illuminate\Support\Facades\Storage::disk("public")->path(""), PHP_EOL;
+              echo "SUMMARY ok=", $okCount, " bad=", $badCount, PHP_EOL;
             '
-            echo "--- physical files (find thumbnails) ---"
-            $COMPOSE exec -T app sh -lc 'find /var/www/html/storage -type f -newermt "-2 hours" \( -name "*.webp" -o -name "*.jpg" \) 2>/dev/null | head -20'
-            echo "--- sizes of newest ---"
-            $COMPOSE exec -T app sh -lc 'find /var/www/html/storage -type f -newermt "-2 hours" \( -name "*.webp" -o -name "*.jpg" \) -exec ls -l {} \; 2>/dev/null | head -20'
