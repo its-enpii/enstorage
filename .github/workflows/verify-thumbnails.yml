@@ -1,0 +1,40 @@
+name: Verify Thumbnails
+
+# Verifikasi sekali pakai: 7 thumbnail video benar-benar berisi gambar valid.
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 15m
+          script: |
+            set -uo pipefail
+            cd //home/enpii/studio/enstorage
+            COMPOSE="docker compose -f docker-compose.yml"
+            $COMPOSE exec -T app php artisan tinker --execute='
+              $rows = DB::table("thumbnails as t")
+                ->join("files as f", "f.id", "=", "t.file_id")
+                ->where("f.mime_type", "like", "video/%")
+                ->select("f.name", "f.mime_type", "t.path")
+                ->get();
+              echo "thumb_video=", $rows->count(), PHP_EOL;
+              foreach ($rows as $r) {
+                $p = \Illuminate\Support\Facades\Storage::disk("local")->path($r->path);
+                $ok = is_file($p);
+                $sz = $ok ? filesize($p) : 0;
+                $dim = $ok ? (@getimagesize($p) ?: [0,0]) : [0,0];
+                echo "  ", $r->name, " | ", $r->mime_type, " | bytes=", $sz,
+                     " | dim=", $dim[0], "x", $dim[1], PHP_EOL;
+              }
+              $doc = DB::table("files")->whereNotNull("metadata")->get()
+                ->filter(fn($f) => isset(json_decode($f->metadata, true)["snippet"]))->count();
+              echo "docs_with_snippet=", $doc, PHP_EOL;
+            '
