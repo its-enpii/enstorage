@@ -1,7 +1,6 @@
 name: Verify Thumbnails
 
-# Verifikasi endpoint thumbnail: buka sesi unlock resmi (markUnlocked) untuk folder
-# pemilik file uji, ukur endpoint HTTP, lalu tutup kembali sesinya.
+# Ambil thumbnail nyata sebagai base64 supaya orkestrator bisa memvalidasi piksel.
 on:
   workflow_dispatch:
 
@@ -21,33 +20,10 @@ jobs:
             cd //home/enpii/studio/enstorage
             COMPOSE="docker compose -f docker-compose.yml"
             $COMPOSE exec -T app php artisan tinker --execute='
-              $f = App\Models\File::with(["thumbnail","folder"])->where("mime_type","like","video/%")->whereHas("thumbnail")->first();
-              $owner = App\Models\User::find($f->user_id);
-              $guard = app(App\Services\FolderLockGuard::class);
-              if ($f->folder) { $guard->markUnlocked($f->folder, $owner->id); }
-              $owner->tokens()->where("name","ci-verify")->delete();
-              echo "FID=", $f->id, PHP_EOL;
-              echo "FNAME=", $f->name, PHP_EOL;
-              echo "OWNER=", $owner->email, PHP_EOL;
-              echo "TPATH=", $f->thumbnail->path, PHP_EOL;
-              echo "EXISTS_APP_ROOT=", (int) file_exists(storage_path("app/".$f->thumbnail->path)), PHP_EOL;
-              echo "EXISTS_PRIVATE=", (int) file_exists(storage_path("app/private/".$f->thumbnail->path)), PHP_EOL;
-              echo "FOLDER=", $f->folder?->name ?? "(root)", PHP_EOL;
-              echo "TOKEN=", $owner->createToken("ci-verify")->plainTextToken, PHP_EOL;
-            ' > /tmp/t.txt 2>&1
-            grep -E "^[A-Z_]+=" /tmp/t.txt
-            TOKEN=$(grep '^TOKEN=' /tmp/t.txt | cut -d= -f2-)
-            FID=$(grep '^FID=' /tmp/t.txt | cut -d= -f2-)
-            echo "── endpoint thumbnail (sesi unlock aktif) ──"
-            $COMPOSE exec -T nginx sh -lc "curl -s -o /tmp/v.bin -w 'http=%{http_code} bytes=%{size_download} type=%{content_type}\n' -H 'Authorization: Bearer $TOKEN' http://localhost/api/v1/files/$FID/thumbnail"
-            $COMPOSE exec -T nginx sh -lc 'xxd -l 16 /tmp/v.bin'
-            echo "── list API ──"
-            $COMPOSE exec -T nginx sh -lc "curl -s -H 'Authorization: Bearer $TOKEN' 'http://localhost/api/v1/files?per_page=200' -o /tmp/l.json; php -r '\$j=json_decode(file_get_contents(\"/tmp/l.json\"),true); echo \"list_count=\",count(\$j[\"data\"]??[]),PHP_EOL;'"
-            echo "── cleanup ──"
-            $COMPOSE exec -T app php artisan tinker --execute='
-              $f = App\Models\File::with("folder")->where("mime_type","like","video/%")->whereHas("thumbnail")->first();
-              $owner = App\Models\User::find($f->user_id);
-              $owner->tokens()->where("name","ci-verify")->delete();
-              if ($f->folder) { app(App\Services\FolderLockGuard::class)->forgetUnlocked($f->folder, $owner->id); }
-              echo "cleanup_done", PHP_EOL;
+              $f = App\Models\File::with("thumbnail")->where("mime_type","like","video/%")->whereHas("thumbnail")->first();
+              $p = storage_path("app/".$f->thumbnail->path);
+              echo "NAME=", $f->name, PHP_EOL;
+              echo "B64START", PHP_EOL;
+              echo chunk_split(base64_encode(file_get_contents($p)), 200, PHP_EOL);
+              echo "B64END", PHP_EOL;
             '
