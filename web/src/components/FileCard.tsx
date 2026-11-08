@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { StarIcon } from '@/lib/icons';
 import { SelectionIndicator } from '@/components/Checkbox';
 import { CardMedia, CardTile, CardTileMeta, CardTileTitle } from '@/components/Card';
+import { useCardSelectGesture } from '@/lib/useCardSelectGesture';
 
 export type FileCardProps = {
   name: string;
@@ -23,8 +24,14 @@ export type FileCardProps = {
   /** Contextual metadata from the API (snippet for text/PDF previews). */
   metadata?: Record<string, unknown> | null;
   onClick?: () => void;
+  /** Fires on hold-to-select (long-press) / Shift+Enter / ContextMenu key. */
+  onSelectRequest?: () => void;
   /** Action slot rendered top-right of the preview stage (menu trigger, …). */
   actions?: ReactNode;
+  /** Short hint (e.g. "Hold to select") exposed via `title`. */
+  title?: string;
+  /** Id of a visually hidden hint element linked via `aria-describedby`. */
+  hintId?: string;
   className?: string;
   'data-testid'?: string;
 };
@@ -144,17 +151,35 @@ export function FileCard({
   thumbnailUrl,
   metadata,
   onClick,
+  onSelectRequest,
   actions,
+  title,
+  hintId,
   className,
   'data-testid': dataTestId,
 }: FileCardProps) {
   const { tone, symbol } = fileVisual(mimeType, name);
+  const gesture = useCardSelectGesture({ onActivate: onClick, onSelectRequest });
   const showSelection = Boolean(selectMode || selected);
   const isDone = uploadStatus === 'done';
   const snippet = previewSnippet(mimeType, name, metadata);
 
   return (
-    <CardTile data-testid={dataTestId} onClick={onClick} selected={selected} className={className}>
+    <CardTile
+      data-testid={dataTestId}
+      onClick={onClick}
+      onPointerDown={gesture.onPointerDown}
+      onPointerMove={gesture.onPointerMove}
+      onPointerUp={gesture.onPointerUp}
+      onPointerCancel={gesture.onPointerCancel}
+      onPointerLeave={gesture.onPointerLeave}
+      onClickCapture={gesture.onClickCapture}
+      onKeyDown={gesture.onKeyDown}
+      title={title}
+      ariaDescribedBy={hintId}
+      selected={selected}
+      className={className}
+    >
       <CardMedia>
         <div className="absolute inset-0 bg-gradient-to-b from-surface-container/60 to-surface-container-lowest/90" aria-hidden />
 

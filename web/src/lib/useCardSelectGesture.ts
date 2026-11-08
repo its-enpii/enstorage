@@ -1,0 +1,105 @@
+'use client';
+
+import { useEffect, useRef } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
+
+/** How long a press must be held before it becomes a selection. */
+export const HOLD_MS = 500;
+/** Pointer drift (px) tolerated before the hold is cancelled — lets scrolling win. */
+export const HOLD_MOVE_TOLERANCE = 10;
+
+type Handlers = {
+  /** Plain tap / click activation (open viewer or folder). */
+  onActivate?: () => void;
+  /** Long-press or keyboard chord that should enter select mode. */
+  onSelectRequest?: () => void;
+};
+
+function vibrate() {
+  try {
+    navigator.vibrate?.(10);
+  } catch {
+    // Vibration API is optional (and absent on desktop) — never fail hard.
+  }
+}
+
+/**
+ * Shared hold-to-select gesture for file and folder cards.
+ *
+ * - Hold ~500 ms → `onSelectRequest` (enters select mode).
+ * - Moving the pointer more than 10 px cancels the hold so scrolling doesn't
+ *   accidentally select; so does `pointerup` / `pointercancel` / `pointerleave`.
+ * - Keyboard: `Enter`/`Space` activate, `Shift+Enter` or the `ContextMenu` key
+ *   request selection. Native context menu is left untouched.
+ */
+export function useCardSelectGesture({ onActivate, onSelectRequest }: Handlers) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const originRef = useRef<{ x: number; y: number } | null>(null);
+  const suppressClickRef = useRef(false);
+
+  const clearHold = () => {
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    originRef.current = null;
+  };
+
+  useEffect(() => clearHold, []);
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLElement>) => {
+    if (!onSelectRequest) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    // Action controls nested in the card (menu trigger, chevron) own their press.
+    const target = (e.target as HTMLElement).closest('button, a, input, select, textarea');
+    if (target && target !== e.currentTarget) return;
+    clearHold();
+    originRef.current = { x: e.clientX, y: e.clientY };
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      originRef.current = null;
+      // A long-press fires a click on release; swallow it so the just-selected
+      // item is not immediately toggled back off / opened.
+      suppressClickRef.current = true;
+      vibrate();
+      onSelectRequest();
+    }, HOLD_MS);
+  };
+
+  const onPointerMove = (e: ReactPointerEvent<HTMLElement>) => {
+    const origin = originRef.current;
+    if (!origin || timerRef.current === null) return;
+    if (Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > HOLD_MOVE_TOLERANCE) clearHold();
+  };
+
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLElement>) => {
+    if (e.key === ' ' || e.key === 'Spacebar') e.preventDefault();
+    const isShiftEnter = e.key === 'Enter' && e.shiftKey;
+    if ((isShiftEnter || e.key === 'ContextMenu') && onSelectRequest) {
+      e.preventDefault();
+      onSelectRequest();
+      return;
+    }
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault();
+      onActivate?.();
+    }
+  };
+
+  const onClickCapture = (e: React.MouseEvent<HTMLElement>) => {
+    if (!suppressClickRef.current) return;
+    suppressClickRef.current = false;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  return {
+    onPointerDown,
+    onPointerMove,
+    onPointerUp: clearHold,
+    onPointerCancel: clearHold,
+    onPointerLeave: clearHold,
+    onKeyDown,
+    onClickCapture,
+  };
+}

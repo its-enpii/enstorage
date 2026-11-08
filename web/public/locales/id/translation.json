@@ -134,7 +134,8 @@
     },
     "selection": {
       "selectAll": "Pilih semua",
-      "clearSelection": "Hapus pilihan"
+      "clearSelection": "Hapus pilihan",
+      "holdHint": "Tahan untuk memilih"
     },
     "confirmDelete": {
       "title": "Hapus File?",

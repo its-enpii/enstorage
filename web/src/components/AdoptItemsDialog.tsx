@@ -215,7 +215,7 @@ export function AdoptItemsDialog({ open, targetFolderId, onClose, onAdopted }: P
         />
       </div>
 
-      <div className="mt-3 flex-1 min-h-0 overflow-y-auto rounded-2xl border border-outline-variant/30 bg-surface-container-low">
+      <div className="mt-3 flex-1 min-h-0 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center py-10">
             <Spinner />
@@ -228,7 +228,7 @@ export function AdoptItemsDialog({ open, targetFolderId, onClose, onAdopted }: P
             className="m-2"
           />
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 p-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-card-gap px-1 py-1">
             {items.map(({ kind, item }) => {
               if (kind === 'folder') {
                 const folder = item;
@@ -246,7 +246,6 @@ export function AdoptItemsDialog({ open, targetFolderId, onClose, onAdopted }: P
                     itemsLabel={t('folders.items')}
                     totalSize={folder.total_size && folder.total_size > 0 ? bytes(folder.total_size) : undefined}
                     selected={checked}
-                    selectMode
                     onClick={() => toggleFolder(folder.id, !checked)}
                     actions={
                       <IconButton
@@ -276,7 +275,6 @@ export function AdoptItemsDialog({ open, targetFolderId, onClose, onAdopted }: P
                   isStarred={file.is_starred}
                   uploadStatus={file.upload_status}
                   selected={checked}
-                  selectMode
                   onClick={() => toggleFile(file.id, !checked)}
                 />
               );

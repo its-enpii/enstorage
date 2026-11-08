@@ -1645,9 +1645,9 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     setSelected(new Set());
   }
 
-  /** Pilih semua item pada tab/filter aktif (folder + file yang tampil). */
-  function selectAllVisible() {
-    setSelected(new Set([...visibleFolders.map((f) => f.id), ...visibleFiles.map((f) => f.id)]));
+  /** Hold-to-select: enter select mode and pick exactly this item. */
+  function selectFromHold(id: string) {
+    setSelected(new Set([id]));
   }
 
   async function bulkDelete() {
@@ -2230,11 +2230,6 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   // Folder terpilih (untuk tombol "Gabungkan" di toolbar seleksi).
   const selectedFoldersInView = visibleFolders.filter((f) => selected.has(f.id));
   const visibleCount = visibleFolders.length + visibleFiles.length;
-  const allVisibleSelected =
-    visibleCount > 0 &&
-    selected.size === visibleCount &&
-    visibleFolders.every((f) => selected.has(f.id)) &&
-    visibleFiles.every((f) => selected.has(f.id));
 
   // Determine if more pages are available for the currently visible list.
   // Tab `all` shows folders + files together, so it stays live while either
@@ -2856,23 +2851,6 @@ function FilesContent({ currentPath }: { currentPath: string }) {
                 {t('files.selected', { count: selected.size })}
               </span>
               <div className="flex items-center gap-1.5 shrink-0">
-                {(visibleFolders.length > 0 || visibleFiles.length > 0) && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={allVisibleSelected ? clearSelection : selectAllVisible}
-                    aria-label={allVisibleSelected ? t('files.selection.clearSelection') : t('files.selection.selectAll')}
-                    data-testid="files-select-all"
-                    className="!h-11 min-h-11"
-                    leftIcon={
-                      <span className="material-symbols-outlined !text-base" aria-hidden>
-                        {allVisibleSelected ? 'deselect' : 'select_all'}
-                      </span>
-                    }
-                  >
-                    {allVisibleSelected ? t('files.selection.clearSelection') : t('files.selection.selectAll')}
-                  </Button>
-                )}
                 <Tooltip label={t('common.cancel')}>
                   <IconButton
                     bare
@@ -2887,6 +2865,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               </div>
             </div>
           )}
+          <p id="files-hold-hint" className="sr-only">{t('files.selection.holdHint')}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-card-gap">
           {visibleFolders.map((f) => {
             const items = (f.files_count ?? 0) + (f.folders_count ?? 0);
@@ -2910,6 +2889,9 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               >
               <FolderCard
                 name={f.name}
+                hintId="files-hold-hint"
+                title={t('files.selection.holdHint')}
+                onSelectRequest={() => selectFromHold(f.id)}
                 description={f.description}
                 iconName={f.icon}
                 logoUrl={f.logo_url}
@@ -2951,6 +2933,9 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             >
             <FileCard
               name={f.name}
+              hintId="files-hold-hint"
+              title={t('files.selection.holdHint')}
+              onSelectRequest={() => selectFromHold(f.id)}
               size={bytes(f.size)}
               mimeType={f.mime_type}
               extension={fileExtension(f.name)}

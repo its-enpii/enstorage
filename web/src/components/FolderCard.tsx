@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { FolderIcon, FolderSpecialIcon, StarIcon } from '@/lib/icons';
 import { SelectionIndicator } from '@/components/Checkbox';
 import { CardMedia, CardTile, CardTileMeta, CardTileTitle } from '@/components/Card';
+import { useCardSelectGesture } from '@/lib/useCardSelectGesture';
 
 export type FolderCardProps = {
   name: string;
@@ -27,6 +28,12 @@ export type FolderCardProps = {
   selectMode?: boolean;
   isDropTarget?: boolean;
   onClick?: () => void;
+  /** Fires on hold-to-select (long-press) / Shift+Enter / ContextMenu key. */
+  onSelectRequest?: () => void;
+  /** Short hint (e.g. "Hold to select") exposed via `title`. */
+  title?: string;
+  /** Id of a visually hidden hint element linked via `aria-describedby`. */
+  hintId?: string;
   /** Slot swapped in place of the title while inline-renaming. */
   editSlot?: ReactNode;
   /** Action slot rendered top-right of the media stage (menu trigger, …). */
@@ -56,12 +63,16 @@ export function FolderCard({
   selectMode,
   isDropTarget,
   onClick,
+  onSelectRequest,
+  title,
+  hintId,
   editSlot,
   actions,
   className,
   'data-testid': dataTestId,
 }: FolderCardProps) {
   const { t } = useTranslation();
+  const gesture = useCardSelectGesture({ onActivate: onClick, onSelectRequest });
   const showSelection = Boolean(selectMode || selected);
   const metaLabel = itemCount !== undefined
     ? `${itemCount} ${itemsLabel ?? ''}`.trim()
@@ -71,6 +82,15 @@ export function FolderCard({
     <CardTile
       data-testid={dataTestId}
       onClick={onClick}
+      onPointerDown={gesture.onPointerDown}
+      onPointerMove={gesture.onPointerMove}
+      onPointerUp={gesture.onPointerUp}
+      onPointerCancel={gesture.onPointerCancel}
+      onPointerLeave={gesture.onPointerLeave}
+      onClickCapture={gesture.onClickCapture}
+      onKeyDown={gesture.onKeyDown}
+      title={title}
+      ariaDescribedBy={hintId}
       selected={selected}
       isDropTarget={isDropTarget}
       className={className}
