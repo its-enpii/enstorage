@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { DM_Sans, Inter } from 'next/font/google';
+import localFont from 'next/font/local';
 import { AuthProvider } from '@/components/AuthProvider';
 import { PromptProvider } from '@/components/usePrompt';
 import { ThemeProvider } from '@/components/ThemeProvider';
@@ -7,17 +7,18 @@ import { I18nProvider } from '@/components/I18nProvider';
 import { RealtimeProvider } from '@/lib/realtime/realtimeProvider';
 import './globals.css';
 
-const inter = Inter({
-  subsets: ['latin'],
+const inter = localFont({
+  src: '../../public/fonts/inter-latin.woff2',
   variable: '--font-inter',
   display: 'swap',
+  weight: '100 900',
 });
 
-const dmSans = DM_Sans({
-  subsets: ['latin'],
-  weight: ['400', '600', '700'],
+const dmSans = localFont({
+  src: '../../public/fonts/dm-sans-latin.woff2',
   variable: '--font-dm-sans',
   display: 'swap',
+  weight: '100 1000',
 });
 
 export const metadata: Metadata = {
