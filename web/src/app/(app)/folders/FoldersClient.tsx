@@ -180,13 +180,56 @@ function FoldersContent() {
       setLoadingMore(false);
     }
   }, [loadingMore, folderPage, folderLastPage, userId, currentId]);
+  // Stable identity + self-healing guard (same contract as FilesClient): a
+  // trigger dropped while a page is in flight is replayed once it settles.
+  const loadingMoreRef = useRef(loadingMore);
+  loadingMoreRef.current = loadingMore;
+  const pendingLoadRef = useRef(false);
+  const loadMoreRef = useRef(loadMore);
+  loadMoreRef.current = loadMore;
   const stableLoadMore = useCallback(() => {
-    if (loadingMore) return;
-    void loadMore();
-  }, [loadMore, loadingMore]);
+    if (loadingMoreRef.current) {
+      pendingLoadRef.current = true;
+      return;
+    }
+    void loadMoreRef.current();
+  }, []);
+  const moreAvailable = hasMoreFolders && !loading;
   const loadMoreSentinel = useInfiniteScroll(stableLoadMore, {
-    enabled: hasMoreFolders && !loading && !loadingMore,
+    enabled: moreAvailable,
+    active: moreAvailable && !loadingMore,
   });
+  useEffect(() => {
+    if (loadingMore) return;
+    if (!pendingLoadRef.current) return;
+    pendingLoadRef.current = false;
+    if (moreAvailable) void loadMoreRef.current();
+  }, [loadingMore, moreAvailable]);
+
+  // Scroll safety net independent of IntersectionObserver.
+  useEffect(() => {
+    const el = loadMoreSentinel.current;
+    const scroller = (el?.closest('[data-shell-scroller]') ??
+      el?.closest('.overflow-y-auto') ??
+      null) as HTMLElement | null;
+    if (!scroller) return;
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        if (!moreAvailable || loadingMoreRef.current) return;
+        const remaining =
+          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+        if (remaining < 400) stableLoadMore();
+      });
+    };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [loadMoreSentinel, moreAvailable, stableLoadMore]);
 
   // Initial state already hydrated from cache in useState lazy initializer.
   // We only need to kick off a background revalidate here, and only if we

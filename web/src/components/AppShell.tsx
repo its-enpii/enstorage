@@ -87,7 +87,7 @@ export function AppShell({
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
         />
-        <div className="relative z-10 flex-1 min-w-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 md:px-8 lg:px-container-p pt-4 sm:pt-6 pb-20 sm:pb-24">
+        <div data-shell-scroller className="relative z-10 flex-1 min-w-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 md:px-8 lg:px-container-p pt-4 sm:pt-6 pb-20 sm:pb-24">
           {children}
         </div>
       </main>

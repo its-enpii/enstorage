@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import {
@@ -146,13 +146,60 @@ export default function CategoryClient({ type }: { type: string }) {
   useEffect(() => {
     void loadFiles(1, false);
   }, [loadFiles]);
+  // Stable identity + self-healing guard (same contract as FilesClient): a
+  // trigger dropped while a page is in flight is replayed once it settles.
+  const loadingMoreRef = useRef(loadingMore);
+  loadingMoreRef.current = loadingMore;
+  const loadingRef = useRef(loading);
+  loadingRef.current = loading;
+  const pendingLoadRef = useRef(false);
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const loadFilesRef = useRef(loadFiles);
+  loadFilesRef.current = loadFiles;
   const stableLoadMore = useCallback(() => {
-    if (loadingMore || loading) return;
-    void loadFiles(page + 1, true);
-  }, [loadingMore, loading, loadFiles, page]);
+    if (loadingMoreRef.current || loadingRef.current) {
+      pendingLoadRef.current = true;
+      return;
+    }
+    void loadFilesRef.current(pageRef.current + 1, true);
+  }, []);
+  const moreAvailable = hasMore && !loading;
   const loadMoreSentinel = useInfiniteScroll(stableLoadMore, {
-    enabled: hasMore && !loadingMore && !loading,
+    enabled: moreAvailable,
+    active: moreAvailable && !loadingMore,
   });
+  useEffect(() => {
+    if (loadingMore || loading) return;
+    if (!pendingLoadRef.current) return;
+    pendingLoadRef.current = false;
+    if (hasMore) void loadFilesRef.current(pageRef.current + 1, true);
+  }, [loadingMore, loading, hasMore]);
+
+  // Scroll safety net independent of IntersectionObserver.
+  useEffect(() => {
+    const el = loadMoreSentinel.current;
+    const scroller = (el?.closest('[data-shell-scroller]') ??
+      el?.closest('.overflow-y-auto') ??
+      null) as HTMLElement | null;
+    if (!scroller) return;
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        if (!hasMore || loadingMoreRef.current || loadingRef.current) return;
+        const remaining =
+          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+        if (remaining < 400) stableLoadMore();
+      });
+    };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [loadMoreSentinel, hasMore, stableLoadMore]);
 
   const sortMenuItems: MenuItem[] = [
     {
