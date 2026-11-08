@@ -2341,18 +2341,26 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     if (loadingMoreRef.current) return; // one load at a time; never replayed
     loadMoreRef.current();
   }, []);
-  const loadMoreSentinel = useInfiniteScroll(stableLoadMore, {
+  const attachBefore = useInfiniteScroll(stableLoadMore, {
     enabled: hasMore,
   });
+  const [sentinelEl, setSentinelEl] = useState<HTMLDivElement | null>(null);
+  const attachSentinel = useCallback(
+    (el: HTMLDivElement | null) => {
+      attachBefore(el);
+      setSentinelEl(el);
+    },
+    [attachBefore],
+  );
 
   // Scroll safety net, independent of IntersectionObserver. Works in every
   // mode (including select mode) — it must NOT be gated by `selectMode`.
   // Binds to the scroller that actually scrolls (AppShell's overflow-y-auto
   // ancestor of the sentinel) and suggests `loadMore` near the bottom.
   useEffect(() => {
-    const el = loadMoreSentinel.current;
-    const scroller = (el?.closest('[data-shell-scroller]') ??
-      el?.closest('.overflow-y-auto') ??
+    if (!sentinelEl) return;
+    const scroller = (sentinelEl.closest('[data-shell-scroller]') ??
+      sentinelEl.closest('.overflow-y-auto') ??
       null) as HTMLElement | null;
     if (!scroller) return;
     let raf = 0;
@@ -2383,7 +2391,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       scroller.removeEventListener('scroll', onScroll);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [loadMoreSentinel, hasMore, stableLoadMore]);
+  }, [sentinelEl, hasMore, stableLoadMore]);
 
   /**
    * Drop every cached view entry for [folderId] (any search/typeFilter
@@ -3169,7 +3177,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           IntersectionObserver misfires or scroll hangs. */}
       {!loading && hasMore && (visibleFolders.length > 0 || visibleFiles.length > 0) && (
         <div className="flex flex-col items-center pt-10 pb-4 gap-3">
-          <div ref={loadMoreSentinel} aria-hidden className="h-1 w-full" />
+          <div ref={attachSentinel} aria-hidden className="h-1 w-full" />
           <div role="status" aria-live="polite" className={loadingMore ? 'flex items-center gap-2 text-metadata text-on-surface-variant' : 'sr-only'}>
             {loadingMore && (
               <>

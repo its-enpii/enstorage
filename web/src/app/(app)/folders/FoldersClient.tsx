@@ -190,15 +190,23 @@ function FoldersContent() {
     void loadMoreRef.current();
   }, []);
   const moreAvailable = hasMoreFolders && !loading;
-  const loadMoreSentinel = useInfiniteScroll(stableLoadMore, {
+  const attachBefore = useInfiniteScroll(stableLoadMore, {
     enabled: moreAvailable,
   });
+  const [sentinelEl, setSentinelEl] = useState<HTMLDivElement | null>(null);
+  const attachSentinel = useCallback(
+    (el: HTMLDivElement | null) => {
+      attachBefore(el);
+      setSentinelEl(el);
+    },
+    [attachBefore],
+  );
 
   // Scroll safety net independent of IntersectionObserver.
   useEffect(() => {
-    const el = loadMoreSentinel.current;
-    const scroller = (el?.closest('[data-shell-scroller]') ??
-      el?.closest('.overflow-y-auto') ??
+    if (!sentinelEl) return;
+    const scroller = (sentinelEl.closest('[data-shell-scroller]') ??
+      sentinelEl.closest('.overflow-y-auto') ??
       null) as HTMLElement | null;
     if (!scroller) return;
     let raf = 0;
@@ -228,7 +236,7 @@ function FoldersContent() {
       scroller.removeEventListener('scroll', onScroll);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [loadMoreSentinel, moreAvailable, stableLoadMore]);
+  }, [sentinelEl, moreAvailable, stableLoadMore]);
 
   // Initial state already hydrated from cache in useState lazy initializer.
   // We only need to kick off a background revalidate here, and only if we
@@ -552,7 +560,7 @@ function FoldersContent() {
       {/* Infinite-scroll sentinel + subtle loading indicator. */}
       {hasMoreFolders && folders.length > 0 && !loading && (
         <div className="flex flex-col items-center pt-10 pb-4 gap-2">
-          <div ref={loadMoreSentinel} aria-hidden className="h-1 w-full" />
+          <div ref={attachSentinel} aria-hidden className="h-1 w-full" />
           <div role="status" aria-live="polite" className={loadingMore ? 'flex items-center gap-2 text-metadata text-on-surface-variant' : 'sr-only'}>
             {loadingMore && (
               <>

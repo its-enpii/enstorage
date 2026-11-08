@@ -1,9 +1,14 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 /**
  * Observe a sentinel element and invoke `onIntersect` when it scrolls into view.
+ *
+ * The hook returns a CALLBACK REF (not a RefObject): pass it to the sentinel
+ * (`ref={attach}`). Because the observer is created from the callback itself,
+ * it no longer depends on the element being present when an effect first runs
+ * (`ref.current === null` used to silently disable the observer forever).
  *
  * One intersecting period fires exactly ONCE: after a fire, the observer stays
  * armed but silent until the sentinel actually leaves the viewport
@@ -17,26 +22,30 @@ import { useEffect, useRef } from 'react';
  * decide whether a trigger is allowed at all (e.g. skip while loading); the
  * hook adds no polling.
  *
- * The callback is copied into a ref inside the effect (not during render), so
- * the observer always sees the latest closure without being torn down.
+ * The callback is copied into a ref on every render (not read inside the
+ * observer), so the observer always sees the latest closure without being
+ * torn down.
  */
 export function useInfiniteScroll(
   onIntersect: () => void,
   options: { rootMargin?: string; enabled?: boolean; active?: boolean } = {},
 ) {
-  const { rootMargin = '200px', enabled = true, active = true } = options;
-  const ref = useRef<HTMLDivElement | null>(null);
+  const { rootMargin = '1200px', enabled = true, active = true } = options;
+  const elRef = useRef<HTMLDivElement | null>(null);
+  const obsRef = useRef<IntersectionObserver | null>(null);
   const cbRef = useRef(onIntersect);
+  cbRef.current = onIntersect;
+  const optsRef = useRef({ rootMargin, enabled, active });
+  optsRef.current = { rootMargin, enabled, active };
   const firedRef = useRef(false);
 
-  useEffect(() => {
-    cbRef.current = onIntersect;
-  });
-
-  useEffect(() => {
-    if (!enabled || !active) return;
-    const el = ref.current;
+  const attach = useCallback((el: HTMLDivElement | null) => {
+    obsRef.current?.disconnect();
+    obsRef.current = null;
+    elRef.current = el;
     if (!el) return;
+    const { rootMargin: rm, enabled: en, active: ac } = optsRef.current;
+    if (!en || !ac) return;
     firedRef.current = false;
     const obs = new IntersectionObserver(
       (entries) => {
@@ -46,16 +55,26 @@ export function useInfiniteScroll(
               firedRef.current = true;
               cbRef.current();
             }
-          } else if (entry.isIntersecting === false) {
+          } else {
             firedRef.current = false;
           }
         }
       },
-      { rootMargin, threshold: 0 },
+      { rootMargin: rm, threshold: 0 },
     );
     obs.observe(el);
-    return () => obs.disconnect();
-  }, [rootMargin, enabled, active]);
+    obsRef.current = obs;
+  }, []);
 
-  return ref;
+  // Re-arm when enabled/active/rootMargin change, using the element captured
+  // by the callback ref (no dependence on mount-time ref presence).
+  useEffect(() => {
+    if (elRef.current) attach(elRef.current);
+    return () => {
+      obsRef.current?.disconnect();
+      obsRef.current = null;
+    };
+  }, [attach, rootMargin, enabled, active]);
+
+  return attach;
 }

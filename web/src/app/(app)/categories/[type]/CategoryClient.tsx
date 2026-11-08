@@ -160,15 +160,23 @@ export default function CategoryClient({ type }: { type: string }) {
     void loadFilesRef.current(pageRef.current + 1, true);
   }, []);
   const moreAvailable = hasMore && !loading;
-  const loadMoreSentinel = useInfiniteScroll(stableLoadMore, {
+  const attachBefore = useInfiniteScroll(stableLoadMore, {
     enabled: moreAvailable,
   });
+  const [sentinelEl, setSentinelEl] = useState<HTMLDivElement | null>(null);
+  const attachSentinel = useCallback(
+    (el: HTMLDivElement | null) => {
+      attachBefore(el);
+      setSentinelEl(el);
+    },
+    [attachBefore],
+  );
 
   // Scroll safety net independent of IntersectionObserver.
   useEffect(() => {
-    const el = loadMoreSentinel.current;
-    const scroller = (el?.closest('[data-shell-scroller]') ??
-      el?.closest('.overflow-y-auto') ??
+    if (!sentinelEl) return;
+    const scroller = (sentinelEl.closest('[data-shell-scroller]') ??
+      sentinelEl.closest('.overflow-y-auto') ??
       null) as HTMLElement | null;
     if (!scroller) return;
     let raf = 0;
@@ -198,7 +206,7 @@ export default function CategoryClient({ type }: { type: string }) {
       scroller.removeEventListener('scroll', onScroll);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [loadMoreSentinel, hasMore, stableLoadMore]);
+  }, [sentinelEl, hasMore, stableLoadMore]);
 
   const sortMenuItems: MenuItem[] = [
     {
@@ -370,7 +378,7 @@ export default function CategoryClient({ type }: { type: string }) {
               })}
             </div>
 
-            <div ref={loadMoreSentinel} aria-hidden className="h-1 w-full" />
+            <div ref={attachSentinel} aria-hidden className="h-1 w-full" />
             <div role="status" aria-live="polite" className={loadingMore ? 'flex items-center justify-center gap-2 pt-6 text-metadata text-on-surface-variant' : 'sr-only'}>
               {loadingMore && (
                 <>
