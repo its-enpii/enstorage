@@ -614,24 +614,63 @@ class FileController extends Controller
             app(GoogleTokenService::class)->ensureFreshToken($account);
             $client->setAccessToken($account->access_token);
 
-            $drive = new Drive($client);
-            $response = $drive->files->get($file->gdrive_file_id, ['alt' => 'media']);
-            $body = $response->getBody();
+            // Drive mendukung Range pada `alt=media`: kirim header Range ke
+            // Drive dan teruskan 206 + Content-Range/Content-Length dari Drive.
+            // Fallback skip-byte hanya dipakai bila Drive mengabaikan Range.
+            $http = $client->getHttpClient();
+            $url = 'https://www.googleapis.com/drive/v3/files/'.rawurlencode((string) $file->gdrive_file_id).'?alt=media';
+
+            $driveRange = $range['status'] === 206
+                ? sprintf('bytes=%d-%d', $range['offset'], $range['offset'] + $range['length'] - 1)
+                : null;
+
+            $headers = [];
+            if ($driveRange !== null) {
+                $headers['Range'] = $driveRange;
+            }
+
+            $resp = $http->request('GET', $url, [
+                'headers' => $headers,
+                'stream' => true,
+                'http_errors' => false,
+                'timeout' => 0,
+                'read_timeout' => 0,
+            ]);
+
+            $code = (int) $resp->getStatusCode();
+            $body = $resp->getBody();
+
+            if ($code === 404 || $code === 403) {
+                throw new \RuntimeException('Drive menolak akses file ('.$code.').', $code);
+            }
+
+            if ($code >= 400) {
+                return $this->fail(__('Download gagal: ').'Drive membalas HTTP '.$code.'.', 502);
+            }
 
             // Header (termasuk hasil middleware) dipasang pada object respons
             // ini, bukan di dalam closure, supaya selalu terkirim utuh.
-            // Drive alt=media tidak mendukung Range: stream penuh lalu
-            // buang `offset` byte pertama dan berhenti setelah `length`.
-            $source = $this->sliceDriveStream($body, $range['offset'], $range['length']);
+            $passthrough = $driveRange !== null && $code === 206;
+
+            $source = $passthrough
+                ? $body
+                : $this->sliceDriveStream($body, $range['offset'], $range['length']);
 
             $stream = $this->streamDownloadResponse(
                 fn () => StreamPump::copy($source),
                 $file->mime_type,
                 $this->makeContentDisposition($disposition, $file),
                 'no-cache, private',
-                $range['status'],
+                $passthrough ? 206 : $range['status'],
             );
-            $this->applyRangeHeaders($stream, $range);
+
+            if ($passthrough) {
+                $stream->headers->set('Accept-Ranges', 'bytes');
+                $stream->headers->set('Content-Range', $resp->getHeaderLine('Content-Range'));
+                $stream->headers->set('Content-Length', $resp->getHeaderLine('Content-Length'));
+            } else {
+                $this->applyRangeHeaders($stream, $range);
+            }
 
             return $stream;
         } catch (Throwable $e) {
