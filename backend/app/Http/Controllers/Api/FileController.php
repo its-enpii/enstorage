@@ -647,6 +647,10 @@ class FileController extends Controller
                 $status = (int) ($fake['status'] ?? 0);
                 $respHeaders = array_change_key_case((array) ($fake['headers'] ?? []), CASE_LOWER);
                 $driveBodyStream = Utils::streamFor((string) ($fake['body'] ?? ''));
+                // Tiru perilaku curl: handle sudah di EOF setelah ditulis, jadi
+                // stream harus di-rewind sebelum dialirkan ke klien.
+                $driveBodyStream->seek(0, SEEK_END);
+                $driveBodyStream->rewind();
             } else {
                 $ch = curl_init($url);
                 curl_setopt_array($ch, [
@@ -700,6 +704,11 @@ class FileController extends Controller
                 }
 
                 $driveBodyStream = Utils::streamFor($sink);
+                // curl menulis sampai EOF; tanpa rewind, stream baru dimulai di
+                // akhir berkas dan klien menerima 0 byte (IncompleteRead).
+                if ($driveBodyStream->isSeekable()) {
+                    $driveBodyStream->rewind();
+                }
             }
 
             if ($status === 404 || $status === 403) {
