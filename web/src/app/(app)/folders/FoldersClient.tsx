@@ -180,31 +180,19 @@ function FoldersContent() {
       setLoadingMore(false);
     }
   }, [loadingMore, folderPage, folderLastPage, userId, currentId]);
-  // Stable identity + self-healing guard (same contract as FilesClient): a
-  // trigger dropped while a page is in flight is replayed once it settles.
+  // Stable identity guard (same contract as FilesClient): one load at a time.
   const loadingMoreRef = useRef(loadingMore);
   loadingMoreRef.current = loadingMore;
-  const pendingLoadRef = useRef(false);
   const loadMoreRef = useRef(loadMore);
   loadMoreRef.current = loadMore;
   const stableLoadMore = useCallback(() => {
-    if (loadingMoreRef.current) {
-      pendingLoadRef.current = true;
-      return;
-    }
+    if (loadingMoreRef.current) return; // one load at a time; never replayed
     void loadMoreRef.current();
   }, []);
   const moreAvailable = hasMoreFolders && !loading;
   const loadMoreSentinel = useInfiniteScroll(stableLoadMore, {
     enabled: moreAvailable,
-    active: moreAvailable && !loadingMore,
   });
-  useEffect(() => {
-    if (loadingMore) return;
-    if (!pendingLoadRef.current) return;
-    pendingLoadRef.current = false;
-    if (moreAvailable) void loadMoreRef.current();
-  }, [loadingMore, moreAvailable]);
 
   // Scroll safety net independent of IntersectionObserver.
   useEffect(() => {
@@ -214,14 +202,25 @@ function FoldersContent() {
       null) as HTMLElement | null;
     if (!scroller) return;
     let raf = 0;
+    let lastScrollTop = scroller.scrollTop;
+    let bottomFired = false;
     const onScroll = () => {
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
+        const top = scroller.scrollTop;
+        if (lastScrollTop - top > 200) bottomFired = false;
+        lastScrollTop = top;
         if (!moreAvailable || loadingMoreRef.current) return;
         const remaining =
-          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-        if (remaining < 400) stableLoadMore();
+          scroller.scrollHeight - top - scroller.clientHeight;
+        if (remaining < 400) {
+          if (bottomFired) return;
+          bottomFired = true;
+          stableLoadMore();
+        } else {
+          bottomFired = false;
+        }
       });
     };
     scroller.addEventListener('scroll', onScroll, { passive: true });

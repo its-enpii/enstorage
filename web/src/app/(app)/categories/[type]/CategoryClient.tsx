@@ -146,35 +146,23 @@ export default function CategoryClient({ type }: { type: string }) {
   useEffect(() => {
     void loadFiles(1, false);
   }, [loadFiles]);
-  // Stable identity + self-healing guard (same contract as FilesClient): a
-  // trigger dropped while a page is in flight is replayed once it settles.
+  // Stable identity guard (same contract as FilesClient): one load at a time.
   const loadingMoreRef = useRef(loadingMore);
   loadingMoreRef.current = loadingMore;
   const loadingRef = useRef(loading);
   loadingRef.current = loading;
-  const pendingLoadRef = useRef(false);
   const pageRef = useRef(page);
   pageRef.current = page;
   const loadFilesRef = useRef(loadFiles);
   loadFilesRef.current = loadFiles;
   const stableLoadMore = useCallback(() => {
-    if (loadingMoreRef.current || loadingRef.current) {
-      pendingLoadRef.current = true;
-      return;
-    }
+    if (loadingMoreRef.current || loadingRef.current) return; // never replayed
     void loadFilesRef.current(pageRef.current + 1, true);
   }, []);
   const moreAvailable = hasMore && !loading;
   const loadMoreSentinel = useInfiniteScroll(stableLoadMore, {
     enabled: moreAvailable,
-    active: moreAvailable && !loadingMore,
   });
-  useEffect(() => {
-    if (loadingMore || loading) return;
-    if (!pendingLoadRef.current) return;
-    pendingLoadRef.current = false;
-    if (hasMore) void loadFilesRef.current(pageRef.current + 1, true);
-  }, [loadingMore, loading, hasMore]);
 
   // Scroll safety net independent of IntersectionObserver.
   useEffect(() => {
@@ -184,14 +172,25 @@ export default function CategoryClient({ type }: { type: string }) {
       null) as HTMLElement | null;
     if (!scroller) return;
     let raf = 0;
+    let lastScrollTop = scroller.scrollTop;
+    let bottomFired = false;
     const onScroll = () => {
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
+        const top = scroller.scrollTop;
+        if (lastScrollTop - top > 200) bottomFired = false;
+        lastScrollTop = top;
         if (!hasMore || loadingMoreRef.current || loadingRef.current) return;
         const remaining =
-          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-        if (remaining < 400) stableLoadMore();
+          scroller.scrollHeight - top - scroller.clientHeight;
+        if (remaining < 400) {
+          if (bottomFired) return;
+          bottomFired = true;
+          stableLoadMore();
+        } else {
+          bottomFired = false;
+        }
       });
     };
     scroller.addEventListener('scroll', onScroll, { passive: true });

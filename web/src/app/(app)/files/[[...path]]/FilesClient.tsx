@@ -2260,34 +2260,18 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   // Auto-load next page when the sentinel scrolls into view. Manual "Load
   // more" button stays as a fallback if IntersectionObserver misfires.
   // `loadingMore` is read through a ref so `stableLoadMore` keeps a stable
-  // identity. A trigger that lands mid-load is NOT dropped: it is recorded in
-  // `pendingLoadRef` and replayed once the load settles (see effect below).
+  // identity. A trigger that lands mid-load is dropped, never replayed.
   const loadingMoreRef = useRef(loadingMore);
   loadingMoreRef.current = loadingMore;
-  const pendingLoadRef = useRef(false);
   const loadMoreRef = useRef(loadMore);
   loadMoreRef.current = loadMore;
   const stableLoadMore = useCallback(() => {
-    if (loadingMoreRef.current) {
-      pendingLoadRef.current = true;
-      return;
-    }
+    if (loadingMoreRef.current) return; // one load at a time; never replayed
     loadMoreRef.current();
   }, []);
   const loadMoreSentinel = useInfiniteScroll(stableLoadMore, {
     enabled: hasMore,
-    active: hasMore && !loadingMore,
   });
-
-  // Replay the swallowed intent: after the in-flight load finishes (loadingMore
-  // goes false), if a trigger was dropped while it ran and more pages remain,
-  // load once more. This is what makes the guard self-healing.
-  useEffect(() => {
-    if (loadingMore) return;
-    if (!pendingLoadRef.current) return;
-    pendingLoadRef.current = false;
-    if (hasMore) loadMoreRef.current();
-  }, [loadingMore, hasMore]);
 
   // Scroll safety net, independent of IntersectionObserver. Works in every
   // mode (including select mode) — it must NOT be gated by `selectMode`.
@@ -2300,15 +2284,26 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       null) as HTMLElement | null;
     if (!scroller) return;
     let raf = 0;
+    let lastScrollTop = scroller.scrollTop;
+    let bottomFired = false;
     const onScroll = () => {
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
+        const top = scroller.scrollTop;
+        if (lastScrollTop - top > 200) bottomFired = false;
+        lastScrollTop = top;
         if (!hasMore) return;
         if (loadingMoreRef.current) return;
         const remaining =
-          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-        if (remaining < 400) stableLoadMore();
+          scroller.scrollHeight - top - scroller.clientHeight;
+        if (remaining < 400) {
+          if (bottomFired) return;
+          bottomFired = true;
+          stableLoadMore();
+        } else {
+          bottomFired = false;
+        }
       });
     };
     scroller.addEventListener('scroll', onScroll, { passive: true });
