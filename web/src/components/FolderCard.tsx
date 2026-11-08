@@ -30,6 +30,10 @@ export type FolderCardProps = {
   onClick?: () => void;
   /** Fires on hold-to-select (long-press) / Shift+Enter / ContextMenu key. */
   onSelectRequest?: () => void;
+  /** Fired once after a successful hold when the pointer starts moving = move drag. */
+  onHoldDragStart?: (e: { clientX: number; clientY: number }) => void;
+  /** Fired when a hold-drag finishes or is cancelled. */
+  onHoldDragEnd?: () => void;
   /** Short hint (e.g. "Hold to select") exposed via `title`. */
   title?: string;
   /** Id of a visually hidden hint element linked via `aria-describedby`. */
@@ -64,6 +68,8 @@ export function FolderCard({
   isDropTarget,
   onClick,
   onSelectRequest,
+  onHoldDragStart,
+  onHoldDragEnd,
   title,
   hintId,
   editSlot,
@@ -72,7 +78,7 @@ export function FolderCard({
   'data-testid': dataTestId,
 }: FolderCardProps) {
   const { t } = useTranslation();
-  const gesture = useCardSelectGesture({ onActivate: onClick, onSelectRequest });
+  const gesture = useCardSelectGesture({ onActivate: onClick, onSelectRequest, onHoldDragStart, onHoldDragEnd });
   const showSelection = Boolean(selectMode || selected);
   const metaLabel = itemCount !== undefined
     ? `${itemCount} ${itemsLabel ?? ''}`.trim()

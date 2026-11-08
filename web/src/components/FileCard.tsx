@@ -26,6 +26,10 @@ export type FileCardProps = {
   onClick?: () => void;
   /** Fires on hold-to-select (long-press) / Shift+Enter / ContextMenu key. */
   onSelectRequest?: () => void;
+  /** Fired once after a successful hold when the pointer starts moving = move drag. */
+  onHoldDragStart?: (e: { clientX: number; clientY: number }) => void;
+  /** Fired when a hold-drag finishes or is cancelled. */
+  onHoldDragEnd?: () => void;
   /** Action slot rendered top-right of the preview stage (menu trigger, …). */
   actions?: ReactNode;
   /** Short hint (e.g. "Hold to select") exposed via `title`. */
@@ -152,6 +156,8 @@ export function FileCard({
   metadata,
   onClick,
   onSelectRequest,
+  onHoldDragStart,
+  onHoldDragEnd,
   actions,
   title,
   hintId,
@@ -159,7 +165,7 @@ export function FileCard({
   'data-testid': dataTestId,
 }: FileCardProps) {
   const { tone, symbol } = fileVisual(mimeType, name);
-  const gesture = useCardSelectGesture({ onActivate: onClick, onSelectRequest });
+  const gesture = useCardSelectGesture({ onActivate: onClick, onSelectRequest, onHoldDragStart, onHoldDragEnd });
   const showSelection = Boolean(selectMode || selected);
   const isDone = uploadStatus === 'done';
   const snippet = previewSnippet(mimeType, name, metadata);

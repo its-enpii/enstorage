@@ -1041,6 +1041,9 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   );
 
   const selectMode = selected.size > 0;
+  /** Active hold-drag: which item ids are being moved and whether they are folders. */
+  const holdDragRef = useRef<{ ids: string[]; kind: 'file' | 'folder' } | null>(null);
+  const holdDragClientRef = useRef<{ clientX: number; clientY: number } | null>(null);
 
   useEffect(() => {
     return () => {
@@ -1664,6 +1667,66 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   /** Hold-to-select: enter select mode and pick exactly this item. */
   function selectFromHold(id: string) {
     setSelected(new Set([id]));
+  }
+
+  /** Hold + move: remember what is being dragged and flag the gesture visually. */
+  function beginHoldDrag(kind: 'file' | 'folder', id: string) {
+    const inSelection =
+      kind === 'file'
+        ? selected.has(id) && files.some((f) => f.id === id)
+        : selected.has(id) && folders.some((f) => f.id === id);
+    const ids = inSelection ? Array.from(selected) : [id];
+    holdDragRef.current = { ids, kind };
+    holdDragClientRef.current = null;
+    document.body.classList.add('hold-drag-active');
+  }
+
+  /** Hold-drag release: resolve the element under the pointer and reuse the drop move path. */
+  function endHoldDrag() {
+    document.body.classList.remove('hold-drag-active');
+    const drag = holdDragRef.current;
+    const client = holdDragClientRef.current;
+    holdDragRef.current = null;
+    holdDragClientRef.current = null;
+    if (!drag || !client) return;
+    const el = document.elementFromPoint(client.clientX, client.clientY);
+    const dropEl = el instanceof Element ? el.closest('[data-drop-target]') : null;
+    if (!dropEl) return;
+    const raw = dropEl.getAttribute('data-drop-target');
+    const targetFolderId = !raw || raw === 'root' ? null : raw;
+    applyHoldDragDrop(drag, targetFolderId);
+  }
+
+  /** Move the held items into `targetFolderId` through the existing move handlers. */
+  function applyHoldDragDrop(
+    drag: { ids: string[]; kind: 'file' | 'folder' },
+    targetFolderId: string | null,
+  ) {
+    if (drag.kind === 'folder') {
+      const targetFolders = folders.filter((f) => drag.ids.includes(f.id));
+      if (targetFolders.length === 0) return;
+      if (targetFolderId !== null && drag.ids.includes(targetFolderId)) {
+        void alert(t('files.move.errors.sameFolder'), { title: t('common.error') });
+        return;
+      }
+      const fileIds = drag.ids.filter((id) => files.some((f) => f.id === id));
+      const extraFiles = targetFolderId === folderId ? [] : files.filter((f) => fileIds.includes(f.id));
+      const effectiveFolders = targetFolders.filter((f) => (f.parent_id ?? null) !== targetFolderId);
+      if (effectiveFolders.length === 0 && extraFiles.length === 0) {
+        void alert(
+          targetFolderId === null && (targetFolders[0]?.parent_id ?? null) === null
+            ? t('folders.errors.sameParent')
+            : t('files.move.errors.sameFolder'),
+          { title: t('common.error') },
+        );
+        return;
+      }
+      void runDirectFolderMove(effectiveFolders, targetFolderId, extraFiles);
+      return;
+    }
+    const targetFiles = files.filter((f) => drag.ids.includes(f.id));
+    if (targetFiles.length === 0 || targetFolderId === folderId) return;
+    void runDirectMove(targetFiles, targetFolderId);
   }
 
   async function bulkDelete() {
@@ -2912,6 +2975,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               }}
               onDragLeave={() => setDragOverFolderId((cur) => (cur === '__root__' ? null : cur))}
               onDrop={(e) => handleFolderDrop(e, null)}
+              data-drop-target="root"
               className={
                 'rounded-2xl border-2 border-dashed px-4 py-3 text-sm flex items-center gap-2 transition-colors ' +
                 (dragOverFolderId === '__root__'
@@ -2959,7 +3023,8 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             return (
               <div
                 key={f.id}
-                draggable={!selectMode}
+                draggable
+                data-drop-target={f.id}
                 onDragStart={(e) => handleFolderDragStart(e, f)}
                 onDragOver={(e) => handleFolderDragOver(e, f.id)}
                 onDragLeave={handleFolderDragLeave}
@@ -2977,6 +3042,11 @@ function FilesContent({ currentPath }: { currentPath: string }) {
                 hintId="files-hold-hint"
                 title={t('files.selection.holdHint')}
                 onSelectRequest={() => selectFromHold(f.id)}
+                onHoldDragStart={(pos) => {
+                  beginHoldDrag('folder', f.id);
+                  holdDragClientRef.current = pos;
+                }}
+                onHoldDragEnd={endHoldDrag}
                 description={f.description}
                 iconName={f.icon}
                 logoUrl={f.logo_url}
@@ -3011,7 +3081,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           {visibleFiles.map((f) => (
             <div
               key={f.id}
-              draggable={!selectMode}
+              draggable
               onDragStart={(e) => handleFileDragStart(e, f)}
               className={selectMode ? '' : 'cursor-grab active:cursor-grabbing'}
               data-testid={`draggable-file-${f.id}`}
@@ -3021,6 +3091,11 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               hintId="files-hold-hint"
               title={t('files.selection.holdHint')}
               onSelectRequest={() => selectFromHold(f.id)}
+              onHoldDragStart={(pos) => {
+                beginHoldDrag('file', f.id);
+                holdDragClientRef.current = pos;
+              }}
+              onHoldDragEnd={endHoldDrag}
               size={bytes(f.size)}
               mimeType={f.mime_type}
               extension={fileExtension(f.name)}
@@ -3173,12 +3248,6 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           onNewFolder={createFolder}
           onUploadFiles={uploadFiles}
           onUploadFolder={(files) => uploadFiles(files)}
-          onSelectMode={() => {
-            // Enter select mode by selecting the first visible item
-            // (folder takes precedence on the default tab, otherwise file).
-            const first = visibleFolders[0]?.id ?? visibleFiles[0]?.id;
-            if (first) setSelected(new Set([first]));
-          }}
         />
       )}
       <UploadProgress jobs={jobs} onDismiss={dismissJob} />

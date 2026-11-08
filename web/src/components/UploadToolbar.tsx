@@ -9,7 +9,6 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import {
   Add,
-  Checklist,
   CreateNewFolder,
   MoveToInbox,
   UploadFile,
@@ -20,7 +19,6 @@ type Props = {
   onNewFolder?: () => void;
   onUploadFiles: (files: FileList) => void;
   onUploadFolder?: (files: FileList) => void;
-  onSelectMode?: () => void;
   /** "Add files" (adopt) entry — only supplied inside an unlocked locked folder. */
   onAdopt?: () => void;
   adoptLabel?: string;
@@ -41,7 +39,7 @@ type Action = {
  * `role="button"` wrapper), which fixes pointer targets being intercepted by
  * the surrounding cards.
  */
-export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSelectMode, onAdopt, adoptLabel }: Props) {
+export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onAdopt, adoptLabel }: Props) {
   const { t } = useTranslation();
   const fileRef = useRef<FileInputHandle>(null);
   const folderRef = useRef<FileInputHandle>(null);
@@ -63,10 +61,6 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
   function handleNewFolder() {
     closeFab();
     if (onNewFolder) onNewFolder();
-  }
-  function handleSelectMode() {
-    closeFab();
-    onSelectMode?.();
   }
 
   // Close the vertical speed dial when Escape is pressed while it is open.
@@ -124,17 +118,6 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
           },
         ]
       : []),
-    ...(onSelectMode
-      ? [
-          {
-            key: 'selectMode',
-            label: t('upload.selectMode'),
-            icon: <Checklist className="!text-2xl" />,
-            onClick: handleSelectMode,
-            bgClass: 'bg-surface-container-high text-on-surface',
-          },
-        ]
-      : []),
   ];
 
   const desktopActions: Action[] = [
@@ -174,17 +157,6 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
             label: adoptLabel,
             icon: <MoveToInbox className="!text-xl" />,
             onClick: onAdopt,
-            bgClass: 'text-on-surface',
-          },
-        ]
-      : []),
-    ...(onSelectMode
-      ? [
-          {
-            key: 'selectMode',
-            label: t('upload.selectMode'),
-            icon: <Checklist className="!text-xl" />,
-            onClick: onSelectMode,
             bgClass: 'text-on-surface',
           },
         ]
@@ -317,9 +289,6 @@ export function UploadToolbar({ onNewFolder, onUploadFiles, onUploadFolder, onSe
           {desktopActions.map((action, i) => (
             <div key={action.key} className="flex items-center gap-1">
               {i === 1 && <div className="h-6 w-px bg-outline-variant/30 mx-1" aria-hidden />}
-              {action.key === 'selectMode' && (
-                <div className="h-6 w-px bg-outline-variant/30 mx-1" aria-hidden />
-              )}
               <Tooltip label={action.label} placement="top">
                 <IconButton
                   type="button"

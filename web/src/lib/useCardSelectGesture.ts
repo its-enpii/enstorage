@@ -7,12 +7,18 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 export const HOLD_MS = 500;
 /** Pointer drift (px) tolerated before the hold is cancelled — lets scrolling win. */
 export const HOLD_MOVE_TOLERANCE = 10;
+/** Distance (px) a pointer must travel after a successful hold to start a move drag. */
+export const HOLD_DRAG_THRESHOLD = 12;
 
 type Handlers = {
   /** Plain tap / click activation (open viewer or folder). */
   onActivate?: () => void;
   /** Long-press or keyboard chord that should enter select mode. */
   onSelectRequest?: () => void;
+  /** Fired once after a successful hold, when the pointer drifts past the drag threshold. */
+  onHoldDragStart?: (e: { clientX: number; clientY: number }) => void;
+  /** Fired when a hold-drag finishes or is cancelled. */
+  onHoldDragEnd?: () => void;
 };
 
 function vibrate() {
@@ -32,10 +38,26 @@ function vibrate() {
  * - Keyboard: `Enter`/`Space` activate, `Shift+Enter` or the `ContextMenu` key
  *   request selection. Native context menu is left untouched.
  */
-export function useCardSelectGesture({ onActivate, onSelectRequest }: Handlers) {
+export function useCardSelectGesture({
+  onActivate,
+  onSelectRequest,
+  onHoldDragStart,
+  onHoldDragEnd,
+}: Handlers) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const originRef = useRef<{ x: number; y: number } | null>(null);
   const suppressClickRef = useRef(false);
+  const holdSucceededRef = useRef(false);
+  const holdDragStartedRef = useRef(false);
+
+  const finishHoldDrag = () => {
+    holdSucceededRef.current = false;
+    originRef.current = null;
+    if (holdDragStartedRef.current) {
+      holdDragStartedRef.current = false;
+      onHoldDragEnd?.();
+    }
+  };
 
   const clearHold = () => {
     if (timerRef.current !== null) {
@@ -54,21 +76,35 @@ export function useCardSelectGesture({ onActivate, onSelectRequest }: Handlers) 
     const target = (e.target as HTMLElement).closest('button, a, input, select, textarea');
     if (target && target !== e.currentTarget) return;
     clearHold();
+    holdSucceededRef.current = false;
+    holdDragStartedRef.current = false;
     originRef.current = { x: e.clientX, y: e.clientY };
+    const origin = { x: e.clientX, y: e.clientY };
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
-      originRef.current = null;
+      // Keep the origin so the follow-up pointermove can start a hold-drag.
       // A long-press fires a click on release; swallow it so the just-selected
       // item is not immediately toggled back off / opened.
       suppressClickRef.current = true;
+      holdSucceededRef.current = true;
+      originRef.current = origin;
       vibrate();
-      onSelectRequest();
+      onSelectRequest?.();
     }, HOLD_MS);
   };
 
   const onPointerMove = (e: ReactPointerEvent<HTMLElement>) => {
     const origin = originRef.current;
-    if (!origin || timerRef.current === null) return;
+    if (!origin) return;
+    if (holdSucceededRef.current) {
+      if (holdDragStartedRef.current) return;
+      if (Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > HOLD_DRAG_THRESHOLD) {
+        holdDragStartedRef.current = true;
+        onHoldDragStart?.({ clientX: e.clientX, clientY: e.clientY });
+      }
+      return;
+    }
+    if (timerRef.current === null) return;
     if (Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > HOLD_MOVE_TOLERANCE) clearHold();
   };
 
@@ -96,8 +132,14 @@ export function useCardSelectGesture({ onActivate, onSelectRequest }: Handlers) 
   return {
     onPointerDown,
     onPointerMove,
-    onPointerUp: clearHold,
-    onPointerCancel: clearHold,
+    onPointerUp: () => {
+      clearHold();
+      finishHoldDrag();
+    },
+    onPointerCancel: () => {
+      clearHold();
+      finishHoldDrag();
+    },
     onPointerLeave: clearHold,
     onKeyDown,
     onClickCapture,

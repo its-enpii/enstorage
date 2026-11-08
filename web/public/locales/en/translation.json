@@ -135,7 +135,8 @@
     "selection": {
       "selectAll": "Select all",
       "clearSelection": "Clear selection",
-      "holdHint": "Hold to select"
+      "holdHint": "Hold to select",
+      "holdDragHint": "Hold then drag to move"
     },
     "confirmDelete": {
       "title": "Delete File?",

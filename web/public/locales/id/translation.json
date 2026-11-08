@@ -135,7 +135,8 @@
     "selection": {
       "selectAll": "Pilih semua",
       "clearSelection": "Hapus pilihan",
-      "holdHint": "Tahan untuk memilih"
+      "holdHint": "Tahan untuk memilih",
+      "holdDragHint": "Tahan lalu geser untuk memindahkan"
     },
     "confirmDelete": {
       "title": "Hapus File?",
