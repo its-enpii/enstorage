@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 
 type Props = {
@@ -8,7 +9,7 @@ type Props = {
   onClose: () => void;
   /** Centered card (default) or a mobile bottom sheet. */
   variant?: 'center' | 'sheet';
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '4xl' | '5xl';
   /** Let a backdrop click dismiss the modal. */
   dismissOnBackdrop?: boolean;
   lockScroll?: boolean;
@@ -27,6 +28,8 @@ const SIZE_CLASSES: Record<NonNullable<Props['size']>, string> = {
   md: 'max-w-md',
   lg: 'max-w-lg',
   xl: 'max-w-xl',
+  '4xl': 'max-w-4xl',
+  '5xl': 'max-w-5xl',
 };
 
 /**
@@ -74,9 +77,9 @@ export function Modal({
     };
   }, [open, onClose, lockScroll]);
 
-  if (!rendered) return null;
+  if (!rendered || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       role="presentation"
       onClick={dismissOnBackdrop ? onClose : undefined}
@@ -102,6 +105,7 @@ export function Modal({
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

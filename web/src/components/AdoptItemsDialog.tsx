@@ -167,7 +167,7 @@ export function AdoptItemsDialog({ open, targetFolderId, onClose, onAdopted }: P
   );
 
   return (
-    <Modal open={open} onClose={submitting ? () => {} : onClose} panelClassName="flex flex-col p-4 sm:p-6 lg:p-inner-padding !max-w-3xl h-[85dvh]">
+    <Modal open={open} onClose={submitting ? () => {} : onClose} panelClassName="flex flex-col p-4 sm:p-6 lg:p-inner-padding !max-w-[min(1400px,96vw)] h-[92dvh] sm:h-[94dvh]">
       <div className="flex items-start gap-4 shrink-0">
         <div className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container">
           <span className="material-symbols-outlined !text-2xl">drive_file_move</span>
