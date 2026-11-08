@@ -824,6 +824,16 @@ function FilesContent({ currentPath }: { currentPath: string }) {
    * empty-state / toolbar → folder aktif). Bukan selalu folder aktif.
    */
   const [adoptTarget, setAdoptTarget] = useState<string | null>(null);
+  // Nama folder tujuan adopsi. `adoptTarget` bisa berupa kartu folder yang
+  // belum tentu sedang dibuka, jadi resolve lewat `allFolders`; fallback ke
+  // nama folder aktif, lalu ke id mentah hanya bila tidak ketemu sama sekali.
+  const adoptTargetName =
+    allFolders.find((f) => f.id === adoptTarget)?.name ||
+    (adoptTarget === folderId
+      ? folders.find((f) => f.id === adoptTarget)?.name
+      : undefined) ||
+    adoptTarget ||
+    '';
   /** Folder aktif terkunci (is_locked) yang sudah di-unlock sesi ini. */
   const [activeLockedFolder, setActiveLockedFolder] = useState<
     { id: string; unlocked: boolean } | null
@@ -3279,6 +3289,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         <AdoptItemsDialog
           open={adoptOpen}
           targetFolderId={adoptTarget}
+          targetFolderName={adoptTargetName}
           onClose={() => {
             setAdoptOpen(false);
             // Reset target supaya dialog berikutnya tidak mewarisi id lama.

@@ -25,6 +25,8 @@ type Props = {
   open: boolean;
   /** Folder terkunci aktif (target adopt). */
   targetFolderId: string;
+  /** Nama folder tujuan untuk ditampilkan; id tetap dipakai untuk request. */
+  targetFolderName: string;
   onClose: () => void;
   /** Dipanggil setelah server membalas sukses; `count` = item yang dipindah. */
   onAdopted: (result: AdoptResult) => void;
@@ -52,7 +54,7 @@ function fileThumbnailUrl(file: FileItem): string | null {
  * sudah di-unlock. Menjelajah seluruh isi akun (kecuali subtree terkunci),
  * memilih file/folder via checkbox, lalu `POST /folders/{id}/adopt`.
  */
-export function AdoptItemsDialog({ open, targetFolderId, onClose, onAdopted }: Props) {
+export function AdoptItemsDialog({ open, targetFolderId, targetFolderName, onClose, onAdopted }: Props) {
   const { t } = useTranslation();
   const [crumbs, setCrumbs] = useState<Crumb[]>([{ id: null, name: t('files.title') }]);
   const [files, setFiles] = useState<FileItem[]>([]);
@@ -183,7 +185,7 @@ export function AdoptItemsDialog({ open, targetFolderId, onClose, onAdopted }: P
             className="text-metadata text-on-surface-variant"
             data-testid="adopt-target"
           >
-            {t('files.move.adoptTargetTo', { name: targetFolderId })}
+            {t('files.move.adoptTargetTo', { name: targetFolderName })}
           </p>
         </div>
         <IconButton aria-label={t('common.close')} onClick={onClose} disabled={submitting}>
