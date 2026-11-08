@@ -215,7 +215,8 @@
       "adoptOpen": "Buka folder",
       "adoptSelected": "{{count}} item dipilih",
       "adoptSubmit": "Masukkan ({{count}})",
-      "adoptSuccess": "{{count}} item dimasukkan ke folder terkunci."
+      "adoptSuccess": "{{count}} item dimasukkan ke folder terkunci.",
+      "adoptTargetTo": "Tujuan: {{name}}"
     },
     "details": {
       "title": "Judul",

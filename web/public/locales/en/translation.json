@@ -215,7 +215,8 @@
       "adoptOpen": "Open folder",
       "adoptSelected": "{{count}} item(s) selected",
       "adoptSubmit": "Add ({{count}})",
-      "adoptSuccess": "{{count}} item(s) added to the locked folder."
+      "adoptSuccess": "{{count}} item(s) added to the locked folder.",
+      "adoptTargetTo": "Add to: {{name}}"
     },
     "details": {
       "title": "Title",

@@ -330,11 +330,63 @@ class FolderController extends Controller
      *
      * Hanya kolom yang dipakai picker ({id, name, path, parent_id}); status
      * kunci tidak dikirim mentah ke klien.
+     *
+     * Query param opsional `within_locked` (uuid folder terkunci): dipakai
+     * saat item SUMBER sudah ada di dalam cakupan folder terkunci yang sudah
+     * di-unlock — owner boleh memindahkan ke folder lain di kepala terkunci
+     * yang sama. Cakupan = folder itu + seluruh descendant-nya, kecuali
+     * descendant yang terkunci sendiri (butuh unlock terpisah) dan kepala
+     * terkunci lain di luar cakupan. Tanpa param, perilaku lama dipertahankan.
      */
     public function movableTargets(Request $request): JsonResponse
     {
         $userId = (string) $request->user()->id;
         $lockedIds = $this->lockGuard->lockedFolderIds($userId);
+
+        $withinLocked = $request->query('within_locked');
+        if (is_string($withinLocked) && $withinLocked !== '') {
+            $scope = Folder::where('user_id', $userId)
+                ->where('id', $withinLocked)
+                ->where('is_locked', true)
+                ->first();
+            if (! $scope) {
+                return $this->fail(
+                    __('Folder konteks terkunci tidak valid.'),
+                    422,
+                    null,
+                    ['code' => 'invalid_within_locked'],
+                );
+            }
+
+            $scopeIds = $this->lockGuard->descendantFolderIds($userId, (string) $scope->id);
+            $nestedLocked = Folder::where('user_id', $userId)
+                ->where('is_locked', true)
+                ->where('id', '!=', $scope->id)
+                ->pluck('id')
+                ->all();
+            $excluded = [];
+            foreach ($nestedLocked as $nestedId) {
+                $excluded = array_merge(
+                    $excluded,
+                    $this->lockGuard->descendantFolderIds($userId, (string) $nestedId),
+                );
+            }
+
+            $targets = Folder::where('user_id', $userId)
+                ->whereIn('id', $scopeIds)
+                ->when($excluded !== [], fn ($q) => $q->whereNotIn('id', $excluded))
+                ->orderBy('path', 'asc')
+                ->get(['id', 'name', 'path', 'parent_id'])
+                ->map(fn (Folder $f) => [
+                    'id' => $f->id,
+                    'name' => $f->name,
+                    'path' => $f->path,
+                    'parent_id' => $f->parent_id,
+                ])
+                ->all();
+
+            return $this->ok($targets, __('Folder tujuan yang tersedia.'));
+        }
 
         $query = Folder::where('user_id', $userId);
         if ($lockedIds !== []) {
@@ -1246,7 +1298,9 @@ class FolderController extends Controller
      * terkunci; picker MoveDialog tidak menawarkan tujuan terkunci).
      *
      * Aturan:
-     * - `{id}` wajib folder terkunci milik user → 422 `target_not_locked`.
+     * - `{id}` wajib berada di dalam cakupan terkunci (folder tujuan berada di
+     *   dalam cakupan terkunci: folder terkunci itu sendiri atau descendant-nya)
+     *   → 422 `target_not_locked`.
      * - Penulis wajib sudah unlock (penanda sesi sama dengan `show()`) →
      *   423 `folder_locked`.
      * - Item dari subtree terkunci mana pun ditolak → 422 `cycle` (termasuk
@@ -1279,7 +1333,8 @@ class FolderController extends Controller
             return $this->notFound(__('Folder tidak ditemukan.'));
         }
 
-        if (! (bool) $target->is_locked) {
+        $gated = $this->lockGuard->isGated($target, $userId);
+        if (! $gated) {
             return $this->fail(
                 __('Folder tujuan tidak terkunci.'),
                 422,

@@ -19,6 +19,11 @@ type Props = {
    * diambil dari `items[].folder_id` / `items[].parent_id`.
    */
   currentFolderId?: string | null;
+  /**
+   * Folder kepala terkunci (sudah di-unlock) tempat item sumber berada:
+   * diteruskan ke picker supaya tujuan di dalam cakupan terkunci ditawarkan.
+   */
+  withinLocked?: string | null;
   open: boolean;
   onClose: () => void;
   /**
@@ -53,6 +58,7 @@ export function MoveDialog({
   kind = 'file',
   items,
   currentFolderId,
+  withinLocked = null,
   open,
   onClose,
   onMoved,
@@ -252,6 +258,7 @@ export function MoveDialog({
         open={open}
         blockedIds={blockedIds}
         rootBlocked={rootBlocked}
+        withinLocked={withinLocked}
         pickedFolderId={pickedFolderId}
         hasPicked={hasPicked}
         onPick={(id, name) => pick(id, name)}

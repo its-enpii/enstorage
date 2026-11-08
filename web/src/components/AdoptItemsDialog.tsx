@@ -179,6 +179,12 @@ export function AdoptItemsDialog({ open, targetFolderId, onClose, onAdopted }: P
           <p className="text-metadata text-on-surface-variant leading-relaxed">
             {t('files.move.adoptDescription')}
           </p>
+          <p
+            className="text-metadata text-on-surface-variant"
+            data-testid="adopt-target"
+          >
+            {t('files.move.adoptTargetTo', { name: targetFolderId })}
+          </p>
         </div>
         <IconButton aria-label={t('common.close')} onClick={onClose} disabled={submitting}>
           <span className="material-symbols-outlined !text-xl">close</span>

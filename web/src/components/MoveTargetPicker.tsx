@@ -16,6 +16,12 @@ type Props = {
   blockedIds: Set<string>;
   /** Root hanya boleh dipilih bila ada item yang asalnya bukan root. */
   rootBlocked: boolean;
+  /**
+   * Folder terkunci (sudah di-unlock) yang membatasi tujuan: server lalu
+   * menawarkan folder di dalam cakupan itu (owner boleh pindah antar
+   * subfolder di kepala terkunci yang sama).
+   */
+  withinLocked?: string | null;
   pickedFolderId: string | null;
   hasPicked: boolean;
   onPick: (id: string | null, name?: string) => void;
@@ -32,6 +38,7 @@ export function MoveTargetPicker({
   open,
   blockedIds,
   rootBlocked,
+  withinLocked = null,
   pickedFolderId,
   hasPicked,
   onPick,
@@ -46,7 +53,8 @@ export function MoveTargetPicker({
     let cancelled = false;
     setLoading(true);
     setError(false);
-    apiRequest<MoveTarget[]>('/folders/movable-targets')
+    const query = withinLocked ? `?within_locked=${encodeURIComponent(withinLocked)}` : '';
+    apiRequest<MoveTarget[]>(`/folders/movable-targets${query}`)
       .then((data) => {
         if (!cancelled) setTargets(data ?? []);
       })
@@ -59,7 +67,7 @@ export function MoveTargetPicker({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, withinLocked]);
 
   const sortedFolders = useMemo(() => sortTree(targets), [targets]);
   const isEmpty = targets.length === 0;

@@ -818,6 +818,12 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   const [mergeSources, setMergeSources] = useState<FolderType[] | null>(null);
   // Dialog "Masukkan file" — hanya dari dalam folder terkunci yang sudah unlock.
   const [adoptOpen, setAdoptOpen] = useState(false);
+  /**
+   * Folder tujuan "Masukkan file" — ditentukan eksplisit oleh pemanggil
+   * (kartu folder → folder itu, kartu file → folder asal file, header /
+   * empty-state / toolbar → folder aktif). Bukan selalu folder aktif.
+   */
+  const [adoptTarget, setAdoptTarget] = useState<string | null>(null);
   /** Folder aktif terkunci (is_locked) yang sudah di-unlock sesi ini. */
   const [activeLockedFolder, setActiveLockedFolder] = useState<
     { id: string; unlocked: boolean } | null
@@ -2454,14 +2460,24 @@ function FilesContent({ currentPath }: { currentPath: string }) {
 
   const canAdopt = activeLockedFolder?.unlocked === true;
 
-  /** Tutup dialog "Masukkan file" lalu sinkronkan folder aktif dari server. */
+  /**
+   * Tutup dialog "Masukkan file" lalu sinkronkan folder aktif dari server.
+   * `adoptTarget` = folder tujuan yang dipilih eksplisit (bisa subfolder lain).
+   */
   function handleAdopted(result: AdoptResult) {
+    const target = adoptTarget;
     setAdoptOpen(false);
+    setAdoptTarget(null);
     setSelected(new Set());
     invalidateCurrentCache();
     invalidateFoldersPageCache();
     void revalidate();
     void reloadAllFolders();
+    // Target bisa berbeda dari folder aktif (kartu folder/file) — segarkan
+    // juga halaman aktif bila target memang folder yang sedang dibuka.
+    // Kalau `adoptTarget` beda dari `folderId`, folder target yang berubah
+    // akan ikut segar saat dibuka berikutnya (cache sudah diinvalidasi).
+    if (target && target === folderId) router.refresh();
     if (result.count > 0) {
       void alert(t('files.move.adoptSuccess', { count: result.count }), {
         title: t('files.move.adoptAction'),
@@ -2508,7 +2524,10 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               label: t('files.move.adoptAction'),
               ariaLabel: t('files.move.adoptAction'),
               icon: <span className="material-symbols-outlined !text-base">move_to_inbox</span>,
-              onClick: () => setAdoptOpen(true),
+              onClick: () => {
+                setAdoptTarget(f.id);
+                setAdoptOpen(true);
+              },
             } as MenuItem,
           ]
         : []),
@@ -2602,7 +2621,12 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               label: t('files.move.adoptAction'),
               ariaLabel: t('files.move.adoptAction'),
               icon: <span className="material-symbols-outlined !text-base">move_to_inbox</span>,
-              onClick: () => setAdoptOpen(true),
+              onClick: () => {
+                const target = f.folder_id ?? folderId;
+                if (!target) return;
+                setAdoptTarget(target);
+                setAdoptOpen(true);
+              },
             } as MenuItem,
           ]
         : []),
@@ -2683,7 +2707,10 @@ function FilesContent({ currentPath }: { currentPath: string }) {
               variant="secondary"
               size="sm"
               className="!h-11 min-h-11 shrink-0 px-2.5 sm:px-3"
-              onClick={() => setAdoptOpen(true)}
+              onClick={() => {
+                setAdoptTarget(folderId);
+                setAdoptOpen(true);
+              }}
               aria-label={t('files.move.adoptAction')}
             >
               <span className="material-symbols-outlined !text-xl" aria-hidden>move_to_inbox</span>
@@ -3025,7 +3052,14 @@ function FilesContent({ currentPath }: { currentPath: string }) {
                 hint={t('files.empty')}
                 action={
                   canAdopt ? (
-                    <Button variant="primary" size="md" onClick={() => setAdoptOpen(true)}>
+                    <Button
+                      variant="primary"
+                      size="md"
+                      onClick={() => {
+                        setAdoptTarget(folderId);
+                        setAdoptOpen(true);
+                      }}
+                    >
                       <span className="material-symbols-outlined !text-xl" aria-hidden>move_to_inbox</span>
                       {t('files.move.adoptAction')}
                     </Button>
@@ -3122,7 +3156,14 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         </div>
       ) : (
         <UploadToolbar
-          onAdopt={canAdopt ? () => setAdoptOpen(true) : undefined}
+          onAdopt={
+            canAdopt
+              ? () => {
+                  setAdoptTarget(folderId);
+                  setAdoptOpen(true);
+                }
+              : undefined
+          }
           adoptLabel={t('files.move.adoptAction')}
           onNewFolder={createFolder}
           onUploadFiles={uploadFiles}
@@ -3217,6 +3258,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           kind="file"
           items={moveFiles}
           currentFolderId={folderId}
+          withinLocked={activeLockedFolder?.unlocked ? activeLockedFolder.id : null}
           open={true}
           onClose={() => setMoveFiles(null)}
           onMoved={(results) => void handleMoved(results)}
@@ -3233,12 +3275,16 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         />
       )}
 
-      {folderId && (
+      {adoptTarget && (
         <AdoptItemsDialog
           open={adoptOpen}
-          targetFolderId={folderId}
-          onClose={() => setAdoptOpen(false)}
-          onAdopted={handleAdopted}
+          targetFolderId={adoptTarget}
+          onClose={() => {
+            setAdoptOpen(false);
+            // Reset target supaya dialog berikutnya tidak mewarisi id lama.
+            setAdoptTarget(null);
+          }}
+          onAdopted={(result) => handleAdopted(result)}
         />
       )}
 
