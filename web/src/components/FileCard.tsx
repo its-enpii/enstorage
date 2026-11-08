@@ -181,6 +181,7 @@ export function FileCard({
       onPointerUp={gesture.onPointerUp}
       onPointerCancel={gesture.onPointerCancel}
       onPointerLeave={gesture.onPointerLeave}
+      onContextMenu={(e) => e.preventDefault()}
       onClickCapture={gesture.onClickCapture}
       onKeyDown={gesture.onKeyDown}
       title={title}

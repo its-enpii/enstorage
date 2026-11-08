@@ -7,6 +7,8 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 export const HOLD_MS = 500;
 /** Pointer drift (px) tolerated before the hold is cancelled — lets scrolling win. */
 export const HOLD_MOVE_TOLERANCE = 10;
+/** Fingers jitter while holding; touch gets a wider drift budget than the mouse. */
+export const HOLD_MOVE_TOLERANCE_TOUCH = 24;
 /** Distance (px) a pointer must travel after a successful hold to start a move drag. */
 export const HOLD_DRAG_THRESHOLD = 12;
 
@@ -35,8 +37,10 @@ function vibrate() {
  * Shared hold-to-select gesture for file and folder cards.
  *
  * - Hold ~500 ms → `onSelectRequest` (enters select mode).
- * - Moving the pointer more than 10 px cancels the hold so scrolling doesn't
- *   accidentally select; so does `pointerup` / `pointercancel` / `pointerleave`.
+ * - Moving the pointer more than 10 px (24 px for touch) cancels the hold so
+ *   scrolling doesn't accidentally select; so does `pointerup` /
+ *   `pointercancel` / `pointerleave` (mouse only — touch fingers drift out of
+ *   bounds while holding).
  * - Keyboard: `Enter`/`Space` activate, `Shift+Enter` or the `ContextMenu` key
  *   request selection. Native context menu is left untouched.
  */
@@ -112,7 +116,8 @@ export function useCardSelectGesture({
       return;
     }
     if (timerRef.current === null) return;
-    if (Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > HOLD_MOVE_TOLERANCE) clearHold();
+    const tolerance = e.pointerType === 'touch' ? HOLD_MOVE_TOLERANCE_TOUCH : HOLD_MOVE_TOLERANCE;
+    if (Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > tolerance) clearHold();
   };
 
   const onKeyDown = (e: ReactKeyboardEvent<HTMLElement>) => {
@@ -147,7 +152,12 @@ export function useCardSelectGesture({
       clearHold();
       finishHoldDrag();
     },
-    onPointerLeave: clearHold,
+    onPointerLeave: (e: ReactPointerEvent<HTMLElement>) => {
+      // A touch finger may drift out of the card bounds mid-hold without the
+      // press being over — only the mouse leaving cancels the hold.
+      if (e.pointerType === 'touch') return;
+      clearHold();
+    },
     onKeyDown,
     onClickCapture,
   };

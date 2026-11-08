@@ -61,6 +61,7 @@ export function CardTile({
   onPointerLeave,
   onClickCapture,
   onKeyDown,
+  onContextMenu,
   title,
   ariaDescribedBy,
   'data-testid': dataTestId,
@@ -78,6 +79,7 @@ export function CardTile({
   onPointerLeave?: (e: ReactPointerEvent<HTMLDivElement>) => void;
   onClickCapture?: (e: ReactMouseEvent<HTMLDivElement>) => void;
   onKeyDown?: (e: ReactKeyboardEvent<HTMLDivElement>) => void;
+  onContextMenu?: (e: ReactMouseEvent<HTMLDivElement>) => void;
   title?: string;
   ariaDescribedBy?: string;
   'data-testid'?: string;
@@ -94,13 +96,14 @@ export function CardTile({
       onPointerLeave={onPointerLeave}
       onClickCapture={onClickCapture}
       onKeyDown={onKeyDown}
+      onContextMenu={onContextMenu}
       title={title}
       aria-describedby={ariaDescribedBy}
       tabIndex={interactive ? 0 : undefined}
       role={interactive ? 'button' : undefined}
-      aria-pressed={interactive && selected !== undefined ? Boolean(selected) : undefined}
+      aria-pressed={interactive ? Boolean(selected) : undefined}
       className={clsx(
-        'group relative grid grid-rows-[auto_auto_auto] gap-2.5 rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background bg-surface-container-low/90 border border-outline-variant/70 backdrop-blur-sm p-3 transition-all duration-200 shadow-md shadow-black/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]',
+        'group relative grid grid-rows-[auto_auto_auto] gap-2.5 rounded-card select-none [touch-action:pan-y] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background bg-surface-container-low/90 border border-outline-variant/70 backdrop-blur-sm p-3 transition-all duration-200 shadow-md shadow-black/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]',
         hoverable && 'hover:bg-surface-container/80 hover:border-primary/60 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-0.5',
         onClick && 'cursor-pointer',
         selected && '!border-primary ring-2 ring-primary/40 bg-primary/5 shadow-selected-glow',

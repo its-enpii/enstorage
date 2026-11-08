@@ -817,6 +817,13 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   // Dialog gabungkan folder: daftar folder sumber, atau null saat tertutup.
   const [mergeSources, setMergeSources] = useState<FolderType[] | null>(null);
   // Dialog "Masukkan file" — hanya dari dalam folder terkunci yang sudah unlock.
+  // HTML5 drag is mouse-only: on touch a long-press on a `draggable` element
+  // starts a native drag and pointer-cancels the hold-to-select gesture before
+  // HOLD_MS elapses. Arm `draggable` from the pointer type instead.
+  const [mouseArmed, setMouseArmed] = useState(false);
+  const onWrapperPointerDown = (e: React.PointerEvent) => {
+    setMouseArmed(e.pointerType === 'mouse');
+  };
   const [adoptOpen, setAdoptOpen] = useState(false);
   /**
    * Folder tujuan "Masukkan file" — ditentukan eksplisit oleh pemanggil
@@ -3040,7 +3047,8 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             return (
               <div
                 key={f.id}
-                draggable
+                draggable={mouseArmed}
+                onPointerDown={onWrapperPointerDown}
                 data-drop-target={f.id}
                 onDragStart={(e) => handleFolderDragStart(e, f)}
                 onDragOver={(e) => handleFolderDragOver(e, f.id)}
@@ -3099,7 +3107,8 @@ function FilesContent({ currentPath }: { currentPath: string }) {
           {visibleFiles.map((f) => (
             <div
               key={f.id}
-              draggable
+              draggable={mouseArmed}
+              onPointerDown={onWrapperPointerDown}
               onDragStart={(e) => handleFileDragStart(e, f)}
               className={selectMode ? '' : 'cursor-grab active:cursor-grabbing'}
               data-testid={`draggable-file-${f.id}`}
