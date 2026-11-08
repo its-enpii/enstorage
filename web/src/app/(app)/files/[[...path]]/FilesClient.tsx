@@ -1694,6 +1694,15 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     if (!dropEl) return;
     const raw = dropEl.getAttribute('data-drop-target');
     const targetFolderId = !raw || raw === 'root' ? null : raw;
+    // Dropping onto the item's own current folder is a no-op, not a failure.
+    if (targetFolderId !== null) {
+      if (drag.kind === 'folder' && targetFolderId === drag.ids[0]) return;
+      if (drag.kind === 'folder') {
+        const sourceFolder = folders.find((f) => drag.ids.includes(f.id));
+        if (sourceFolder && (sourceFolder.parent_id ?? null) === targetFolderId) return;
+      }
+      if (drag.kind === 'file' && targetFolderId === folderId) return;
+    }
     applyHoldDragDrop(drag, targetFolderId);
   }
 
@@ -3046,6 +3055,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
                   beginHoldDrag('folder', f.id);
                   holdDragClientRef.current = pos;
                 }}
+                onHoldDragMove={(pos) => { holdDragClientRef.current = pos; }}
                 onHoldDragEnd={endHoldDrag}
                 description={f.description}
                 iconName={f.icon}
@@ -3095,6 +3105,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
                 beginHoldDrag('file', f.id);
                 holdDragClientRef.current = pos;
               }}
+              onHoldDragMove={(pos) => { holdDragClientRef.current = pos; }}
               onHoldDragEnd={endHoldDrag}
               size={bytes(f.size)}
               mimeType={f.mime_type}

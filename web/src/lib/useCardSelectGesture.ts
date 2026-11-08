@@ -17,6 +17,8 @@ type Handlers = {
   onSelectRequest?: () => void;
   /** Fired once after a successful hold, when the pointer drifts past the drag threshold. */
   onHoldDragStart?: (e: { clientX: number; clientY: number }) => void;
+  /** Fired on every pointer move while a hold-drag is in progress (last known position). */
+  onHoldDragMove?: (e: { clientX: number; clientY: number }) => void;
   /** Fired when a hold-drag finishes or is cancelled. */
   onHoldDragEnd?: () => void;
 };
@@ -42,6 +44,7 @@ export function useCardSelectGesture({
   onActivate,
   onSelectRequest,
   onHoldDragStart,
+  onHoldDragMove,
   onHoldDragEnd,
 }: Handlers) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -97,10 +100,14 @@ export function useCardSelectGesture({
     const origin = originRef.current;
     if (!origin) return;
     if (holdSucceededRef.current) {
-      if (holdDragStartedRef.current) return;
+      if (holdDragStartedRef.current) {
+        onHoldDragMove?.({ clientX: e.clientX, clientY: e.clientY });
+        return;
+      }
       if (Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > HOLD_DRAG_THRESHOLD) {
         holdDragStartedRef.current = true;
         onHoldDragStart?.({ clientX: e.clientX, clientY: e.clientY });
+        onHoldDragMove?.({ clientX: e.clientX, clientY: e.clientY });
       }
       return;
     }

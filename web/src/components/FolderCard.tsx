@@ -32,6 +32,7 @@ export type FolderCardProps = {
   onSelectRequest?: () => void;
   /** Fired once after a successful hold when the pointer starts moving = move drag. */
   onHoldDragStart?: (e: { clientX: number; clientY: number }) => void;
+  onHoldDragMove?: (e: { clientX: number; clientY: number }) => void;
   /** Fired when a hold-drag finishes or is cancelled. */
   onHoldDragEnd?: () => void;
   /** Short hint (e.g. "Hold to select") exposed via `title`. */
@@ -69,6 +70,7 @@ export function FolderCard({
   onClick,
   onSelectRequest,
   onHoldDragStart,
+  onHoldDragMove,
   onHoldDragEnd,
   title,
   hintId,
@@ -78,7 +80,7 @@ export function FolderCard({
   'data-testid': dataTestId,
 }: FolderCardProps) {
   const { t } = useTranslation();
-  const gesture = useCardSelectGesture({ onActivate: onClick, onSelectRequest, onHoldDragStart, onHoldDragEnd });
+  const gesture = useCardSelectGesture({ onActivate: onClick, onSelectRequest, onHoldDragStart, onHoldDragMove, onHoldDragEnd });
   const showSelection = Boolean(selectMode || selected);
   const metaLabel = itemCount !== undefined
     ? `${itemCount} ${itemsLabel ?? ''}`.trim()
