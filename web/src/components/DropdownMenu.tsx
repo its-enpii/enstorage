@@ -125,13 +125,13 @@ export function DropdownMenu({ trigger, items, align = 'right', header }: Props)
             maxHeight: pos?.maxHeight,
             visibility: pos ? undefined : 'hidden',
           }}
-          className="z-[1000] min-w-[180px] bg-surface-container-highest rounded-xl shadow-2xl py-1 border border-outline-variant/20 overflow-y-auto overscroll-contain"
+          className="z-[1000] min-w-[180px] bg-surface-container-highest rounded-xl shadow-2xl py-1 border border-outline-variant/20 ring-1 ring-black/5 dark:ring-white/5 backdrop-blur-sm overflow-y-auto overscroll-contain"
           onClick={(e) => e.stopPropagation()}
         >
           {header && (
             <>
-              <div className="px-4 py-2.5">{header}</div>
-              <div className="my-1 border-b border-outline-variant/15" />
+              <div className="px-4 py-2.5 text-metadata uppercase tracking-wide text-outline">{header}</div>
+              <div className="my-1 mx-3 border-t border-outline-variant/20" />
             </>
           )}
           {items.map((item, i) => (
@@ -140,16 +140,26 @@ export function DropdownMenu({ trigger, items, align = 'right', header }: Props)
                 role="menuitem"
                 aria-label={item.ariaLabel ?? item.label}
                 onClick={() => { item.onClick(); setOpen(false); }}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors ${
+                className={`w-full mx-1 flex items-center gap-3 px-4 py-2.5 text-sm text-left rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
                   item.variant === 'danger'
-                    ? 'text-error hover:bg-error/10'
-                    : 'text-on-surface hover:bg-surface-container'
+                    ? 'text-error hover:bg-error/10 active:bg-error/15'
+                    : 'text-on-surface hover:bg-surface-container active:bg-surface-container-high'
                 }`}
               >
-                {item.icon && <span className="shrink-0">{item.icon}</span>}
+                {item.icon && (
+                  <span
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                      item.variant === 'danger'
+                        ? 'bg-error/10 border border-error/25 text-error'
+                        : 'bg-surface-container/70 border border-outline-variant/25'
+                    }`}
+                  >
+                    {item.icon}
+                  </span>
+                )}
                 {item.label}
               </button>
-              {item.dividerAfter && <div className="my-1 border-t border-outline-variant/20" />}
+              {item.dividerAfter && <div className="my-1 mx-3 border-t border-outline-variant/20" />}
             </div>
           ))}
         </div>,
