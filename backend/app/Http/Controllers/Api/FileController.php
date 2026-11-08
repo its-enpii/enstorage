@@ -27,6 +27,7 @@ use App\Support\ByteRange;
 use App\Support\ClosureStream;
 use App\Support\StreamPump;
 use Google\Service\Drive;
+use GuzzleHttp\Psr7\Utils;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -614,47 +615,110 @@ class FileController extends Controller
             app(GoogleTokenService::class)->ensureFreshToken($account);
             $client->setAccessToken($account->access_token);
 
-            // Drive mendukung Range pada `alt=media`: kirim header Range ke
-            // Drive dan teruskan 206 + Content-Range/Content-Length dari Drive.
-            // Fallback skip-byte hanya dipakai bila Drive mengabaikan Range.
-            $http = $client->getHttpClient();
+            // Drive mendukung Range pada `alt=media` (dibuktikan: request
+            // `Range: bytes=...` ke Drive membalas 206 + Content-Range).
+            //
+            // PENTING: jangan pakai $client->getHttpClient() untuk ini. Client
+            // Guzzle dari SDK Google TIDAK membawa autorisasi yang sah untuk
+            // permintaan media mentah — hasilnya 403 bahkan tanpa header Range
+            // (terukur di produksi). Jalur yang terbukti: curl dengan
+            // `Authorization: Bearer <access_token>`.
             $url = 'https://www.googleapis.com/drive/v3/files/'.rawurlencode((string) $file->gdrive_file_id).'?alt=media';
 
             $driveRange = $range['status'] === 206
                 ? sprintf('bytes=%d-%d', $range['offset'], $range['offset'] + $range['length'] - 1)
                 : null;
 
-            $headers = [];
+            $sendHeaders = ['Authorization: Bearer '.$account->access_token];
             if ($driveRange !== null) {
-                $headers['Range'] = $driveRange;
+                $sendHeaders[] = 'Range: '.$driveRange;
             }
 
-            $resp = $http->request('GET', $url, [
-                'headers' => $headers,
-                'stream' => true,
-                'http_errors' => false,
-                'timeout' => 0,
-                'read_timeout' => 0,
-            ]);
+            $status = 0;
+            $respHeaders = [];
+            $driveBodyStream = null;
 
-            $code = (int) $resp->getStatusCode();
-            $body = $resp->getBody();
+            // Titik suntik transport: tes dapat mengganti closure ini agar tidak
+            // memanggil jaringan. Produksi memakai null → jalur curl di bawah.
+            $transport = app()->bound('enpii.gdrive.transport') ? app('enpii.gdrive.transport') : null;
 
-            if ($code === 404 || $code === 403) {
-                throw new \RuntimeException('Drive menolak akses file ('.$code.').', $code);
+            if ($transport !== null) {
+                $fake = $transport($url, $sendHeaders);
+                $status = (int) ($fake['status'] ?? 0);
+                $respHeaders = array_change_key_case((array) ($fake['headers'] ?? []), CASE_LOWER);
+                $driveBodyStream = Utils::streamFor((string) ($fake['body'] ?? ''));
+            } else {
+                $ch = curl_init($url);
+                curl_setopt_array($ch, [
+                    CURLOPT_HTTPHEADER => $sendHeaders,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_CONNECTTIMEOUT => 30,
+                    CURLOPT_TIMEOUT => 0,
+                    CURLOPT_RETURNTRANSFER => false,
+                ]);
+                curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($ch, $line) use (&$status, &$respHeaders) {
+                    $len = strlen($line);
+                    if (preg_match('#^HTTP/\S+\s+(\d{3})#', $line, $m)) {
+                        $status = (int) $m[1];
+                        $respHeaders = [];   // blok header baru (redirect) → reset
+                    } elseif (str_contains($line, ':')) {
+                        [$k, $v] = explode(':', $line, 2);
+                        $respHeaders[strtolower(trim($k))] = trim($v);
+                    }
+
+                    return $len;
+                });
+
+                // Header respons dipasang pada objek StreamedResponse, jadi header
+                // Drive harus sudah terbaca sebelum body dialirkan.
+                $sink = fopen('php://temp', 'w+b');
+                curl_setopt($ch, CURLOPT_FILE, $sink);
+                curl_exec($ch);
+                $curlErr = curl_error($ch);
+                curl_close($ch);
+
+                if ($curlErr !== '') {
+                    if (is_resource($sink)) {
+                        fclose($sink);
+                    }
+                    throw new \RuntimeException('Drive: '.$curlErr);
+                }
+
+                if ($status === 404 || $status === 403) {
+                    if (is_resource($sink)) {
+                        fclose($sink);
+                    }
+                    throw new \RuntimeException('Drive menolak akses file ('.$status.').', $status);
+                }
+
+                if ($status >= 400) {
+                    if (is_resource($sink)) {
+                        fclose($sink);
+                    }
+
+                    return $this->fail(__('Download gagal: ').'Drive membalas HTTP '.$status.'.', 502);
+                }
+
+                $driveBodyStream = Utils::streamFor($sink);
             }
 
-            if ($code >= 400) {
-                return $this->fail(__('Download gagal: ').'Drive membalas HTTP '.$code.'.', 502);
+            if ($status === 404 || $status === 403) {
+                throw new \RuntimeException('Drive menolak akses file ('.$status.').', $status);
             }
+
+            if ($status >= 400) {
+                return $this->fail(__('Download gagal: ').'Drive membalas HTTP '.$status.'.', 502);
+            }
+
+            $driveBody = $driveBodyStream;
 
             // Header (termasuk hasil middleware) dipasang pada object respons
             // ini, bukan di dalam closure, supaya selalu terkirim utuh.
-            $passthrough = $driveRange !== null && $code === 206;
+            $passthrough = $driveRange !== null && $status === 206;
 
             $source = $passthrough
-                ? $body
-                : $this->sliceDriveStream($body, $range['offset'], $range['length']);
+                ? $driveBody
+                : $this->sliceDriveStream($driveBody, $range['offset'], $range['length']);
 
             $stream = $this->streamDownloadResponse(
                 fn () => StreamPump::copy($source),
@@ -666,8 +730,12 @@ class FileController extends Controller
 
             if ($passthrough) {
                 $stream->headers->set('Accept-Ranges', 'bytes');
-                $stream->headers->set('Content-Range', $resp->getHeaderLine('Content-Range'));
-                $stream->headers->set('Content-Length', $resp->getHeaderLine('Content-Length'));
+                if (isset($respHeaders['content-range'])) {
+                    $stream->headers->set('Content-Range', $respHeaders['content-range']);
+                }
+                if (isset($respHeaders['content-length'])) {
+                    $stream->headers->set('Content-Length', $respHeaders['content-length']);
+                }
             } else {
                 $this->applyRangeHeaders($stream, $range);
             }

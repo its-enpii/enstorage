@@ -7,17 +7,10 @@ use App\Models\GoogleAccount;
 use App\Models\User;
 use App\Services\Google\GoogleClientFactory;
 use App\Services\Google\GoogleTokenService;
-use Google\Client as GoogleClient;
-use GuzzleHttp\Client;
-use GuzzleHttp\HandlerStack;
-use GuzzleHttp\Middleware;
-use GuzzleHttp\Promise\Create;
-use GuzzleHttp\Psr7\Response as PsrResponse;
+use Google\Client;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
-use Psr\Http\Message\RequestInterface;
-use Psr\Http\Message\ResponseInterface;
 use Tests\TestCase;
 
 /**
@@ -32,6 +25,9 @@ class GdriveRangePassthroughTest extends TestCase
 
     /** @var array<int, array{request: RequestInterface, response: ?ResponseInterface}> */
     private array $history = [];
+
+    /** @var array{status:int, headers:array<string,string>, body:string}|null */
+    private ?array $driveResponse = null;
 
     private User $owner;
 
@@ -52,27 +48,26 @@ class GdriveRangePassthroughTest extends TestCase
         Sanctum::actingAs($this->owner);
     }
 
-    private function fakeDrive(ResponseInterface $response): void
+    /**
+     * Suntik transport curl palsu. Implementasi produksi memakai curl
+     * ber-token (bukan $client->getHttpClient(), yang terbukti 403 untuk
+     * media Drive), jadi tes harus memalsukan transport ITU.
+     *
+     * @param  array{status:int, headers:array<string,string>, body:string}  $drive
+     */
+    private function fakeDrive(array $drive): void
     {
         $this->history = [];
-        $mock = function (RequestInterface $request, array $options) use ($response) {
-            return Create::promiseFor($response);
-        };
-        $stack = HandlerStack::create($mock);
-        $stack->push(Middleware::history($this->history));
+        $this->driveResponse = $drive;
 
-        $client = new GoogleClient;
-        $client->setHttpClient(new Client(['handler' => $stack]));
-        $client->setAccessToken([
-            'access_token' => 'OWNER_TOKEN',
-            'created' => time(),
-            'expires_in' => 3600,
-        ]);
+        $this->app->instance('enpii.gdrive.transport', function (string $url, array $headers) use (&$drive) {
+            $this->history[] = ['url' => $url, 'headers' => $headers];
 
-        $factory = \Mockery::mock(GoogleClientFactory::class)->makePartial();
-        $factory->shouldReceive('makeFor')->andReturn($client);
-        $this->app->instance(GoogleClientFactory::class, $factory);
+            return $drive;
+        });
 
+        // Jangan menyentuh Google sungguhan: token dianggap sudah segar dan
+        // klien dibuat tanpa jaringan (transport curl-lah yang dipalsukan).
         $tokens = \Mockery::mock(GoogleTokenService::class)->makePartial();
         $tokens->shouldReceive('ensureFreshToken')->andReturnUsing(function ($acct) {
             $acct->access_token = 'OWNER_TOKEN';
@@ -80,6 +75,20 @@ class GdriveRangePassthroughTest extends TestCase
             return $acct->access_token;
         });
         $this->app->instance(GoogleTokenService::class, $tokens);
+
+        $client = new Client;
+        $client->setAccessToken(['access_token' => 'OWNER_TOKEN', 'created' => time(), 'expires_in' => 3600]);
+        $factory = \Mockery::mock(GoogleClientFactory::class)->makePartial();
+        $factory->shouldReceive('makeFor')->andReturn($client);
+        $this->app->instance(GoogleClientFactory::class, $factory);
+    }
+
+    /** Header yang benar-benar dikirim ke Drive pada permintaan terakhir. */
+    private function sentHeaders(): array
+    {
+        $this->assertNotEmpty($this->history, 'harus ada permintaan ke Drive');
+
+        return $this->history[count($this->history) - 1]['headers'];
     }
 
     private function makeGdriveFile(string $gdriveId = 'gd_range'): File
@@ -99,34 +108,26 @@ class GdriveRangePassthroughTest extends TestCase
         ]);
     }
 
-    private function mediaRequest(): RequestInterface
-    {
-        $entries = array_values(array_filter(
-            $this->history,
-            fn ($entry) => str_contains((string) $entry['request']->getUri(), 'alt=media'),
-        ));
-
-        $this->assertNotEmpty($entries, 'harus ada request alt=media ke Drive');
-
-        return $entries[0]['request'];
-    }
-
     public function test_gdrive_stream_forwards_range_and_returns_206(): void
     {
         $file = $this->makeGdriveFile();
 
-        $this->fakeDrive(new PsrResponse(206, [
-            'Content-Type' => 'video/mp4',
-            'Content-Range' => 'bytes 5-14/20',
-            'Content-Length' => '10',
-        ], '56789abcde'));
+        $this->fakeDrive([
+            'status' => 206,
+            'headers' => [
+                'content-type' => 'video/mp4',
+                'content-range' => 'bytes 5-14/20',
+                'content-length' => '10',
+            ],
+            'body' => '56789abcde',
+        ]);
 
         $response = $this->get('/api/v1/files/'.$file->id.'/download?inline=1', [
             'Range' => 'bytes=5-14',
         ]);
 
         $response->assertStatus(206);
-        $this->assertSame('bytes=5-14', $this->mediaRequest()->getHeaderLine('Range'));
+        $this->assertContains('Range: bytes=5-14', $this->sentHeaders());
         $this->assertSame('bytes 5-14/20', $response->headers->get('Content-Range'));
         $this->assertSame('10', $response->headers->get('Content-Length'));
         $this->assertSame('56789abcde', $response->streamedContent());
@@ -137,7 +138,7 @@ class GdriveRangePassthroughTest extends TestCase
         $file = $this->makeGdriveFile();
 
         // Drive abaikan Range → balas 200 dengan body penuh.
-        $this->fakeDrive(new PsrResponse(200, ['Content-Type' => 'video/mp4'], self::BODY));
+        $this->fakeDrive(['status' => 200, 'headers' => ['content-type' => 'video/mp4'], 'body' => self::BODY]);
 
         $response = $this->get('/api/v1/files/'.$file->id.'/download?inline=1', [
             'Range' => 'bytes=5-14',
@@ -153,12 +154,12 @@ class GdriveRangePassthroughTest extends TestCase
     {
         $file = $this->makeGdriveFile();
 
-        $this->fakeDrive(new PsrResponse(200, ['Content-Type' => 'video/mp4'], self::BODY));
+        $this->fakeDrive(['status' => 200, 'headers' => ['content-type' => 'video/mp4'], 'body' => self::BODY]);
 
         $response = $this->get('/api/v1/files/'.$file->id.'/download?inline=1');
 
         $response->assertStatus(200);
-        $this->assertFalse($this->mediaRequest()->hasHeader('Range'));
+        $this->assertSame([], array_values(array_filter($this->sentHeaders(), fn ($h) => str_starts_with($h, 'Range:'))));
         $this->assertSame(self::BODY, $response->streamedContent());
     }
 
@@ -166,9 +167,11 @@ class GdriveRangePassthroughTest extends TestCase
     {
         $file = $this->makeGdriveFile('gd_missing');
 
-        $this->fakeDrive(new PsrResponse(404, ['Content-Type' => 'application/json'], json_encode([
-            'error' => ['message' => 'File not found'],
-        ])));
+        $this->fakeDrive([
+            'status' => 404,
+            'headers' => ['content-type' => 'application/json'],
+            'body' => json_encode(['error' => ['message' => 'File not found']]),
+        ]);
 
         $this->getJson('/api/v1/files/'.$file->id.'/download')
             ->assertStatus(409)
