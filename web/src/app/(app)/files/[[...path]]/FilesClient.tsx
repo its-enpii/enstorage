@@ -3082,10 +3082,15 @@ function FilesContent({ currentPath }: { currentPath: string }) {
                 itemsLabel={t('folders.items')}
                 totalSize={size > 0 ? bytes(size) : undefined}
                 isDropTarget={isDropTarget}
-                onClick={() =>
-                  f.is_locked
-                    ? setClickUnlock({ folderId: f.id, folderName: f.name, path: f.path })
-                    : navigateToFolder(f.path)
+                selected={selected.has(f.id)}
+                selectMode={selectMode}
+                onClick={
+                  selectMode
+                    ? () => toggleSelect(f.id)
+                    : () =>
+                        f.is_locked
+                          ? setClickUnlock({ folderId: f.id, folderName: f.name, path: f.path })
+                          : navigateToFolder(f.path)
                 }
                 actions={
                   <DropdownMenu
