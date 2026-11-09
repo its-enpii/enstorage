@@ -721,11 +721,11 @@ export function FilesStoreProvider({
   }, []);
 
   const upsertFolder = useCallback((f: FolderType) => {
-    setFolders((prev) => insertInBackendOrder(prev, f));
+    setFolders((prev) => applyUpsertWithSort(prev, f, sortRef.current));
   }, []);
 
   const upsertFile = useCallback((f: FileItem) => {
-    setFiles((prev) => insertInBackendOrder(prev, f));
+    setFiles((prev) => applyUpsertWithSort(prev, f, sortRef.current));
   }, []);
 
   const renameFolder = useCallback((id: string, name: string) => {
@@ -942,14 +942,32 @@ function mergeUnique<T extends { id: string }>(prev: T[], incoming: T[]): T[] {
   return next;
 }
 
-function insertInBackendOrder<T extends { id: string; created_at: string; name: string }>(
+/**
+ * Upsert that respects the user's active sort instead of always re-sorting
+ * the whole list by `created_at desc`. An item already present is replaced
+ * in place (its position must not shift on a realtime `file.updated`);
+ * a brand-new item is spliced by `created_at desc` only when that is the
+ * active sort, otherwise pushed to the end. The canonical server order is
+ * restored on the next fetch (refresh).
+ */
+function applyUpsertWithSort<T extends { id: string; created_at: string; name: string }>(
   list: T[],
   item: T,
+  active: { sort: string; sortDir: 'asc' | 'desc' },
 ): T[] {
-  const next = [...list.filter((x) => x.id !== item.id), item];
-  next.sort((a, b) => {
-    if (a.created_at !== b.created_at) return a.created_at > b.created_at ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
-  return next;
+  const idx = list.findIndex((x) => x.id === item.id);
+  if (idx !== -1) {
+    const next = [...list];
+    next[idx] = item;
+    return next;
+  }
+  if (active.sort === 'created_at' && active.sortDir === 'desc') {
+    const next = [...list, item];
+    next.sort((a, b) => {
+      if (a.created_at !== b.created_at) return a.created_at > b.created_at ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    return next;
+  }
+  return [...list, item];
 }
