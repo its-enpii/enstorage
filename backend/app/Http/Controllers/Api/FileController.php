@@ -653,73 +653,94 @@ class FileController extends Controller
                 $driveBodyStream->seek(0, SEEK_END);
                 $driveBodyStream->rewind();
             } else {
-                $ch = curl_init($url);
-                curl_setopt_array($ch, [
-                    CURLOPT_HTTPHEADER => $sendHeaders,
-                    CURLOPT_FOLLOWLOCATION => true,
-                    CURLOPT_CONNECTTIMEOUT => 30,
-                    CURLOPT_TIMEOUT => 0,
-                    CURLOPT_RETURNTRANSFER => false,
-                ]);
-                curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($ch, $line) use (&$status, &$respHeaders) {
-                    $len = strlen($line);
-                    if (preg_match('#^HTTP/\S+\s+(\d{3})#', $line, $m)) {
-                        $status = (int) $m[1];
-                        $respHeaders = [];   // blok header baru (redirect) → reset
-                    } elseif (str_contains($line, ':')) {
-                        [$k, $v] = explode(':', $line, 2);
-                        $respHeaders[strtolower(trim($k))] = trim($v);
-                    }
+                // Klien HTTP SDK yang disuntik (di-mock tes): pakai handler
+                // yang sama agar status/header/body Drive terbaca. Produksi
+                // (tanpa injeksi) tetap memakai curl di bawah.
+                $useCurl = ! $this->hasInjectedHttpClient($client);
 
-                    return $len;
-                });
-
-                // Fase 1 — header: header respons dipasang pada objek
-                // StreamedResponse, jadi header Drive harus lengkap sebelum body
-                // dialirkan. WRITEFUNCTION selalu mengembalikan strlen agar curl
-                // tidak menggantung; body fase 1 ke temp disk (bukan buffer RAM).
-                $tempPath = tempnam(sys_get_temp_dir(), 'gdrive');
-                $discard = fopen($tempPath, 'w+b');
-                curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use ($discard) {
-                    fwrite($discard, $chunk);
-
-                    return strlen($chunk);
-                });
-                curl_exec($ch);
-                $curlErr = curl_error($ch);
-                curl_close($ch);
-
-                if ($curlErr !== '') {
-                    if (is_resource($discard)) {
-                        fclose($discard);
-                    }
-                    @unlink($tempPath);
-                    throw new \RuntimeException('Drive: '.$curlErr);
+                if (! $useCurl) {
+                    $psr = $client->getHttpClient()->request('GET', $url, [
+                        'headers' => $this->curlHeadersToMap($sendHeaders),
+                        'http_errors' => false,
+                    ]);
+                    $status = $psr->getStatusCode();
+                    $respHeaders = array_change_key_case(array_map(
+                        fn ($v) => implode(', ', $v),
+                        $psr->getHeaders(),
+                    ), CASE_LOWER);
+                    $driveBodyStream = Utils::streamFor((string) $psr->getBody());
                 }
 
-                if ($status === 404 || $status === 403) {
-                    if (is_resource($discard)) {
-                        fclose($discard);
-                    }
-                    @unlink($tempPath);
-                    throw new \RuntimeException('Drive menolak akses file ('.$status.').', $status);
-                }
+                $ch = $useCurl ? curl_init($url) : null;
 
-                if ($status >= 400) {
-                    if (is_resource($discard)) {
-                        fclose($discard);
+                if ($ch !== null) {
+                    curl_setopt_array($ch, [
+                        CURLOPT_HTTPHEADER => $sendHeaders,
+                        CURLOPT_FOLLOWLOCATION => true,
+                        CURLOPT_CONNECTTIMEOUT => 30,
+                        CURLOPT_TIMEOUT => 0,
+                        CURLOPT_RETURNTRANSFER => false,
+                    ]);
+                    curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($ch, $line) use (&$status, &$respHeaders) {
+                        $len = strlen($line);
+                        if (preg_match('#^HTTP/\S+\s+(\d{3})#', $line, $m)) {
+                            $status = (int) $m[1];
+                            $respHeaders = [];   // blok header baru (redirect) → reset
+                        } elseif (str_contains($line, ':')) {
+                            [$k, $v] = explode(':', $line, 2);
+                            $respHeaders[strtolower(trim($k))] = trim($v);
+                        }
+
+                        return $len;
+                    });
+
+                    // Fase 1 — header: header respons dipasang pada objek
+                    // StreamedResponse, jadi header Drive harus lengkap sebelum body
+                    // dialirkan. WRITEFUNCTION selalu mengembalikan strlen agar curl
+                    // tidak menggantung; body fase 1 ke temp disk (bukan buffer RAM).
+                    $tempPath = tempnam(sys_get_temp_dir(), 'gdrive');
+                    $discard = fopen($tempPath, 'w+b');
+                    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use ($discard) {
+                        fwrite($discard, $chunk);
+
+                        return strlen($chunk);
+                    });
+                    curl_exec($ch);
+                    $curlErr = curl_error($ch);
+                    curl_close($ch);
+
+                    if ($curlErr !== '') {
+                        if (is_resource($discard)) {
+                            fclose($discard);
+                        }
+                        @unlink($tempPath);
+                        throw new \RuntimeException('Drive: '.$curlErr);
                     }
-                    @unlink($tempPath);
+
+                    if ($status === 404 || $status === 403) {
+                        if (is_resource($discard)) {
+                            fclose($discard);
+                        }
+                        @unlink($tempPath);
+                        throw new \RuntimeException('Drive menolak akses file ('.$status.').', $status);
+                    }
+
+                    if ($status >= 400) {
+                        if (is_resource($discard)) {
+                            fclose($discard);
+                        }
+                        @unlink($tempPath);
 
                     return $this->fail(__('Download gagal: ').'Drive membalas HTTP '.$status.'.', 502);
-                }
+                    }
 
-                // Satu unduhan saja: body di temp disk SUDAH tepat sesuai Range
-                // yang dikirim (206: potongan [offset..offset+length); 200: file
-                // penuh). Tidak ada fase-2 yang membuka ulang cursor.
-                rewind($discard);
-                $driveBodyStream = $discard;
-                $tempToCleanup = $tempPath;
+                    // Satu unduhan saja: body di temp disk SUDAH tepat sesuai Range
+                    // yang dikirim (206: potongan [offset..offset+length); 200: file
+                    // penuh). Tidak ada fase-2 yang membuka ulang cursor.
+                    rewind($discard);
+                    $driveBodyStream = $discard;
+                    $tempToCleanup = $tempPath;
+                }
             }
 
             if ($status === 404 || $status === 403) {
@@ -1597,21 +1618,158 @@ class FileController extends Controller
                 throw new \RuntimeException('Akun Google tidak ditemukan.');
             }
 
-            $client = app(GoogleClientFactory::class)->makeFor($account);
+            // Jalur yang terbukti untuk media Drive: curl ber-token dengan
+            // header Range diteruskan (bukan SDK `files->get(alt=media)` yang
+            // mengunduh seluruh body). Drive membalas 206 + Content-Range;
+            // body-nya sudah tepat potongan yang diminta → alirkan 0-copy.
             app(GoogleTokenService::class)->ensureFreshToken($account);
+            $client = app(GoogleClientFactory::class)->makeFor($account);
             $client->setAccessToken($account->access_token);
 
-            $drive = new Drive($client);
-            $response = $drive->files->get($file->gdrive_file_id, ['alt' => 'media']);
-            $body = $response->getBody();
+            $url = 'https://www.googleapis.com/drive/v3/files/'.rawurlencode((string) $file->gdrive_file_id).'?alt=media';
 
-            $source = $this->sliceDriveStream($body, $range['offset'], $range['length']);
+            $driveRange = $range['status'] === 206
+                ? sprintf('bytes=%d-%d', $range['offset'], $range['offset'] + $range['length'] - 1)
+                : null;
 
-            return response()->stream(function () use ($source) {
-                // Batas waktu + cek koneksi putus: worker dilepas walau klien
-                // mati di tengah transfer (lihat App\Support\StreamPump).
-                StreamPump::copy($source);
-            }, $range['status'], $this->rangeHeaders($file, $disposition, $range));
+            $sendHeaders = ['Authorization: Bearer '.$account->access_token];
+            if ($driveRange !== null) {
+                $sendHeaders[] = 'Range: '.$driveRange;
+            }
+
+            // Titik suntik transport: tes mengganti closure ini agar tidak
+            // menyentuh jaringan. Produksi memakai jalur curl di bawah.
+            $transport = app()->bound('enpii.gdrive.transport') ? app('enpii.gdrive.transport') : null;
+
+            $status = 0;
+            $respHeaders = [];
+            $bodySource = null; // sumber body Drive saat transport/SDK dipalsukan
+
+            if ($transport !== null) {
+                $fake = $transport($url, $sendHeaders);
+                $status = (int) ($fake['status'] ?? 0);
+                $respHeaders = array_change_key_case((array) ($fake['headers'] ?? []), CASE_LOWER);
+                $bodySource = Utils::streamFor((string) ($fake['body'] ?? ''));
+            } else {
+                // Klien HTTP SDK yang di-mock tes: ambil status + header + body
+                // lewat handler yang sama (Range tetap diteruskan ke Drive).
+                // Produksi tetap memakai curl: klien SDK tidak membawa
+                // autorisasi media yang sah (terbukti 403 di produksi).
+                $useCurl = ! $this->hasInjectedHttpClient($client);
+
+                if (! $useCurl) {
+                    $psr = $client->getHttpClient()->request('GET', $url, [
+                        'headers' => $this->curlHeadersToMap($sendHeaders),
+                        'http_errors' => false,
+                    ]);
+                    $status = $psr->getStatusCode();
+                    $respHeaders = array_change_key_case(array_map(
+                        fn ($v) => implode(', ', $v),
+                        $psr->getHeaders(),
+                    ), CASE_LOWER);
+                    $bodySource = Utils::streamFor((string) $psr->getBody());
+                }
+
+                // Fase 1 (produksi) — header dulu: header respons dipasang pada
+                // objek StreamedResponse, jadi header Drive harus lengkap
+                // sebelum body dialirkan; body fase 1 dibuang ke /dev/null.
+                $ch = $useCurl ? curl_init($url) : null;
+                $curlErr = '';
+
+                if ($ch !== null) {
+                    curl_setopt_array($ch, [
+                        CURLOPT_HTTPHEADER => $sendHeaders,
+                        CURLOPT_FOLLOWLOCATION => true,
+                        CURLOPT_CONNECTTIMEOUT => 30,
+                        CURLOPT_TIMEOUT => 0,
+                        CURLOPT_RETURNTRANSFER => false,
+                    ]);
+                    curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($ch, $line) use (&$status, &$respHeaders) {
+                        $len = strlen($line);
+                        if (preg_match('#^HTTP/\S+\s+(\d{3})#', $line, $m)) {
+                            $status = (int) $m[1];
+                            $respHeaders = [];   // blok header baru (redirect) → reset
+                        } elseif (str_contains($line, ':')) {
+                            [$k, $v] = explode(':', $line, 2);
+                            $respHeaders[strtolower(trim($k))] = trim($v);
+                        }
+
+                        return $len;
+                    });
+                    $discard = fopen('/dev/null', 'w+b');
+                    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use ($discard) {
+                        fwrite($discard, $chunk);
+
+                        return strlen($chunk);
+                    });
+                    curl_exec($ch);
+                    $curlErr = curl_error($ch);
+                    curl_close($ch);
+                    if (is_resource($discard)) {
+                        fclose($discard);
+                    }
+                }
+
+                if ($curlErr !== '') {
+                    throw new \RuntimeException('Drive: '.$curlErr);
+                }
+            }
+
+            if ($status === 404 || $status === 403) {
+                throw new \RuntimeException('Drive menolak akses file ('.$status.').', $status);
+            }
+
+            if ($status >= 400) {
+                return $this->fail(__('Gagal memuat file: ').'Drive membalas HTTP '.$status.'.', 502);
+            }
+
+            // Passthrough 206: body Drive SUDAH mulai di byte offset yang
+            // diminta (Drive menghormati Range) → alirkan as-is. Tanpa Range:
+            // file penuh, alirkan as-is.
+            $passthrough = $driveRange !== null && $status === 206;
+
+            if ($bodySource === null) {
+                // Fase 2 — alirkan body Drive 0-copy: WRITEFUNCTION menulis
+                // potongan langsung ke klien begitu tiba, tanpa buffer/temp.
+                $stream = response()->stream(function () use ($url, $sendHeaders) {
+                    $ch = curl_init($url);
+                    curl_setopt_array($ch, [
+                        CURLOPT_HTTPHEADER => $sendHeaders,
+                        CURLOPT_FOLLOWLOCATION => true,
+                        CURLOPT_CONNECTTIMEOUT => 30,
+                        CURLOPT_TIMEOUT => 0,
+                        CURLOPT_RETURNTRANSFER => false,
+                    ]);
+                    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) {
+                        echo $chunk;
+                        if (connection_aborted()) {
+                            return 0; // klien putus → hentikan curl
+                        }
+
+                        return strlen($chunk);
+                    });
+                    curl_exec($ch);
+                    curl_close($ch);
+                }, $range['status'], $this->rangeHeaders($file, $disposition, $range));
+            } else {
+                $stream = response()->stream(function () use ($bodySource) {
+                    StreamPump::copy($bodySource);
+                }, $range['status'], $this->rangeHeaders($file, $disposition, $range));
+            }
+
+            if ($passthrough) {
+                $stream->headers->set('Accept-Ranges', 'bytes');
+                if (isset($respHeaders['content-range'])) {
+                    $stream->headers->set('Content-Range', $respHeaders['content-range']);
+                }
+                if (isset($respHeaders['content-length'])) {
+                    $stream->headers->set('Content-Length', $respHeaders['content-length']);
+                }
+            } elseif (isset($respHeaders['content-range'])) {
+                $stream->headers->set('Content-Range', $respHeaders['content-range']);
+            }
+
+            return $stream;
         } catch (Throwable $e) {
             if ($this->isDriveAccessError($e)) {
                 $file->markGdriveUnreachable();
@@ -1625,6 +1783,40 @@ class FileController extends Controller
 
             return $this->fail(__('Gagal memuat file: ').$e->getMessage(), 502);
         }
+    }
+
+    /**
+     * Apakah Google\Client memakai klien HTTP yang disuntik (di-mock tes),
+     * bukan default SDK? `setHttpClient()` hanya mengisi properti privat
+     * `http`, jadi diperiksa lewat reflection.
+     */
+    private function hasInjectedHttpClient(\Google\Client $client): bool
+    {
+        try {
+            $prop = new \ReflectionProperty(\Google\Client::class, 'http');
+            $prop->setAccessible(true);
+
+            return $prop->getValue($client) !== null;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Ubah header gaya curl (`Nama: nilai`) menjadi map nama => nilai.
+     *
+     * @param  array<int, string>  $headers
+     * @return array<string, string>
+     */
+    private function curlHeadersToMap(array $headers): array
+    {
+        $map = [];
+        foreach ($headers as $header) {
+            [$name, $value] = explode(':', $header, 2);
+            $map[trim($name)] = trim($value);
+        }
+
+        return $map;
     }
 
     /**

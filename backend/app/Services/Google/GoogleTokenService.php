@@ -11,6 +11,9 @@ use RuntimeException;
 
 class GoogleTokenService
 {
+    /** @var array<int, array{exp: int, token: string}> */
+    private array $tokenCache = [];
+
     public function __construct(private readonly GoogleClientFactory $factory) {}
 
     /**
@@ -186,6 +189,25 @@ class GoogleTokenService
      */
     public function ensureFreshToken(GoogleAccount $account): string
     {
+        $cacheKey = 'gdrive.token.'.$account->id;
+
+        // Instance-level cache: hindari query DB + decrypt berulang di satu request.
+        $hit = $this->tokenCache[$account->id] ?? null;
+        if ($hit && $hit['exp'] > time() + 60) {
+            $account->access_token = $hit['token'];
+
+            return $hit['token'];
+        }
+
+        // Bursty: bila cache (CACHE_STORE=redis) punya token valid, pakai itu.
+        $cached = cache()->get($cacheKey);
+        if (is_array($cached) && ($cached['exp'] ?? 0) > time() + 60) {
+            $account->access_token = $cached['token'];
+            $this->tokenCache[$account->id] = ['token' => $cached['token'], 'exp' => (int) $cached['exp']];
+
+            return $cached['token'];
+        }
+
         $client = $this->factory->makeFor($account);
 
         if ($client->isAccessTokenExpired()) {
@@ -210,6 +232,13 @@ class GoogleTokenService
             }
             $account->token_expires_at = now()->addSeconds((int) ($newToken['expires_in'] ?? 3600));
             $account->save();
+        }
+
+        // Simpan token valid (hanya bila ada) di redis + instance cache.
+        if (! empty($account->access_token)) {
+            $exp = $account->token_expires_at?->getTimestamp() ?? time() + 3300;
+            cache()->put($cacheKey, ['token' => $account->access_token, 'exp' => $exp], 300);
+            $this->tokenCache[$account->id] = ['token' => $account->access_token, 'exp' => $exp];
         }
 
         return $account->access_token;
