@@ -637,8 +637,6 @@ class FileController extends Controller
             $status = 0;
             $respHeaders = [];
             $driveBodyStream = null;
-            $directStream = false;
-            $curlBody = null;
             $tempToCleanup = null;
 
             // Titik suntik transport: tes dapat mengganti closure ini agar tidak
@@ -716,42 +714,12 @@ class FileController extends Controller
                     return $this->fail(__('Download gagal: ').'Drive membalas HTTP '.$status.'.', 502);
                 }
 
-                if ($transport === null && $driveRange !== null && $status === 206) {
-                    // Fase 2 — body: body fase 1 dibuang (tidak di-buffer); buka
-                    // ulang curl dengan Range yang sama dan alirkan tiap chunk
-                    // LANGSUNG ke klien (zero-copy, 64 KB/chunk).
-                    if (is_resource($discard)) {
-                        fclose($discard);
-                    }
-                    @unlink($tempPath);
-
-                    $directStream = true;
-                    $curlBody = function () use ($url, $sendHeaders) {
-                        $ch = curl_init($url);
-                        curl_setopt_array($ch, [
-                            CURLOPT_HTTPHEADER => $sendHeaders,
-                            CURLOPT_FOLLOWLOCATION => true,
-                            CURLOPT_CONNECTTIMEOUT => 30,
-                            CURLOPT_TIMEOUT => 0,
-                            CURLOPT_BUFFERSIZE => 65536,
-                            CURLOPT_WRITEFUNCTION => function ($ch, $chunk) {
-                                echo $chunk;
-                                StreamPump::flushOutput();
-
-                                return strlen($chunk);
-                            },
-                        ]);
-                        curl_exec($ch);
-                        curl_close($ch);
-                    };
-                } else {
-                    // File penuh (200 / tanpa Range / titik suntik transport):
-                    // slice dari temp disk lewat resource native; hapus temp
-                    // setelah respons selesai.
-                    rewind($discard);
-                    $driveBodyStream = $discard;
-                    $tempToCleanup = $tempPath;
-                }
+                // Satu unduhan saja: body di temp disk SUDAH tepat sesuai Range
+                // yang dikirim (206: potongan [offset..offset+length); 200: file
+                // penuh). Tidak ada fase-2 yang membuka ulang cursor.
+                rewind($discard);
+                $driveBodyStream = $discard;
+                $tempToCleanup = $tempPath;
             }
 
             if ($status === 404 || $status === 403) {
@@ -766,41 +734,31 @@ class FileController extends Controller
             // ini, bukan di dalam closure, supaya selalu terkirim utuh.
             $passthrough = $driveRange !== null && $status === 206;
 
-            if ($directStream) {
-                // Zero-copy: curl fase 2 menulis tiap chunk langsung ke klien.
-                $stream = $this->streamDownloadResponse(
-                    $curlBody,
-                    $file->mime_type,
-                    $this->makeContentDisposition($disposition, $file),
-                    'no-cache, private',
-                    206,
-                );
-            } else {
-                // Passthrough 206: body dari Drive SUDAH mulai di byte offset
-                // yang diminta → skip 0 lagi, hanya batasi length. Fallback 200
-                // (Drive abaikan Range) masih perlu slice dari offset.
-                $sliceOffset = $passthrough ? 0 : $range['offset'];
-                $source = $this->sliceDriveStream($driveBodyStream, $sliceOffset, $range['length']);
+            // Passthrough 206: body dari Drive SUDAH mulai di byte offset yang
+            // diminta → alirkan as-is, panjang = length Range. Fallback (Drive
+            // abaikan Range → 200) masih perlu slice dari offset. Tanpa Range:
+            // file penuh, alirkan as-is.
+            $sliceOffset = $passthrough ? 0 : ($range['status'] === 206 ? $range['offset'] : 0);
+            $source = $this->sliceReadStream($driveBodyStream, $sliceOffset, $range['length']);
 
-                $stream = $this->streamDownloadResponse(
-                    function () use ($source, $driveBodyStream, $tempToCleanup) {
-                        try {
-                            StreamPump::copy($source);
-                        } finally {
-                            if (is_resource($driveBodyStream)) {
-                                fclose($driveBodyStream);
-                            }
-                            if ($tempToCleanup !== null) {
-                                @unlink($tempToCleanup);
-                            }
+            $stream = $this->streamDownloadResponse(
+                function () use ($source, $driveBodyStream, $tempToCleanup) {
+                    try {
+                        StreamPump::copy($source);
+                    } finally {
+                        if (is_resource($driveBodyStream)) {
+                            fclose($driveBodyStream);
                         }
-                    },
-                    $file->mime_type,
-                    $this->makeContentDisposition($disposition, $file),
-                    'no-cache, private',
-                    $range['status'],
-                );
-            }
+                        if ($tempToCleanup !== null) {
+                            @unlink($tempToCleanup);
+                        }
+                    }
+                },
+                $file->mime_type,
+                $this->makeContentDisposition($disposition, $file),
+                'no-cache, private',
+                $range['status'],
+            );
 
             if ($passthrough) {
                 $stream->headers->set('Accept-Ranges', 'bytes');
