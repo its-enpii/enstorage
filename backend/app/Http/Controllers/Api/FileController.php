@@ -637,6 +637,9 @@ class FileController extends Controller
             $status = 0;
             $respHeaders = [];
             $driveBodyStream = null;
+            $directStream = false;
+            $curlBody = null;
+            $tempToCleanup = null;
 
             // Titik suntik transport: tes dapat mengganti closure ini agar tidak
             // memanggil jaringan. Produksi memakai null → jalur curl di bawah.
@@ -673,41 +676,81 @@ class FileController extends Controller
                     return $len;
                 });
 
-                // Header respons dipasang pada objek StreamedResponse, jadi header
-                // Drive harus sudah terbaca sebelum body dialirkan.
-                $sink = fopen('php://temp', 'w+b');
-                curl_setopt($ch, CURLOPT_FILE, $sink);
+                // Fase 1 — header: header respons dipasang pada objek
+                // StreamedResponse, jadi header Drive harus lengkap sebelum body
+                // dialirkan. WRITEFUNCTION selalu mengembalikan strlen agar curl
+                // tidak menggantung; body fase 1 ke temp disk (bukan buffer RAM).
+                $tempPath = tempnam(sys_get_temp_dir(), 'gdrive');
+                $discard = fopen($tempPath, 'w+b');
+                curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use ($discard) {
+                    fwrite($discard, $chunk);
+
+                    return strlen($chunk);
+                });
                 curl_exec($ch);
                 $curlErr = curl_error($ch);
                 curl_close($ch);
 
                 if ($curlErr !== '') {
-                    if (is_resource($sink)) {
-                        fclose($sink);
+                    if (is_resource($discard)) {
+                        fclose($discard);
                     }
+                    @unlink($tempPath);
                     throw new \RuntimeException('Drive: '.$curlErr);
                 }
 
                 if ($status === 404 || $status === 403) {
-                    if (is_resource($sink)) {
-                        fclose($sink);
+                    if (is_resource($discard)) {
+                        fclose($discard);
                     }
+                    @unlink($tempPath);
                     throw new \RuntimeException('Drive menolak akses file ('.$status.').', $status);
                 }
 
                 if ($status >= 400) {
-                    if (is_resource($sink)) {
-                        fclose($sink);
+                    if (is_resource($discard)) {
+                        fclose($discard);
                     }
+                    @unlink($tempPath);
 
                     return $this->fail(__('Download gagal: ').'Drive membalas HTTP '.$status.'.', 502);
                 }
 
-                $driveBodyStream = Utils::streamFor($sink);
-                // curl menulis sampai EOF; tanpa rewind, stream baru dimulai di
-                // akhir berkas dan klien menerima 0 byte (IncompleteRead).
-                if ($driveBodyStream->isSeekable()) {
-                    $driveBodyStream->rewind();
+                if ($transport === null && $driveRange !== null && $status === 206) {
+                    // Fase 2 — body: body fase 1 dibuang (tidak di-buffer); buka
+                    // ulang curl dengan Range yang sama dan alirkan tiap chunk
+                    // LANGSUNG ke klien (zero-copy, 64 KB/chunk).
+                    if (is_resource($discard)) {
+                        fclose($discard);
+                    }
+                    @unlink($tempPath);
+
+                    $directStream = true;
+                    $curlBody = function () use ($url, $sendHeaders) {
+                        $ch = curl_init($url);
+                        curl_setopt_array($ch, [
+                            CURLOPT_HTTPHEADER => $sendHeaders,
+                            CURLOPT_FOLLOWLOCATION => true,
+                            CURLOPT_CONNECTTIMEOUT => 30,
+                            CURLOPT_TIMEOUT => 0,
+                            CURLOPT_BUFFERSIZE => 65536,
+                            CURLOPT_WRITEFUNCTION => function ($ch, $chunk) {
+                                echo $chunk;
+                                StreamPump::flushOutput();
+
+                                return strlen($chunk);
+                            },
+                        ]);
+                        curl_exec($ch);
+                        curl_close($ch);
+                    };
+                } else {
+                    // File penuh (200 / tanpa Range / titik suntik transport):
+                    // slice dari temp disk lewat resource native; hapus temp
+                    // setelah respons selesai.
+                    rewind($discard);
+                    $driveBodyStream = $discard;
+                    $tempToCleanup = $tempPath;
                 }
             }
 
@@ -719,23 +762,45 @@ class FileController extends Controller
                 return $this->fail(__('Download gagal: ').'Drive membalas HTTP '.$status.'.', 502);
             }
 
-            $driveBody = $driveBodyStream;
-
             // Header (termasuk hasil middleware) dipasang pada object respons
             // ini, bukan di dalam closure, supaya selalu terkirim utuh.
             $passthrough = $driveRange !== null && $status === 206;
 
-            $source = $passthrough
-                ? $driveBody
-                : $this->sliceDriveStream($driveBody, $range['offset'], $range['length']);
+            if ($directStream) {
+                // Zero-copy: curl fase 2 menulis tiap chunk langsung ke klien.
+                $stream = $this->streamDownloadResponse(
+                    $curlBody,
+                    $file->mime_type,
+                    $this->makeContentDisposition($disposition, $file),
+                    'no-cache, private',
+                    206,
+                );
+            } else {
+                // Passthrough 206: body dari Drive SUDAH mulai di byte offset
+                // yang diminta → skip 0 lagi, hanya batasi length. Fallback 200
+                // (Drive abaikan Range) masih perlu slice dari offset.
+                $sliceOffset = $passthrough ? 0 : $range['offset'];
+                $source = $this->sliceDriveStream($driveBodyStream, $sliceOffset, $range['length']);
 
-            $stream = $this->streamDownloadResponse(
-                fn () => StreamPump::copy($source),
-                $file->mime_type,
-                $this->makeContentDisposition($disposition, $file),
-                'no-cache, private',
-                $passthrough ? 206 : $range['status'],
-            );
+                $stream = $this->streamDownloadResponse(
+                    function () use ($source, $driveBodyStream, $tempToCleanup) {
+                        try {
+                            StreamPump::copy($source);
+                        } finally {
+                            if (is_resource($driveBodyStream)) {
+                                fclose($driveBodyStream);
+                            }
+                            if ($tempToCleanup !== null) {
+                                @unlink($tempToCleanup);
+                            }
+                        }
+                    },
+                    $file->mime_type,
+                    $this->makeContentDisposition($disposition, $file),
+                    'no-cache, private',
+                    $range['status'],
+                );
+            }
 
             if ($passthrough) {
                 $stream->headers->set('Accept-Ranges', 'bytes');
@@ -747,6 +812,9 @@ class FileController extends Controller
                 }
             } else {
                 $this->applyRangeHeaders($stream, $range);
+                if (isset($respHeaders['content-range'])) {
+                    $stream->headers->set('Content-Range', $respHeaders['content-range']);
+                }
             }
 
             return $stream;
@@ -2152,7 +2220,9 @@ class FileController extends Controller
                 return null;
             }
 
-            return $body->read(min(StreamPump::CHUNK_BYTES, $max));
+            $rr = $body->read(min(StreamPump::CHUNK_BYTES, $max));
+
+            return $rr;
         }, $length);
     }
 
