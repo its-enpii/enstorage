@@ -14,8 +14,8 @@ use App\Models\ShareLink;
 use App\Models\Webhook;
 use App\Services\Google\GoogleDriveFolderService;
 use App\Services\Google\GoogleDriveUploader;
-use App\Services\WebhookService;
 use App\Services\ThumbnailGenerator;
+use App\Services\WebhookService;
 use App\Support\BulkQuery;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -60,6 +60,9 @@ class PurgeFolderTree implements ShouldQueue
 
     /** Id file per statement & per batch kerja. */
     private const BATCH = 1000;
+
+    /** @var array<int|string, array<int, string>> id Drive gagal, dikumpulkan per akun untuk pass kedua. */
+    private array $driveFailureIds = [];
 
     /**
      * Id file maksimum per `FilesDeletedBroadcast`.
@@ -274,6 +277,10 @@ class PurgeFolderTree implements ShouldQueue
             });
         });
 
+        // Pass kedua: satu retry untuk SEMUA id yang gagal di loop utama,
+        // dikelompokkan per akun. Best-effort — DB sudah bersih.
+        $stats['drive_failures'] = $this->retryDriveFailures($uploader);
+
         // 9. Baris folder: FK `parent_id` cascade menghapus subfolder, tapi
         //    share_links folder (polymorphic) tidak ikut — hapus manual dulu.
         $stats['share_links'] += ShareLink::where('shareable_type', Folder::class)
@@ -466,14 +473,18 @@ class PurgeFolderTree implements ShouldQueue
             $account = $accounts->get($accountId);
             if (! $account) {
                 $failures += count($gdriveFileIds);
+                $this->rememberDriveFailures($accountId, $gdriveFileIds);
 
                 continue;
             }
 
             try {
-                $failures += count($uploader->deleteFilesBulk($account, $gdriveFileIds));
+                $failed = $uploader->deleteFilesBulk($account, $gdriveFileIds);
+                $failures += count($failed);
+                $this->rememberDriveFailures($accountId, $failed);
             } catch (Throwable $e) {
                 $failures += count($gdriveFileIds);
+                $this->rememberDriveFailures($accountId, $gdriveFileIds);
                 Log::warning('PurgeFolderTree: GDrive batch delete gagal', [
                     'account_id' => $accountId,
                     'files' => count($gdriveFileIds),
@@ -483,6 +494,95 @@ class PurgeFolderTree implements ShouldQueue
         }
 
         return $failures;
+    }
+
+    /**
+     * @param  array<int, string>  $gdriveFileIds
+     */
+    private function rememberDriveFailures(int|string $accountId, array $gdriveFileIds): void
+    {
+        if ($gdriveFileIds === []) {
+            return;
+        }
+
+        $this->driveFailureIds[$accountId] = array_merge(
+            $this->driveFailureIds[$accountId] ?? [],
+            array_values($gdriveFileIds),
+        );
+    }
+
+    /**
+     * Satu kali pass kedua untuk semua id yang gagal di loop utama.
+     * Kegagalan final dicatat sebagai residual terstruktur agar bisa
+     * direkonsiliasi manual (DB sudah tidak menyimpan barisnya).
+     */
+    private function retryDriveFailures(GoogleDriveUploader $uploader): int
+    {
+        if ($this->driveFailureIds === []) {
+            return 0;
+        }
+
+        $pending = [];
+        foreach ($this->driveFailureIds as $accountId => $ids) {
+            $ids = array_values(array_unique($ids));
+            if ($ids !== []) {
+                $pending[$accountId] = $ids;
+            }
+        }
+        $this->driveFailureIds = [];
+
+        if ($pending === []) {
+            return 0;
+        }
+
+        $attempted = array_sum(array_map('count', $pending));
+        $accounts = GoogleAccount::whereIn('id', array_keys($pending))->get()->keyBy('id');
+        $residuals = [];
+
+        foreach ($pending as $accountId => $ids) {
+            $account = $accounts->get($accountId);
+            if (! $account) {
+                $residuals[$accountId] = $ids;
+
+                continue;
+            }
+
+            try {
+                $stillFailed = $uploader->deleteFilesBulk($account, $ids);
+                if ($stillFailed !== []) {
+                    $residuals[$accountId] = array_values(array_unique($stillFailed));
+                }
+            } catch (Throwable $e) {
+                $residuals[$accountId] = $ids;
+                Log::warning('PurgeFolderTree: retry GDrive batch delete gagal', [
+                    'account_id' => $accountId,
+                    'files' => count($ids),
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $remaining = array_sum(array_map('count', $residuals));
+
+        foreach ($residuals as $accountId => $ids) {
+            Log::error('PurgeFolderTree: drive residuals', [
+                'folder_id' => $this->folderId,
+                'user_id' => $this->userId,
+                'purge_token' => $this->purgeToken,
+                'account_id' => $accountId,
+                'count' => count($ids),
+                'gdrive_file_ids' => array_values($ids),
+            ]);
+        }
+
+        Log::info('PurgeFolderTree: drive retry pass selesai', [
+            'folder_id' => $this->folderId,
+            'purge_token' => $this->purgeToken,
+            'attempted' => $attempted,
+            'remaining' => $remaining,
+        ]);
+
+        return $remaining;
     }
 
     /**

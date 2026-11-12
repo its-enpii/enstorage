@@ -15,6 +15,9 @@ use Psr\Http\Message\RequestInterface;
 
 class GoogleDriveUploader
 {
+    /** Google Drive menolak batch request berisi lebih dari 100 call. */
+    private const BATCH_LIMIT = 100;
+
     // Ambang batas "Direct 1-shot Multipart". File/part dengan ukuran
     // <= 5 MB dikirim dalam SATU request HTTP (metadata + isi file sekaligus),
     // tanpa handshake resumable (init session + nextChunk). Ini memotong
@@ -417,34 +420,104 @@ class GoogleDriveUploader
         $client->setUseBatch(true);
 
         $failed = [];
+        $ids = array_values(array_unique(array_map('strval', $gdriveFileIds)));
 
         try {
-            $batch = $drive->createBatch();
-            $requests = [];
+            foreach (array_chunk($ids, self::BATCH_LIMIT) as $chunk) {
+                $retryIds = $this->executeDeleteBatch($drive, $chunk, $failed);
 
-            foreach ($gdriveFileIds as $gdriveFileId) {
-                $requests[$gdriveFileId] = $batch->add($drive->files->delete($gdriveFileId), $gdriveFileId);
-            }
-
-            $results = $batch->execute();
-
-            foreach ($results as $key => $result) {
-                $id = (string) (str_starts_with((string) $key, 'response-') ? substr($key, 9) : $key);
-
-                if ($result instanceof \Google\Service\Exception) {
-                    $failed[] = $id;
-                    Log::warning('GDrive batch delete failed', [
-                        'gdrive_file_id' => $id,
-                        'code' => $result->getCode(),
-                        'error' => $result->getMessage(),
-                    ]);
+                if ($retryIds === []) {
+                    continue;
                 }
+
+                // 403 "soft limit / Please retry" sering sembuh setelah jeda
+                // singkat. Coba SEKALI lagi; kegagalan kedua jadi final.
+                sleep(1);
+                $this->executeDeleteBatch($drive, $retryIds, $failed, false);
             }
         } finally {
             $client->setUseBatch(false);
         }
 
-        return $failed;
+        return array_values(array_unique($failed));
+    }
+
+    /**
+     * Jalankan satu batch delete (maksimal BATCH_LIMIT id).
+     *
+     * @param  array<int, string>  $gdriveFileIds
+     * @param  array<int, string>  $failed  akumulasi id gagal final
+     * @return array<int, string> id yang perlu di-retry karena 403 soft limit
+     */
+    private function executeDeleteBatch(Drive $drive, array $gdriveFileIds, array &$failed, bool $retrySoftLimit = true): array
+    {
+        $batch = $drive->createBatch();
+
+        foreach ($gdriveFileIds as $gdriveFileId) {
+            $batch->add($drive->files->delete($gdriveFileId), $gdriveFileId);
+        }
+
+        try {
+            $results = $batch->execute();
+        } catch (\Throwable $e) {
+            if ($retrySoftLimit && (int) $e->getCode() === 403 && $this->isSoftLimit($e->getMessage())) {
+                return $gdriveFileIds;
+            }
+
+            $failed = array_merge($failed, $gdriveFileIds);
+            Log::warning('GDrive batch delete failed', [
+                'files' => count($gdriveFileIds),
+                'code' => $e->getCode(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+
+        $retry = [];
+        $handled = [];
+
+        foreach (is_array($results) ? $results : [] as $key => $result) {
+            $id = (string) (str_starts_with((string) $key, 'response-') ? substr($key, 9) : $key);
+            $handled[$id] = true;
+
+            if (! $result instanceof \Google\Service\Exception) {
+                continue;
+            }
+
+            if ($retrySoftLimit && $result->getCode() === 403 && $this->isSoftLimit($result->getMessage())) {
+                $retry[] = $id;
+
+                continue;
+            }
+
+            $failed[] = $id;
+            Log::warning('GDrive batch delete failed', [
+                'gdrive_file_id' => $id,
+                'code' => $result->getCode(),
+                'error' => $result->getMessage(),
+            ]);
+        }
+
+        // Response parsial / key tak dikenal tidak boleh membuat residu
+        // dianggap sukses.
+        foreach ($gdriveFileIds as $gdriveFileId) {
+            if (! isset($handled[$gdriveFileId])) {
+                $failed[] = $gdriveFileId;
+                Log::warning('GDrive batch delete response tidak lengkap', [
+                    'gdrive_file_id' => $gdriveFileId,
+                ]);
+            }
+        }
+
+        return $retry;
+    }
+
+    private function isSoftLimit(string $message): bool
+    {
+        $message = strtolower($message);
+
+        return str_contains($message, 'soft limit') || str_contains($message, 'please retry');
     }
 
     public function deleteFile(GoogleAccount $account, string $gdriveFileId): void

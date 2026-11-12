@@ -354,7 +354,7 @@ class GoogleDriveFolderService
             $drive = $this->makeDrive($account);
 
             if ($folder !== null) {
-                $this->deleteDriveChildren($drive, $account, $folder, $gdriveFolderId);
+                $this->deleteDriveChildren($account, $folder, $gdriveFolderId);
             }
 
             $drive->files->delete($gdriveFolderId);
@@ -385,8 +385,13 @@ class GoogleDriveFolderService
      * supaya folder Drive yang di-share antar-folder EnStorage tidak ikut
      * terhapus.
      */
-    private function deleteDriveChildren(Drive $drive, GoogleAccount $account, Folder $folder, string $gdriveFolderId): void
+    private function deleteDriveChildren(GoogleAccount $account, Folder $folder, string $gdriveFolderId): void
     {
+        // Resolve lazy: GoogleDriveUploader sudah bergantung pada service ini,
+        // jadi constructor injection di sini akan membuat siklus dependency.
+        $uploader = app(GoogleDriveUploader::class);
+        $childDriveIds = [];
+
         $childFolders = Folder::where('user_id', $folder->user_id)
             ->where('parent_id', $folder->id)
             ->whereNotNull('gdrive_folder_id')
@@ -398,15 +403,7 @@ class GoogleDriveFolderService
                 continue;
             }
 
-            try {
-                $drive->files->delete($childDriveId);
-            } catch (Throwable $e) {
-                Log::warning('GDrive delete child folder failed', [
-                    'folder_id' => $child->id,
-                    'gdrive_folder_id' => $childDriveId,
-                    'error' => $e->getMessage(),
-                ]);
-            }
+            $childDriveIds[] = $childDriveId;
         }
 
         // Sengaja BUKAN di-scope user_id: lebih baik mencoba hapus satu id
@@ -422,15 +419,30 @@ class GoogleDriveFolderService
                 continue;
             }
 
-            try {
-                $drive->files->delete($gdriveFileId);
-            } catch (Throwable $e) {
-                Log::warning('GDrive delete child file failed', [
+            $childDriveIds[] = $gdriveFileId;
+        }
+
+        if ($childDriveIds === []) {
+            return;
+        }
+
+        try {
+            $failed = $uploader->deleteFilesBulk($account, array_values(array_unique($childDriveIds)));
+
+            if ($failed !== []) {
+                Log::warning('GDrive delete child items gagal (best-effort)', [
                     'folder_id' => $folder->id,
-                    'gdrive_file_id' => $gdriveFileId,
-                    'error' => $e->getMessage(),
+                    'account_id' => $account->id,
+                    'failed' => count($failed),
+                    'gdrive_ids' => array_values($failed),
                 ]);
             }
+        } catch (Throwable $e) {
+            Log::warning('GDrive delete child items gagal (best-effort)', [
+                'folder_id' => $folder->id,
+                'account_id' => $account->id,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
