@@ -55,7 +55,7 @@ class FileSourceFetcher
 
     /**
      * Ambil path lokal file: disk `local` langsung, atau download dari Drive.
-     * Driver lain (s3/spanned) tidak didukung → null.
+     * Driver lain (s3) tidak didukung → null.
      */
     public function fetch(FileModel $file): ?string
     {

@@ -119,25 +119,19 @@ class QuotaManager
         }
 
         if (! $best) {
-            throw new RuntimeException('Tidak ada akun Google yang memiliki ruang cukup untuk file ini.');
+            throw new RuntimeException('Tidak ada akun Google Drive yang memiliki kuota cukup.');
         }
 
         return $best;
     }
 
     /**
-     * Rencanakan alokasi penyimpanan sebuah file ke satu atau beberapa akun
-     * Google Drive milik user (Spanned Chunk Storage).
-     *
-     * - Single fit: ada akun dengan free >= ukuran file → pakai akun dengan
-     *   free terbesar, 1 part utuh.
-     * - Spanning: tidak ada akun yang cukup → greedy dari akun dengan free
-     *   terkecil (habiskan hingga 0), sisa byte dialokasikan ke akun
-     *   berikutnya sampai file tertampung.
+     * Pilih satu akun Google Drive milik user yang mampu menampung seluruh
+     * file. Akun dengan free space terbesar yang memenuhi syarat diutamakan.
      *
      * @return array<int, array{account: GoogleAccount, part_number: int, byte_offset_start: int, byte_offset_end: int, size: int}>
      *
-     * @throws RuntimeException bila tidak ada akun atau total kuota kurang
+     * @throws RuntimeException bila tidak ada akun atau kuota tidak cukup
      */
     public function planStorageAllocation(User $user, int $fileSizeBytes): array
     {
@@ -165,8 +159,7 @@ class QuotaManager
             $pool[] = ['account' => $account, 'free' => (int) $quota['free']];
         }
 
-        // Kasus 1 (Single Fit): ada satu akun yang mampu menampung seluruh
-        // file. Akun dengan ruang paling besar diutamakan.
+        // Hanya akun yang mampu menampung seluruh file yang boleh dipilih.
         $best = null;
         $bestFree = -1;
         foreach ($pool as $candidate) {
@@ -186,44 +179,7 @@ class QuotaManager
             ]];
         }
 
-        // Kasus 2 (Spanning Multi-Drive): greedy dari akun dengan sisa
-        // ruang terkecil; tiap akun diisi penuh sampai 0 KB.
-        $usable = array_values(array_filter($pool, fn (array $item) => $item['free'] > 0));
-        usort($usable, fn (array $a, array $b) => $a['free'] <=> $b['free']);
-
-        $plan = [];
-        $remaining = $fileSizeBytes;
-        $offset = 0;
-        $partNumber = 1;
-
-        foreach ($usable as $item) {
-            if ($remaining <= 0) {
-                break;
-            }
-
-            $take = min($item['free'], $remaining);
-            if ($take <= 0) {
-                continue;
-            }
-
-            $plan[] = [
-                'account' => $item['account'],
-                'part_number' => $partNumber,
-                'byte_offset_start' => $offset,
-                'byte_offset_end' => $offset + $take - 1,
-                'size' => $take,
-            ];
-
-            $offset += $take;
-            $remaining -= $take;
-            $partNumber++;
-        }
-
-        if ($remaining > 0) {
-            throw new RuntimeException('Total kuota Google Drive tidak mencukupi untuk file ini.');
-        }
-
-        return $plan;
+        throw new RuntimeException('Tidak ada akun Google Drive yang memiliki kuota cukup.');
     }
 
     /**

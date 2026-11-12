@@ -18,7 +18,7 @@ class GoogleDriveUploader
     /** Google Drive menolak batch request berisi lebih dari 100 call. */
     private const BATCH_LIMIT = 100;
 
-    // Ambang batas "Direct 1-shot Multipart". File/part dengan ukuran
+    // Ambang batas "Direct 1-shot Multipart". File dengan ukuran
     // <= 5 MB dikirim dalam SATU request HTTP (metadata + isi file sekaligus),
     // tanpa handshake resumable (init session + nextChunk). Ini memotong
     // round-trip untuk mayoritas file kecil secara signifikan.
@@ -132,129 +132,6 @@ class GoogleDriveUploader
     }
 
     /**
-     * Upload satu part byte (Spanned Chunk Storage) dari file lokal ke akun
-     * Google Drive tertentu. Membaca `$partSize` byte mulai `$offset`.
-     *
-     * @return array{gdrive_file_id: string, shareable_link: ?string}
-     */
-    public function uploadPart(
-        GoogleAccount $account,
-        FileModel $file,
-        string $localPath,
-        int $offset,
-        int $partSize,
-        int $partNumber,
-    ): array {
-        if ($partSize <= 0) {
-            throw new \RuntimeException('Ukuran part harus lebih besar dari 0 byte.');
-        }
-
-        if (! is_file($localPath)) {
-            throw new \RuntimeException("File lokal tidak ditemukan: {$localPath}");
-        }
-
-        // 1. Refresh token jika perlu
-        $this->tokens->ensureFreshToken($account);
-
-        $client = $this->factory->makeFor($account);
-        $client->setAccessToken($account->access_token);
-        $drive = new Drive($client);
-
-        // 2. Parent folder: folder sync 1:1 bila ada, else root EnStorage.
-        $parentFolderId = $this->resolveParentFolderId($account, $file);
-
-        // 3. Metadata part: "<nama asli>.part<N>"
-        $metadata = new DriveFile([
-            'name' => $file->original_name.'.part'.$partNumber,
-            'parents' => [$parentFolderId],
-        ]);
-
-        // 4a. Part kecil (<= 5 MB): Direct Multipart Upload 1-shot. Baca
-        //     potongan byte lalu kirim sekaligus tanpa handshake resumable.
-        if ($partSize <= self::MULTIPART_THRESHOLD_BYTES) {
-            $handle = fopen($localPath, 'rb');
-            if (! $handle) {
-                throw new \RuntimeException("Gagal membuka file lokal untuk streaming: {$localPath}");
-            }
-
-            try {
-                if (fseek($handle, $offset) !== 0) {
-                    throw new \RuntimeException("Gagal seek ke offset {$offset} pada {$localPath}");
-                }
-
-                $partData = fread($handle, $partSize);
-                if ($partData === false || $partData === '') {
-                    throw new \RuntimeException("Gagal membaca part dari {$localPath}");
-                }
-            } finally {
-                if (is_resource($handle)) {
-                    fclose($handle);
-                }
-            }
-
-            return $this->uploadMultipart($client, $drive, $file, $parentFolderId, $partData, $metadata);
-        }
-
-        // 4b. Part besar (> 5 MB): Resumable Upload streaming per chunk.
-        $client->setDefer(true);
-
-        $handle = fopen($localPath, 'rb');
-        if (! $handle) {
-            throw new \RuntimeException("Gagal membuka file lokal untuk streaming: {$localPath}");
-        }
-
-        try {
-            if (fseek($handle, $offset) !== 0) {
-                throw new \RuntimeException("Gagal seek ke offset {$offset} pada {$localPath}");
-            }
-
-            $request = $drive->files->create($metadata, [
-                'fields' => 'id,name,webViewLink,webContentLink,mimeType,size',
-                'uploadType' => 'resumable',
-            ]);
-
-            $uploader = new MediaFileUpload(
-                $client,
-                $request,
-                $file->mime_type,
-                false,      // streaming mode
-                true,       // resumable
-            );
-            $uploader->setFileSize($partSize);
-            $uploader->setChunkSize(self::CHUNK_SIZE);
-
-            $uploaded = false;
-            $bytesLeft = $partSize;
-
-            while (! $uploaded && $bytesLeft > 0) {
-                $chunk = fread($handle, min(self::CHUNK_SIZE, $bytesLeft));
-                if ($chunk === false || $chunk === '') {
-                    throw new \RuntimeException("Gagal membaca part dari {$localPath} (sisa {$bytesLeft} byte).");
-                }
-                $bytesLeft -= strlen($chunk);
-                $uploaded = $uploader->nextChunk($chunk);
-                unset($chunk);
-            }
-
-            if ($uploaded instanceof \Exception) {
-                throw $uploaded;
-            }
-            if (! $uploaded instanceof DriveFile) {
-                throw new \RuntimeException('Upload part gagal: response tidak valid dari Google Drive.');
-            }
-        } finally {
-            if (is_resource($handle)) {
-                fclose($handle);
-            }
-        }
-
-        return [
-            'gdrive_file_id' => $uploaded->getId(),
-            'shareable_link' => $uploaded->getWebViewLink() ?? null,
-        ];
-    }
-
-    /**
      * Buat sesi Resumable Upload di Google Drive lalu kembalikan session URI
      * (header `Location`). Klien (web/mobile) meng-PUT byte file langsung ke
      * URI ini — byte TIDAK pernah mampir ke disk VPS (Jalur 2: zero VPS disk).
@@ -360,7 +237,7 @@ class GoogleDriveUploader
     }
 
     /**
-     * Direct Multipart Upload 1-shot: metadata + isi file/part dikirim dalam
+     * Direct Multipart Upload 1-shot: metadata + isi file dikirim dalam
      * satu request HTTP (`uploadType=multipart`), tanpa handshake resumable.
      * Dipakai untuk payload <= MULTIPART_THRESHOLD_BYTES.
      *
@@ -375,11 +252,10 @@ class GoogleDriveUploader
         FileModel $file,
         string $parentFolderId,
         string $data,
-        ?DriveFile $metadata = null,
     ): array {
         $client->setDefer(false);
 
-        $uploaded = $drive->files->create($metadata ?? $this->buildMetadata($file, $parentFolderId), [
+        $uploaded = $drive->files->create($this->buildMetadata($file, $parentFolderId), [
             'data' => $data,
             'mimeType' => $file->mime_type,
             'uploadType' => 'multipart',

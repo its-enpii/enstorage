@@ -129,6 +129,28 @@ class UploadSizeLimitTest extends TestCase
         $this->assertSame(self::ONE_GIB, (int) $stored->total_size);
     }
 
+    public function test_init_chunked_persists_is_chunked_and_total_chunks(): void
+    {
+        $user = $this->actingUser();
+
+        $response = $this->postJson('/api/v1/files/upload/init', [
+            'file_name' => 'chunked.bin',
+            'mime_type' => 'application/octet-stream',
+            'total_size' => 4096,
+            'total_chunks' => 4,
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('success', true);
+
+        $stored = File::whereKey($response->json('data.file_id'))->first();
+        $this->assertNotNull($stored);
+        $this->assertSame($user->id, $stored->user_id);
+        $this->assertTrue((bool) $stored->is_chunked);
+        $this->assertSame(4, (int) $stored->total_chunks);
+        $this->assertSame(4096, (int) $stored->total_size);
+    }
+
     public function test_upload_chunk_rejects_oversized_chunk_and_negative_index(): void
     {
         $user = $this->actingUser();

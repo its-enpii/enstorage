@@ -25,9 +25,9 @@ use Tests\TestCase;
  *
  * Mengunci:
  *  1. Ambang batas Direct 1-shot Multipart = 5 MB.
- *  2. File/part <= 5 MB memakai `uploadType=multipart` (1 request, tanpa
+ *  2. File <= 5 MB memakai `uploadType=multipart` (1 request, tanpa
  *     handshake resumable).
- *  3. File/part > 5 MB tetap memakai Resumable Upload
+ *  3. File > 5 MB tetap memakai Resumable Upload
  *     (`uploadType=resumable` + nextChunk).
  *  4. Pekerja antrean dijalankan 16 proses (supervisord numprocs=16).
  *
@@ -241,49 +241,6 @@ class UploadSpeedOptimizationTest extends TestCase
         $this->assertStringNotContainsString('uploadType=multipart', $initUri);
 
         $this->assertGreaterThanOrEqual(2, count($requests), 'Resumable upload = init session + minimal 1 chunk');
-    }
-
-    public function test_small_part_uses_one_shot_multipart_upload(): void
-    {
-        $this->fakeDrive([
-            new PsrResponse(200, ['Content-Type' => 'application/json'], $this->fileCreatedDriveFile('part-1')),
-        ]);
-
-        $path = $this->makeLocalFile(4096, 'AAAAAAAAAA');
-        $file = $this->makeFile(['storage_driver' => 'gdrive_spanned']);
-
-        $result = $this->makeUploader()->uploadPart($this->account, $file, $path, 0, 1024, 1);
-
-        $this->assertSame('part-1', $result['gdrive_file_id']);
-
-        $requests = $this->driveRequests();
-        $this->assertCount(1, $requests);
-        $this->assertStringContainsString('uploadType=multipart', (string) $requests[0]['request']->getUri());
-
-        // Hanya potongan yang diminta (1024 byte dari offset 0) yang dikirim dalam base64.
-        $body = (string) $requests[0]['request']->getBody();
-        $this->assertStringContainsString('dokumen.pdf.part1', $body);
-        $this->assertStringContainsString('base64', $body);
-        $this->assertStringContainsString('QUFBQUFBQUFBQQ', $body);
-    }
-
-    public function test_large_part_uses_resumable_upload(): void
-    {
-        $this->fakeDrive([
-            new PsrResponse(200, ['Location' => 'https://www.googleapis.com/upload/drive/v3/files?upload_id=part-session'], ''),
-            new PsrResponse(200, ['Content-Type' => 'application/json'], $this->fileCreatedDriveFile('part-large-1')),
-        ]);
-
-        $partSize = GoogleDriveUploader::MULTIPART_THRESHOLD_BYTES + 1024;
-        $path = $this->makeLocalFile($partSize, 'z');
-        $file = $this->makeFile(['storage_driver' => 'gdrive_spanned']);
-
-        $result = $this->makeUploader()->uploadPart($this->account, $file, $path, 0, $partSize, 1);
-
-        $this->assertSame('part-large-1', $result['gdrive_file_id']);
-
-        $requests = $this->driveRequests();
-        $this->assertStringContainsString('uploadType=resumable', (string) $requests[0]['request']->getUri());
     }
 
     public function test_supervisord_runs_sixteen_queue_workers(): void
