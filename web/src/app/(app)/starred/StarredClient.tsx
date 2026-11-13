@@ -142,39 +142,56 @@ function StarredContent() {
   }
 
   function buildFileMenuItems(f: FileItem): MenuItem[] {
+    const organize = t('files.menuSections.organize');
+    const actions = t('files.menuSections.actions');
+    const share = t('files.menuSections.share');
+
     return [
       {
         label: t('files.actions.unstar'),
+        ariaLabel: t('files.actions.unstar'),
+        section: organize,
         icon: <span className="material-symbols-outlined !text-base fill">star</span>,
         onClick: () => toggleStarFile(f.id),
       },
       {
         label: t('files.actions.preview'),
+        ariaLabel: t('files.actions.preview'),
+        section: actions,
         icon: <span className="material-symbols-outlined !text-base">visibility</span>,
         onClick: () => setViewerFile(f),
       },
       {
         label: t('files.actions.rename'),
+        ariaLabel: t('files.actions.rename'),
+        section: organize,
         icon: <span className="material-symbols-outlined !text-base">edit</span>,
         onClick: () => renameFile(f),
       },
       {
         label: t('files.actions.download'),
+        ariaLabel: t('files.actions.download'),
+        section: actions,
         icon: <span className="material-symbols-outlined !text-base">download</span>,
         onClick: () => downloadFile(f.id),
       },
       {
         label: t('files.actions.share'),
+        ariaLabel: t('files.actions.share'),
+        section: share,
         icon: <span className="material-symbols-outlined !text-base">link</span>,
         onClick: () => setShareFile(f),
       },
       {
         label: t('files.actions.copy'),
+        ariaLabel: t('files.actions.copy'),
+        section: actions,
         icon: <span className="material-symbols-outlined !text-base">content_copy</span>,
         onClick: () => copyFileToClipboard(f),
       },
       {
         label: t('files.actions.delete'),
+        ariaLabel: t('files.actions.delete'),
         icon: <span className="material-symbols-outlined !text-base">delete</span>,
         onClick: () => deleteFileFromStarred(f.id),
         variant: 'danger' as const,
