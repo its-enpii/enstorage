@@ -192,6 +192,7 @@ function ImageViewer({ file }: { file: FileItem }) {
       <div
         ref={viewportRef}
         data-testid="viewer-image-viewport"
+        data-swipe-ignore={zoom > 1 ? 'true' : undefined}
         className={
           'flex-1 min-h-0 w-full overflow-auto overscroll-contain flex items-center justify-center p-3 pb-16 sm:p-6 sm:pb-20 ' +
           (panning ? 'cursor-grabbing select-none' : zoom > 1 ? 'cursor-grab' : '')
@@ -255,12 +256,27 @@ function ImageViewer({ file }: { file: FileItem }) {
 }
 
 function VideoViewer({ file }: { file: FileItem }) {
+  const rawWidth = file.metadata?.resolution_width;
+  const rawHeight = file.metadata?.resolution_height;
+  const width = typeof rawWidth === 'number' && rawWidth > 0 ? rawWidth : null;
+  const height = typeof rawHeight === 'number' && rawHeight > 0 ? rawHeight : null;
+
   return (
     <div
       className="flex-1 flex items-center justify-center p-4"
       onClick={(e) => e.stopPropagation()}
     >
-      <video controls autoPlay className="max-w-full max-h-full rounded-lg" src={fileUrl(file)} />
+      {width !== null && height !== null ? (
+        <div
+          data-testid="viewer-video-frame"
+          className="w-full max-w-full max-h-full overflow-hidden rounded-lg bg-media-backdrop"
+          style={{ aspectRatio: `${width} / ${height}` }}
+        >
+          <video controls autoPlay className="block w-full h-full object-contain rounded-lg" src={fileUrl(file)} />
+        </div>
+      ) : (
+        <video controls autoPlay className="max-w-full max-h-full rounded-lg" src={fileUrl(file)} />
+      )}
     </div>
   );
 }

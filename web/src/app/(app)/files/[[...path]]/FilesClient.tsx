@@ -2578,34 +2578,44 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   }
 
   function buildFolderMenuItems(f: FolderType): MenuItem[] {
+    const organize = t('files.menuSections.organize');
+    const actions = t('files.menuSections.actions');
+    const share = t('files.menuSections.share');
+    const security = t('files.menuSections.security');
+
     return [
       {
         label: f.is_starred ? t('files.actions.unstar') : t('files.actions.star'),
         ariaLabel: f.is_starred ? t('files.actions.unstar') : t('files.actions.star'),
+        section: organize,
         icon: <span className="material-symbols-outlined !text-base fill">{f.is_starred ? 'star' : 'star_border'}</span>,
         onClick: () => toggleStarFolder(f.id, f.is_starred),
       },
       {
         label: t('files.actions.rename'),
         ariaLabel: t('files.actions.rename'),
+        section: organize,
         icon: <span className="material-symbols-outlined !text-base">edit</span>,
         onClick: () => renameFolderHandler(f),
       },
       {
         label: t('folders.editDetails'),
         ariaLabel: t('folders.editDetails'),
+        section: organize,
         icon: <span className="material-symbols-outlined !text-base">tune</span>,
         onClick: () => setDetailsTarget(f),
       },
       {
         label: t('folders.moveFolder'),
         ariaLabel: t('folders.moveFolder'),
+        section: organize,
         icon: <DriveFileMoveIcon />,
         onClick: () => openFolderMoveDialog([f]),
       },
       {
         label: t('files.actions.merge'),
         ariaLabel: t('files.actions.merge'),
+        section: organize,
         icon: <span className="material-symbols-outlined !text-base">merge</span>,
         onClick: () => openMergeDialog([f]),
       },
@@ -2615,6 +2625,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             {
               label: t('files.move.adoptAction'),
               ariaLabel: t('files.move.adoptAction'),
+              section: organize,
               icon: <span className="material-symbols-outlined !text-base">move_to_inbox</span>,
               onClick: () => {
                 setAdoptTarget(f.id);
@@ -2626,12 +2637,14 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       {
         label: t('folders.downloadFolder') || t('files.actions.download'),
         ariaLabel: t('folders.downloadFolder') || t('files.actions.download'),
+        section: actions,
         icon: <span className="material-symbols-outlined !text-base">download</span>,
         onClick: () => downloadFolder(f.id),
       },
       {
         label: t('files.actions.share'),
         ariaLabel: t('files.actions.share'),
+        section: share,
         icon: <span className="material-symbols-outlined !text-base">link</span>,
         onClick: () => setShareFolder(f),
       },
@@ -2639,12 +2652,14 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         ? {
             label: t('lock.menu.change'),
             ariaLabel: t('lock.menu.change'),
+            section: security,
             icon: <span className="material-symbols-outlined !text-base">key</span>,
             onClick: () => setLockTarget({ folder: f, mode: 'change' }),
           }
         : {
             label: t('lock.menu.set'),
             ariaLabel: t('lock.menu.set'),
+            section: security,
             icon: <span className="material-symbols-outlined !text-base">lock</span>,
             onClick: () => setLockTarget({ folder: f, mode: 'set' }),
           },
@@ -2653,6 +2668,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             {
               label: t('lock.menu.remove'),
               ariaLabel: t('lock.menu.remove'),
+              section: security,
               icon: <span className="material-symbols-outlined !text-base">lock_open</span>,
               onClick: () => setLockTarget({ folder: f, mode: 'remove' }),
             } as MenuItem,
@@ -2669,10 +2685,15 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   }
 
   function buildFileMenuItems(f: FileItem, opts: { includePreview?: boolean } = {}): MenuItem[] {
+    const organize = t('files.menuSections.organize');
+    const actions = t('files.menuSections.actions');
+    const share = t('files.menuSections.share');
+
     const items: MenuItem[] = [
       {
         label: f.is_starred ? t('files.actions.unstar') : t('files.actions.star'),
         ariaLabel: f.is_starred ? t('files.actions.unstar') : t('files.actions.star'),
+        section: organize,
         icon: <span className="material-symbols-outlined !text-base fill">{f.is_starred ? 'star' : 'star_border'}</span>,
         onClick: () => toggleStarFile(f.id, f.is_starred),
       },
@@ -2681,12 +2702,14 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       items.push({
         label: t('files.actions.preview'),
         ariaLabel: t('files.actions.preview'),
+        section: actions,
         icon: <span className="material-symbols-outlined !text-base">visibility</span>,
         onClick: () => openViewer(f),
       });
       items.push({
         label: t('files.action.details'),
         ariaLabel: t('files.action.details'),
+        section: actions,
         icon: <span className="material-symbols-outlined !text-base">info</span>,
         onClick: () => {
           openViewer(f);
@@ -2698,12 +2721,14 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       {
         label: t('files.actions.rename'),
         ariaLabel: t('files.actions.rename'),
+        section: organize,
         icon: <span className="material-symbols-outlined !text-base">edit</span>,
         onClick: () => renameFile(f),
       },
       {
         label: t('files.actions.moveTo'),
         ariaLabel: t('files.actions.moveTo'),
+        section: organize,
         icon: <DriveFileMoveIcon />,
         onClick: () => openMoveDialog([f]),
       },
@@ -2712,6 +2737,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             {
               label: t('files.move.adoptAction'),
               ariaLabel: t('files.move.adoptAction'),
+              section: organize,
               icon: <span className="material-symbols-outlined !text-base">move_to_inbox</span>,
               onClick: () => {
                 const target = f.folder_id ?? folderId;
@@ -2725,18 +2751,21 @@ function FilesContent({ currentPath }: { currentPath: string }) {
       {
         label: t('files.actions.download'),
         ariaLabel: t('files.actions.download'),
+        section: actions,
         icon: <span className="material-symbols-outlined !text-base">download</span>,
         onClick: () => downloadFile(f.id),
       },
       {
         label: t('files.actions.share'),
         ariaLabel: t('files.actions.share'),
+        section: share,
         icon: <span className="material-symbols-outlined !text-base">link</span>,
         onClick: () => setShareFile(f),
       },
       {
         label: t('files.actions.copy'),
         ariaLabel: t('files.actions.copy'),
+        section: actions,
         icon: <span className="material-symbols-outlined !text-base">content_copy</span>,
         onClick: () => copyFileToClipboard(f),
       },
@@ -2745,6 +2774,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             {
               label: t('files.extract.action'),
               ariaLabel: t('files.extract.action'),
+              section: actions,
               icon: <span className="material-symbols-outlined !text-base">unarchive</span>,
               onClick: () => void extractArchive(f),
             } as MenuItem,
