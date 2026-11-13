@@ -447,6 +447,89 @@ class GoogleDriveFolderService
     }
 
     /**
+     * Drive service terautentikasi untuk akun ini, tanpa refresh token.
+     *
+     * Dipakai command audit yang sudah me-refresh token sekali per akun;
+     * aman dipanggil berulang (idempoten) dan menghormati hook test
+     * `$factorySpy` sehingga jalur service bisa diuji hermetik.
+     */
+    public function driveServiceFor(GoogleAccount $account): Drive
+    {
+        $spy = self::$factorySpy;
+        if ($spy) {
+            $client = $spy($account, $this->factory);
+            $client->setAccessToken($account->access_token);
+
+            return new Drive($client);
+        }
+
+        $client = $this->factory->makeFor($account);
+        $client->setAccessToken($account->access_token);
+
+        return new Drive($client);
+    }
+
+    /**
+     * Cari folder Drive bernama sama persis di bawah `$parentGDriveId`.
+     *
+     * Hanya read-only (`files.listFiles`). Return daftar kandidat (id, name).
+     * Pemanggil wajib menolak hasil kosong maupun ambigu (>= 2) — tidak ada
+     * fuzzy matching.
+     *
+     * @return array<int, string>
+     */
+    public function findFoldersByName(Drive $drive, string $parentGDriveId, string $name): array
+    {
+        $query = "'".$this->escapeQueryString($parentGDriveId)."' in parents"
+            .' and trashed=false'
+            ." and name='".$this->escapeQueryString($name)."'"
+            ." and mimeType='".self::FOLDER_MIME_TYPE."'";
+
+        return $this->listIds($drive->files->listFiles([
+            'q' => $query,
+            'fields' => 'files(id,name)',
+            'pageSize' => 10,
+        ]));
+    }
+
+    /**
+     * Cari file bernama sama persis di dalam folder Drive `$parentGDriveId`.
+     *
+     * @return array<int, string>
+     */
+    public function findFilesByName(Drive $drive, string $parentGDriveId, string $name): array
+    {
+        $query = "'".$this->escapeQueryString($parentGDriveId)."' in parents"
+            .' and trashed=false'
+            ." and name='".$this->escapeQueryString($name)."'"
+            ." and mimeType!='".self::FOLDER_MIME_TYPE."'";
+
+        return $this->listIds($drive->files->listFiles([
+            'q' => $query,
+            'fields' => 'files(id,name)',
+            'pageSize' => 10,
+        ]));
+    }
+
+    /**
+     * Kumpulkan id dari hasil listFiles; item tanpa id dilewati.
+     *
+     * @return array<int, string>
+     */
+    private function listIds(mixed $list): array
+    {
+        $ids = [];
+        foreach ($list->getFiles() ?? [] as $item) {
+            $id = $item->getId();
+            if (is_string($id) && $id !== '') {
+                $ids[] = $id;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
      * Bangun Drive service terautentikasi untuk akun ini.
      * Dibungkus method agar traversal bisa di-stub tanpa OAuth pada test.
      */
