@@ -16,7 +16,7 @@ use Tests\TestCase;
 /**
  * Batas upload harus jelas & konsisten di semua lapis:
  *  - multipart /files/upload & /files/bulk-upload: file > 1 GiB → 422
- *  - chunked /files/upload/init: total_size > 1 GiB → 422
+ *  - chunked /files/upload/init: total_size > 20 GiB → 422, 1 GiB+1 → 201
  *  - chunked upload valid tetap 201
  *
  * File > 1 GiB dibuat secara virtual (Illuminate TestFile::sizeToReport),
@@ -27,6 +27,8 @@ class UploadSizeLimitTest extends TestCase
     use RefreshDatabase;
 
     private const ONE_GIB = 1024 * 1024 * 1024;
+
+    private const TWENTY_GIB = 20 * 1024 * 1024 * 1024;
 
     protected function setUp(): void
     {
@@ -87,22 +89,43 @@ class UploadSizeLimitTest extends TestCase
         $this->assertSame(0, File::count());
     }
 
-    public function test_init_chunked_rejects_total_size_above_1gib(): void
+    public function test_init_chunked_rejects_total_size_above_20gib(): void
     {
         $this->actingUser();
 
         $response = $this->postJson('/api/v1/files/upload/init', [
-            'file_name' => 'big.bin',
+            'file_name' => 'huge.bin',
             'mime_type' => 'application/octet-stream',
-            'total_size' => self::ONE_GIB + 1,
-            'total_chunks' => 129,
+            'total_size' => self::TWENTY_GIB + 1,
+            'total_chunks' => 854,
         ]);
 
         $response->assertStatus(422)
             ->assertJsonPath('success', false)
             ->assertJsonStructure(['data' => ['errors' => ['total_size']]]);
-        $this->assertStringContainsString('1 GB', json_encode($response->json('data.errors.total_size.0'), JSON_UNESCAPED_UNICODE));
-        $this->assertSame(0, File::count());
+        $this->assertStringContainsString('20 GB', json_encode($response->json('data.errors.total_size.0'), JSON_UNESCAPED_UNICODE));
+        $this->assertSame(0, File::count(), 'File > 20 GiB tidak boleh membuat record chunked.');
+    }
+
+    public function test_init_chunked_accepts_total_size_above_1gib(): void
+    {
+        $user = $this->actingUser();
+
+        $response = $this->postJson('/api/v1/files/upload/init', [
+            'file_name' => 'big.bin',
+            'mime_type' => 'application/octet-stream',
+            'total_size' => self::ONE_GIB + 1,
+            'total_chunks' => 43,
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('success', true);
+
+        $stored = File::whereKey($response->json('data.file_id'))->first();
+        $this->assertNotNull($stored);
+        $this->assertSame($user->id, $stored->user_id);
+        $this->assertTrue((bool) $stored->is_chunked);
+        $this->assertSame(self::ONE_GIB + 1, (int) $stored->total_size);
     }
 
     public function test_init_chunked_accepts_valid_size(): void

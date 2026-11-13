@@ -1297,7 +1297,9 @@ curl -X POST http://localhost:8080/api/v1/files/upload \
 
 #### `POST /files/upload/init` — Scope: `write`
 
-Inisialisasi chunked upload untuk file besar (> 1 GB, hingga puluhan GB). Membuat record file pending dan temporary directory chunk.
+Inisialisasi chunked upload untuk file besar (> 1 GB, hingga 20 GB). Membuat record file pending dan temporary directory chunk.
+
+Batas total chunked upload 20 GB; total_chunks 1-1000; per chunk maksimal 32 MB.
 
 **Body (JSON):**
 

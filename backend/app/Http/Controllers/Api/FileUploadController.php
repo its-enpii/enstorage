@@ -597,7 +597,7 @@ class FileUploadController extends Controller
 
     /**
      * POST /files/upload/init
-     * Inisialisasi chunked upload untuk file besar (>1GB).
+     * Inisialisasi chunked upload untuk file besar (> 1 GB hingga 20 GB).
      * Return 201 + file_id dan upload_url_template.
      */
     public function initChunked(Request $request): JsonResponse
@@ -623,9 +623,9 @@ class FileUploadController extends Controller
             throw ValidationException::withMessages(['total_size' => __('total_size harus lebih dari 0.')]);
         }
         $totalSize = (int) $totalSize;
-        if ($totalSize > self::MAX_FILE_SIZE_BYTES) {
+        if ($totalSize > FileRecordCreator::MAX_CHUNKED_FILE_SIZE_BYTES) {
             throw ValidationException::withMessages([
-                'total_size' => UploadSizeLimit::canonicalMessage(),
+                'total_size' => UploadSizeLimit::chunkedMessage(),
             ]);
         }
 

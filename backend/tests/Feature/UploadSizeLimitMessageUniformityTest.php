@@ -17,7 +17,11 @@ class UploadSizeLimitMessageUniformityTest extends TestCase
 
     private const ONE_GIB = 1024 * 1024 * 1024;
 
+    private const TWENTY_GIB = 20 * 1024 * 1024 * 1024;
+
     private const CANONICAL_MESSAGE = 'Ukuran file melebihi batas maksimum 1 GB (1.073.741.824 byte).';
+
+    private const CHUNKED_MESSAGE = 'Ukuran file melebihi batas maksimum chunked upload 20 GB (21.474.836.480 byte).';
 
     protected function setUp(): void
     {
@@ -26,7 +30,7 @@ class UploadSizeLimitMessageUniformityTest extends TestCase
         app()->setLocale('id');
     }
 
-    public function test_all_oversize_rejection_paths_return_the_same_canonical_message(): void
+    public function test_direct_paths_return_the_same_canonical_1gb_message(): void
     {
         Sanctum::actingAs(User::factory()->create());
 
@@ -36,12 +40,6 @@ class UploadSizeLimitMessageUniformityTest extends TestCase
         $bulkResponse = $this->post('/api/v1/files/bulk-upload', [
             'files' => [$this->virtualHugeFile('batch.bin')],
         ]);
-        $initResponse = $this->postJson('/api/v1/files/upload/init', [
-            'file_name' => 'big.bin',
-            'mime_type' => 'application/octet-stream',
-            'total_size' => 2 * self::ONE_GIB,
-            'total_chunks' => 256,
-        ]);
         $this->fakeOversizedUrlDownload();
         $urlResponse = $this->postJson('/api/v1/files/upload-from-url', [
             'url' => 'https://93.184.216.34/oversized.bin',
@@ -49,21 +47,39 @@ class UploadSizeLimitMessageUniformityTest extends TestCase
 
         $uploadBody = json_decode((string) $uploadResponse->getContent(), true, flags: JSON_THROW_ON_ERROR);
         $bulkBody = json_decode((string) $bulkResponse->getContent(), true, flags: JSON_THROW_ON_ERROR);
-        $initBody = json_decode((string) $initResponse->getContent(), true, flags: JSON_THROW_ON_ERROR);
         $urlBody = json_decode((string) $urlResponse->getContent(), true, flags: JSON_THROW_ON_ERROR);
 
         $messages = [
             $this->normalizeMessage($uploadBody['data']['errors']['file'][0]),
             $this->normalizeMessage($bulkBody['data']['errors']['files.0']),
-            $this->normalizeMessage($initBody['data']['errors']['total_size'][0]),
             $this->normalizeMessage($urlBody['data']['errors']['url'][0]),
         ];
 
         $this->assertSame(
-            array_fill(0, 4, self::CANONICAL_MESSAGE),
+            array_fill(0, 3, self::CANONICAL_MESSAGE),
             $messages,
-            'Semua jalur penolakan ukuran harus mengembalikan kalimat kanonik yang identik.',
+            'Semua jalur direct (1 GB) harus mengembalikan kalimat kanonik yang identik.',
         );
+    }
+
+    public function test_chunked_init_uses_the_chunked_20gb_message(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+
+        $response = $this->postJson('/api/v1/files/upload/init', [
+            'file_name' => 'huge.bin',
+            'mime_type' => 'application/octet-stream',
+            'total_size' => self::TWENTY_GIB + 1,
+            'total_chunks' => 854,
+        ]);
+
+        $response->assertStatus(422);
+        $body = json_decode((string) $response->getContent(), true, flags: JSON_THROW_ON_ERROR);
+        $message = $this->normalizeMessage($body['data']['errors']['total_size'][0]);
+
+        $this->assertSame(self::CHUNKED_MESSAGE, $message);
+        $this->assertStringContainsString('20 GB', $message);
+        $this->assertNotSame(self::CANONICAL_MESSAGE, $message);
     }
 
     private function virtualHugeFile(string $name = 'huge.bin'): UploadedFile

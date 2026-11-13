@@ -16,7 +16,13 @@ use RuntimeException;
  */
 class FileRecordCreator
 {
-    public const MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
+    public const MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB (jalur direct)
+
+    /**
+     * Batas total chunked upload — lihat docs/api.md §`POST /files/upload/init`
+     * ("> 1 GB, hingga 20 GB"). Jangan dipakai untuk jalur direct.
+     */
+    public const MAX_CHUNKED_FILE_SIZE_BYTES = 20 * 1024 * 1024 * 1024; // 20 GB
 
     /**
      * Extension → MIME for image formats that PHP's fileinfo (libmagic on the
