@@ -225,10 +225,6 @@ class FileMetadataExtractor
                 return [];
             }
 
-            if (class_exists(\getid3_lib::class)) {
-                \getid3_lib::CopyTagsToInfo($info);
-            }
-
             $out = [];
 
             if (isset($info['playtime_seconds']) && is_numeric($info['playtime_seconds'])) {
@@ -264,7 +260,7 @@ class FileMetadataExtractor
                 }
             }
 
-            // Tag teks (audio biasa). CopyTagsToInfo menaruh di root atau tags_*.
+            // Tag teks (audio biasa) dibaca langsung dari root atau tags_*.
             foreach (['artist', 'title', 'album'] as $tag) {
                 $val = $info[$tag]
                     ?? $info['tags']['id3v2'][$tag][0]
