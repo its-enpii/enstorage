@@ -140,7 +140,7 @@ export function FileViewerShell({ file, files, onClose, onNavigate, actions, nav
         <div className="pointer-events-auto flex-1 flex items-center justify-center min-h-0 relative">
           <div
             key={file.id}
-            className={`flex-1 min-w-0 h-full flex ${
+            className={`flex-1 min-w-0 h-full flex touch-pan-y ${
               swipeDirection === 'next'
                 ? 'viewer-swipe-in-next'
                 : swipeDirection === 'prev'
