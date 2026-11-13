@@ -174,7 +174,7 @@
       "downloadFailed": "Failed to download.",
       "copyFailed": "Failed to copy file.",
       "maxFiles": "Maximum 10 files per upload.",
-      "tooLarge": "File size exceeds the maximum {{limit}} (1,073,741,824 bytes).",
+      "tooLarge": "File size exceeds the maximum {{limit}}.",
       "oauthFailed": "Failed to connect account",
       "oauthWarning": "Account connected, but {{warning}}. Disconnect & reconnect.",
       "warningTitle": "Warning",
@@ -185,7 +185,7 @@
       "uploadProcessingFailed": "Failed to process the upload to Drive. Please try again."
     },
     "upload": {
-      "tooLarge": "File size exceeds the maximum {{limit}} (1,073,741,824 bytes).",
+      "tooLarge": "File size exceeds the maximum {{limit}}.",
       "hint": "Up to {{limit}} per file. Files over {{chunked}} are uploaded in chunks so they don't fail."
     },
     "move": {

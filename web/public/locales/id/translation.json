@@ -174,7 +174,7 @@
       "downloadFailed": "Gagal download.",
       "copyFailed": "Gagal copy file.",
       "maxFiles": "Maksimal 10 file per upload.",
-      "tooLarge": "Ukuran file melebihi batas maksimum {{limit}} (1.073.741.824 byte).",
+      "tooLarge": "Ukuran file melebihi batas maksimum {{limit}}.",
       "oauthFailed": "Gagal menghubungkan akun",
       "oauthWarning": "Akun terhubung, tetapi {{warning}}. Cabut & hubungkan ulang.",
       "warningTitle": "Peringatan",
@@ -185,7 +185,7 @@
       "uploadProcessingFailed": "Gagal memproses upload ke Drive. Silakan coba lagi."
     },
     "upload": {
-      "tooLarge": "Ukuran file melebihi batas maksimum {{limit}} (1.073.741.824 byte).",
+      "tooLarge": "Ukuran file melebihi batas maksimum {{limit}}.",
       "hint": "Maksimal {{limit}} per file. File lebih dari {{chunked}} diunggah bertahap (chunked) agar tidak gagal."
     },
     "move": {

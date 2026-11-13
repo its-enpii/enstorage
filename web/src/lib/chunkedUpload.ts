@@ -15,14 +15,26 @@
  * in `uploadChunk()`), so a failed chunk can simply be re-POSTed.
  */
 
-/** Hard per-file ceiling — same value as the server (MAX_FILE_SIZE_BYTES). */
+/**
+ * Direct-batch (Jalur 2) per-file ceiling — same value as the server's
+ * multipart/direct limit (MAX_FILE_SIZE_BYTES on `POST /files/upload`).
+ */
 export const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024; // 1 GiB
+
+/**
+ * Chunked-upload per-file ceiling — mirrors the server's chunked init contract
+ * (`POST /files/upload/init`): up to 20 GB total, total_chunks 1-1000.
+ */
+export const MAX_CHUNKED_UPLOAD_BYTES = 20 * 1024 * 1024 * 1024; // 20 GiB
 
 /** Files above this size take the chunked path; the rest stay on bulk-upload. */
 export const CHUNKED_THRESHOLD_BYTES = 64 * 1024 * 1024; // 64 MiB
 
-/** Size of one chunk POST. */
-export const CHUNK_SIZE_BYTES = 16 * 1024 * 1024; // 16 MiB
+/**
+ * Size of one chunk POST. 24 MiB keeps 20 GiB at 854 chunks (<= 1000 server
+ * limit) and stays under the server's 32 MB per-chunk guard (~25% headroom).
+ */
+export const CHUNK_SIZE_BYTES = 24 * 1024 * 1024; // 24 MiB
 
 /** Max chunk requests in flight for a single file. */
 const CHUNK_CONCURRENCY = 5;
@@ -141,7 +153,7 @@ export async function uploadFileChunked(
   },
 ): Promise<CompleteResponse> {
   const { token, folderId, onProgress, signal } = opts;
-  if (file.size > MAX_UPLOAD_BYTES) {
+  if (file.size > MAX_CHUNKED_UPLOAD_BYTES) {
     throw new ChunkedUploadError('file_too_large');
   }
   if (signal?.aborted) throw new ChunkedUploadError('aborted');

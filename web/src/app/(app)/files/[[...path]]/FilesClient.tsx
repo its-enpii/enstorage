@@ -55,6 +55,7 @@ import { useInfiniteScroll } from '@/lib/useInfiniteScroll';
 import {
   CHUNKED_THRESHOLD_BYTES,
   ChunkedUploadError,
+  MAX_CHUNKED_UPLOAD_BYTES,
   MAX_UPLOAD_BYTES,
   uploadFileChunked,
   uploadFilesChunked,
@@ -77,8 +78,9 @@ function fileThumbnailUrl(file: FileItem): string | null {
 }
 
 /**
- * Human-readable ceiling for the upload gate, derived from MAX_UPLOAD_BYTES so
- * the copy can never drift from the enforced limit (1 GiB → "1 GB").
+ * Human-readable ceiling for the upload gate, derived from the enforced byte
+ * limits so the copy can never drift: direct-batch 1 GiB → "1 GB", chunked
+ * 20 GiB → "20 GB" (server chunked init ceiling).
  */
 function formatLimit(bytes: number): string {
   const gb = bytes / (1024 * 1024 * 1024);
@@ -1349,7 +1351,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
         const reason =
           e instanceof ChunkedUploadError
             ? e.message === 'file_too_large'
-              ? t('files.upload.tooLarge', { limit: formatLimit(MAX_UPLOAD_BYTES) })
+              ? t('files.upload.tooLarge', { limit: formatLimit(MAX_CHUNKED_UPLOAD_BYTES) })
               : e.message
             : t('files.errors.uploadNetwork');
         setJobs((js) =>
@@ -1431,12 +1433,14 @@ function FilesContent({ currentPath }: { currentPath: string }) {
 
   /**
    * Entry point for every upload (picker, folder picker, drag-drop):
-   *  1. Reject files > MAX_UPLOAD_BYTES up front with a clear i18n message.
+   *  1. Reject files > MAX_CHUNKED_UPLOAD_BYTES (20 GiB) up front with a clear
+   *     i18n message.
    *  2. More than one file → Jalur 2 Zero VPS Disk (`uploadDirectBatch`):
    *     browser PUTs straight to Google Drive resumable sessions, falling
-   *     back to the lanes below when direct-batch init fails.
+   *     back to the lanes below when direct-batch init fails (each direct
+   *     file still capped at MAX_UPLOAD_BYTES = 1 GiB).
    *  3. Single file > 64 MiB → chunked upload (`uploadFilesChunked` in
-   *     chunkedUpload.ts).
+   *     chunkedUpload.ts; server caps 20 GB total, 32 MB per chunk).
    *  4. Single file ≤ 64 MiB → existing `bulk-upload` multipart lane.
    * Partial success: one file failing never cancels the others.
    */
@@ -1454,7 +1458,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     const accepted: { file: File; jobId: string }[] = [];
     for (const file of filesArr) {
       const jobId = `upload-${nextUploadJobId.current++}`;
-      if (file.size > MAX_UPLOAD_BYTES) {
+      if (file.size > MAX_CHUNKED_UPLOAD_BYTES) {
         setJobs((prev) => [
           ...prev,
           {
@@ -1464,7 +1468,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
             total: file.size,
             loaded: 0,
             status: 'failed',
-            error: t('files.upload.tooLarge', { limit: formatLimit(MAX_UPLOAD_BYTES) }),
+            error: t('files.upload.tooLarge', { limit: formatLimit(MAX_CHUNKED_UPLOAD_BYTES) }),
           },
         ]);
       } else {
