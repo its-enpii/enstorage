@@ -132,6 +132,12 @@
       "menu": "Menu",
       "merge": "Merge…"
     },
+    "menuSections": {
+      "organize": "Organize",
+      "actions": "Actions",
+      "share": "Share",
+      "security": "Security"
+    },
     "selection": {
       "selectAll": "Select all",
       "clearSelection": "Clear selection",

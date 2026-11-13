@@ -218,6 +218,28 @@
   z-index: var(--z-viewer, 1000);
 }
 
+/* === FILE VIEWER SWIPE TRANSITION === */
+@keyframes viewer-swipe-in-next {
+  from { opacity: 0; transform: translateX(18px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes viewer-swipe-in-prev {
+  from { opacity: 0; transform: translateX(-18px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.viewer-swipe-in-next {
+  animation: viewer-swipe-in-next 160ms ease-out;
+}
+.viewer-swipe-in-prev {
+  animation: viewer-swipe-in-prev 160ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .viewer-swipe-in-next,
+  .viewer-swipe-in-prev {
+    animation: none;
+  }
+}
+
 /* === ROOT + BODY === */
 :root {
   color-scheme: dark;

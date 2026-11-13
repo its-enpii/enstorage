@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Close, ChevronLeft, ChevronRight } from '@mui/icons-material';
+import { Close } from '@mui/icons-material';
 import type { FileItem } from '@/lib/api';
 import { getToken } from '@/lib/api';
 import { bytes } from '@/lib/format';
@@ -41,6 +40,9 @@ export function FileViewerShell({ file, files, onClose, onNavigate, actions, nav
   const { t } = useTranslation();
   const currentIndex = files ? files.findIndex((f) => f.id === file.id) : -1;
   const hasNav = files && files.length > 1;
+  const [swipeDirection, setSwipeDirection] = useState<'prev' | 'next' | null>(null);
+  const swipeStartRef = useRef<{ x: number; y: number; pointerId: number } | null>(null);
+  const swipeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -54,6 +56,42 @@ export function FileViewerShell({ file, files, onClose, onNavigate, actions, nav
       document.body.style.overflow = '';
     };
   }, [onNavigate, hasNav, currentIndex, files, navLocked]);
+
+  useEffect(() => () => {
+    if (swipeTimerRef.current) clearTimeout(swipeTimerRef.current);
+  }, []);
+
+  const navigateBySwipe = (direction: 'prev' | 'next') => {
+    if (!onNavigate || !files || navLocked) return;
+    const targetIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+    if (targetIndex < 0 || targetIndex >= files.length) return;
+    setSwipeDirection(direction);
+    onNavigate(files[targetIndex]);
+    if (swipeTimerRef.current) clearTimeout(swipeTimerRef.current);
+    swipeTimerRef.current = setTimeout(() => setSwipeDirection(null), 180);
+  };
+
+  const onSwipePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'touch' || !e.isPrimary || !hasNav || navLocked) return;
+    const target = e.target instanceof Element ? e.target : null;
+    if (!target) return;
+    if (target.closest('[data-swipe-ignore="true"]')) return;
+    if (target.closest('button, a, input, select, textarea, summary, audio, [role="slider"], [role="button"], [contenteditable="true"]')) return;
+    const video = target.closest('video');
+    if (video && e.clientY > video.getBoundingClientRect().bottom - 56) return;
+    swipeStartRef.current = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+
+  const onSwipePointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    if (!start || start.pointerId !== e.pointerId || e.pointerType !== 'touch') return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    if (Math.abs(dx) < 48 || Math.abs(dx) <= Math.abs(dy)) return;
+    navigateBySwipe(dx < 0 ? 'next' : 'prev');
+  };
 
   return (
     <div className="fixed inset-0 z-[1000] z-viewer">
@@ -100,39 +138,22 @@ export function FileViewerShell({ file, files, onClose, onNavigate, actions, nav
 
         {/* Main Viewer Body */}
         <div className="pointer-events-auto flex-1 flex items-center justify-center min-h-0 relative">
-          {hasNav && !navLocked && currentIndex > 0 && (
-            <IconButton
-              shape="circle"
-              size="xl"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNavigate?.(files![currentIndex - 1]);
-              }}
-              className="pointer-events-auto absolute left-2 sm:left-4 z-10 !bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest shadow-lg"
-              aria-label={t('preview.prev')}
-            >
-              <ChevronLeft />
-            </IconButton>
-          )}
-
-          <div className="flex-1 min-w-0 h-full flex" data-testid="file-viewer-body">
+          <div
+            key={file.id}
+            className={`flex-1 min-w-0 h-full flex ${
+              swipeDirection === 'next'
+                ? 'viewer-swipe-in-next'
+                : swipeDirection === 'prev'
+                  ? 'viewer-swipe-in-prev'
+                  : ''
+            }`}
+            data-testid="file-viewer-body"
+            onPointerDown={onSwipePointerDown}
+            onPointerUp={onSwipePointerUp}
+            onPointerCancel={() => { swipeStartRef.current = null; }}
+          >
             {viewer}
           </div>
-
-          {hasNav && !navLocked && currentIndex < files!.length - 1 && (
-            <IconButton
-              shape="circle"
-              size="xl"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNavigate?.(files![currentIndex + 1]);
-              }}
-              className="pointer-events-auto absolute right-2 sm:right-4 z-10 !bg-surface-container/70 backdrop-blur-md border border-outline-variant/20 !text-on-surface hover:!bg-surface-container-highest shadow-lg"
-              aria-label={t('preview.next')}
-            >
-              <ChevronRight />
-            </IconButton>
-          )}
         </div>
       </div>
 

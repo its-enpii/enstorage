@@ -132,6 +132,12 @@
       "menu": "Menu",
       "merge": "Gabungkan…"
     },
+    "menuSections": {
+      "organize": "Organisasi",
+      "actions": "Aksi",
+      "share": "Bagikan",
+      "security": "Keamanan"
+    },
     "selection": {
       "selectAll": "Pilih semua",
       "clearSelection": "Hapus pilihan",
