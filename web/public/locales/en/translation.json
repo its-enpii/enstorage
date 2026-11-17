@@ -186,7 +186,8 @@
     },
     "upload": {
       "tooLarge": "File size exceeds the maximum {{limit}}.",
-      "hint": "Up to {{limit}} per file. Files over {{chunked}} are uploaded in chunks so they don't fail."
+      "hint": "Up to {{limit}} per file. Files over {{chunked}} are uploaded in chunks so they don't fail.",
+      "routeBusy": "Wait until the folder finishes loading, then retry the upload."
     },
     "move": {
       "titleSingle": "Move File",

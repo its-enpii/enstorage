@@ -112,8 +112,12 @@ class ThumbnailBackfillCommandTest extends TestCase
         $videoA = $this->localFile('a.mp4', 'video/mp4', 'fake-video-a');
         $videoB = $this->localFile('b.mp4', 'video/mp4', 'fake-video-b');
         $hasThumb = $this->localFile('c.mp4', 'video/mp4', 'fake-video-c');
-        $tooBig = $this->localFile('big.mp4', 'video/mp4', 'fake-video-big', [
-            'size' => GenerateThumbnailJob::MAX_VIDEO_BYTES + 1,
+        // Video besar TIDAK lagi dilewati: batas 500 MB dihapus karena frame
+        // grab kini membaca Drive lewat HTTP Range (ukuran tidak menentukan
+        // biaya). Kelas ini dulu jadi alasan 158 video produksi tanpa
+        // thumbnail, jadi backfill WAJIB meng-dispatchnya.
+        $bigVideo = $this->localFile('big.mp4', 'video/mp4', 'fake-video-big', [
+            'size' => 2 * 1024 * 1024 * 1024,
         ]);
         $pending = $this->localFile('d.mp4', 'video/mp4', 'fake-video-d', [
             'upload_status' => File::STATUS_PENDING,
@@ -155,15 +159,17 @@ class ThumbnailBackfillCommandTest extends TestCase
 
         $out = $this->runBackfill();
 
-        // 2 video dispatched (punya thumbnail / terlalu besar / belum done → skip)
+        // 3 video dispatched: video besar ikut diproses (batas 500 MB dihapus).
+        // Yang di-skip hanya yang sudah punya thumbnail dan yang belum `done`.
         $this->assertSame(
-            collect([$videoA->id, $videoB->id])->sort()->values()->all(),
+            collect([$videoA->id, $videoB->id, $bigVideo->id])->sort()->values()->all(),
             collect(self::dispatchedIds())->sort()->values()->all(),
-            'hanya 2 video yang memenuhi syarat yang di-dispatch',
+            'video besar wajib ikut di-dispatch; hanya yang sudah punya thumbnail '
+            .'dan yang belum selesai yang dilewati',
         );
-        Bus::assertDispatchedTimes(GenerateThumbnailJob::class, 2);
+        Bus::assertDispatchedTimes(GenerateThumbnailJob::class, 3);
         Bus::assertNotDispatched(GenerateThumbnailJob::class, fn ($job) => in_array($job->fileId, [
-            $hasThumb->id, $tooBig->id, $pending->id,
+            $hasThumb->id, $pending->id,
         ], true));
 
         // Dokumen: 2 teks diperbarui, yang lain utuh / tidak disentuh.
@@ -181,7 +187,7 @@ class ThumbnailBackfillCommandTest extends TestCase
         $gdriveDoc->refresh();
         $this->assertNull($gdriveDoc->metadata);
 
-        $this->assertStringContainsString('videos dispatched: 2, images dispatched: 0, docs updated: 2, stale_rows_deleted: 0, skipped: 1', $out);
+        $this->assertStringContainsString('videos dispatched: 3, images dispatched: 0, docs updated: 2, stale_rows_deleted: 0, skipped: 1', $out);
 
         // Simulasi worker: job yang sudah di-dispatch menghasilkan baris
         // thumbnail. Bus::fake tidak menjalankan job, jadi tanpa ini NOT
@@ -196,6 +202,15 @@ class ThumbnailBackfillCommandTest extends TestCase
         Thumbnail::create([
             'file_id' => $videoB->id,
             'path' => 'thumbnails/'.$videoB->id.'.webp',
+            'width' => 1, 'height' => 1, 'size' => 4,
+        ]);
+        // Video besar ikut diproses run pertama, jadi ia juga harus punya
+        // thumbnail sebelum run kedua — kalau tidak, run kedua akan
+        // meng-dispatch-nya lagi dan invarian idempotensi tidak terbukti.
+        Storage::disk('local')->put('thumbnails/'.$bigVideo->id.'.webp', 'webp');
+        Thumbnail::create([
+            'file_id' => $bigVideo->id,
+            'path' => 'thumbnails/'.$bigVideo->id.'.webp',
             'width' => 1, 'height' => 1, 'size' => 4,
         ]);
 

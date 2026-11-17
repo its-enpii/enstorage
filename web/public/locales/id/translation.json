@@ -186,7 +186,8 @@
     },
     "upload": {
       "tooLarge": "Ukuran file melebihi batas maksimum {{limit}}.",
-      "hint": "Maksimal {{limit}} per file. File lebih dari {{chunked}} diunggah bertahap (chunked) agar tidak gagal."
+      "hint": "Maksimal {{limit}} per file. File lebih dari {{chunked}} diunggah bertahap (chunked) agar tidak gagal.",
+      "routeBusy": "Tunggu folder selesai dimuat, lalu ulangi upload."
     },
     "move": {
       "titleSingle": "Pindahkan File",

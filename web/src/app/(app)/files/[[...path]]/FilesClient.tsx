@@ -615,6 +615,10 @@ function FilesRoute() {
   if (error) {
     // Fall back to the root view; surface via the store error banner instead
     // of a dead-end screen.
+    //
+    // `routeReady` WAJIB true di sini: root adalah tujuan yang sah dan sudah
+    // pasti (tidak ada resolve yang tertunda). Tanpa ini, upload ke `/files`
+    // selalu ditolak oleh guard upload saat store sempat error.
     return (
       <FilesStoreGate
         folderId={null}
@@ -624,6 +628,7 @@ function FilesRoute() {
         typeFilter={typeFilter}
         sort={sort}
         sortDir={sortDir}
+        routeReady
       >
         <FilesContent currentPath="/" />
       </FilesStoreGate>
@@ -639,6 +644,13 @@ function FilesRoute() {
   // `view` (not `resolved`) feeds the gate: it is the last *complete* route,
   // so the previous folder stays interactive for the few ms of resolve.
   const active = view ?? resolved!;
+  // `routeReady` membandingkan rute yang sudah resolve dengan TUJUAN
+  // (`currentPath` dari URL), BUKAN dengan `active.currentPath`. `active`
+  // memakai `view` yang sengaja dipertahankan sebagai rute LAMA selama
+  // navigasi, sehingga membandingkan ke `active` selalu true dan justru
+  // membuka celah upload ke folder sebelumnya (gejala "massive upload
+  // berakhir di root / folder lama").
+  const routeReady = resolved !== null && resolved.currentPath === currentPath;
   return (
     <FilesStoreGate
       folderId={active.folderId}
@@ -649,6 +661,7 @@ function FilesRoute() {
       sort={sort}
       sortDir={sortDir}
       pending={resolved === null}
+      routeReady={routeReady}
     >
       <FilesContent currentPath={active.currentPath} />
     </FilesStoreGate>
@@ -665,6 +678,7 @@ function FilesStoreGate({
   sort,
   sortDir,
   pending = false,
+  routeReady = false,
 }: {
   children: React.ReactNode;
   folderId: string | null;
@@ -676,6 +690,8 @@ function FilesStoreGate({
   sortDir: 'asc' | 'desc';
   /** True while the next path is still resolving (shows a thin top bar). */
   pending?: boolean;
+  /** True only when folderId comes from a fully resolved route. */
+  routeReady?: boolean;
 }) {
   // Force a fresh provider mount on every view change so the store reads
   // the right cache key and renders instantly with no stale-data flash.
@@ -684,7 +700,7 @@ function FilesStoreGate({
   return (
     <FilesStoreProvider key={viewKey} folderId={folderId} search={search} typeFilter={typeFilter}>
       <FilesStoreBinderHost folderId={folderId}>
-        <FilesRouteContext.Provider value={{ folderId, crumbs }}>
+        <FilesRouteContext.Provider value={{ folderId, crumbs, routeReady }}>
           {children}
         </FilesRouteContext.Provider>
       </FilesStoreBinderHost>
@@ -695,11 +711,19 @@ function FilesStoreGate({
 type FilesRouteCtx = {
   folderId: string | null;
   crumbs: { id: string; name: string; path: string }[];
+  /**
+   * True hanya ketika `folderId` berasal dari rute yang SUDAH selesai
+   * di-resolve (`resolved`, bukan `view` yang bisa menunjuk folder lama).
+   * Upload wajib memeriksa ini: mengirim batch dengan folder id basi
+   * membuat file muncul di folder sebelumnya atau di root.
+   */
+  routeReady: boolean;
 };
 
 const FilesRouteContext = createContext<FilesRouteCtx>({
   folderId: null,
   crumbs: [],
+  routeReady: false,
 });
 
 /**
@@ -744,7 +768,7 @@ function FilesContent({ currentPath }: { currentPath: string }) {
   const router = useRouter();
   const { alert, confirm, prompt } = usePrompt();
   const { state: wsState } = useRealtime();
-  const { folderId, crumbs: folderCrumbs } = useContext(FilesRouteContext);
+  const { folderId, crumbs: folderCrumbs, routeReady } = useContext(FilesRouteContext);
   const search = searchParams.get('q') ?? '';
   const typeFilter = searchParams.get('type') ?? '';
 
@@ -1450,9 +1474,34 @@ function FilesContent({ currentPath }: { currentPath: string }) {
     // Destination folder of THIS batch. Captured up front because the user
     // may navigate away while uploads are still in flight; the refresh below
     // must never append A's new rows to another folder's list (root).
+    //
+    // Guard: while the destination route is still resolving, `folderId` can
+    // belong to the PREVIOUS folder (view is intentionally kept mounted) or
+    // be null for a mid-navigation window. Uploading then sends a stale/null
+    // `folder_id` and the batch lands in the wrong folder or at root — the
+    // reported "massive upload ends up in /files" symptom. Refuse instead of
+    // silently misfiling.
     const targetFolderId = folderId;
     const filesArr = Array.from(fileList);
     if (filesArr.length === 0) return;
+
+    if (!routeReady) {
+      const reason = t('files.upload.routeBusy');
+      setJobs((prev) => [
+        ...prev,
+        ...filesArr.map<UploadJob>((file) => ({
+          id: `upload-${nextUploadJobId.current++}`,
+          fileId: '',
+          name: file.name,
+          total: file.size,
+          loaded: 0,
+          status: 'failed',
+          error: reason,
+        })),
+      ]);
+
+      return;
+    }
 
     // Size gate BEFORE any request: never surface a raw server/proxy error.
     const accepted: { file: File; jobId: string }[] = [];

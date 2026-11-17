@@ -23,9 +23,10 @@ use Throwable;
  * ini menyusul file yang sudah ter-upload sebelum fitur itu ada.
  *
  *  - `videos` / `images`: file image/video (mime ATAU ekstensi) yang done,
- *    belum punya baris thumbnails (atau barisnya yatim), ukuran video
- *    <= GenerateThumbnailJob::MAX_VIDEO_BYTES → dispatch GenerateThumbnailJob
- *    (job idempotent + guard retry sendiri). Tidak ada ekstraksi inline.
+ *    belum punya baris thumbnails (atau barisnya yatim) → dispatch
+ *    GenerateThumbnailJob (job idempotent + guard retry sendiri). TIDAK ADA
+ *    batas ukuran: frame grab membaca Drive via HTTP Range, jadi video
+ *    berukuran GB ikut diproses.
  *  - `docs`: teks/json/pdf/zip yang `metadata` NULL atau tanpa key
  *    `snippet`/`first_entry` → re-ekstrak via FileMetadataExtractor.
  *    Sumber: local disk (storage_driver=local) atau download temp dari
@@ -254,10 +255,12 @@ class BackfillThumbnailsCommand extends Command
             if (ThumbnailGenerator::mediaKind($file) !== $kind) {
                 return;
             }
+            // Tidak ada lagi skip berbasis ukuran: `GenerateThumbnailJob` kini
+            // mengambil frame langsung dari Drive lewat HTTP Range, sehingga
+            // biaya tidak bergantung pada besar berkas. Guard lama
+            // (`> MAX_VIDEO_BYTES` → return) membuat video GB tidak pernah
+            // mendapat thumbnail meski backfill dijalankan berkali-kali.
             if ($skipDispatched && isset($this->dispatchedFileIds[$file->id])) {
-                return;
-            }
-            if ($kind === 'video' && $file->size !== null && (int) $file->size > GenerateThumbnailJob::MAX_VIDEO_BYTES) {
                 return;
             }
 
