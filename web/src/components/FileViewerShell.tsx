@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type TouchEvent as ReactTouchEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Close } from '@mui/icons-material';
 import type { FileItem } from '@/lib/api';
@@ -41,7 +41,18 @@ export function FileViewerShell({ file, files, onClose, onNavigate, actions, nav
   const currentIndex = files ? files.findIndex((f) => f.id === file.id) : -1;
   const hasNav = files && files.length > 1;
   const [swipeDirection, setSwipeDirection] = useState<'prev' | 'next' | null>(null);
-  const swipeStartRef = useRef<{ x: number; y: number; pointerId: number } | null>(null);
+  // Swipe memakai NATIVE TOUCH events, bukan pointer events.
+  //
+  // Alasan (terbukti dengan instrumentasi CDP di produksi): pada perangkat
+  // sentuh, browser memancarkan
+  //   pointerdown → pointermove → POINTERCANCEL → touchmove... → touchend
+  // karena `touch-action: pan-y` menyerahkansumbu-Y ke browser dan membatalkan
+  // pointer stream. Tidak pernah ada `pointerup`, sehingga implementasi lama
+  // (onPointerUp) TIDAK pernah menghitung swipe. Keyboard ArrowRight tetap
+  // bekerja karena jalurnya terpisah — itulah yang menyesatkan diagnosis.
+  // `touchmove`/`touchend` tetap lengkap, jadi itu arbiter yang benar.
+  const swipeStartRef = useRef<{ x: number; y: number; identifier: number } | null>(null);
+  const swipeMovedRef = useRef(false);
   const swipeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -71,24 +82,40 @@ export function FileViewerShell({ file, files, onClose, onNavigate, actions, nav
     swipeTimerRef.current = setTimeout(() => setSwipeDirection(null), 180);
   };
 
-  const onSwipePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.pointerType !== 'touch' || !e.isPrimary || !hasNav || navLocked) return;
+  const onSwipeTouchStart = (e: ReactTouchEvent<HTMLDivElement>) => {
+    if (!hasNav || navLocked || e.touches.length !== 1) return;
+    const touch = e.touches[0];
     const target = e.target instanceof Element ? e.target : null;
     if (!target) return;
     if (target.closest('[data-swipe-ignore="true"]')) return;
     if (target.closest('button, a, input, select, textarea, summary, audio, [role="slider"], [role="button"], [contenteditable="true"]')) return;
+    // Video: swipe tetap boleh di area gambar, tapi bukan di control bar bawah
+    // (56px) — di sana user sedang menggeser timeline / menekan play.
     const video = target.closest('video');
-    if (video && e.clientY > video.getBoundingClientRect().bottom - 56) return;
-    swipeStartRef.current = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
-    e.currentTarget.setPointerCapture?.(e.pointerId);
+    if (video && touch.clientY > video.getBoundingClientRect().bottom - 56) return;
+    swipeStartRef.current = { x: touch.clientX, y: touch.clientY, identifier: touch.identifier };
+    swipeMovedRef.current = false;
   };
 
-  const onSwipePointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+  const onSwipeTouchMove = (e: ReactTouchEvent<HTMLDivElement>) => {
+    const start = swipeStartRef.current;
+    if (!start) return;
+    const touch = Array.from(e.touches).find((t) => t.identifier === start.identifier);
+    if (!touch) return;
+    if (Math.abs(touch.clientX - start.x) > 8 || Math.abs(touch.clientY - start.y) > 8) {
+      swipeMovedRef.current = true;
+    }
+  };
+
+  const onSwipeTouchEnd = (e: ReactTouchEvent<HTMLDivElement>) => {
     const start = swipeStartRef.current;
     swipeStartRef.current = null;
-    if (!start || start.pointerId !== e.pointerId || e.pointerType !== 'touch') return;
-    const dx = e.clientX - start.x;
-    const dy = e.clientY - start.y;
+    if (!start || !swipeMovedRef.current) return;
+    // `changedTouches` berisi jari yang BARU diangkat; `touches` sudah kosong.
+    const touch = Array.from(e.changedTouches).find((t) => t.identifier === start.identifier);
+    if (!touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
     if (Math.abs(dx) < 48 || Math.abs(dx) <= Math.abs(dy)) return;
     navigateBySwipe(dx < 0 ? 'next' : 'prev');
   };
@@ -148,9 +175,10 @@ export function FileViewerShell({ file, files, onClose, onNavigate, actions, nav
                   : ''
             }`}
             data-testid="file-viewer-body"
-            onPointerDown={onSwipePointerDown}
-            onPointerUp={onSwipePointerUp}
-            onPointerCancel={() => { swipeStartRef.current = null; }}
+            onTouchStart={onSwipeTouchStart}
+            onTouchMove={onSwipeTouchMove}
+            onTouchEnd={onSwipeTouchEnd}
+            onTouchCancel={() => { swipeStartRef.current = null; swipeMovedRef.current = false; }}
           >
             {viewer}
           </div>
