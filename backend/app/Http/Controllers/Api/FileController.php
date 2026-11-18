@@ -1654,11 +1654,18 @@ class FileController extends Controller
 
                 // Fase 1 (produksi) — header dulu: header respons dipasang pada
                 // objek StreamedResponse, jadi header Drive harus lengkap
-                // sebelum body dialirkan; body fase 1 dibuang ke /dev/null.
+                // sebelum body dialirkan; body fase 1 sengaja dibatalkan.
                 $ch = $useCurl ? curl_init($url) : null;
-                $curlErr = '';
 
                 if ($ch !== null) {
+                    // Sama dengan jalur `download()`: SATU permintaan, tanpa
+                    // fase-1 yang mengunduh body ke /dev/null. Ini JALUR YANG
+                    // DIPAKAI VIDEO PLAYER lewat `/s/{token}/download` — jadi
+                    // inilah yang paling terasa saat seek.
+                    //
+                    // Fase-1 lama menulis seluruh potongan ke /dev/null sebelum
+                    // byte pertama dikirim: terukur TTFB 12.8s untuk
+                    // `Range: bytes=N-` (482 MB ter-buffer lebih dulu).
                     curl_setopt_array($ch, [
                         CURLOPT_HTTPHEADER => $sendHeaders,
                         CURLOPT_FOLLOWLOCATION => true,
@@ -1678,23 +1685,26 @@ class FileController extends Controller
 
                         return $len;
                     });
-                    $discard = fopen('/dev/null', 'w+b');
-                    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use ($discard) {
-                        fwrite($discard, $chunk);
 
-                        return strlen($chunk);
-                    });
+                    // `return 0` membatalkan transfer di chunk pertama: hanya
+                    // status + header yang diambil, tidak ada byte body yang
+                    // benar-benar diunduh. Menghasilkan CURLE_WRITE_ERROR (23)
+                    // yang memang diharapkan.
+                    curl_setopt($ch, CURLOPT_WRITEFUNCTION, fn ($ch, $chunk) => 0);
                     curl_exec($ch);
-                    $curlErr = curl_error($ch);
+                    $curlErrNo = curl_errno($ch);
                     curl_close($ch);
-                    if (is_resource($discard)) {
-                        fclose($discard);
+
+                    if ($curlErrNo !== 0 && $curlErrNo !== CURLE_WRITE_ERROR && $status === 0) {
+                        throw new \RuntimeException('Drive: koneksi gagal (curl '.$curlErrNo.').');
                     }
                 }
+            }
 
-                if ($curlErr !== '') {
-                    throw new \RuntimeException('Drive: '.$curlErr);
-                }
+            if ($status === 0) {
+                // Tanpa status berarti tidak ada header respons; fase-2 akan
+                // mengalirkan body kosong dan klien menerima "200 sukses" palsu.
+                throw new \RuntimeException('Drive: tidak ada respons (status 0).');
             }
 
             if ($status === 404 || $status === 403) {
@@ -1711,27 +1721,12 @@ class FileController extends Controller
             $passthrough = $driveRange !== null && $status === 206;
 
             if ($bodySource === null) {
-                // Fase 2 — alirkan body Drive 0-copy: WRITEFUNCTION menulis
-                // potongan langsung ke klien begitu tiba, tanpa buffer/temp.
+                // Fase 2 — alirkan body Drive 0-copy lewat StreamPump::copyCurl:
+                // WRITEFUNCTION meneruskan chunk ke klien begitu tiba, dengan
+                // penjaga klien-putus dan batas DIAM (bukan anggaran total)
+                // agar transfer GB yang sehat tidak dipotong di tengah.
                 $stream = response()->stream(function () use ($url, $sendHeaders) {
-                    $ch = curl_init($url);
-                    curl_setopt_array($ch, [
-                        CURLOPT_HTTPHEADER => $sendHeaders,
-                        CURLOPT_FOLLOWLOCATION => true,
-                        CURLOPT_CONNECTTIMEOUT => 30,
-                        CURLOPT_TIMEOUT => 0,
-                        CURLOPT_RETURNTRANSFER => false,
-                    ]);
-                    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) {
-                        echo $chunk;
-                        if (connection_aborted()) {
-                            return 0; // klien putus → hentikan curl
-                        }
-
-                        return strlen($chunk);
-                    });
-                    curl_exec($ch);
-                    curl_close($ch);
+                    StreamPump::copyCurl($url, $sendHeaders);
                 }, $range['status'], $this->rangeHeaders($file, $disposition, $range));
             } else {
                 $stream = response()->stream(function () use ($bodySource) {
