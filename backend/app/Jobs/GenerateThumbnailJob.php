@@ -107,7 +107,21 @@ class GenerateThumbnailJob implements ShouldQueue
                 return;
             }
 
-            // Jalur cadangan: file lokal milik disk `local` (bukan Drive).
+            // Jalur cadangan HANYA untuk file yang benar-benar tersimpan di
+            // disk lokal/S3. Untuk video Drive, jangan pernah jatuh ke
+            // `$sources->fetch()`: ia mengunduh seluruh body ke memori dan
+            // terbukti membuat worker OOM (128 MB) pada video 1.4 GB. Kalau
+            // frame-grab URL gagal, lebih baik keluar dengan log daripada
+            // mengunduh GB-byte cuma untuk satu frame.
+            if ($file->storage_driver !== 'local' && $file->storage_driver !== 's3') {
+                Log::warning('GenerateThumbnailJob: frame-grab Drive gagal; lewati (tanpa unduh penuh)', [
+                    'file_id' => $this->fileId,
+                    'size' => (int) $file->size,
+                ]);
+
+                return;
+            }
+
             $localPath = $sources->fetch($file);
             if (! $localPath) {
                 return;
@@ -238,11 +252,19 @@ class GenerateThumbnailJob implements ShouldQueue
         // `-headers` meneruskan Authorization ke permintaan Range yang
         // dibuat ffmpeg sendiri. `-ss 1` sebelum `-i` = seek cepat: ffmpeg
         // melompat langsung, bukan mendekode dari awal.
+        //
+        // `setparams` WAJIB: video AV1 dari penyimpanan ini punya color
+        // primaries `reserved`, yang membuat auto-scaler ffmpeg gagal
+        // (`Unsupported input ... prim:reserved`) meski frame berhasil
+        // di-decode. Memaksa primaries/trc/space = bt709 memperbaiki ini
+        // (terukur: exit 0, frame 37 KB, 0.2s pada file 1.43 GB).
+        $vf = 'setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709,format=yuv420p';
         $cmd = sprintf(
-            '%s -y -headers %s -ss 1 -i %s -frames:v 1 -f image2 -update 1 %s 2>&1',
+            '%s -y -headers %s -ss 1 -i %s -frames:v 1 -vf %s -f image2 -update 1 %s 2>&1',
             escapeshellarg($ffmpeg),
             escapeshellarg('Authorization: Bearer '.$account->access_token."\r\n"),
             escapeshellarg($url),
+            escapeshellarg($vf),
             escapeshellarg($framePath),
         );
 
