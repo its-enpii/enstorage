@@ -13,3 +13,6 @@ Thumbs.db
 # Internal dev folders — not part of the shipped product
 .design/
 .guide/
+
+# Hermes verification manifest (local-only)
+.hermes/
