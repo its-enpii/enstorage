@@ -423,7 +423,13 @@ export function FilesStoreProvider({
       const params = new URLSearchParams();
       params.set('page', String(page));
       params.set('per_page', String(PER_PAGE));
-      if (folderId) params.set('folder_id', folderId);
+      // Selalu kirim `folder_id`, termasuk 'null' untuk root. Kalau param
+      // dihilangkan saat root, backend mengira ini pencarian global (karena
+      // `search`/`type` ikut terkirim) dan menampilkan file dari SEMUA folder.
+      // File manager harus membatasi hasil ke folder aktif SAJA — tidak ke
+      // subfolder, tidak ke parent. Backend menerima string 'null' sebagai
+      // penanda root (lihat FileController::index).
+      params.set('folder_id', folderId ?? 'null');
       if (search) params.set('search', search);
       if (typeFilter) params.set('type', typeFilter);
       params.set('sort', sortRef.current.sort);
